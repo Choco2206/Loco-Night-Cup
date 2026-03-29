@@ -12,6 +12,8 @@ const {
   MessageFlags,
 } = require('discord.js');
 
+const { sendTournamentCeremonyIfReady } = require('./announcement');
+
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
@@ -103,6 +105,19 @@ function saveKo(data) {
 // =========================
 // HELPERS
 // =========================
+
+function isUserAllowedForTeam(userId, team) {
+  if (!userId || !team) return false;
+
+  const allowedIds = [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ]
+    .filter(Boolean)
+    .map(id => String(id));
+
+  return allowedIds.includes(String(userId));
+}
 
 function getActualFormat(teamCount) {
   if (teamCount < 8) return 0;
@@ -919,9 +934,13 @@ async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
   round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
   saveKo(koData);
 
-  if (match.confirmationMessageId) {
+  const confirmationMessageId = match.confirmationMessageId;
+  match.confirmationMessageId = null;
+  saveKo(koData);
+
+  if (confirmationMessageId) {
     setTimeout(async () => {
-      await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+      await deleteMessageIfExists(round.channelId, confirmationMessageId);
     }, 4000);
   }
 
@@ -931,6 +950,14 @@ async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
   });
 
   await advanceKoIfReady(eventKey);
+
+  try {
+    if (roundKey === 'final' || roundKey === 'thirdPlace') {
+      await sendTournamentCeremonyIfReady(clientRef, eventKey);
+    }
+  } catch (error) {
+    console.error('❌ Fehler bei der automatischen Siegerehrung:', error);
+  }
 
   return true;
 }
@@ -982,9 +1009,13 @@ async function handleReject(interaction, eventKey, roundKey, matchNumber) {
   round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
   saveKo(koData);
 
-  if (match.confirmationMessageId) {
+  const confirmationMessageId = match.confirmationMessageId;
+  match.confirmationMessageId = null;
+  saveKo(koData);
+
+  if (confirmationMessageId) {
     setTimeout(async () => {
-      await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+      await deleteMessageIfExists(round.channelId, confirmationMessageId);
     }, 4000);
   }
 
