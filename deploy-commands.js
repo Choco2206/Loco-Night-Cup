@@ -6,6 +6,10 @@ const commands = [
   new SlashCommandBuilder()
     .setName('setup')
     .setDescription('Erstellt Start-Hier und Rolle-Wählen'),
+
+  new SlashCommandBuilder()
+    .setName('teamsetup')
+    .setDescription('Erstellt Team-Anmeldung und Team-Übersicht'),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
