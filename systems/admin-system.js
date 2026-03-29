@@ -67,7 +67,8 @@ function saveTeams(data) {
 
 function loadAdminState() {
   return readJson(ADMIN_FILE, {
-    controlPanelMessageId: null,
+    testControlPanelMessageId: null,
+    liveControlPanelMessageId: null,
   });
 }
 function saveAdminState(data) {
@@ -125,28 +126,6 @@ function isAdminMember(member) {
   return member?.roles?.cache?.has(adminRoleId) || false;
 }
 
-function getTestChannelIds() {
-  return [
-    process.env.TEST_CONTROL_CHANNEL_ID,
-    process.env.TEST_CHECKIN_CHANNEL_ID,
-    process.env.TEST_GROUP_A_CHANNEL_ID,
-    process.env.TEST_GROUP_B_CHANNEL_ID,
-    process.env.TEST_GROUP_C_CHANNEL_ID,
-    process.env.TEST_GROUP_D_CHANNEL_ID,
-    process.env.TEST_GROUP_E_CHANNEL_ID,
-    process.env.TEST_GROUP_F_CHANNEL_ID,
-    process.env.TEST_GROUP_G_CHANNEL_ID,
-    process.env.TEST_GROUP_H_CHANNEL_ID,
-    process.env.TEST_ROUND_OF_16_CHANNEL_ID,
-    process.env.TEST_QUARTERFINAL_CHANNEL_ID,
-    process.env.TEST_SEMIFINAL_CHANNEL_ID,
-    process.env.TEST_THIRD_PLACE_CHANNEL_ID,
-    process.env.TEST_FINAL_CHANNEL_ID,
-    process.env.TEST_RESULT_CHECK_CHANNEL_ID,
-    process.env.TEST_LOGS_CHANNEL_ID,
-  ].filter(Boolean);
-}
-
 async function fetchChannel(channelId) {
   try {
     return await clientRef.channels.fetch(channelId);
@@ -178,8 +157,17 @@ async function deleteMessageIfExists(channelId, messageId) {
   } catch {}
 }
 
-async function logToTestChannel(text) {
-  const channelId = process.env.TEST_LOGS_CHANNEL_ID;
+function requireAdmin(interaction) {
+  if (!isAdminMember(interaction.member)) {
+    return interaction.reply({
+      content: '❌ Nur NightCup Admins dürfen dieses Panel nutzen.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  return null;
+}
+
+async function logToChannel(channelId, text) {
   if (!channelId) return;
 
   const channel = await fetchChannel(channelId);
@@ -190,15 +178,31 @@ async function logToTestChannel(text) {
       content: `[${new Date().toLocaleString('de-DE')}] ${text}`,
     });
   } catch (error) {
-    console.error('❌ Fehler beim Schreiben in Test-Logs:', error);
+    console.error('❌ Fehler beim Schreiben in Logs:', error);
   }
 }
 
+async function logToLive(text) {
+  await logToChannel(process.env.LIVE_LOGS_CHANNEL_ID, text);
+}
+
+async function logToTest(text) {
+  await logToChannel(process.env.TEST_LOGS_CHANNEL_ID, text);
+}
+
+function sortRows(rows) {
+  return [...rows].sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.diff !== a.diff) return b.diff - a.diff;
+    return a.clubName.localeCompare(b.clubName, 'de');
+  });
+}
+
 // =========================
-// CONTROL PANEL
+// TEST PANEL
 // =========================
 
-function buildControlEmbed(testState) {
+function buildTestControlEmbed(testState) {
   const status = testState.active
     ? `🟢 Aktiv (${testState.format}er Testlauf)`
     : '⚪ Kein aktiver Testlauf';
@@ -225,7 +229,7 @@ function buildControlEmbed(testState) {
     .setColor(0xff0000);
 }
 
-function buildControlRows() {
+function buildTestControlRows() {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('admin_test_start_8')
@@ -270,7 +274,7 @@ function buildControlRows() {
   return [row1, row2, row3];
 }
 
-async function ensureControlPanel() {
+async function ensureTestControlPanel() {
   const channelId = process.env.TEST_CONTROL_CHANNEL_ID;
   if (!channelId) return;
 
@@ -281,30 +285,105 @@ async function ensureControlPanel() {
   const testState = loadTestState();
 
   let message = null;
-
-  if (adminState.controlPanelMessageId) {
-    message = await fetchMessage(channel, adminState.controlPanelMessageId);
+  if (adminState.testControlPanelMessageId) {
+    message = await fetchMessage(channel, adminState.testControlPanelMessageId);
   }
 
   if (!message) {
     const created = await channel.send({
-      embeds: [buildControlEmbed(testState)],
-      components: buildControlRows(),
+      embeds: [buildTestControlEmbed(testState)],
+      components: buildTestControlRows(),
     });
 
-    adminState.controlPanelMessageId = created.id;
+    adminState.testControlPanelMessageId = created.id;
     saveAdminState(adminState);
     return;
   }
 
   await message.edit({
-    embeds: [buildControlEmbed(testState)],
-    components: buildControlRows(),
+    embeds: [buildTestControlEmbed(testState)],
+    components: buildTestControlRows(),
   });
 }
 
 // =========================
-// TEST RUN
+// LIVE PANEL
+// =========================
+
+function buildLiveControlEmbed() {
+  return new EmbedBuilder()
+    .setTitle('🤖 Live Bot Steuerung')
+    .setDescription(
+      [
+        '**Live Admin-Aktionen:**',
+        '• Registriertes Team löschen',
+        '• Backup / Team nachrücken',
+        '• Gruppenergebnis manuell setzen',
+        '• K.O.-Ergebnis manuell setzen',
+      ].join('\n')
+    )
+    .setColor(0xff0000);
+}
+
+function buildLiveControlRows() {
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('live_delete_team')
+      .setLabel('🗑️ Registriertes Team löschen')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('live_manual_backup')
+      .setLabel('🔁 Team/Backup nachrücken')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('live_manual_group_result')
+      .setLabel('🏆 Gruppenergebnis setzen')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('live_manual_ko_result')
+      .setLabel('🏁 K.O.-Ergebnis setzen')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return [row1, row2];
+}
+
+async function ensureLiveControlPanel() {
+  const channelId = process.env.LIVE_CONTROL_CHANNEL_ID;
+  if (!channelId) return;
+
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  const adminState = loadAdminState();
+
+  let message = null;
+  if (adminState.liveControlPanelMessageId) {
+    message = await fetchMessage(channel, adminState.liveControlPanelMessageId);
+  }
+
+  if (!message) {
+    const created = await channel.send({
+      embeds: [buildLiveControlEmbed()],
+      components: buildLiveControlRows(),
+    });
+
+    adminState.liveControlPanelMessageId = created.id;
+    saveAdminState(adminState);
+    return;
+  }
+
+  await message.edit({
+    embeds: [buildLiveControlEmbed()],
+    components: buildLiveControlRows(),
+  });
+}
+
+// =========================
+// TEST HELPERS
 // =========================
 
 function createTestTeams(format) {
@@ -322,6 +401,28 @@ function createTestTeams(format) {
     });
   }
   return teams;
+}
+
+function getTestChannelIds() {
+  return [
+    process.env.TEST_CONTROL_CHANNEL_ID,
+    process.env.TEST_CHECKIN_CHANNEL_ID,
+    process.env.TEST_GROUP_A_CHANNEL_ID,
+    process.env.TEST_GROUP_B_CHANNEL_ID,
+    process.env.TEST_GROUP_C_CHANNEL_ID,
+    process.env.TEST_GROUP_D_CHANNEL_ID,
+    process.env.TEST_GROUP_E_CHANNEL_ID,
+    process.env.TEST_GROUP_F_CHANNEL_ID,
+    process.env.TEST_GROUP_G_CHANNEL_ID,
+    process.env.TEST_GROUP_H_CHANNEL_ID,
+    process.env.TEST_ROUND_OF_16_CHANNEL_ID,
+    process.env.TEST_QUARTERFINAL_CHANNEL_ID,
+    process.env.TEST_SEMIFINAL_CHANNEL_ID,
+    process.env.TEST_THIRD_PLACE_CHANNEL_ID,
+    process.env.TEST_FINAL_CHANNEL_ID,
+    process.env.TEST_RESULT_CHECK_CHANNEL_ID,
+    process.env.TEST_LOGS_CHANNEL_ID,
+  ].filter(Boolean);
 }
 
 async function clearTestChannelMessages() {
@@ -349,48 +450,37 @@ async function clearTestChannelMessages() {
 
 async function startTestRun(format) {
   const teams = loadTeams();
-
   const filteredTeams = teams.filter(team => !team.isTest);
   const newTestTeams = createTestTeams(format);
-  const mergedTeams = [...filteredTeams, ...newTestTeams];
-  saveTeams(mergedTeams);
+  saveTeams([...filteredTeams, ...newTestTeams]);
 
-  const newState = {
+  saveTestState({
     active: true,
     format,
     teamIds: newTestTeams.map(t => t.id),
     createdMessageIds: [],
     createdAt: new Date().toISOString(),
-  };
-
-  saveTestState(newState);
+    generated: false,
+    label: null,
+    checkinMessageId: null,
+    groups: {},
+    ko: { rounds: {} },
+  });
 
   const checkinChannel = await fetchChannel(process.env.TEST_CHECKIN_CHANNEL_ID);
   if (checkinChannel) {
-    const msg = await checkinChannel.send({
-      content: [
-        `🧪 **${format}er Testlauf gestartet**`,
-        '',
-        `Es wurden automatisch ${format} Testteams erstellt.`,
-        'Der Admin kann jetzt Testdaten und Overrides simulieren.',
-      ].join('\n'),
+    await checkinChannel.send({
+      content: `🧪 ${format}er Testlauf gestartet`,
     });
-
-    newState.createdMessageIds.push({
-      channelId: checkinChannel.id,
-      messageId: msg.id,
-    });
-    saveTestState(newState);
   }
 
-  await logToTestChannel(`🧪 ${format}er Testlauf gestartet.`);
-  await ensureControlPanel();
+  await logToTest(`🧪 ${format}er Testlauf gestartet.`);
+  await ensureTestControlPanel();
 }
 
 async function deleteTestRun() {
   const teams = loadTeams();
-  const filteredTeams = teams.filter(team => !team.isTest);
-  saveTeams(filteredTeams);
+  saveTeams(teams.filter(team => !team.isTest));
 
   saveTestState({
     active: false,
@@ -398,15 +488,121 @@ async function deleteTestRun() {
     teamIds: [],
     createdMessageIds: [],
     createdAt: null,
+    generated: false,
+    label: null,
+    checkinMessageId: null,
+    groups: {},
+    ko: { rounds: {} },
   });
 
   await clearTestChannelMessages();
-  await logToTestChannel('🗑️ Testlauf komplett gelöscht.');
-  await ensureControlPanel();
+  await logToTest('🗑️ Testlauf komplett gelöscht.');
+  await ensureTestControlPanel();
 }
 
 // =========================
-// CHECKIN OVERRIDE
+// SHARED RENDER HELPERS
+// =========================
+
+function buildTableText(rows) {
+  const sortedRows = sortRows(rows);
+
+  return sortedRows
+    .map((row, index) => {
+      return `**${index + 1}. ${row.clubName}**  •  S ${row.s}  •  U ${row.u}  •  N ${row.n}  •  Diff ${row.diff}  •  P ${row.points}`;
+    })
+    .join('\n');
+}
+
+function buildGroupTableEmbed(eventLabel, groupLetter, rows) {
+  return new EmbedBuilder()
+    .setTitle(`🏆 ${eventLabel} • Gruppe ${groupLetter} • Live-Tabelle`)
+    .setDescription(rows.length ? buildTableText(rows) : 'Noch keine Teams.')
+    .setColor(0xff0000);
+}
+
+function buildGroupScheduleText(matches) {
+  return matches
+    .map(match => {
+      let status = '⏳ Offen';
+
+      if (match.status === 'reported' && match.reportedScore) {
+        status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
+      }
+
+      if (match.status === 'confirmed' && match.reportedScore) {
+        status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+      }
+
+      return `**${match.matchNumber}.** ${match.homeClubName} vs ${match.awayClubName}\n🕒 ${match.timeWindow} • ${status}`;
+    })
+    .join('\n\n');
+}
+
+function buildGroupScheduleEmbed(eventLabel, groupLetter, matches) {
+  return new EmbedBuilder()
+    .setTitle(`⚽ ${eventLabel} • Gruppe ${groupLetter} • Spielplan`)
+    .setDescription(
+      [
+        'Die Ergebnisse werden über den Button darunter eingetragen.',
+        '',
+        buildGroupScheduleText(matches),
+      ].join('\n')
+    )
+    .setColor(0xff0000);
+}
+
+function buildGroupScheduleButtons(eventKey, groupLetter) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`result_open:${eventKey}:${groupLetter}`)
+      .setLabel('⚽ Ergebnis eintragen')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function buildKoRoundEmbed(eventLabel, roundKey, matches) {
+  const lines = matches.map(match => {
+    let status = '⏳ Offen';
+
+    if (match.status === 'reported' && match.reportedScore) {
+      status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
+    }
+
+    if (match.status === 'confirmed' && match.reportedScore) {
+      status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+    }
+
+    return [
+      `**${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}**`,
+      `🕒 ${match.timeWindow}`,
+      `${status}`,
+    ].join('\n');
+  });
+
+  return new EmbedBuilder()
+    .setTitle(`🏆 ${eventLabel} • ${getRoundLabel(roundKey)}`)
+    .setDescription(
+      [
+        'Ergebnisse werden über den Button darunter eingetragen.',
+        '',
+        ...lines,
+      ].join('\n\n')
+    )
+    .setColor(0xff0000);
+}
+
+function buildKoButtons(eventKey, roundKey) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
+      .setLabel('⚽ Ergebnis eintragen')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+// =========================
+// LIVE DATA OPERATIONS
 // =========================
 
 function getActualFormat(teamCount) {
@@ -417,7 +613,80 @@ function getActualFormat(teamCount) {
   return 32;
 }
 
-async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName) {
+async function deleteRegisteredTeam(clubName) {
+  const teams = loadTeams();
+  const checkins = loadCheckins();
+  const groups = loadGroups();
+  const results = loadResults();
+  const ko = loadKo();
+
+  const team = teams.find(t => t.clubName.toLowerCase() === clubName.toLowerCase());
+  if (!team) {
+    throw new Error('Team nicht gefunden.');
+  }
+
+  const teamId = team.id;
+
+  // teams.json
+  saveTeams(teams.filter(t => t.id !== teamId));
+
+  // checkins.json
+  for (const eventKey of ['friday', 'saturday']) {
+    const event = checkins[eventKey];
+    if (!event) continue;
+
+    event.teams = (event.teams || []).filter(t => t.teamId !== teamId && t.id !== teamId);
+    if (event.backupDecisions && event.backupDecisions[teamId]) {
+      delete event.backupDecisions[teamId];
+    }
+  }
+  saveCheckins(checkins);
+
+  // groups.json
+  for (const eventKey of ['friday', 'saturday']) {
+    const event = groups[eventKey];
+    if (!event?.groups) continue;
+
+    for (const letter of Object.keys(event.groups)) {
+      const group = event.groups[letter];
+      group.teams = (group.teams || []).filter(t => t.teamId !== teamId);
+      group.rows = (group.rows || []).filter(r => r.teamId !== teamId);
+    }
+  }
+  saveGroups(groups);
+
+  // results.json
+  for (const eventKey of ['friday', 'saturday']) {
+    const event = results[eventKey];
+    if (!event?.groups) continue;
+
+    for (const letter of Object.keys(event.groups)) {
+      const group = event.groups[letter];
+      group.matches = (group.matches || []).filter(
+        m => m.homeTeamId !== teamId && m.awayTeamId !== teamId
+      );
+    }
+  }
+  saveResults(results);
+
+  // ko.json
+  for (const eventKey of ['friday', 'saturday']) {
+    const event = ko[eventKey];
+    if (!event?.rounds) continue;
+
+    for (const roundKey of Object.keys(event.rounds)) {
+      const round = event.rounds[roundKey];
+      round.matches = (round.matches || []).filter(
+        m => m.homeTeamId !== teamId && m.awayTeamId !== teamId
+      );
+    }
+  }
+  saveKo(ko);
+
+  await logToLive(`🗑️ Registriertes Team gelöscht: ${team.clubName}`);
+}
+
+async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName, isTest = false) {
   const checkins = loadCheckins();
   const event = checkins[eventKey];
 
@@ -462,82 +731,11 @@ async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName) {
 
   saveCheckins(checkins);
 
-  await logToTestChannel(
-    `🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`
-  );
-}
-
-// =========================
-// GROUP RESULT OVERRIDE
-// =========================
-
-function sortRows(rows) {
-  return [...rows].sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.diff !== a.diff) return b.diff - a.diff;
-    return a.clubName.localeCompare(b.clubName, 'de');
-  });
-}
-
-function buildTableText(rows) {
-  const sortedRows = sortRows(rows);
-
-  return sortedRows
-    .map((row, index) => {
-      return `**${index + 1}. ${row.clubName}**  •  S ${row.s}  •  U ${row.u}  •  N ${row.n}  •  Diff ${row.diff}  •  P ${row.points}`;
-    })
-    .join('\n');
-}
-
-function buildTableEmbed(eventLabel, groupLetter, rows) {
-  return new EmbedBuilder()
-    .setTitle(`🏆 ${eventLabel} • Gruppe ${groupLetter} • Live-Tabelle`)
-    .setDescription(
-      rows.length > 0 ? buildTableText(rows) : 'Noch keine Teams in dieser Gruppe.'
-    )
-    .setColor(0xff0000);
-}
-
-function buildScheduleText(matches) {
-  if (!matches.length) return 'Noch kein Spielplan vorhanden.';
-
-  return matches
-    .map(match => {
-      let status = '⏳ Offen';
-
-      if (match.status === 'reported' && match.reportedScore) {
-        status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
-      }
-
-      if (match.status === 'confirmed' && match.reportedScore) {
-        status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
-      }
-
-      return `**${match.matchNumber}.** ${match.homeClubName} vs ${match.awayClubName}\n🕒 ${match.timeWindow} • ${status}`;
-    })
-    .join('\n\n');
-}
-
-function buildScheduleEmbed(eventLabel, groupLetter, matches) {
-  return new EmbedBuilder()
-    .setTitle(`⚽ ${eventLabel} • Gruppe ${groupLetter} • Spielplan`)
-    .setDescription(
-      [
-        'Die Ergebnisse werden über den Button darunter eingetragen.',
-        '',
-        buildScheduleText(matches),
-      ].join('\n')
-    )
-    .setColor(0xff0000);
-}
-
-function buildScheduleButtons(eventKey, groupLetter) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`result_open:${eventKey}:${groupLetter}`)
-      .setLabel('⚽ Ergebnis eintragen')
-      .setStyle(ButtonStyle.Primary)
-  );
+  if (isTest) {
+    await logToTest(`🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`);
+  } else {
+    await logToLive(`🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`);
+  }
 }
 
 function recalculateRows(rows, matches) {
@@ -583,7 +781,7 @@ function recalculateRows(rows, matches) {
   return nextRows;
 }
 
-async function updateGroupMessages(eventKey, groupLetter) {
+async function updateLiveGroupMessages(eventKey, groupLetter) {
   const groupsData = loadGroups();
   const resultsData = loadResults();
 
@@ -602,20 +800,20 @@ async function updateGroupMessages(eventKey, groupLetter) {
   const tableMessage = await fetchMessage(channel, groupMeta.tableMessageId);
   if (tableMessage) {
     await tableMessage.edit({
-      embeds: [buildTableEmbed(groupsData[eventKey].label, groupLetter, newRows)],
+      embeds: [buildGroupTableEmbed(groupsData[eventKey].label, groupLetter, newRows)],
     });
   }
 
   const scheduleMessage = await fetchMessage(channel, resultGroup.scheduleMessageId);
   if (scheduleMessage) {
     await scheduleMessage.edit({
-      embeds: [buildScheduleEmbed(groupsData[eventKey].label, groupLetter, resultGroup.matches)],
-      components: [buildScheduleButtons(eventKey, groupLetter)],
+      embeds: [buildGroupScheduleEmbed(groupsData[eventKey].label, groupLetter, resultGroup.matches)],
+      components: [buildGroupScheduleButtons(eventKey, groupLetter)],
     });
   }
 }
 
-async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoals, awayGoals) {
+async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoals, awayGoals, isTest = false) {
   const resultsData = loadResults();
   const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
 
@@ -637,16 +835,14 @@ async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoal
   match.confirmed = true;
 
   saveResults(resultsData);
-  await updateGroupMessages(eventKey, groupLetter);
+  await updateLiveGroupMessages(eventKey, groupLetter);
 
-  await logToTestChannel(
-    `✏️ Admin-Korrektur Gruppe ${groupLetter}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`
-  );
+  if (isTest) {
+    await logToTest(`✏️ Admin-Korrektur Gruppe ${groupLetter}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
+  } else {
+    await logToLive(`✏️ Admin-Korrektur Gruppe ${groupLetter}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
+  }
 }
-
-// =========================
-// K.O. RESULT OVERRIDE
-// =========================
 
 function getRoundLabel(roundKey) {
   if (roundKey === 'roundOf16') return 'Achtelfinale';
@@ -657,47 +853,7 @@ function getRoundLabel(roundKey) {
   return 'K.O.-Phase';
 }
 
-function buildKoRoundEmbed(eventLabel, roundKey, matches) {
-  const lines = matches.map(match => {
-    let status = '⏳ Offen';
-
-    if (match.status === 'reported' && match.reportedScore) {
-      status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
-    }
-
-    if (match.status === 'confirmed' && match.reportedScore) {
-      status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
-    }
-
-    return [
-      `**${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}**`,
-      `🕒 ${match.timeWindow}`,
-      `${status}`,
-    ].join('\n');
-  });
-
-  return new EmbedBuilder()
-    .setTitle(`🏆 ${eventLabel} • ${getRoundLabel(roundKey)}`)
-    .setDescription(
-      [
-        'Ergebnisse werden über den Button darunter eingetragen.',
-        '',
-        ...lines,
-      ].join('\n\n')
-    )
-    .setColor(0xff0000);
-}
-
-function buildKoButtons(eventKey, roundKey) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
-      .setLabel('⚽ Ergebnis eintragen')
-      .setStyle(ButtonStyle.Primary)
-  );
-}
-
-async function updateKoRoundMessage(eventKey, roundKey) {
+async function updateLiveKoRoundMessage(eventKey, roundKey) {
   const koData = loadKo();
   const event = koData[eventKey];
   const round = event?.rounds?.[roundKey];
@@ -715,7 +871,7 @@ async function updateKoRoundMessage(eventKey, roundKey) {
   });
 }
 
-async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awayGoals) {
+async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awayGoals, isTest = false) {
   const koData = loadKo();
   const event = koData[eventKey];
   const round = event?.rounds?.[roundKey];
@@ -750,26 +906,18 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
   }
 
   saveKo(koData);
-  await updateKoRoundMessage(eventKey, roundKey);
+  await updateLiveKoRoundMessage(eventKey, roundKey);
 
-  await logToTestChannel(
-    `✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`
-  );
-}
-
-// =========================
-// UI FLOWS
-// =========================
-
-function requireAdmin(interaction) {
-  if (!isAdminMember(interaction.member)) {
-    return interaction.reply({
-      content: '❌ Nur NightCup Admins dürfen dieses Panel nutzen.',
-      flags: MessageFlags.Ephemeral,
-    });
+  if (isTest) {
+    await logToTest(`✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
+  } else {
+    await logToLive(`✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
   }
-  return null;
 }
+
+// =========================
+// SELECT BUILDERS
+// =========================
 
 function buildEventSelect(customId) {
   return new ActionRowBuilder().addComponents(
@@ -783,11 +931,18 @@ function buildEventSelect(customId) {
   );
 }
 
+// =========================
+// INIT
+// =========================
+
 module.exports = {
   async init(client) {
     clientRef = client;
 
-    ensureFile(ADMIN_FILE, { controlPanelMessageId: null });
+    ensureFile(ADMIN_FILE, {
+      testControlPanelMessageId: null,
+      liveControlPanelMessageId: null,
+    });
     ensureFile(TEST_FILE, {
       active: false,
       format: null,
@@ -796,7 +951,8 @@ module.exports = {
       createdAt: null,
     });
 
-    await ensureControlPanel();
+    await ensureTestControlPanel();
+    await ensureLiveControlPanel();
   },
 
   async handleInteraction(interaction) {
@@ -804,7 +960,7 @@ module.exports = {
     // BUTTONS
     // =========================
     if (interaction.isButton()) {
-      const adminButtons = [
+      const allButtons = [
         'admin_test_start_8',
         'admin_test_start_16',
         'admin_test_start_24',
@@ -813,113 +969,131 @@ module.exports = {
         'admin_manual_backup',
         'admin_manual_group_result',
         'admin_manual_ko_result',
+        'live_delete_team',
+        'live_manual_backup',
+        'live_manual_group_result',
+        'live_manual_ko_result',
       ];
 
-      if (adminButtons.includes(interaction.customId)) {
-        const denied = requireAdmin(interaction);
-        if (denied) {
-          await denied;
-          return true;
-        }
+      if (!allButtons.includes(interaction.customId)) return false;
 
-        if (interaction.customId === 'admin_test_start_8') {
-          await startTestRun(8);
-          await interaction.reply({
-            content: '✅ 8er Testlauf gestartet.',
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+      const denied = requireAdmin(interaction);
+      if (denied) {
+        await denied;
+        return true;
+      }
 
-        if (interaction.customId === 'admin_test_start_16') {
-          await startTestRun(16);
-          await interaction.reply({
-            content: '✅ 16er Testlauf gestartet.',
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+      // TEST
+      if (interaction.customId === 'admin_test_start_8') {
+        await startTestRun(8);
+        await interaction.reply({ content: '✅ 8er Testlauf gestartet.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      if (interaction.customId === 'admin_test_start_16') {
+        await startTestRun(16);
+        await interaction.reply({ content: '✅ 16er Testlauf gestartet.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      if (interaction.customId === 'admin_test_start_24') {
+        await startTestRun(24);
+        await interaction.reply({ content: '✅ 24er Testlauf gestartet.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      if (interaction.customId === 'admin_test_start_32') {
+        await startTestRun(32);
+        await interaction.reply({ content: '✅ 32er Testlauf gestartet.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
+      if (interaction.customId === 'admin_test_delete') {
+        await deleteTestRun();
+        await interaction.reply({ content: '✅ Testlauf komplett gelöscht.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
 
-        if (interaction.customId === 'admin_test_start_24') {
-          await startTestRun(24);
-          await interaction.reply({
-            content: '✅ 24er Testlauf gestartet.',
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+      if (interaction.customId === 'admin_manual_backup' || interaction.customId === 'live_manual_backup') {
+        const modal = new ModalBuilder()
+          .setCustomId(
+            interaction.customId === 'admin_manual_backup'
+              ? 'admin_backup_modal'
+              : 'live_backup_modal'
+          )
+          .setTitle('Team / Backup nachrücken');
 
-        if (interaction.customId === 'admin_test_start_32') {
-          await startTestRun(32);
-          await interaction.reply({
-            content: '✅ 32er Testlauf gestartet.',
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+        const eventInput = new TextInputBuilder()
+          .setCustomId('event_key')
+          .setLabel('Event (friday oder saturday)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder('friday');
 
-        if (interaction.customId === 'admin_test_delete') {
-          await deleteTestRun();
-          await interaction.reply({
-            content: '✅ Testlauf komplett gelöscht.',
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+        const outgoingInput = new TextInputBuilder()
+          .setCustomId('outgoing_team')
+          .setLabel('Teilnehmendes Team, das raus soll')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder('z. B. Team A');
 
-        if (interaction.customId === 'admin_manual_backup') {
-          const modal = new ModalBuilder()
-            .setCustomId('admin_backup_modal')
-            .setTitle('Team / Backup nachrücken');
+        const incomingInput = new TextInputBuilder()
+          .setCustomId('incoming_team')
+          .setLabel('Backup-Team, das nachrücken soll')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder('z. B. Team B');
 
-          const eventInput = new TextInputBuilder()
-            .setCustomId('event_key')
-            .setLabel('Event (friday oder saturday)')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setPlaceholder('friday');
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(eventInput),
+          new ActionRowBuilder().addComponents(outgoingInput),
+          new ActionRowBuilder().addComponents(incomingInput)
+        );
 
-          const outgoingInput = new TextInputBuilder()
-            .setCustomId('outgoing_team')
-            .setLabel('Teilnehmendes Team, das raus soll')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setPlaceholder('z. B. Test Team 1');
+        await interaction.showModal(modal);
+        return true;
+      }
 
-          const incomingInput = new TextInputBuilder()
-            .setCustomId('incoming_team')
-            .setLabel('Backup-Team, das nachrücken soll')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setPlaceholder('z. B. Test Team 9');
+      if (interaction.customId === 'admin_manual_group_result' || interaction.customId === 'live_manual_group_result') {
+        await interaction.reply({
+          content: 'Für welches Event willst du ein Gruppenergebnis manuell setzen?',
+          components: [buildEventSelect(
+            interaction.customId === 'admin_manual_group_result'
+              ? 'admin_pick_group_event'
+              : 'live_pick_group_event'
+          )],
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
 
-          modal.addComponents(
-            new ActionRowBuilder().addComponents(eventInput),
-            new ActionRowBuilder().addComponents(outgoingInput),
-            new ActionRowBuilder().addComponents(incomingInput)
-          );
+      if (interaction.customId === 'admin_manual_ko_result' || interaction.customId === 'live_manual_ko_result') {
+        await interaction.reply({
+          content: 'Für welches Event willst du ein K.O.-Ergebnis manuell setzen?',
+          components: [buildEventSelect(
+            interaction.customId === 'admin_manual_ko_result'
+              ? 'admin_pick_ko_event'
+              : 'live_pick_ko_event'
+          )],
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
 
-          await interaction.showModal(modal);
-          return true;
-        }
+      if (interaction.customId === 'live_delete_team') {
+        const modal = new ModalBuilder()
+          .setCustomId('live_delete_team_modal')
+          .setTitle('Registriertes Team löschen');
 
-        if (interaction.customId === 'admin_manual_group_result') {
-          await interaction.reply({
-            content: 'Für welches Event willst du ein Gruppenergebnis manuell setzen?',
-            components: [buildEventSelect('admin_pick_group_event')],
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+        const teamInput = new TextInputBuilder()
+          .setCustomId('club_name')
+          .setLabel('Exakter Teamname')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder('z. B. Loco Squad');
 
-        if (interaction.customId === 'admin_manual_ko_result') {
-          await interaction.reply({
-            content: 'Für welches Event willst du ein K.O.-Ergebnis manuell setzen?',
-            components: [buildEventSelect('admin_pick_ko_event')],
-            flags: MessageFlags.Ephemeral,
-          });
-          return true;
-        }
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(teamInput)
+        );
+
+        await interaction.showModal(modal);
+        return true;
       }
     }
 
@@ -933,7 +1107,8 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId === 'admin_pick_group_event') {
+      // TEST GROUP RESULT
+      if (interaction.customId === 'admin_pick_group_event' || interaction.customId === 'live_pick_group_event') {
         const eventKey = interaction.values[0];
         const resultsData = loadResults();
         const event = resultsData[eventKey];
@@ -946,6 +1121,7 @@ module.exports = {
           return true;
         }
 
+        const isTest = interaction.customId === 'admin_pick_group_event';
         const groupOptions = Object.keys(event.groups).map(letter => ({
           label: `Gruppe ${letter}`,
           value: letter,
@@ -953,7 +1129,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId(`admin_pick_group_letter:${eventKey}`)
+            .setCustomId(`${isTest ? 'admin' : 'live'}_pick_group_letter:${eventKey}`)
             .setPlaceholder('Gruppe auswählen')
             .addOptions(groupOptions)
         );
@@ -965,8 +1141,11 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId.startsWith('admin_pick_group_letter:')) {
-        const [, eventKey] = interaction.customId.split(':');
+      if (
+        interaction.customId.startsWith('admin_pick_group_letter:') ||
+        interaction.customId.startsWith('live_pick_group_letter:')
+      ) {
+        const [prefix, eventKey] = interaction.customId.split(':');
         const groupLetter = interaction.values[0];
         const resultsData = loadResults();
         const matches = resultsData[eventKey]?.groups?.[groupLetter]?.matches || [];
@@ -981,7 +1160,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId(`admin_pick_group_match:${eventKey}:${groupLetter}`)
+            .setCustomId(`${prefix.replace('letter', 'match')}:${eventKey}:${groupLetter}`)
             .setPlaceholder('Spiel auswählen')
             .addOptions(
               matches.map(match => ({
@@ -999,8 +1178,11 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId.startsWith('admin_pick_group_match:')) {
-        const [, eventKey, groupLetter] = interaction.customId.split(':');
+      if (
+        interaction.customId.startsWith('admin_pick_group_match:') ||
+        interaction.customId.startsWith('live_pick_group_match:')
+      ) {
+        const [prefix, eventKey, groupLetter] = interaction.customId.split(':');
         const matchNumber = interaction.values[0];
         const resultsData = loadResults();
         const match = resultsData[eventKey]?.groups?.[groupLetter]?.matches?.find(
@@ -1016,7 +1198,9 @@ module.exports = {
         }
 
         const modal = new ModalBuilder()
-          .setCustomId(`admin_group_result_modal:${eventKey}:${groupLetter}:${matchNumber}`)
+          .setCustomId(
+            `${prefix.startsWith('admin') ? 'admin' : 'live'}_group_result_modal:${eventKey}:${groupLetter}:${matchNumber}`
+          )
           .setTitle('Gruppenergebnis setzen');
 
         const homeInput = new TextInputBuilder()
@@ -1042,7 +1226,8 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId === 'admin_pick_ko_event') {
+      // K.O.
+      if (interaction.customId === 'admin_pick_ko_event' || interaction.customId === 'live_pick_ko_event') {
         const eventKey = interaction.values[0];
         const koData = loadKo();
         const event = koData[eventKey];
@@ -1055,6 +1240,7 @@ module.exports = {
           return true;
         }
 
+        const isTest = interaction.customId === 'admin_pick_ko_event';
         const roundOptions = Object.keys(event.rounds).map(roundKey => ({
           label: getRoundLabel(roundKey),
           value: roundKey,
@@ -1062,7 +1248,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId(`admin_pick_ko_round:${eventKey}`)
+            .setCustomId(`${isTest ? 'admin' : 'live'}_pick_ko_round:${eventKey}`)
             .setPlaceholder('K.O.-Runde auswählen')
             .addOptions(roundOptions)
         );
@@ -1074,8 +1260,11 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId.startsWith('admin_pick_ko_round:')) {
-        const [, eventKey] = interaction.customId.split(':');
+      if (
+        interaction.customId.startsWith('admin_pick_ko_round:') ||
+        interaction.customId.startsWith('live_pick_ko_round:')
+      ) {
+        const [prefix, eventKey] = interaction.customId.split(':');
         const roundKey = interaction.values[0];
         const koData = loadKo();
         const matches = koData[eventKey]?.rounds?.[roundKey]?.matches || [];
@@ -1090,7 +1279,7 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId(`admin_pick_ko_match:${eventKey}:${roundKey}`)
+            .setCustomId(`${prefix.replace('round', 'match')}:${eventKey}:${roundKey}`)
             .setPlaceholder('Spiel auswählen')
             .addOptions(
               matches.map(match => ({
@@ -1108,8 +1297,11 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId.startsWith('admin_pick_ko_match:')) {
-        const [, eventKey, roundKey] = interaction.customId.split(':');
+      if (
+        interaction.customId.startsWith('admin_pick_ko_match:') ||
+        interaction.customId.startsWith('live_pick_ko_match:')
+      ) {
+        const [prefix, eventKey, roundKey] = interaction.customId.split(':');
         const matchNumber = interaction.values[0];
         const koData = loadKo();
         const match = koData[eventKey]?.rounds?.[roundKey]?.matches?.find(
@@ -1125,7 +1317,9 @@ module.exports = {
         }
 
         const modal = new ModalBuilder()
-          .setCustomId(`admin_ko_result_modal:${eventKey}:${roundKey}:${matchNumber}`)
+          .setCustomId(
+            `${prefix.startsWith('admin') ? 'admin' : 'live'}_ko_result_modal:${eventKey}:${roundKey}:${matchNumber}`
+          )
           .setTitle('K.O.-Ergebnis setzen');
 
         const homeInput = new TextInputBuilder()
@@ -1162,13 +1356,18 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId === 'admin_backup_modal') {
+      if (interaction.customId === 'admin_backup_modal' || interaction.customId === 'live_backup_modal') {
         const eventKey = interaction.fields.getTextInputValue('event_key').trim().toLowerCase();
         const outgoingTeam = interaction.fields.getTextInputValue('outgoing_team').trim();
         const incomingTeam = interaction.fields.getTextInputValue('incoming_team').trim();
 
         try {
-          await promoteBackupSwap(eventKey, outgoingTeam, incomingTeam);
+          await promoteBackupSwap(
+            eventKey,
+            outgoingTeam,
+            incomingTeam,
+            interaction.customId === 'admin_backup_modal'
+          );
 
           await interaction.reply({
             content: `✅ Backup-Swap durchgeführt.\nRaus: **${outgoingTeam}**\nRein: **${incomingTeam}**`,
@@ -1184,7 +1383,29 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId.startsWith('admin_group_result_modal:')) {
+      if (interaction.customId === 'live_delete_team_modal') {
+        const clubName = interaction.fields.getTextInputValue('club_name').trim();
+
+        try {
+          await deleteRegisteredTeam(clubName);
+          await interaction.reply({
+            content: `✅ Team gelöscht: **${clubName}**`,
+            flags: MessageFlags.Ephemeral,
+          });
+        } catch (error) {
+          await interaction.reply({
+            content: `❌ ${error.message}`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return true;
+      }
+
+      if (
+        interaction.customId.startsWith('admin_group_result_modal:') ||
+        interaction.customId.startsWith('live_group_result_modal:')
+      ) {
         const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
         const homeGoals = interaction.fields.getTextInputValue('home_goals').trim();
         const awayGoals = interaction.fields.getTextInputValue('away_goals').trim();
@@ -1198,7 +1419,14 @@ module.exports = {
         }
 
         try {
-          await manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoals, awayGoals);
+          await manualSetGroupResult(
+            eventKey,
+            groupLetter,
+            matchNumber,
+            homeGoals,
+            awayGoals,
+            interaction.customId.startsWith('admin_')
+          );
 
           await interaction.reply({
             content: `✅ Gruppenergebnis manuell gesetzt: ${homeGoals}:${awayGoals}`,
@@ -1214,7 +1442,10 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId.startsWith('admin_ko_result_modal:')) {
+      if (
+        interaction.customId.startsWith('admin_ko_result_modal:') ||
+        interaction.customId.startsWith('live_ko_result_modal:')
+      ) {
         const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
         const homeGoals = interaction.fields.getTextInputValue('home_goals').trim();
         const awayGoals = interaction.fields.getTextInputValue('away_goals').trim();
@@ -1228,7 +1459,14 @@ module.exports = {
         }
 
         try {
-          await manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awayGoals);
+          await manualSetKoResult(
+            eventKey,
+            roundKey,
+            matchNumber,
+            homeGoals,
+            awayGoals,
+            interaction.customId.startsWith('admin_')
+          );
 
           await interaction.reply({
             content: `✅ K.O.-Ergebnis manuell gesetzt: ${homeGoals}:${awayGoals}`,
