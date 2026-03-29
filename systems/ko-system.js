@@ -922,7 +922,7 @@ async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
   if (match.confirmationMessageId) {
     setTimeout(async () => {
       await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
-    }, 20000);
+    }, 4000);
   }
 
   await interaction.reply({
@@ -985,7 +985,7 @@ async function handleReject(interaction, eventKey, roundKey, matchNumber) {
   if (match.confirmationMessageId) {
     setTimeout(async () => {
       await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
-    }, 20000);
+    }, 4000);
   }
 
   await interaction.reply({
