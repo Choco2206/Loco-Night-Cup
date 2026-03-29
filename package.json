@@ -1,0 +1,16 @@
+{
+  "name": "loco-night-cup-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for Loco Night Cup",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.5"
+  }
+}
