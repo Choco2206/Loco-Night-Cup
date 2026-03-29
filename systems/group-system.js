@@ -365,7 +365,31 @@ module.exports = {
     return false;
   },
 
-  async handleMessage() {
+  async handleMessage(message) {
+  if (!message.guild) return false;
+  if (message.author.bot) return false;
+
+  const groupChannelIds = [
+    process.env.GROUP_A_CHANNEL_ID,
+    process.env.GROUP_B_CHANNEL_ID,
+    process.env.GROUP_C_CHANNEL_ID,
+    process.env.GROUP_D_CHANNEL_ID,
+    process.env.GROUP_E_CHANNEL_ID,
+    process.env.GROUP_F_CHANNEL_ID,
+    process.env.GROUP_G_CHANNEL_ID,
+    process.env.GROUP_H_CHANNEL_ID,
+  ].filter(Boolean);
+
+  if (!groupChannelIds.includes(message.channel.id)) {
     return false;
-  },
+  }
+
+  setTimeout(async () => {
+    try {
+      await message.delete();
+    } catch (error) {}
+  }, 10 * 60 * 1000);
+
+  return false;
+},
 };
