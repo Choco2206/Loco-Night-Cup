@@ -6,6 +6,7 @@ const { ensureDataFolders, ensureJsonFiles } = require('./utils/storage');
 const roleSystem = require('./systems/role-system');
 const teamSystem = require('./systems/team-system');
 const checkinSystem = require('./systems/checkin-system');
+const groupSystem = require('./systems/group-system');
 
 const client = new Client({
   intents: [
@@ -25,6 +26,7 @@ client.once(Events.ClientReady, async readyClient => {
     if (roleSystem.init) await roleSystem.init(client);
     if (teamSystem.init) await teamSystem.init(client);
     if (checkinSystem.init) await checkinSystem.init(client);
+    if (groupSystem.init) await groupSystem.init(client);
 
     console.log(`✅ Bot online als ${readyClient.user.tag}`);
   } catch (error) {
@@ -46,6 +48,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (checkinSystem.handleInteraction) {
       const handled = await checkinSystem.handleInteraction(interaction);
+      if (handled) return;
+    }
+
+    if (groupSystem.handleInteraction) {
+      const handled = await groupSystem.handleInteraction(interaction);
       if (handled) return;
     }
   } catch (error) {
@@ -73,6 +80,11 @@ client.on(Events.MessageCreate, async message => {
 
     if (checkinSystem.handleMessage) {
       const handled = await checkinSystem.handleMessage(message);
+      if (handled) return;
+    }
+
+    if (groupSystem.handleMessage) {
+      const handled = await groupSystem.handleMessage(message);
       if (handled) return;
     }
   } catch (error) {
