@@ -1,7 +1,848 @@
-module.exports = {
-  async init() {},
+const fs = require('fs');
+const path = require('path');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+} = require('discord.js');
 
-  async handleInteraction() {
+const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
+const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
+
+let clientRef = null;
+let intervalRef = null;
+
+function ensureCheckinsFile() {
+  const dir = path.dirname(CHECKINS_FILE);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (!fs.existsSync(CHECKINS_FILE)) {
+    fs.writeFileSync(
+      CHECKINS_FILE,
+      JSON.stringify(
+        {
+          friday: null,
+          saturday: null,
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+  }
+}
+
+function loadCheckins() {
+  ensureCheckinsFile();
+
+  try {
+    const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+    };
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von checkins.json:', error);
+    return { friday: null, saturday: null };
+  }
+}
+
+function saveCheckins(data) {
+  try {
+    fs.writeFileSync(CHECKINS_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.error('❌ Fehler beim Schreiben von checkins.json:', error);
+  }
+}
+
+function loadTeams() {
+  try {
+    if (!fs.existsSync(TEAMS_FILE)) return [];
+    const raw = fs.readFileSync(TEAMS_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von teams.json:', error);
+    return [];
+  }
+}
+
+function getUserTeam(userId) {
+  const teams = loadTeams();
+
+  return teams.find(team => {
+    const isManager = team.managerId === userId;
+    const isCoManager =
+      Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+    return isManager || isCoManager;
+  });
+}
+
+function formatDateGerman(date) {
+  return new Intl.DateTimeFormat('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatTimeGerman(date) {
+  return new Intl.DateTimeFormat('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function formatCountdown(targetTimestamp) {
+  const diff = targetTimestamp - Date.now();
+
+  if (diff <= 0) return 'abgelaufen';
+
+  const totalMinutes = Math.floor(diff / 1000 / 60);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function getCurrentFormat(teamCount) {
+  if (teamCount < 8) return 0;
+  if (teamCount < 16) return 8;
+  if (teamCount < 24) return 16;
+  if (teamCount < 32) return 24;
+  return 32;
+}
+
+function getFormatExplanation(format) {
+  if (format === 8) {
+    return [
+      '• 2 Gruppen mit je 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• K.O.-Phase startet ab dem Halbfinale',
+    ].join('\n');
+  }
+
+  if (format === 16) {
+    return [
+      '• 4 Gruppen mit je 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• K.O.-Phase startet ab dem Viertelfinale',
+    ].join('\n');
+  }
+
+  if (format === 24) {
+    return [
+      '• 6 Gruppen mit je 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• Dazu kommen die 4 besten Gruppendritten weiter',
+      '• K.O.-Phase startet ab dem Achtelfinale',
+    ].join('\n');
+  }
+
+  if (format === 32) {
+    return [
+      '• 8 Gruppen mit je 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• K.O.-Phase startet ab dem Achtelfinale',
+    ].join('\n');
+  }
+
+  return '• Mindestanzahl für den Start sind 8 Teams';
+}
+
+function getParticipatingTeams(event) {
+  const format = getCurrentFormat(event.teams.length);
+  if (format === 0) return [];
+  return event.teams.slice(0, format);
+}
+
+function getBackupTeams(event) {
+  const format = getCurrentFormat(event.teams.length);
+  if (format === 0) return [];
+  return event.teams.slice(format);
+}
+
+function buildTeamList(event) {
+  const participating = getParticipatingTeams(event);
+
+  if (participating.length === 0) {
+    return 'Noch keine teilnehmenden Teams.';
+  }
+
+  return participating
+    .map((team, index) => `${index + 1}. ${team.clubName}`)
+    .join('\n');
+}
+
+function buildBackupShortLine(event) {
+  const backups = getBackupTeams(event);
+  if (backups.length === 0) return null;
+  return `**Backups (aktuell nicht teilnahmeberechtigt):** ${backups.length}`;
+}
+
+function buildMainEmbed(event) {
+  const format = getCurrentFormat(event.teams.length);
+  const participatingCount = getParticipatingTeams(event).length;
+  const statusText =
+    event.finalized && event.status === 'cancelled'
+      ? '❌ NightCup findet nicht statt'
+      : event.finalized && event.status === 'confirmed'
+      ? '✅ NightCup findet statt'
+      : '🟢 Check-in geöffnet';
+
+  const formatText = format === 0 ? 'Noch kein gültiges Turnierformat' : `${format}er Turnier`;
+  const backupLine = buildBackupShortLine(event);
+
+  const sections = [
+    `**Status:** ${statusText}`,
+    `**Datum:** ${event.displayDate}`,
+    `**Anmeldeschluss:** ${formatTimeGerman(new Date(event.deadlineAt))} Uhr`,
+    `**Countdown bis Anmeldeschluss:** ${formatCountdown(event.deadlineAt)}`,
+    `**Turnierstart:** ${event.startLabel}`,
+    `**Countdown bis Start:** ${formatCountdown(event.startAt)}`,
+    `**Aktuelles Format:** ${formatText}`,
+    `**Teilnehmende Teams:** ${participatingCount}${format > 0 ? `/${format}` : ''}`,
+    backupLine || null,
+    `**Regeln:** <#${process.env.RULES_CHANNEL_ID}>`,
+    '',
+    '━━━━━━━━━━━━━━',
+    '',
+    '**Aktuelles Turnierformat:**',
+    getFormatExplanation(format),
+    '',
+    '━━━━━━━━━━━━━━',
+    '',
+    '**Teilnehmende Teams:**',
+    buildTeamList(event),
+  ].filter(Boolean);
+
+  if (event.finalized && event.status === 'cancelled') {
+    sections.push(
+      '',
+      '━━━━━━━━━━━━━━',
+      '',
+      '❌ **NightCup findet nicht statt**',
+      'Minimum sind **8 Teams**.'
+    );
+  }
+
+  return new EmbedBuilder()
+    .setTitle(`🌙 Loco NightCup ${event.label}`)
+    .setDescription(sections.join('\n'))
+    .setColor(0xff0000);
+}
+
+function buildMainButtons(event) {
+  const disabled = event.finalized || Date.now() >= event.deadlineAt;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`checkin_join:${event.type}`)
+      .setLabel('⬆️ Anmelden')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`checkin_leave:${event.type}`)
+      .setLabel('⬇️ Abmelden')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  );
+}
+
+function buildSummaryContent(event) {
+  const format = getCurrentFormat(event.teams.length);
+
+  if (format === 0) {
+    return [
+      '❌ **NightCup findet nicht statt**',
+      '',
+      'Es wurden nicht genug Teams registriert.',
+      'Minimum sind **8 Teams**.',
+    ].join('\n');
+  }
+
+  return [
+    '✅ **NightCup findet statt**',
+    '',
+    `Format: **${format}er Turnier**`,
+    'Gruppenauslosung findet um **23:15 Uhr** statt.',
+    'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
+  ].join('\n');
+}
+
+function getMentionLine(team) {
+  const mentionIds = [team.managerId, ...(team.coManagerIds || [])].filter(Boolean);
+  const uniqueIds = [...new Set(mentionIds)];
+  return uniqueIds.map(id => `<@${id}>`).join(' ');
+}
+
+function buildBackupContent(event) {
+  const backups = getBackupTeams(event);
+
+  if (backups.length === 0) return null;
+
+  const lines = backups.map((team, index) => {
+    const decision = event.backupDecisions?.[team.teamId] || 'open';
+
+    let status = '⏳ Offen';
+    if (decision === 'yes') status = '✅ Bereit';
+    if (decision === 'no') status = '❌ Nicht bereit';
+
+    return [
+      `**${index + 1}. ${team.clubName}**`,
+      getMentionLine(team),
+      `Status: ${status}`,
+    ].join('\n');
+  });
+
+  return [
+    '⚠️ **Backups**',
+    '',
+    'Die folgenden Teams sind aktuell nicht teilnahmeberechtigt.',
+    'Bitte bestätigt, ob ihr als Backup bereitsteht:',
+    '',
+    lines.join('\n\n'),
+  ].join('\n');
+}
+
+function buildBackupButtons(event) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`backup_yes:${event.type}`)
+      .setLabel('✅ Backup bestätigen')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`backup_no:${event.type}`)
+      .setLabel('❌ Backup ablehnen')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+async function fetchChannel(channelId) {
+  try {
+    return await clientRef.channels.fetch(channelId);
+  } catch (error) {
+    console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
+    return null;
+  }
+}
+
+async function fetchMessage(channel, messageId) {
+  try {
+    return await channel.messages.fetch(messageId);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function deleteMessageIfExists(channelId, messageId) {
+  if (!channelId || !messageId) return;
+
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  const message = await fetchMessage(channel, messageId);
+  if (!message) return;
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
+  }
+}
+
+function getNextBoundary(dayOfWeek, hour) {
+  const now = new Date();
+  const next = new Date(now);
+  next.setSeconds(0, 0);
+
+  while (true) {
+    if (
+      next.getDay() === dayOfWeek &&
+      next.getHours() === hour &&
+      next.getMinutes() === 0 &&
+      next.getTime() > now.getTime()
+    ) {
+      return next;
+    }
+
+    next.setMinutes(next.getMinutes() + 1);
+  }
+}
+
+function getCycleConfig(type) {
+  if (type === 'friday') {
+    const resetAt = getNextBoundary(6, 7); // Samstag 07:00
+    const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000); // Freitag 23:00
+    const start = new Date(deadline.getTime() + 60 * 60 * 1000); // Samstag 00:00
+
+    return {
+      key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
+      type: 'friday',
+      label: 'Freitag',
+      channelId: process.env.FRIDAY_CHECKIN_CHANNEL_ID,
+      deadlineAt: deadline.getTime(),
+      startAt: start.getTime(),
+      resetAt: resetAt.getTime(),
+      displayDate: formatDateGerman(deadline),
+      startLabel: '00:00 Uhr (Nacht von Freitag auf Samstag)',
+    };
+  }
+
+  const resetAt = getNextBoundary(0, 7); // Sonntag 07:00
+  const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000); // Samstag 23:00
+  const start = new Date(deadline.getTime() + 60 * 60 * 1000); // Sonntag 00:00
+
+  return {
+    key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
+    type: 'saturday',
+    label: 'Samstag',
+    channelId: process.env.SATURDAY_CHECKIN_CHANNEL_ID,
+    deadlineAt: deadline.getTime(),
+    startAt: start.getTime(),
+    resetAt: resetAt.getTime(),
+    displayDate: formatDateGerman(deadline),
+    startLabel: '00:00 Uhr (Nacht von Samstag auf Sonntag)',
+  };
+}
+
+function createNewEventState(type, previousState = null) {
+  const cfg = getCycleConfig(type);
+
+  return {
+    cycleKey: cfg.key,
+    type: cfg.type,
+    label: cfg.label,
+    channelId: cfg.channelId,
+    deadlineAt: cfg.deadlineAt,
+    startAt: cfg.startAt,
+    resetAt: cfg.resetAt,
+    displayDate: cfg.displayDate,
+    startLabel: cfg.startLabel,
+
+    messageId: previousState?.messageId || null,
+    summaryMessageId: null,
+    backupMessageId: null,
+
+    teams: [],
+    backupDecisions: {},
+
+    finalized: false,
+    status: 'open',
+    lastRenderMinute: null,
+  };
+}
+
+async function ensureMainMessage(event) {
+  const channel = await fetchChannel(event.channelId);
+  if (!channel) return event;
+
+  let message = null;
+
+  if (event.messageId) {
+    message = await fetchMessage(channel, event.messageId);
+  }
+
+  if (!message) {
+    const created = await channel.send({
+      embeds: [buildMainEmbed(event)],
+      components: [buildMainButtons(event)],
+    });
+
+    event.messageId = created.id;
+    return event;
+  }
+
+  await message.edit({
+    embeds: [buildMainEmbed(event)],
+    components: [buildMainButtons(event)],
+  });
+
+  return event;
+}
+
+async function ensureSummaryMessage(event) {
+  if (!event.finalized) return event;
+
+  const channel = await fetchChannel(event.channelId);
+  if (!channel) return event;
+
+  const content = buildSummaryContent(event);
+  let message = null;
+
+  if (event.summaryMessageId) {
+    message = await fetchMessage(channel, event.summaryMessageId);
+  }
+
+  if (!message) {
+    const created = await channel.send({ content });
+    event.summaryMessageId = created.id;
+    return event;
+  }
+
+  await message.edit({ content });
+  return event;
+}
+
+async function ensureBackupMessage(event) {
+  const channel = await fetchChannel(event.channelId);
+  if (!channel) return event;
+
+  const backupContent = buildBackupContent(event);
+
+  if (!backupContent) {
+    if (event.backupMessageId) {
+      await deleteMessageIfExists(event.channelId, event.backupMessageId);
+      event.backupMessageId = null;
+    }
+    return event;
+  }
+
+  let message = null;
+
+  if (event.backupMessageId) {
+    message = await fetchMessage(channel, event.backupMessageId);
+  }
+
+  if (!message) {
+    const created = await channel.send({
+      content: backupContent,
+      components: [buildBackupButtons(event)],
+    });
+    event.backupMessageId = created.id;
+    return event;
+  }
+
+  await message.edit({
+    content: backupContent,
+    components: [buildBackupButtons(event)],
+  });
+
+  return event;
+}
+
+async function finalizeEvent(event) {
+  if (event.finalized) return event;
+
+  event.finalized = true;
+  event.status = getCurrentFormat(event.teams.length) === 0 ? 'cancelled' : 'confirmed';
+
+  event = await ensureMainMessage(event);
+  event = await ensureSummaryMessage(event);
+  event = await ensureBackupMessage(event);
+
+  return event;
+}
+
+async function resetEvent(oldEvent, type) {
+  if (oldEvent?.summaryMessageId) {
+    await deleteMessageIfExists(oldEvent.channelId, oldEvent.summaryMessageId);
+  }
+
+  if (oldEvent?.backupMessageId) {
+    await deleteMessageIfExists(oldEvent.channelId, oldEvent.backupMessageId);
+  }
+
+  const fresh = createNewEventState(type, oldEvent || null);
+  return ensureMainMessage(fresh);
+}
+
+async function reconcileEvent(type, data) {
+  const current = data[type];
+  const cfg = getCycleConfig(type);
+
+  if (!current) {
+    const created = createNewEventState(type, null);
+    data[type] = await ensureMainMessage(created);
+    return;
+  }
+
+  if (current.cycleKey !== cfg.key) {
+    data[type] = await resetEvent(current, type);
+    return;
+  }
+
+  current.deadlineAt = cfg.deadlineAt;
+  current.startAt = cfg.startAt;
+  current.resetAt = cfg.resetAt;
+  current.displayDate = cfg.displayDate;
+  current.startLabel = cfg.startLabel;
+  current.channelId = cfg.channelId;
+
+  if (!current.finalized && Date.now() >= current.deadlineAt) {
+    data[type] = await finalizeEvent(current);
+    return;
+  }
+
+  const now = new Date();
+  const renderMinute = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+
+  if (current.lastRenderMinute !== renderMinute) {
+    current.lastRenderMinute = renderMinute;
+    data[type] = await ensureMainMessage(current);
+
+    if (current.finalized) {
+      data[type] = await ensureSummaryMessage(current);
+      data[type] = await ensureBackupMessage(current);
+    }
+  }
+}
+
+async function reconcileAll() {
+  if (!clientRef) return;
+
+  const data = loadCheckins();
+
+  await reconcileEvent('friday', data);
+  await reconcileEvent('saturday', data);
+
+  saveCheckins(data);
+}
+
+function normalizeTeamForCheckin(team) {
+  return {
+    teamId: team.id,
+    clubName: team.clubName,
+    managerId: team.managerId,
+    coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
+    joinedAt: Date.now(),
+  };
+}
+
+function findEventByType(data, type) {
+  if (type === 'friday') return data.friday;
+  if (type === 'saturday') return data.saturday;
+  return null;
+}
+
+function isUserAllowedForTeam(userId, team) {
+  if (!team) return false;
+  if (team.managerId === userId) return true;
+  return Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+}
+
+async function handleJoin(interaction, type) {
+  const data = loadCheckins();
+  const event = findEventByType(data, type);
+
+  if (!event) {
+    await interaction.reply({
+      content: '❌ Check-in wurde nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (event.finalized || Date.now() >= event.deadlineAt) {
+    await interaction.reply({
+      content: '❌ Die Anmeldung ist bereits geschlossen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const team = getUserTeam(interaction.user.id);
+
+  if (!team) {
+    await interaction.reply({
+      content: '❌ Du bist keinem registrierten Team als Vereinsmanager oder Co-VM zugeordnet.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const alreadyIn = event.teams.find(entry => entry.teamId === team.id);
+  if (alreadyIn) {
+    await interaction.reply({
+      content: '⚠️ Dein Team ist bereits angemeldet.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  event.teams.push(normalizeTeamForCheckin(team));
+  event.teams.sort((a, b) => a.joinedAt - b.joinedAt);
+
+  data[type] = await ensureMainMessage(event);
+  saveCheckins(data);
+
+  await interaction.reply({
+    content: `✅ **${team.clubName}** wurde angemeldet.`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleLeave(interaction, type) {
+  const data = loadCheckins();
+  const event = findEventByType(data, type);
+
+  if (!event) {
+    await interaction.reply({
+      content: '❌ Check-in wurde nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (event.finalized || Date.now() >= event.deadlineAt) {
+    await interaction.reply({
+      content: '❌ Die Anmeldung ist bereits geschlossen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const team = getUserTeam(interaction.user.id);
+
+  if (!team) {
+    await interaction.reply({
+      content: '❌ Du bist keinem registrierten Team als Vereinsmanager oder Co-VM zugeordnet.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const before = event.teams.length;
+  event.teams = event.teams.filter(entry => entry.teamId !== team.id);
+
+  if (before === event.teams.length) {
+    await interaction.reply({
+      content: '⚠️ Dein Team war nicht angemeldet.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  data[type] = await ensureMainMessage(event);
+  saveCheckins(data);
+
+  await interaction.reply({
+    content: `⬇️ **${team.clubName}** wurde abgemeldet.`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleBackupDecision(interaction, type, decision) {
+  const data = loadCheckins();
+  const event = findEventByType(data, type);
+
+  if (!event || !event.finalized) {
+    await interaction.reply({
+      content: '❌ Es wurde kein passender Backup-Check gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const userTeam = getUserTeam(interaction.user.id);
+
+  if (!userTeam) {
+    await interaction.reply({
+      content: '❌ Du bist keinem registrierten Team als Vereinsmanager oder Co-VM zugeordnet.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const backups = getBackupTeams(event);
+  const backupTeam = backups.find(team => team.teamId === userTeam.id);
+
+  if (!backupTeam) {
+    await interaction.reply({
+      content: '❌ Nur Teams, die aktuell als Backup geführt werden, dürfen diese Buttons benutzen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (
+    !isUserAllowedForTeam(interaction.user.id, {
+      managerId: backupTeam.managerId,
+      coManagerIds: backupTeam.coManagerIds,
+    })
+  ) {
+    await interaction.reply({
+      content: '❌ Du darfst diese Backup-Aktion nicht ausführen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (!event.backupDecisions) {
+    event.backupDecisions = {};
+  }
+
+  event.backupDecisions[backupTeam.teamId] = decision;
+
+  data[type] = await ensureBackupMessage(event);
+  saveCheckins(data);
+
+  await interaction.reply({
+    content:
+      decision === 'yes'
+        ? `✅ **${backupTeam.clubName}** ist jetzt als Backup bestätigt.`
+        : `❌ **${backupTeam.clubName}** wurde als Backup abgelehnt.`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+module.exports = {
+  async init(client) {
+    clientRef = client;
+    ensureCheckinsFile();
+
+    await reconcileAll();
+
+    if (!intervalRef) {
+      intervalRef = setInterval(async () => {
+        try {
+          await reconcileAll();
+        } catch (error) {
+          console.error('❌ Fehler im Check-in-Intervall:', error);
+        }
+      }, 60 * 1000);
+    }
+  },
+
+  async handleInteraction(interaction) {
+    if (!interaction.isButton()) return false;
+
+    if (interaction.customId.startsWith('checkin_join:')) {
+      const [, type] = interaction.customId.split(':');
+      return handleJoin(interaction, type);
+    }
+
+    if (interaction.customId.startsWith('checkin_leave:')) {
+      const [, type] = interaction.customId.split(':');
+      return handleLeave(interaction, type);
+    }
+
+    if (interaction.customId.startsWith('backup_yes:')) {
+      const [, type] = interaction.customId.split(':');
+      return handleBackupDecision(interaction, type, 'yes');
+    }
+
+    if (interaction.customId.startsWith('backup_no:')) {
+      const [, type] = interaction.customId.split(':');
+      return handleBackupDecision(interaction, type, 'no');
+    }
+
     return false;
   },
 
