@@ -1,0 +1,1059 @@
+const fs = require('fs');
+const path = require('path');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  MessageFlags,
+} = require('discord.js');
+
+const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
+const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
+const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
+
+let clientRef = null;
+let intervalRef = null;
+
+// =========================
+// FILE HELPERS
+// =========================
+
+function ensureKoFile() {
+  const dir = path.dirname(KO_FILE);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (!fs.existsSync(KO_FILE)) {
+    fs.writeFileSync(
+      KO_FILE,
+      JSON.stringify(
+        {
+          friday: null,
+          saturday: null,
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+  }
+}
+
+function loadGroups() {
+  try {
+    if (!fs.existsSync(GROUPS_FILE)) return { friday: null, saturday: null };
+    const raw = fs.readFileSync(GROUPS_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+    };
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von groups.json:', error);
+    return { friday: null, saturday: null };
+  }
+}
+
+function loadResults() {
+  try {
+    if (!fs.existsSync(RESULTS_FILE)) return { friday: null, saturday: null };
+    const raw = fs.readFileSync(RESULTS_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+    };
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von results.json:', error);
+    return { friday: null, saturday: null };
+  }
+}
+
+function loadKo() {
+  ensureKoFile();
+
+  try {
+    const raw = fs.readFileSync(KO_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+    };
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von ko.json:', error);
+    return { friday: null, saturday: null };
+  }
+}
+
+function saveKo(data) {
+  try {
+    fs.writeFileSync(KO_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.error('❌ Fehler beim Schreiben von ko.json:', error);
+  }
+}
+
+// =========================
+// HELPERS
+// =========================
+
+function getActualFormat(teamCount) {
+  if (teamCount < 8) return 0;
+  if (teamCount < 16) return 8;
+  if (teamCount < 24) return 16;
+  if (teamCount < 32) return 24;
+  return 32;
+}
+
+function sortRows(rows) {
+  return [...rows].sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.diff !== a.diff) return b.diff - a.diff;
+    return a.clubName.localeCompare(b.clubName, 'de');
+  });
+}
+
+function getRoundChannelId(roundKey) {
+  if (roundKey === 'roundOf16') return process.env.KO_ROUND_OF_16_CHANNEL_ID;
+  if (roundKey === 'quarterFinal') return process.env.KO_QUARTERFINAL_CHANNEL_ID;
+  if (roundKey === 'semiFinal') return process.env.KO_SEMIFINAL_CHANNEL_ID;
+  if (roundKey === 'thirdPlace') return process.env.KO_THIRD_PLACE_CHANNEL_ID;
+  if (roundKey === 'final') return process.env.KO_FINAL_CHANNEL_ID;
+  return null;
+}
+
+function getRoundLabel(roundKey) {
+  if (roundKey === 'roundOf16') return 'Achtelfinale';
+  if (roundKey === 'quarterFinal') return 'Viertelfinale';
+  if (roundKey === 'semiFinal') return 'Halbfinale';
+  if (roundKey === 'thirdPlace') return 'Spiel um Platz 3';
+  if (roundKey === 'final') return 'Finale';
+  return 'K.O.-Phase';
+}
+
+function getRoundTimeWindow(roundKey) {
+  if (roundKey === 'roundOf16') return '01:00–01:05';
+  if (roundKey === 'quarterFinal') return '01:20–01:25';
+  if (roundKey === 'semiFinal') return '01:40–01:45';
+  if (roundKey === 'thirdPlace') return '02:00–02:05';
+  if (roundKey === 'final') return '02:00–02:05';
+  return '01:00–01:05';
+}
+
+function cloneTeam(row) {
+  return {
+    teamId: row.teamId,
+    clubName: row.clubName,
+    managerId: row.managerId,
+    coManagerIds: Array.isArray(row.coManagerIds) ? row.coManagerIds : [],
+  };
+}
+
+function getQualifiedTeamsFromGroups(eventKey) {
+  const groupsData = loadGroups();
+  const event = groupsData[eventKey];
+  if (!event || !event.groups) return null;
+
+  const format = event.format;
+  const groupLetters = Object.keys(event.groups).sort();
+
+  const groupPlacements = {};
+  for (const letter of groupLetters) {
+    const rows = sortRows(event.groups[letter].rows || []);
+    groupPlacements[letter] = rows;
+  }
+
+  if (format === 8) {
+    return {
+      format,
+      semiFinal: [
+        [cloneTeam(groupPlacements.A[0]), cloneTeam(groupPlacements.B[1])],
+        [cloneTeam(groupPlacements.B[0]), cloneTeam(groupPlacements.A[1])],
+      ],
+    };
+  }
+
+  if (format === 16) {
+    return {
+      format,
+      quarterFinal: [
+        [cloneTeam(groupPlacements.A[0]), cloneTeam(groupPlacements.B[1])],
+        [cloneTeam(groupPlacements.B[0]), cloneTeam(groupPlacements.A[1])],
+        [cloneTeam(groupPlacements.C[0]), cloneTeam(groupPlacements.D[1])],
+        [cloneTeam(groupPlacements.D[0]), cloneTeam(groupPlacements.C[1])],
+      ],
+    };
+  }
+
+  if (format === 24) {
+    const winners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][0]));
+    const runners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][1]));
+    const thirds = groupLetters.map(letter => cloneTeam(groupPlacements[letter][2]));
+    const bestThirds = sortRows(thirds).slice(0, 4).map(cloneTeam);
+
+    return {
+      format,
+      roundOf16: [
+        [winners[0], bestThirds[3]],
+        [winners[1], bestThirds[2]],
+        [winners[2], bestThirds[1]],
+        [winners[3], bestThirds[0]],
+        [winners[4], runners[5]],
+        [winners[5], runners[4]],
+        [runners[0], runners[3]],
+        [runners[1], runners[2]],
+      ],
+    };
+  }
+
+  if (format === 32) {
+    return {
+      format,
+      roundOf16: [
+        [cloneTeam(groupPlacements.A[0]), cloneTeam(groupPlacements.B[1])],
+        [cloneTeam(groupPlacements.B[0]), cloneTeam(groupPlacements.A[1])],
+        [cloneTeam(groupPlacements.C[0]), cloneTeam(groupPlacements.D[1])],
+        [cloneTeam(groupPlacements.D[0]), cloneTeam(groupPlacements.C[1])],
+        [cloneTeam(groupPlacements.E[0]), cloneTeam(groupPlacements.F[1])],
+        [cloneTeam(groupPlacements.F[0]), cloneTeam(groupPlacements.E[1])],
+        [cloneTeam(groupPlacements.G[0]), cloneTeam(groupPlacements.H[1])],
+        [cloneTeam(groupPlacements.H[0]), cloneTeam(groupPlacements.G[1])],
+      ],
+    };
+  }
+
+  return null;
+}
+
+function createKoMatches(roundKey, pairs) {
+  const timeWindow = getRoundTimeWindow(roundKey);
+
+  return pairs.map((pair, index) => {
+    const [home, away] = pair;
+
+    return {
+      id: `${roundKey}_match_${index + 1}`,
+      roundKey,
+      matchNumber: index + 1,
+      timeWindow,
+      homeTeamId: home.teamId,
+      awayTeamId: away.teamId,
+      homeClubName: home.clubName,
+      awayClubName: away.clubName,
+      homeManagerId: home.managerId,
+      awayManagerId: away.managerId,
+      homeCoManagerIds: home.coManagerIds || [],
+      awayCoManagerIds: away.coManagerIds || [],
+      status: 'pending', // pending | reported | confirmed
+      reportedByTeamId: null,
+      reportedScore: null,
+      confirmed: false,
+      confirmationMessageId: null,
+      winnerTeamId: null,
+      loserTeamId: null,
+    };
+  });
+}
+
+function getMentionLine(match, side) {
+  const ids =
+    side === 'home'
+      ? [match.homeManagerId, ...(match.homeCoManagerIds || [])]
+      : [match.awayManagerId, ...(match.awayCoManagerIds || [])];
+
+  return [...new Set(ids.filter(Boolean))].map(id => `<@${id}>`).join(' ');
+}
+
+function buildRoundEmbed(eventLabel, roundKey, matches) {
+  const lines = matches.map(match => {
+    let status = '⏳ Offen';
+
+    if (match.status === 'reported' && match.reportedScore) {
+      status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
+    }
+
+    if (match.status === 'confirmed' && match.reportedScore) {
+      status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+    }
+
+    return [
+      `**${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}**`,
+      `🕒 ${match.timeWindow}`,
+      `${status}`,
+    ].join('\n');
+  });
+
+  return new EmbedBuilder()
+    .setTitle(`🏆 ${eventLabel} • ${getRoundLabel(roundKey)}`)
+    .setDescription(
+      [
+        'Ergebnisse werden über den Button darunter eingetragen.',
+        '',
+        ...lines,
+      ].join('\n\n')
+    )
+    .setColor(0xff0000);
+}
+
+function buildRoundButtons(eventKey, roundKey) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
+      .setLabel('⚽ Ergebnis eintragen')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function buildConfirmButtons(eventKey, roundKey, matchNumber) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ko_confirm:${eventKey}:${roundKey}:${matchNumber}`)
+      .setLabel('✅ Bestätigen')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`ko_reject:${eventKey}:${roundKey}:${matchNumber}`)
+      .setLabel('❌ Ablehnen')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+// =========================
+// DISCORD HELPERS
+// =========================
+
+async function fetchChannel(channelId) {
+  try {
+    return await clientRef.channels.fetch(channelId);
+  } catch (error) {
+    console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
+    return null;
+  }
+}
+
+async function fetchMessage(channel, messageId) {
+  try {
+    return await channel.messages.fetch(messageId);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function deleteMessageIfExists(channelId, messageId) {
+  if (!channelId || !messageId) return;
+
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  const message = await fetchMessage(channel, messageId);
+  if (!message) return;
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
+  }
+}
+
+async function sendOrEditRoundMessage(eventKey, roundKey, roundData, eventLabel) {
+  const channel = await fetchChannel(roundData.channelId);
+  if (!channel) return roundData;
+
+  const existing = roundData.messageId ? await fetchMessage(channel, roundData.messageId) : null;
+
+  if (!existing) {
+    const created = await channel.send({
+      embeds: [buildRoundEmbed(eventLabel, roundKey, roundData.matches)],
+      components: [buildRoundButtons(eventKey, roundKey)],
+    });
+
+    roundData.messageId = created.id;
+    return roundData;
+  }
+
+  await existing.edit({
+    embeds: [buildRoundEmbed(eventLabel, roundKey, roundData.matches)],
+    components: [buildRoundButtons(eventKey, roundKey)],
+  });
+
+  return roundData;
+}
+
+// =========================
+// AUTO GENERATION
+// =========================
+
+function allGroupMatchesConfirmed(eventKey) {
+  const resultsData = loadResults();
+  const event = resultsData[eventKey];
+  if (!event || !event.groups) return false;
+
+  for (const letter of Object.keys(event.groups)) {
+    const group = event.groups[letter];
+    if (!group || !Array.isArray(group.matches)) return false;
+
+    const allConfirmed = group.matches.every(match => match.status === 'confirmed');
+    if (!allConfirmed) return false;
+  }
+
+  return true;
+}
+
+async function createInitialKoRound(eventKey) {
+  const koData = loadKo();
+  const groupsData = loadGroups();
+  const groupEvent = groupsData[eventKey];
+
+  if (!groupEvent) return;
+  if (koData[eventKey] && koData[eventKey].cycleKey === groupEvent.cycleKey) return;
+  if (!allGroupMatchesConfirmed(eventKey)) return;
+
+  const qualified = getQualifiedTeamsFromGroups(eventKey);
+  if (!qualified) return;
+
+  const eventStore = {
+    cycleKey: groupEvent.cycleKey,
+    label: groupEvent.label,
+    format: qualified.format,
+    rounds: {},
+  };
+
+  if (qualified.semiFinal) {
+    eventStore.rounds.semiFinal = {
+      channelId: getRoundChannelId('semiFinal'),
+      messageId: null,
+      matches: createKoMatches('semiFinal', qualified.semiFinal),
+      completed: false,
+    };
+    eventStore.rounds.semiFinal = await sendOrEditRoundMessage(
+      eventKey,
+      'semiFinal',
+      eventStore.rounds.semiFinal,
+      eventStore.label
+    );
+  }
+
+  if (qualified.quarterFinal) {
+    eventStore.rounds.quarterFinal = {
+      channelId: getRoundChannelId('quarterFinal'),
+      messageId: null,
+      matches: createKoMatches('quarterFinal', qualified.quarterFinal),
+      completed: false,
+    };
+    eventStore.rounds.quarterFinal = await sendOrEditRoundMessage(
+      eventKey,
+      'quarterFinal',
+      eventStore.rounds.quarterFinal,
+      eventStore.label
+    );
+  }
+
+  if (qualified.roundOf16) {
+    eventStore.rounds.roundOf16 = {
+      channelId: getRoundChannelId('roundOf16'),
+      messageId: null,
+      matches: createKoMatches('roundOf16', qualified.roundOf16),
+      completed: false,
+    };
+    eventStore.rounds.roundOf16 = await sendOrEditRoundMessage(
+      eventKey,
+      'roundOf16',
+      eventStore.rounds.roundOf16,
+      eventStore.label
+    );
+  }
+
+  koData[eventKey] = eventStore;
+  saveKo(koData);
+
+  console.log(`✅ Erste K.O.-Runde für ${eventStore.label} erstellt.`);
+}
+
+function roundIsComplete(roundData) {
+  return roundData.matches.every(match => match.status === 'confirmed');
+}
+
+function getWinnerStub(match) {
+  const isHomeWinner = Number(match.reportedScore.home) > Number(match.reportedScore.away);
+  const isDraw = Number(match.reportedScore.home) === Number(match.reportedScore.away);
+
+  if (isDraw) return null;
+
+  if (isHomeWinner) {
+    return {
+      teamId: match.homeTeamId,
+      clubName: match.homeClubName,
+      managerId: match.homeManagerId,
+      coManagerIds: match.homeCoManagerIds || [],
+    };
+  }
+
+  return {
+    teamId: match.awayTeamId,
+    clubName: match.awayClubName,
+    managerId: match.awayManagerId,
+    coManagerIds: match.awayCoManagerIds || [],
+  };
+}
+
+function getLoserStub(match) {
+  const isHomeWinner = Number(match.reportedScore.home) > Number(match.reportedScore.away);
+  const isDraw = Number(match.reportedScore.home) === Number(match.reportedScore.away);
+
+  if (isDraw) return null;
+
+  if (isHomeWinner) {
+    return {
+      teamId: match.awayTeamId,
+      clubName: match.awayClubName,
+      managerId: match.awayManagerId,
+      coManagerIds: match.awayCoManagerIds || [],
+    };
+  }
+
+  return {
+    teamId: match.homeTeamId,
+    clubName: match.homeClubName,
+    managerId: match.homeManagerId,
+    coManagerIds: match.homeCoManagerIds || [],
+  };
+}
+
+async function advanceKoIfReady(eventKey) {
+  const koData = loadKo();
+  const event = koData[eventKey];
+  if (!event || !event.rounds) return;
+
+  // Achtelfinale -> Viertelfinale
+  if (event.rounds.roundOf16 && roundIsComplete(event.rounds.roundOf16) && !event.rounds.quarterFinal) {
+    const winners = event.rounds.roundOf16.matches.map(getWinnerStub).filter(Boolean);
+    if (winners.length === 8) {
+      const pairs = [
+        [winners[0], winners[1]],
+        [winners[2], winners[3]],
+        [winners[4], winners[5]],
+        [winners[6], winners[7]],
+      ];
+
+      event.rounds.quarterFinal = {
+        channelId: getRoundChannelId('quarterFinal'),
+        messageId: null,
+        matches: createKoMatches('quarterFinal', pairs),
+        completed: false,
+      };
+
+      event.rounds.quarterFinal = await sendOrEditRoundMessage(
+        eventKey,
+        'quarterFinal',
+        event.rounds.quarterFinal,
+        event.label
+      );
+
+      saveKo(koData);
+      return;
+    }
+  }
+
+  // Viertelfinale -> Halbfinale
+  if (event.rounds.quarterFinal && roundIsComplete(event.rounds.quarterFinal) && !event.rounds.semiFinal) {
+    const winners = event.rounds.quarterFinal.matches.map(getWinnerStub).filter(Boolean);
+    if (winners.length === 4) {
+      const pairs = [
+        [winners[0], winners[1]],
+        [winners[2], winners[3]],
+      ];
+
+      event.rounds.semiFinal = {
+        channelId: getRoundChannelId('semiFinal'),
+        messageId: null,
+        matches: createKoMatches('semiFinal', pairs),
+        completed: false,
+      };
+
+      event.rounds.semiFinal = await sendOrEditRoundMessage(
+        eventKey,
+        'semiFinal',
+        event.rounds.semiFinal,
+        event.label
+      );
+
+      saveKo(koData);
+      return;
+    }
+  }
+
+  // Halbfinale -> Finale + Platz 3
+  if (event.rounds.semiFinal && roundIsComplete(event.rounds.semiFinal)) {
+    if (!event.rounds.final || !event.rounds.thirdPlace) {
+      const winners = event.rounds.semiFinal.matches.map(getWinnerStub).filter(Boolean);
+      const losers = event.rounds.semiFinal.matches.map(getLoserStub).filter(Boolean);
+
+      if (winners.length === 2 && losers.length === 2) {
+        if (!event.rounds.final) {
+          event.rounds.final = {
+            channelId: getRoundChannelId('final'),
+            messageId: null,
+            matches: createKoMatches('final', [[winners[0], winners[1]]]),
+            completed: false,
+          };
+
+          event.rounds.final = await sendOrEditRoundMessage(
+            eventKey,
+            'final',
+            event.rounds.final,
+            event.label
+          );
+        }
+
+        if (!event.rounds.thirdPlace) {
+          event.rounds.thirdPlace = {
+            channelId: getRoundChannelId('thirdPlace'),
+            messageId: null,
+            matches: createKoMatches('thirdPlace', [[losers[0], losers[1]]]),
+            completed: false,
+          };
+
+          event.rounds.thirdPlace = await sendOrEditRoundMessage(
+            eventKey,
+            'thirdPlace',
+            event.rounds.thirdPlace,
+            event.label
+          );
+        }
+
+        saveKo(koData);
+        return;
+      }
+    }
+  }
+}
+
+async function reconcileKoAuto() {
+  await createInitialKoRound('friday');
+  await createInitialKoRound('saturday');
+
+  await advanceKoIfReady('friday');
+  await advanceKoIfReady('saturday');
+}
+
+// =========================
+// INTERACTION HELPERS
+// =========================
+
+function findRoundAndMatch(koData, eventKey, roundKey, matchNumber) {
+  const event = koData[eventKey];
+  if (!event) return null;
+
+  const round = event.rounds?.[roundKey];
+  if (!round) return null;
+
+  const match = round.matches.find(m => m.matchNumber === Number(matchNumber));
+  if (!match) return null;
+
+  return { event, round, match };
+}
+
+function isAuthorizedForMatch(userId, match) {
+  const homeTeam = {
+    managerId: match.homeManagerId,
+    coManagerIds: match.homeCoManagerIds || [],
+  };
+  const awayTeam = {
+    managerId: match.awayManagerId,
+    coManagerIds: match.awayCoManagerIds || [],
+  };
+
+  return isUserAllowedForTeam(userId, homeTeam) || isUserAllowedForTeam(userId, awayTeam);
+}
+
+async function handleOpenResult(interaction, eventKey, roundKey) {
+  const koData = loadKo();
+  const event = koData[eventKey];
+  const round = event?.rounds?.[roundKey];
+
+  if (!event || !round) {
+    await interaction.reply({
+      content: '❌ K.O.-Runde nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const allowedMatches = round.matches.filter(match => isAuthorizedForMatch(interaction.user.id, match));
+
+  if (allowedMatches.length === 0) {
+    await interaction.reply({
+      content: '❌ Du darfst für keine Paarung in dieser Runde ein Ergebnis eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`ko_select:${eventKey}:${roundKey}`)
+    .setPlaceholder('Wähle die Paarung aus')
+    .addOptions(
+      allowedMatches.map(match => ({
+        label: `${match.homeClubName} vs ${match.awayClubName}`,
+        description: `${getRoundLabel(roundKey)} • ${match.timeWindow}`,
+        value: String(match.matchNumber),
+      }))
+    );
+
+  const row = new ActionRowBuilder().addComponents(select);
+
+  await interaction.reply({
+    content: 'Wähle die Paarung aus, für die du ein Ergebnis eintragen willst.',
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleSelectResult(interaction, eventKey, roundKey) {
+  const koData = loadKo();
+  const round = koData[eventKey]?.rounds?.[roundKey];
+  const matchNumber = Number(interaction.values[0]);
+
+  if (!round) {
+    await interaction.reply({
+      content: '❌ Runde nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const match = round.matches.find(m => m.matchNumber === matchNumber);
+  if (!match) {
+    await interaction.reply({
+      content: '❌ Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`ko_modal:${eventKey}:${roundKey}:${matchNumber}`)
+    .setTitle('Ergebnis eintragen');
+
+  const homeInput = new TextInputBuilder()
+    .setCustomId('home_goals')
+    .setLabel(`Tore ${match.homeClubName}`)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('z. B. 3');
+
+  const awayInput = new TextInputBuilder()
+    .setCustomId('away_goals')
+    .setLabel(`Tore ${match.awayClubName}`)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('z. B. 1');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(homeInput),
+    new ActionRowBuilder().addComponents(awayInput)
+  );
+
+  await interaction.showModal(modal);
+  return true;
+}
+
+async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
+  const koData = loadKo();
+  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
+
+  if (!found) {
+    await interaction.reply({
+      content: '❌ K.O.-Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const { round, match } = found;
+
+  if (!isAuthorizedForMatch(interaction.user.id, match)) {
+    await interaction.reply({
+      content: '❌ Du darfst für dieses Spiel kein Ergebnis eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const homeGoals = interaction.fields.getTextInputValue('home_goals').trim();
+  const awayGoals = interaction.fields.getTextInputValue('away_goals').trim();
+
+  if (!/^\d+$/.test(homeGoals) || !/^\d+$/.test(awayGoals)) {
+    await interaction.reply({
+      content: '❌ Bitte gib nur ganze Zahlen ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (Number(homeGoals) === Number(awayGoals)) {
+    await interaction.reply({
+      content: '❌ In der K.O.-Phase muss es einen Sieger geben. Bitte trage kein Unentschieden ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const reportingHome = isUserAllowedForTeam(interaction.user.id, {
+    managerId: match.homeManagerId,
+    coManagerIds: match.homeCoManagerIds || [],
+  });
+
+  const reportingTeamId = reportingHome ? match.homeTeamId : match.awayTeamId;
+  const opponentMentions = reportingHome
+    ? [...new Set([match.awayManagerId, ...(match.awayCoManagerIds || [])].filter(Boolean))]
+    : [...new Set([match.homeManagerId, ...(match.homeCoManagerIds || [])].filter(Boolean))];
+
+  match.status = 'reported';
+  match.reportedByTeamId = reportingTeamId;
+  match.reportedScore = {
+    home: Number(homeGoals),
+    away: Number(awayGoals),
+  };
+  match.confirmed = false;
+
+  const channel = await fetchChannel(round.channelId);
+  if (!channel) {
+    await interaction.reply({
+      content: '❌ Kanal konnte nicht geladen werden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.confirmationMessageId) {
+    await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+    match.confirmationMessageId = null;
+  }
+
+  const confirmMessage = await channel.send({
+    content: [
+      `⚠️ **Ergebnis gemeldet**`,
+      '',
+      `**${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
+      '',
+      `Nur das gegnerische Team darf jetzt bestätigen oder ablehnen.`,
+      opponentMentions.map(id => `<@${id}>`).join(' '),
+    ].join('\n'),
+    components: [buildConfirmButtons(eventKey, roundKey, match.matchNumber)],
+  });
+
+  match.confirmationMessageId = confirmMessage.id;
+  saveKo(koData);
+
+  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, found.event.label)).messageId;
+  saveKo(koData);
+
+  await interaction.reply({
+    content: '✅ Ergebnis wurde gemeldet. Jetzt muss das gegnerische Team bestätigen.',
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
+  const koData = loadKo();
+  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
+
+  if (!found) {
+    await interaction.reply({
+      content: '❌ K.O.-Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const { event, round, match } = found;
+
+  if (match.status !== 'reported' || !match.reportedScore) {
+    await interaction.reply({
+      content: '❌ Für dieses Spiel gibt es aktuell kein offenes Ergebnis zur Bestätigung.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const opponentTeam =
+    match.reportedByTeamId === match.homeTeamId
+      ? { managerId: match.awayManagerId, coManagerIds: match.awayCoManagerIds || [] }
+      : { managerId: match.homeManagerId, coManagerIds: match.homeCoManagerIds || [] };
+
+  if (!isUserAllowedForTeam(interaction.user.id, opponentTeam)) {
+    await interaction.reply({
+      content: '❌ Nur das gegnerische Team darf dieses Ergebnis bestätigen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  match.status = 'confirmed';
+  match.confirmed = true;
+
+  const homeGoals = Number(match.reportedScore.home);
+  const awayGoals = Number(match.reportedScore.away);
+
+  if (homeGoals > awayGoals) {
+    match.winnerTeamId = match.homeTeamId;
+    match.loserTeamId = match.awayTeamId;
+  } else {
+    match.winnerTeamId = match.awayTeamId;
+    match.loserTeamId = match.homeTeamId;
+  }
+
+  saveKo(koData);
+
+  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
+  saveKo(koData);
+
+  if (match.confirmationMessageId) {
+    setTimeout(async () => {
+      await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+    }, 20000);
+  }
+
+  await interaction.reply({
+    content: `✅ Ergebnis bestätigt: **${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  await advanceKoIfReady(eventKey);
+
+  return true;
+}
+
+async function handleReject(interaction, eventKey, roundKey, matchNumber) {
+  const koData = loadKo();
+  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
+
+  if (!found) {
+    await interaction.reply({
+      content: '❌ K.O.-Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const { event, round, match } = found;
+
+  if (match.status !== 'reported' || !match.reportedScore) {
+    await interaction.reply({
+      content: '❌ Für dieses Spiel gibt es aktuell kein offenes Ergebnis zur Ablehnung.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const opponentTeam =
+    match.reportedByTeamId === match.homeTeamId
+      ? { managerId: match.awayManagerId, coManagerIds: match.awayCoManagerIds || [] }
+      : { managerId: match.homeManagerId, coManagerIds: match.homeCoManagerIds || [] };
+
+  if (!isUserAllowedForTeam(interaction.user.id, opponentTeam)) {
+    await interaction.reply({
+      content: '❌ Nur das gegnerische Team darf dieses Ergebnis ablehnen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  match.status = 'pending';
+  match.reportedByTeamId = null;
+  match.reportedScore = null;
+  match.confirmed = false;
+  match.winnerTeamId = null;
+  match.loserTeamId = null;
+
+  saveKo(koData);
+
+  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
+  saveKo(koData);
+
+  if (match.confirmationMessageId) {
+    setTimeout(async () => {
+      await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+    }, 20000);
+  }
+
+  await interaction.reply({
+    content: '❌ Ergebnis wurde abgelehnt. Das Spiel muss neu gemeldet oder später manuell geklärt werden.',
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+// =========================
+// EXPORTS
+// =========================
+
+module.exports = {
+  async init(client) {
+    clientRef = client;
+    ensureKoFile();
+
+    await reconcileKoAuto();
+
+    if (!intervalRef) {
+      intervalRef = setInterval(async () => {
+        try {
+          await reconcileKoAuto();
+        } catch (error) {
+          console.error('❌ Fehler im K.O.-Intervall:', error);
+        }
+      }, 60000);
+    }
+  },
+
+  async handleInteraction(interaction) {
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('ko_result_open:')) {
+        const [, eventKey, roundKey] = interaction.customId.split(':');
+        return handleOpenResult(interaction, eventKey, roundKey);
+      }
+
+      if (interaction.customId.startsWith('ko_confirm:')) {
+        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+        return handleConfirm(interaction, eventKey, roundKey, matchNumber);
+      }
+
+      if (interaction.customId.startsWith('ko_reject:')) {
+        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+        return handleReject(interaction, eventKey, roundKey, matchNumber);
+      }
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId.startsWith('ko_select:')) {
+        const [, eventKey, roundKey] = interaction.customId.split(':');
+        return handleSelectResult(interaction, eventKey, roundKey);
+      }
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('ko_modal:')) {
+        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+        return handleResultModal(interaction, eventKey, roundKey, matchNumber);
+      }
+    }
+
+    return false;
+  },
+
+  async handleMessage() {
+    return false;
+  },
+};
