@@ -1269,7 +1269,7 @@ async function handleConfirm(interaction, scope, key1, key2) {
     if (match.confirmationMessageId) {
       setTimeout(async () => {
         await deleteMessageIfExists(group.channelId, match.confirmationMessageId);
-      }, 20000);
+      }, 4000);
     }
 
     await interaction.reply({
@@ -1322,7 +1322,7 @@ async function handleConfirm(interaction, scope, key1, key2) {
     if (match.confirmationMessageId) {
       setTimeout(async () => {
         await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
-      }, 20000);
+      }, 4000);
     }
 
     await interaction.reply({
@@ -1379,7 +1379,7 @@ async function handleReject(interaction, scope, key1, key2) {
     if (match.confirmationMessageId) {
       setTimeout(async () => {
         await deleteMessageIfExists(group.channelId, match.confirmationMessageId);
-      }, 20000);
+      }, 4000);
     }
 
     await interaction.reply({
@@ -1422,7 +1422,7 @@ async function handleReject(interaction, scope, key1, key2) {
     if (match.confirmationMessageId) {
       setTimeout(async () => {
         await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
-      }, 20000);
+      }, 4000);
     }
 
     await interaction.reply({
