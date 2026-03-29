@@ -270,12 +270,12 @@ function getBackupTeams(event) {
 
 function buildSlotsList(event) {
   const slots = getDisplaySlots(event.teams.length);
-  const participating = getParticipatingTeams(event);
+  const signedUpTeams = event.teams.slice(0, slots);
 
   const lines = [];
   for (let i = 0; i < slots; i++) {
-    if (participating[i]) {
-      lines.push(`${i + 1}. ${participating[i].clubName}`);
+    if (signedUpTeams[i]) {
+      lines.push(`${i + 1}. ${signedUpTeams[i].clubName}`);
     } else {
       lines.push(`${i + 1}. —`);
     }
