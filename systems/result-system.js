@@ -720,7 +720,7 @@ async function handleConfirmResult(interaction, eventKey, groupLetter, matchNumb
   if (match.confirmationMessageId) {
     setTimeout(async () => {
       await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-    }, 20000);
+    }, 4000);
   }
 
   await interaction.reply({
@@ -779,7 +779,7 @@ async function handleRejectResult(interaction, eventKey, groupLetter, matchNumbe
   if (match.confirmationMessageId) {
     setTimeout(async () => {
       await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-    }, 20000);
+    }, 4000);
   }
 
   await interaction.reply({
