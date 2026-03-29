@@ -10,6 +10,7 @@ const groupSystem = require('./systems/group-system');
 const resultSystem = require('./systems/result-system');
 const koSystem = require('./systems/ko-system');
 const adminSystem = require('./systems/admin-system');
+const testSystem = require('./systems/test-system');
 
 const client = new Client({
   intents: [
@@ -33,6 +34,7 @@ client.once(Events.ClientReady, async readyClient => {
     if (resultSystem.init) await resultSystem.init(client);
     if (koSystem.init) await koSystem.init(client);
     if (adminSystem.init) await adminSystem.init(client);
+    if (testSystem.init) await testSystem.init(client);
 
     console.log(`✅ Bot online als ${readyClient.user.tag}`);
   } catch (error) {
@@ -74,6 +76,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (adminSystem.handleInteraction) {
       const handled = await adminSystem.handleInteraction(interaction);
+      if (handled) return;
+    }
+
+    if (testSystem.handleInteraction) {
+      const handled = await testSystem.handleInteraction(interaction);
       if (handled) return;
     }
   } catch (error) {
@@ -121,6 +128,11 @@ client.on(Events.MessageCreate, async message => {
 
     if (adminSystem.handleMessage) {
       const handled = await adminSystem.handleMessage(message);
+      if (handled) return;
+    }
+
+    if (testSystem.handleMessage) {
+      const handled = await testSystem.handleMessage(message);
       if (handled) return;
     }
   } catch (error) {
