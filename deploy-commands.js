@@ -9,7 +9,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('teamsetup')
-    .setDescription('Erstellt Team-Anmeldung und Team-Übersicht'),
+    .setDescription('Erstellt Team-Verwaltung und Registrierte Teams'),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
