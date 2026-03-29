@@ -153,13 +153,36 @@ function getRoundLabel(roundKey) {
   return 'K.O.-Phase';
 }
 
-function getRoundTimeWindow(roundKey) {
-  if (roundKey === 'roundOf16') return '01:00–01:05';
-  if (roundKey === 'quarterFinal') return '01:20–01:25';
-  if (roundKey === 'semiFinal') return '01:40–01:45';
-  if (roundKey === 'thirdPlace') return '02:00–02:05';
-  if (roundKey === 'final') return '02:00–02:05';
-  return '01:00–01:05';
+function getRoundTimeWindow(format, roundKey) {
+  const windowsByFormat = {
+    8: {
+      semiFinal: '01:00–01:05',
+      thirdPlace: '01:20–01:25',
+      final: '01:20–01:25',
+    },
+    16: {
+      quarterFinal: '01:00–01:05',
+      semiFinal: '01:20–01:25',
+      thirdPlace: '01:40–01:45',
+      final: '01:40–01:45',
+    },
+    24: {
+      roundOf16: '01:00–01:05',
+      quarterFinal: '01:20–01:25',
+      semiFinal: '01:40–01:45',
+      thirdPlace: '02:00–02:05',
+      final: '02:00–02:05',
+    },
+    32: {
+      roundOf16: '01:00–01:05',
+      quarterFinal: '01:20–01:25',
+      semiFinal: '01:40–01:45',
+      thirdPlace: '02:00–02:05',
+      final: '02:00–02:05',
+    },
+  };
+
+  return windowsByFormat[format]?.[roundKey] || '01:00–01:05';
 }
 
 function cloneTeam(row) {
@@ -247,8 +270,8 @@ function getQualifiedTeamsFromGroups(eventKey) {
   return null;
 }
 
-function createKoMatches(roundKey, pairs) {
-  const timeWindow = getRoundTimeWindow(roundKey);
+function createKoMatches(format, roundKey, pairs) {
+  const timeWindow = getRoundTimeWindow(format, roundKey);
 
   return pairs.map((pair, index) => {
     const [home, away] = pair;
@@ -443,7 +466,7 @@ async function createInitialKoRound(eventKey) {
     eventStore.rounds.semiFinal = {
       channelId: getRoundChannelId('semiFinal'),
       messageId: null,
-      matches: createKoMatches('semiFinal', qualified.semiFinal),
+      matches: createKoMatches(qualified.format, 'semiFinal', qualified.semiFinal),
       completed: false,
     };
     eventStore.rounds.semiFinal = await sendOrEditRoundMessage(
@@ -458,7 +481,7 @@ async function createInitialKoRound(eventKey) {
     eventStore.rounds.quarterFinal = {
       channelId: getRoundChannelId('quarterFinal'),
       messageId: null,
-      matches: createKoMatches('quarterFinal', qualified.quarterFinal),
+      matches: createKoMatches(qualified.format, 'quarterFinal', qualified.quarterFinal),
       completed: false,
     };
     eventStore.rounds.quarterFinal = await sendOrEditRoundMessage(
@@ -473,7 +496,7 @@ async function createInitialKoRound(eventKey) {
     eventStore.rounds.roundOf16 = {
       channelId: getRoundChannelId('roundOf16'),
       messageId: null,
-      matches: createKoMatches('roundOf16', qualified.roundOf16),
+      matches: createKoMatches(qualified.format, 'roundOf16', qualified.roundOf16),
       completed: false,
     };
     eventStore.rounds.roundOf16 = await sendOrEditRoundMessage(
@@ -559,7 +582,7 @@ async function advanceKoIfReady(eventKey) {
       event.rounds.quarterFinal = {
         channelId: getRoundChannelId('quarterFinal'),
         messageId: null,
-        matches: createKoMatches('quarterFinal', pairs),
+        matches: createKoMatches(event.format, 'quarterFinal', pairs),
         completed: false,
       };
 
@@ -587,7 +610,7 @@ async function advanceKoIfReady(eventKey) {
       event.rounds.semiFinal = {
         channelId: getRoundChannelId('semiFinal'),
         messageId: null,
-        matches: createKoMatches('semiFinal', pairs),
+        matches: createKoMatches(event.format, 'semiFinal', pairs),
         completed: false,
       };
 
@@ -614,7 +637,7 @@ async function advanceKoIfReady(eventKey) {
           event.rounds.final = {
             channelId: getRoundChannelId('final'),
             messageId: null,
-            matches: createKoMatches('final', [[winners[0], winners[1]]]),
+            matches: createKoMatches(event.format, 'final', [[winners[0], winners[1]]]),
             completed: false,
           };
 
@@ -630,7 +653,7 @@ async function advanceKoIfReady(eventKey) {
           event.rounds.thirdPlace = {
             channelId: getRoundChannelId('thirdPlace'),
             messageId: null,
-            matches: createKoMatches('thirdPlace', [[losers[0], losers[1]]]),
+            matches: createKoMatches(event.format, 'thirdPlace', [[losers[0], losers[1]]]),
             completed: false,
           };
 
