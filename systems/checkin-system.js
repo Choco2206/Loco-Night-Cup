@@ -14,6 +14,10 @@ const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 let clientRef = null;
 let intervalRef = null;
 
+// =========================
+// FILE HELPERS
+// =========================
+
 function ensureCheckinsFile() {
   const dir = path.dirname(CHECKINS_FILE);
 
@@ -73,6 +77,10 @@ function loadTeams() {
   }
 }
 
+// =========================
+// TEAM HELPERS
+// =========================
+
 function getUserTeam(userId) {
   const teams = loadTeams();
 
@@ -83,6 +91,26 @@ function getUserTeam(userId) {
     return isManager || isCoManager;
   });
 }
+
+function normalizeTeamForCheckin(team) {
+  return {
+    teamId: team.id,
+    clubName: team.clubName,
+    managerId: team.managerId,
+    coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
+    joinedAt: Date.now(),
+  };
+}
+
+function isUserAllowedForTeam(userId, team) {
+  if (!team) return false;
+  if (team.managerId === userId) return true;
+  return Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+}
+
+// =========================
+// DATE / TIME HELPERS
+// =========================
 
 function formatDateGerman(date) {
   return new Intl.DateTimeFormat('de-DE', {
@@ -110,255 +138,9 @@ function formatCountdown(targetTimestamp) {
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
   const minutes = totalMinutes % 60;
 
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
-}
-
-function getCurrentFormat(teamCount) {
-  if (teamCount < 8) return 0;
-  if (teamCount < 16) return 8;
-  if (teamCount < 24) return 16;
-  if (teamCount < 32) return 24;
-  return 32;
-}
-
-function getFormatExplanation(format) {
-  if (format === 8) {
-    return [
-      '• 2 Gruppen mit je 4 Teams',
-      '• Die Top 2 jeder Gruppe kommen weiter',
-      '• K.O.-Phase startet ab dem Halbfinale',
-    ].join('\n');
-  }
-
-  if (format === 16) {
-    return [
-      '• 4 Gruppen mit je 4 Teams',
-      '• Die Top 2 jeder Gruppe kommen weiter',
-      '• K.O.-Phase startet ab dem Viertelfinale',
-    ].join('\n');
-  }
-
-  if (format === 24) {
-    return [
-      '• 6 Gruppen mit je 4 Teams',
-      '• Die Top 2 jeder Gruppe kommen weiter',
-      '• Dazu kommen die 4 besten Gruppendritten weiter',
-      '• K.O.-Phase startet ab dem Achtelfinale',
-    ].join('\n');
-  }
-
-  if (format === 32) {
-    return [
-      '• 8 Gruppen mit je 4 Teams',
-      '• Die Top 2 jeder Gruppe kommen weiter',
-      '• K.O.-Phase startet ab dem Achtelfinale',
-    ].join('\n');
-  }
-
-  return '• Mindestanzahl für den Start sind 8 Teams';
-}
-
-function getParticipatingTeams(event) {
-  const format = getCurrentFormat(event.teams.length);
-  if (format === 0) return [];
-  return event.teams.slice(0, format);
-}
-
-function getBackupTeams(event) {
-  const format = getCurrentFormat(event.teams.length);
-  if (format === 0) return [];
-  return event.teams.slice(format);
-}
-
-function buildTeamList(event) {
-  const participating = getParticipatingTeams(event);
-
-  if (participating.length === 0) {
-    return 'Noch keine teilnehmenden Teams.';
-  }
-
-  return participating
-    .map((team, index) => `${index + 1}. ${team.clubName}`)
-    .join('\n');
-}
-
-function buildBackupShortLine(event) {
-  const backups = getBackupTeams(event);
-  if (backups.length === 0) return null;
-  return `**Backups (aktuell nicht teilnahmeberechtigt):** ${backups.length}`;
-}
-
-function buildMainEmbed(event) {
-  const format = getCurrentFormat(event.teams.length);
-  const participatingCount = getParticipatingTeams(event).length;
-  const statusText =
-    event.finalized && event.status === 'cancelled'
-      ? '❌ NightCup findet nicht statt'
-      : event.finalized && event.status === 'confirmed'
-      ? '✅ NightCup findet statt'
-      : '🟢 Check-in geöffnet';
-
-  const formatText = format === 0 ? 'Noch kein gültiges Turnierformat' : `${format}er Turnier`;
-  const backupLine = buildBackupShortLine(event);
-
-  const sections = [
-    `**Status:** ${statusText}`,
-    `**Datum:** ${event.displayDate}`,
-    `**Anmeldeschluss:** ${formatTimeGerman(new Date(event.deadlineAt))} Uhr`,
-    `**Countdown bis Anmeldeschluss:** ${formatCountdown(event.deadlineAt)}`,
-    `**Turnierstart:** ${event.startLabel}`,
-    `**Countdown bis Start:** ${formatCountdown(event.startAt)}`,
-    `**Aktuelles Format:** ${formatText}`,
-    `**Teilnehmende Teams:** ${participatingCount}${format > 0 ? `/${format}` : ''}`,
-    backupLine || null,
-    `**Regeln:** <#${process.env.RULES_CHANNEL_ID}>`,
-    '',
-    '━━━━━━━━━━━━━━',
-    '',
-    '**Aktuelles Turnierformat:**',
-    getFormatExplanation(format),
-    '',
-    '━━━━━━━━━━━━━━',
-    '',
-    '**Teilnehmende Teams:**',
-    buildTeamList(event),
-  ].filter(Boolean);
-
-  if (event.finalized && event.status === 'cancelled') {
-    sections.push(
-      '',
-      '━━━━━━━━━━━━━━',
-      '',
-      '❌ **NightCup findet nicht statt**',
-      'Minimum sind **8 Teams**.'
-    );
-  }
-
-  return new EmbedBuilder()
-    .setTitle(`🌙 Loco NightCup ${event.label}`)
-    .setDescription(sections.join('\n'))
-    .setColor(0xff0000);
-}
-
-function buildMainButtons(event) {
-  const disabled = event.finalized || Date.now() >= event.deadlineAt;
-
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`checkin_join:${event.type}`)
-      .setLabel('⬆️ Anmelden')
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(`checkin_leave:${event.type}`)
-      .setLabel('⬇️ Abmelden')
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(disabled)
-  );
-}
-
-function buildSummaryContent(event) {
-  const format = getCurrentFormat(event.teams.length);
-
-  if (format === 0) {
-    return [
-      '❌ **NightCup findet nicht statt**',
-      '',
-      'Es wurden nicht genug Teams registriert.',
-      'Minimum sind **8 Teams**.',
-    ].join('\n');
-  }
-
-  return [
-    '✅ **NightCup findet statt**',
-    '',
-    `Format: **${format}er Turnier**`,
-    'Gruppenauslosung findet um **23:15 Uhr** statt.',
-    'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
-  ].join('\n');
-}
-
-function getMentionLine(team) {
-  const mentionIds = [team.managerId, ...(team.coManagerIds || [])].filter(Boolean);
-  const uniqueIds = [...new Set(mentionIds)];
-  return uniqueIds.map(id => `<@${id}>`).join(' ');
-}
-
-function buildBackupContent(event) {
-  const backups = getBackupTeams(event);
-
-  if (backups.length === 0) return null;
-
-  const lines = backups.map((team, index) => {
-    const decision = event.backupDecisions?.[team.teamId] || 'open';
-
-    let status = '⏳ Offen';
-    if (decision === 'yes') status = '✅ Bereit';
-    if (decision === 'no') status = '❌ Nicht bereit';
-
-    return [
-      `**${index + 1}. ${team.clubName}**`,
-      getMentionLine(team),
-      `Status: ${status}`,
-    ].join('\n');
-  });
-
-  return [
-    '⚠️ **Backups**',
-    '',
-    'Die folgenden Teams sind aktuell nicht teilnahmeberechtigt.',
-    'Bitte bestätigt, ob ihr als Backup bereitsteht:',
-    '',
-    lines.join('\n\n'),
-  ].join('\n');
-}
-
-function buildBackupButtons(event) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`backup_yes:${event.type}`)
-      .setLabel('✅ Backup bestätigen')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`backup_no:${event.type}`)
-      .setLabel('❌ Backup ablehnen')
-      .setStyle(ButtonStyle.Secondary)
-  );
-}
-
-async function fetchChannel(channelId) {
-  try {
-    return await clientRef.channels.fetch(channelId);
-  } catch (error) {
-    console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
-    return null;
-  }
-}
-
-async function fetchMessage(channel, messageId) {
-  try {
-    return await channel.messages.fetch(messageId);
-  } catch (error) {
-    return null;
-  }
-}
-
-async function deleteMessageIfExists(channelId, messageId) {
-  if (!channelId || !messageId) return;
-
-  const channel = await fetchChannel(channelId);
-  if (!channel) return;
-
-  const message = await fetchMessage(channel, messageId);
-  if (!message) return;
-
-  try {
-    await message.delete();
-  } catch (error) {
-    console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
-  }
 }
 
 function getNextBoundary(dayOfWeek, hour) {
@@ -395,7 +177,7 @@ function getCycleConfig(type) {
       startAt: start.getTime(),
       resetAt: resetAt.getTime(),
       displayDate: formatDateGerman(deadline),
-      startLabel: '00:00 Uhr (Nacht von Freitag auf Samstag)',
+      startLine: '🌙 Nacht von Freitag auf Samstag',
     };
   }
 
@@ -412,9 +194,309 @@ function getCycleConfig(type) {
     startAt: start.getTime(),
     resetAt: resetAt.getTime(),
     displayDate: formatDateGerman(deadline),
-    startLabel: '00:00 Uhr (Nacht von Samstag auf Sonntag)',
+    startLine: '🌙 Nacht von Samstag auf Sonntag',
   };
 }
+
+// =========================
+// FORMAT LOGIC
+// =========================
+
+// Echtes Turnierformat / Erklärung
+function getActualFormat(teamCount) {
+  if (teamCount < 8) return 0;
+  if (teamCount < 16) return 8;
+  if (teamCount < 24) return 16;
+  if (teamCount < 32) return 24;
+  return 32;
+}
+
+// Früher erweiterte Anzeige-Slots
+function getDisplaySlots(teamCount) {
+  if (teamCount >= 28) return 32;
+  if (teamCount >= 20) return 24;
+  if (teamCount >= 6) return 16;
+  return 8;
+}
+
+function getFormatExplanation(format) {
+  if (format === 8) {
+    return [
+      '• 2 Gruppen à 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• K.O.-Phase startet ab dem Halbfinale',
+    ].join('\n');
+  }
+
+  if (format === 16) {
+    return [
+      '• 4 Gruppen à 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• K.O.-Phase startet ab dem Viertelfinale',
+    ].join('\n');
+  }
+
+  if (format === 24) {
+    return [
+      '• 6 Gruppen à 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• Plus die 4 besten Gruppendritten',
+      '• K.O.-Phase startet ab dem Achtelfinale',
+    ].join('\n');
+  }
+
+  if (format === 32) {
+    return [
+      '• 8 Gruppen à 4 Teams',
+      '• Die Top 2 jeder Gruppe kommen weiter',
+      '• K.O.-Phase startet ab dem Achtelfinale',
+    ].join('\n');
+  }
+
+  return '• Minimum 8 Teams erforderlich';
+}
+
+function getParticipatingTeams(event) {
+  const actualFormat = getActualFormat(event.teams.length);
+  if (actualFormat === 0) return [];
+  return event.teams.slice(0, actualFormat);
+}
+
+function getBackupTeams(event) {
+  const actualFormat = getActualFormat(event.teams.length);
+  if (actualFormat === 0) return [];
+  return event.teams.slice(actualFormat);
+}
+
+function buildSlotsList(event) {
+  const slots = getDisplaySlots(event.teams.length);
+  const participating = getParticipatingTeams(event);
+
+  const lines = [];
+  for (let i = 0; i < slots; i++) {
+    if (participating[i]) {
+      lines.push(`${i + 1}. ${participating[i].clubName}`);
+    } else {
+      lines.push(`${i + 1}. —`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildBackupShortSection(event) {
+  const backups = getBackupTeams(event);
+  if (backups.length === 0) return null;
+
+  return [
+    '⚠️ **Backups (aktuell nicht teilnahmeberechtigt)**',
+    backups.map((team, index) => `${index + 1}. ${team.clubName}`).join('\n'),
+  ].join('\n');
+}
+
+function buildSummaryContent(event) {
+  const actualFormat = getActualFormat(event.teams.length);
+
+  if (actualFormat === 0) {
+    return [
+      '❌ **NightCup findet nicht statt**',
+      '',
+      'Es wurden nicht genug Teams registriert.',
+      'Minimum sind **8 Teams**.',
+    ].join('\n');
+  }
+
+  return [
+    '✅ **NightCup findet statt**',
+    '',
+    `Format: **${actualFormat}er Turnier**`,
+    'Gruppenauslosung findet um **23:15 Uhr** statt.',
+    'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
+  ].join('\n');
+}
+
+function getMentionLine(team) {
+  const ids = [team.managerId, ...(team.coManagerIds || [])].filter(Boolean);
+  const uniqueIds = [...new Set(ids)];
+  return uniqueIds.map(id => `<@${id}>`).join(' ');
+}
+
+function buildBackupContent(event) {
+  const backups = getBackupTeams(event);
+  if (backups.length === 0) return null;
+
+  const lines = backups.map((team, index) => {
+    const decision = event.backupDecisions?.[team.teamId] || 'open';
+
+    let status = '⏳ Offen';
+    if (decision === 'yes') status = '✅ Bereit';
+    if (decision === 'no') status = '❌ Nicht bereit';
+
+    return [
+      `**${index + 1}. ${team.clubName}**`,
+      getMentionLine(team),
+      `Status: ${status}`,
+    ].join('\n');
+  });
+
+  return [
+    '⚠️ **Backups**',
+    '',
+    'Die folgenden Teams sind aktuell nicht teilnahmeberechtigt.',
+    'Bitte bestätigt, ob ihr als Backup bereitsteht:',
+    '',
+    lines.join('\n\n'),
+  ].join('\n');
+}
+
+// =========================
+// MESSAGE BUILDERS
+// =========================
+
+function buildMainEmbed(event) {
+  const actualFormat = getActualFormat(event.teams.length);
+  const displaySlots = getDisplaySlots(event.teams.length);
+  const participatingCount = getParticipatingTeams(event).length;
+
+  let statusLine = '🟢 Check-in geöffnet';
+  if (event.finalized && event.status === 'confirmed') {
+    statusLine = '✅ NightCup findet statt';
+  }
+  if (event.finalized && event.status === 'cancelled') {
+    statusLine = '❌ NightCup findet nicht statt';
+  }
+
+  const descriptionParts = [
+    `**${statusLine}**`,
+    `📅 **Datum:** ${event.displayDate}`,
+    '',
+    `⏰ **Anmeldeschluss:** 23:00 Uhr`,
+    `⌛ **Noch offen:** ${formatCountdown(event.deadlineAt)}`,
+    '',
+    `🚀 **Turnierstart:** 00:00 Uhr`,
+    `${event.startLine}`,
+    `🕛 **Start in:** ${formatCountdown(event.startAt)}`,
+    '',
+    `📜 **Regeln:** <#${process.env.RULES_CHANNEL_ID}>`,
+    '',
+    '━━━━━━━━━━━━━━',
+    '',
+    `🏆 **Turnierformat:** ${actualFormat === 0 ? 'Noch kein gültiges Turnierformat' : `${actualFormat}er Turnier`}`,
+    getFormatExplanation(actualFormat),
+    '',
+    '━━━━━━━━━━━━━━',
+    '',
+    `👥 **Teilnehmende Teams (${displaySlots})**`,
+    buildSlotsList(event),
+  ];
+
+  const backupSection = buildBackupShortSection(event);
+  if (backupSection) {
+    descriptionParts.push('', '━━━━━━━━━━━━━━', '', backupSection);
+  }
+
+  if (event.finalized && event.status === 'cancelled') {
+    descriptionParts.push(
+      '',
+      '━━━━━━━━━━━━━━',
+      '',
+      '❌ **NightCup findet nicht statt**',
+      'Minimum sind **8 Teams**.'
+    );
+  }
+
+  return new EmbedBuilder()
+    .setTitle(`🌙 Loco NightCup ${event.label}`)
+    .setDescription(descriptionParts.join('\n'))
+    .setColor(0xff0000);
+}
+
+function buildMainButtons(event) {
+  const disabled = event.finalized || Date.now() >= event.deadlineAt;
+
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`checkin_join:${event.type}`)
+      .setLabel('⬆️ Anmelden')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`checkin_leave:${event.type}`)
+      .setLabel('⬇️ Abmelden')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  );
+}
+
+function buildBackupButtons(event) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`backup_yes:${event.type}`)
+      .setLabel('✅ Backup bestätigen')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`backup_no:${event.type}`)
+      .setLabel('❌ Backup ablehnen')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+// =========================
+// CHANNEL / MESSAGE HELPERS
+// =========================
+
+async function fetchChannel(channelId) {
+  try {
+    return await clientRef.channels.fetch(channelId);
+  } catch (error) {
+    console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
+    return null;
+  }
+}
+
+async function fetchMessage(channel, messageId) {
+  try {
+    return await channel.messages.fetch(messageId);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function deleteMessageIfExists(channelId, messageId) {
+  if (!channelId || !messageId) return;
+
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  const message = await fetchMessage(channel, messageId);
+  if (!message) return;
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
+  }
+}
+
+async function findExistingMainMessage(channel, eventLabel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 30 });
+    const ownMessage = messages.find(msg => {
+      if (!msg.author || msg.author.id !== clientRef.user.id) return false;
+      if (!msg.embeds || msg.embeds.length === 0) return false;
+      const title = msg.embeds[0]?.title || '';
+      return title.includes(`Loco NightCup ${eventLabel}`);
+    });
+
+    return ownMessage || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// =========================
+// EVENT STATE
+// =========================
 
 function createNewEventState(type, previousState = null) {
   const cfg = getCycleConfig(type);
@@ -428,7 +510,7 @@ function createNewEventState(type, previousState = null) {
     startAt: cfg.startAt,
     resetAt: cfg.resetAt,
     displayDate: cfg.displayDate,
-    startLabel: cfg.startLabel,
+    startLine: cfg.startLine,
 
     messageId: previousState?.messageId || null,
     summaryMessageId: null,
@@ -443,6 +525,16 @@ function createNewEventState(type, previousState = null) {
   };
 }
 
+function findEventByType(data, type) {
+  if (type === 'friday') return data.friday;
+  if (type === 'saturday') return data.saturday;
+  return null;
+}
+
+// =========================
+// RENDER / UPDATE
+// =========================
+
 async function ensureMainMessage(event) {
   const channel = await fetchChannel(event.channelId);
   if (!channel) return event;
@@ -451,6 +543,13 @@ async function ensureMainMessage(event) {
 
   if (event.messageId) {
     message = await fetchMessage(channel, event.messageId);
+  }
+
+  if (!message) {
+    message = await findExistingMainMessage(channel, event.label);
+    if (message) {
+      event.messageId = message.id;
+    }
   }
 
   if (!message) {
@@ -535,7 +634,7 @@ async function finalizeEvent(event) {
   if (event.finalized) return event;
 
   event.finalized = true;
-  event.status = getCurrentFormat(event.teams.length) === 0 ? 'cancelled' : 'confirmed';
+  event.status = getActualFormat(event.teams.length) === 0 ? 'cancelled' : 'confirmed';
 
   event = await ensureMainMessage(event);
   event = await ensureSummaryMessage(event);
@@ -576,7 +675,7 @@ async function reconcileEvent(type, data) {
   current.startAt = cfg.startAt;
   current.resetAt = cfg.resetAt;
   current.displayDate = cfg.displayDate;
-  current.startLabel = cfg.startLabel;
+  current.startLine = cfg.startLine;
   current.channelId = cfg.channelId;
 
   if (!current.finalized && Date.now() >= current.deadlineAt) {
@@ -609,27 +708,9 @@ async function reconcileAll() {
   saveCheckins(data);
 }
 
-function normalizeTeamForCheckin(team) {
-  return {
-    teamId: team.id,
-    clubName: team.clubName,
-    managerId: team.managerId,
-    coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
-    joinedAt: Date.now(),
-  };
-}
-
-function findEventByType(data, type) {
-  if (type === 'friday') return data.friday;
-  if (type === 'saturday') return data.saturday;
-  return null;
-}
-
-function isUserAllowedForTeam(userId, team) {
-  if (!team) return false;
-  if (team.managerId === userId) return true;
-  return Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
-}
+// =========================
+// BUTTON HANDLERS
+// =========================
 
 async function handleJoin(interaction, type) {
   const data = loadCheckins();
@@ -801,6 +882,10 @@ async function handleBackupDecision(interaction, type, decision) {
 
   return true;
 }
+
+// =========================
+// EXPORTS
+// =========================
 
 module.exports = {
   async init(client) {
