@@ -7,6 +7,7 @@ const roleSystem = require('./systems/role-system');
 const teamSystem = require('./systems/team-system');
 const checkinSystem = require('./systems/checkin-system');
 const groupSystem = require('./systems/group-system');
+const resultSystem = require('./systems/result-system');
 
 const client = new Client({
   intents: [
@@ -27,6 +28,7 @@ client.once(Events.ClientReady, async readyClient => {
     if (teamSystem.init) await teamSystem.init(client);
     if (checkinSystem.init) await checkinSystem.init(client);
     if (groupSystem.init) await groupSystem.init(client);
+    if (resultSystem.init) await resultSystem.init(client);
 
     console.log(`✅ Bot online als ${readyClient.user.tag}`);
   } catch (error) {
@@ -53,6 +55,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (groupSystem.handleInteraction) {
       const handled = await groupSystem.handleInteraction(interaction);
+      if (handled) return;
+    }
+
+    if (resultSystem.handleInteraction) {
+      const handled = await resultSystem.handleInteraction(interaction);
       if (handled) return;
     }
   } catch (error) {
@@ -85,6 +92,11 @@ client.on(Events.MessageCreate, async message => {
 
     if (groupSystem.handleMessage) {
       const handled = await groupSystem.handleMessage(message);
+      if (handled) return;
+    }
+
+    if (resultSystem.handleMessage) {
+      const handled = await resultSystem.handleMessage(message);
       if (handled) return;
     }
   } catch (error) {
