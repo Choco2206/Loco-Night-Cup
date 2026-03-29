@@ -15,6 +15,7 @@ const {
   ModalBuilder,
   MessageFlags,
   Events,
+  AttachmentBuilder,
 } = require('discord.js');
 
 const { ensureDataFolders, ensureJsonFiles } = require('./utils/storage');
@@ -70,6 +71,10 @@ function writeTeams(data) {
   writeJsonSafe(teamsFile, data);
 }
 
+function getRegisteredTeamsChannelId() {
+  return process.env.REGISTERED_TEAMS_CHANNEL_ID || process.env.TEAMS_OVERVIEW_CHANNEL_ID;
+}
+
 function getFileExtension(attachment) {
   if (attachment.contentType) {
     if (attachment.contentType.includes('png')) return 'png';
@@ -91,60 +96,140 @@ function getFileExtension(attachment) {
   return 'png';
 }
 
-function buildTeamsOverviewEmbed(teams) {
+function parseUserId(input) {
+  if (!input) return null;
+
+  const trimmed = input.trim();
+
+  const mentionMatch = trimmed.match(/^<@!?(\d+)>$/);
+  if (mentionMatch) return mentionMatch[1];
+
+  const idMatch = trimmed.match(/^(\d{16,20})$/);
+  if (idMatch) return idMatch[1];
+
+  return null;
+}
+
+function formatUserMention(userId) {
+  return userId ? `<@${userId}>` : '—';
+}
+
+function buildRegisteredTeamsEmbed(teams) {
   const sortedTeams = [...teams].sort((a, b) => {
-    return (a.name || '').localeCompare(b.name || '', 'de');
+    return (a.clubName || '').localeCompare(b.clubName || '', 'de');
   });
 
   const lines = sortedTeams.map((team, index) => {
-    const logoStatus = team.logoFile ? '✅ Logo' : '❌ Kein Logo';
-    return `**${index + 1}. ${team.name}**\nManager: <@${team.managerId}>\nStatus: ${logoStatus}`;
+    const coManagers =
+      team.coManagerIds && team.coManagerIds.length > 0
+        ? team.coManagerIds.map(id => `<@${id}>`).join(', ')
+        : 'Keine';
+
+    return `**${index + 1}. ${team.clubName}**
+Vereinsmanager: <@${team.managerId}>
+Co-VM: ${coManagers}`;
   });
 
   return new EmbedBuilder()
-    .setTitle('🏆 Teilnehmende Teams')
-    .setDescription(
-      lines.length > 0
-        ? lines.join('\n\n')
-        : 'Noch keine Teams angemeldet.'
-    )
+    .setTitle('🏆 Registrierte Teams')
+    .setDescription(lines.length > 0 ? lines.join('\n\n') : 'Noch keine Teams registriert.')
     .setColor(0xff0000);
 }
 
-async function refreshTeamsOverview(guild) {
+async function refreshRegisteredTeams(guild) {
   try {
     const setupData = readSetupData();
     const teams = readTeams();
 
-    const overviewChannel = guild.channels.cache.get(process.env.TEAMS_OVERVIEW_CHANNEL_ID);
-    if (!overviewChannel) {
-      console.error('❌ Team-Übersichts-Kanal nicht gefunden.');
+    const channelId = getRegisteredTeamsChannelId();
+    const registeredTeamsChannel = guild.channels.cache.get(channelId);
+
+    if (!registeredTeamsChannel) {
+      console.error('❌ Kanal für registrierte Teams nicht gefunden.');
       return;
     }
 
-    const embed = buildTeamsOverviewEmbed(teams);
+    const embed = buildRegisteredTeamsEmbed(teams);
 
-    if (setupData.teamsOverviewMessageId) {
+    if (setupData.registeredTeamsMessageId) {
       try {
-        const existingMessage = await overviewChannel.messages.fetch(setupData.teamsOverviewMessageId);
-        await existingMessage.edit({ embeds: [embed] });
+        const oldMessage = await registeredTeamsChannel.messages.fetch(setupData.registeredTeamsMessageId);
+        await oldMessage.edit({ embeds: [embed] });
         return;
       } catch (error) {
-        console.warn('⚠️ Übersichtsnachricht konnte nicht bearbeitet werden, poste neu.');
+        console.warn('⚠️ Alte registrierte Teams Nachricht nicht gefunden, poste neu.');
       }
     }
 
-    const newMessage = await overviewChannel.send({ embeds: [embed] });
+    const newMessage = await registeredTeamsChannel.send({ embeds: [embed] });
 
-    setupData.teamsOverviewChannelId = overviewChannel.id;
-    setupData.teamsOverviewMessageId = newMessage.id;
+    setupData.registeredTeamsChannelId = registeredTeamsChannel.id;
+    setupData.registeredTeamsMessageId = newMessage.id;
     writeSetupData(setupData);
   } catch (error) {
-    console.error('❌ Fehler beim Aktualisieren der Team-Übersicht:', error);
+    console.error('❌ Fehler beim Aktualisieren der registrierten Teams:', error);
   }
 }
 
-client.once(Events.ClientReady, async (readyClient) => {
+function findTeamByManagerOrCoManager(userId) {
+  const teams = readTeams();
+
+  return teams.find(team => {
+    const isManager = team.managerId === userId;
+    const isCoManager = Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+    return isManager || isCoManager;
+  });
+}
+
+async function sendMyTeamOverview(interaction, team) {
+  const coManagers =
+    team.coManagerIds && team.coManagerIds.length > 0
+      ? team.coManagerIds.map(id => `<@${id}>`).join(', ')
+      : 'Keine';
+
+  const embed = new EmbedBuilder()
+    .setTitle(team.clubName)
+    .setDescription([
+      `**Vereinsmanager:** ${formatUserMention(team.managerId)}`,
+      `**Co-VM:** ${coManagers}`,
+    ].join('\n'))
+    .setColor(0xff0000);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('team_add_covm_open')
+      .setLabel('➕ Co-VM hinzufügen')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('team_delete_open')
+      .setLabel('🗑️ Team abmelden')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  if (team.logoFile) {
+    const logoPath = path.join(logosDir, team.logoFile);
+
+    if (fs.existsSync(logoPath)) {
+      const attachment = new AttachmentBuilder(logoPath, { name: team.logoFile });
+      embed.setImage(`attachment://${team.logoFile}`);
+
+      return interaction.reply({
+        embeds: [embed],
+        components: [row],
+        files: [attachment],
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  }
+
+  return interaction.reply({
+    embeds: [embed],
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+client.once(Events.ClientReady, async readyClient => {
   try {
     ensureDataFolders();
     ensureJsonFiles();
@@ -159,7 +244,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
+client.on(Events.InteractionCreate, async interaction => {
   try {
     // =========================
     // SLASH COMMANDS
@@ -249,7 +334,7 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
 
         const setupData = readSetupData();
 
-        if (setupData.teamPanelMessageId && setupData.teamsOverviewMessageId) {
+        if (setupData.teamPanelMessageId && setupData.registeredTeamsMessageId) {
           return interaction.reply({
             content: '❌ Team-Setup wurde bereits erstellt.',
             flags: MessageFlags.Ephemeral,
@@ -257,22 +342,23 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
         }
 
         const teamRegisterChannel = guild.channels.cache.get(process.env.TEAM_REGISTER_CHANNEL_ID);
-        const teamsOverviewChannel = guild.channels.cache.get(process.env.TEAMS_OVERVIEW_CHANNEL_ID);
+        const registeredTeamsChannel = guild.channels.cache.get(getRegisteredTeamsChannelId());
 
-        if (!teamRegisterChannel || !teamsOverviewChannel) {
+        if (!teamRegisterChannel || !registeredTeamsChannel) {
           return interaction.reply({
-            content: '❌ Team-Anmelde- oder Team-Übersichts-Kanal nicht gefunden. Prüfe deine Railway Variables.',
+            content: '❌ Team-Anmelde- oder Registrierte-Teams-Kanal nicht gefunden. Prüfe deine Railway Variables.',
             flags: MessageFlags.Ephemeral,
           });
         }
 
         const teamPanelEmbed = new EmbedBuilder()
-          .setTitle('📝 Team anmelden')
+          .setTitle('📝 Team-Verwaltung')
           .setDescription(
-            'Nur Manager können hier ein Team anlegen.\n\n' +
-            '1. Klicke auf **Team anmelden**\n' +
-            '2. Gib deinen Teamnamen ein\n' +
-            '3. Lade danach dein Teamlogo als Bild **in diesem Kanal** hoch'
+            'Hier kannst du dein Team verwalten.\n\n' +
+            '• **Team anmelden** → EA FC Clubname eingeben und danach Logo hochladen\n' +
+            '• **Co-VM hinzufügen** → nur der Vereinsmanager kann Co-VMs hinzufügen\n' +
+            '• **Mein Team** → private Übersicht deines Teams\n' +
+            '• **Team abmelden** → nur der Vereinsmanager kann das Team löschen'
           )
           .setColor(0xff0000);
 
@@ -280,7 +366,19 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
           new ButtonBuilder()
             .setCustomId('team_register_open')
             .setLabel('📝 Team anmelden')
-            .setStyle(ButtonStyle.Success)
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('team_add_covm_open')
+            .setLabel('➕ Co-VM hinzufügen')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId('team_show_mine')
+            .setLabel('📋 Mein Team')
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId('team_delete_open')
+            .setLabel('🗑️ Team abmelden')
+            .setStyle(ButtonStyle.Danger)
         );
 
         const panelMessage = await teamRegisterChannel.send({
@@ -288,17 +386,17 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
           components: [teamPanelRow],
         });
 
-        const overviewEmbed = buildTeamsOverviewEmbed(readTeams());
-        const overviewMessage = await teamsOverviewChannel.send({
-          embeds: [overviewEmbed],
+        const registeredTeamsEmbed = buildRegisteredTeamsEmbed(readTeams());
+        const registeredTeamsMessage = await registeredTeamsChannel.send({
+          embeds: [registeredTeamsEmbed],
         });
 
         writeSetupData({
           ...setupData,
           teamPanelChannelId: teamRegisterChannel.id,
           teamPanelMessageId: panelMessage.id,
-          teamsOverviewChannelId: teamsOverviewChannel.id,
-          teamsOverviewMessageId: overviewMessage.id,
+          registeredTeamsChannelId: registeredTeamsChannel.id,
+          registeredTeamsMessageId: registeredTeamsMessage.id,
         });
 
         return interaction.reply({
@@ -332,6 +430,7 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
         });
       }
 
+      // Rollenwahl
       if (interaction.customId === 'role_player') {
         if (member.roles.cache.has(managerRole.id)) {
           await member.roles.remove(managerRole);
@@ -362,6 +461,7 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
         });
       }
 
+      // Team anmelden
       if (interaction.customId === 'team_register_open') {
         if (!member.roles.cache.has(managerRole.id)) {
           return interaction.reply({
@@ -374,19 +474,133 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
           .setCustomId('team_register_modal')
           .setTitle('Team anmelden');
 
-        const nameInput = new TextInputBuilder()
-          .setCustomId('team_name')
-          .setLabel('Teamname')
+        const clubNameInput = new TextInputBuilder()
+          .setCustomId('club_name')
+          .setLabel('EA FC Clubname')
           .setStyle(TextInputStyle.Short)
           .setMinLength(2)
           .setMaxLength(30)
           .setRequired(true)
           .setPlaceholder('z. B. Loco Squad');
 
-        const firstRow = new ActionRowBuilder().addComponents(nameInput);
-        modal.addComponents(firstRow);
+        const row = new ActionRowBuilder().addComponents(clubNameInput);
+        modal.addComponents(row);
 
         return interaction.showModal(modal);
+      }
+
+      // Mein Team
+      if (interaction.customId === 'team_show_mine') {
+        const team = findTeamByManagerOrCoManager(interaction.user.id);
+
+        if (!team) {
+          return interaction.reply({
+            content: '❌ Du bist aktuell keinem Team zugeordnet.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return sendMyTeamOverview(interaction, team);
+      }
+
+      // Co-VM hinzufügen öffnen
+      if (interaction.customId === 'team_add_covm_open') {
+        const teams = readTeams();
+        const team = teams.find(t => t.managerId === interaction.user.id);
+
+        if (!team) {
+          return interaction.reply({
+            content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs hinzufügen.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId('team_add_covm_modal')
+          .setTitle('Co-VM hinzufügen');
+
+        const coVmInput = new TextInputBuilder()
+          .setCustomId('covm_user')
+          .setLabel('Discord ID oder @Erwähnung')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder('@User oder 123456789012345678');
+
+        const row = new ActionRowBuilder().addComponents(coVmInput);
+        modal.addComponents(row);
+
+        return interaction.showModal(modal);
+      }
+
+      // Team abmelden öffnen
+      if (interaction.customId === 'team_delete_open') {
+        const teams = readTeams();
+        const team = teams.find(t => t.managerId === interaction.user.id);
+
+        if (!team) {
+          return interaction.reply({
+            content: '❌ Nur der Vereinsmanager des Teams kann das Team abmelden.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('team_delete_confirm')
+            .setLabel('✅ Ja, Team abmelden')
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId('team_delete_cancel')
+            .setLabel('❌ Abbrechen')
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        return interaction.reply({
+          content: `Möchtest du dein Team **${team.clubName}** wirklich abmelden?`,
+          components: [row],
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'team_delete_cancel') {
+        return interaction.reply({
+          content: 'Abgebrochen.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'team_delete_confirm') {
+        const teams = readTeams();
+        const team = teams.find(t => t.managerId === interaction.user.id);
+
+        if (!team) {
+          return interaction.reply({
+            content: '❌ Nur der Vereinsmanager des Teams kann das Team abmelden.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const updatedTeams = teams.filter(t => t.id !== team.id);
+        writeTeams(updatedTeams);
+
+        if (team.logoFile) {
+          const logoPath = path.join(logosDir, team.logoFile);
+          if (fs.existsSync(logoPath)) {
+            try {
+              fs.unlinkSync(logoPath);
+            } catch (error) {
+              console.warn('⚠️ Logo konnte nicht gelöscht werden.');
+            }
+          }
+        }
+
+        pendingLogoUploads.delete(interaction.user.id);
+        await refreshRegisteredTeams(guild);
+
+        return interaction.reply({
+          content: `✅ Dein Team **${team.clubName}** wurde abgemeldet.`,
+          flags: MessageFlags.Ephemeral,
+        });
       }
     }
 
@@ -394,6 +608,7 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
     // MODALS
     // =========================
     if (interaction.isModalSubmit()) {
+      // Team anmelden Modal
       if (interaction.customId === 'team_register_modal') {
         const guild = interaction.guild;
         const member = interaction.member;
@@ -413,19 +628,20 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
           });
         }
 
-        const teamName = interaction.fields.getTextInputValue('team_name').trim();
+        const clubName = interaction.fields.getTextInputValue('club_name').trim();
         const teams = readTeams();
 
         let team = teams.find(t => t.managerId === interaction.user.id);
 
         if (team) {
-          team.name = teamName;
+          team.clubName = clubName;
           team.updatedAt = new Date().toISOString();
         } else {
           team = {
             id: `team_${Date.now()}`,
-            name: teamName,
+            clubName,
             managerId: interaction.user.id,
+            coManagerIds: [],
             logoFile: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -441,13 +657,82 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
           expiresAt: Date.now() + 10 * 60 * 1000,
         });
 
-        await refreshTeamsOverview(guild);
+        await refreshRegisteredTeams(guild);
 
         return interaction.reply({
           content:
-            `✅ Dein Team **${teamName}** wurde gespeichert.\n\n` +
+            `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
             `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
             `Du hast dafür 10 Minuten Zeit.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      // Co-VM hinzufügen Modal
+      if (interaction.customId === 'team_add_covm_modal') {
+        const guild = interaction.guild;
+        if (!guild) {
+          return interaction.reply({
+            content: '❌ Diese Aktion funktioniert nur auf einem Server.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const teams = readTeams();
+        const team = teams.find(t => t.managerId === interaction.user.id);
+
+        if (!team) {
+          return interaction.reply({
+            content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs hinzufügen.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const input = interaction.fields.getTextInputValue('covm_user');
+        const userId = parseUserId(input);
+
+        if (!userId) {
+          return interaction.reply({
+            content: '❌ Bitte gib eine gültige Discord ID oder @Erwähnung ein.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        if (userId === team.managerId) {
+          return interaction.reply({
+            content: '❌ Der Vereinsmanager kann nicht zusätzlich Co-VM sein.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        try {
+          await guild.members.fetch(userId);
+        } catch (error) {
+          return interaction.reply({
+            content: '❌ Dieser User ist nicht auf dem Server.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        if (!Array.isArray(team.coManagerIds)) {
+          team.coManagerIds = [];
+        }
+
+        if (team.coManagerIds.includes(userId)) {
+          return interaction.reply({
+            content: '❌ Dieser User ist bereits Co-VM.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        team.coManagerIds.push(userId);
+        team.updatedAt = new Date().toISOString();
+
+        writeTeams(teams);
+        await refreshRegisteredTeams(guild);
+
+        return interaction.reply({
+          content: `✅ <@${userId}> wurde als Co-VM hinzugefügt.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -464,7 +749,7 @@ Je nachdem, ob du Spieler oder Manager bist, werden dir anschließend die passen
   }
 });
 
-client.on(Events.MessageCreate, async (message) => {
+client.on(Events.MessageCreate, async message => {
   try {
     if (message.author.bot) return;
     if (!message.guild) return;
@@ -510,7 +795,7 @@ client.on(Events.MessageCreate, async (message) => {
 
     pendingLogoUploads.delete(message.author.id);
 
-    await refreshTeamsOverview(message.guild);
+    await refreshRegisteredTeams(message.guild);
 
     try {
       await message.delete();
@@ -519,7 +804,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
     const confirmMessage = await message.channel.send(
-      `✅ Logo für **${team.name}** wurde gespeichert, <@${message.author.id}>.`
+      `✅ Logo für **${team.clubName}** wurde gespeichert, <@${message.author.id}>.`
     );
 
     setTimeout(async () => {
