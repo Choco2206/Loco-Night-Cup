@@ -527,7 +527,26 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
 }
 
 async function handleSelectResult(interaction, eventKey, groupLetter) {
+  const resultsData = loadResults();
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
   const matchNumber = Number(interaction.values[0]);
+
+  if (!resultGroup) {
+    await interaction.reply({
+      content: '❌ Spielplan nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const match = resultGroup.matches.find(m => m.matchNumber === matchNumber);
+  if (!match) {
+    await interaction.reply({
+      content: '❌ Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
 
   const modal = new ModalBuilder()
     .setCustomId(`result_modal:${eventKey}:${groupLetter}:${matchNumber}`)
@@ -535,14 +554,14 @@ async function handleSelectResult(interaction, eventKey, groupLetter) {
 
   const homeInput = new TextInputBuilder()
     .setCustomId('home_goals')
-    .setLabel('Tore Heimteam')
+    .setLabel(`Tore ${match.homeClubName}`)
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setPlaceholder('z. B. 3');
 
   const awayInput = new TextInputBuilder()
     .setCustomId('away_goals')
-    .setLabel('Tore Auswärtsteam')
+    .setLabel(`Tore ${match.awayClubName}`)
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setPlaceholder('z. B. 1');
