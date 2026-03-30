@@ -10,6 +10,8 @@ const {
   ModalBuilder,
   MessageFlags,
   AttachmentBuilder,
+  UserSelectMenuBuilder,
+  StringSelectMenuBuilder,
 } = require('discord.js');
 
 const setupFile = path.join(process.cwd(), 'data', 'setup-messages.json');
@@ -78,22 +80,18 @@ function getFileExtension(attachment) {
   return 'png';
 }
 
-function parseUserId(input) {
-  if (!input) return null;
-
-  const trimmed = input.trim();
-
-  const mentionMatch = trimmed.match(/^<@!?(\d+)>$/);
-  if (mentionMatch) return mentionMatch[1];
-
-  const idMatch = trimmed.match(/^(\d{16,20})$/);
-  if (idMatch) return idMatch[1];
-
-  return null;
-}
-
 function formatUserMention(userId) {
   return userId ? `<@${userId}>` : '—';
+}
+
+function findTeamByManagerOrCoManager(userId) {
+  const teams = readTeams();
+
+  return teams.find(team => {
+    const isManager = team.managerId === userId;
+    const isCoManager = Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+    return isManager || isCoManager;
+  });
 }
 
 function buildRegisteredTeamsEmbed(teams) {
@@ -108,8 +106,8 @@ function buildRegisteredTeamsEmbed(teams) {
         : 'Keine';
 
     return `**${index + 1}. ${team.clubName}**
-Vereinsmanager: <@${team.managerId}>
-Co-VM: ${coManagers}`;
+👑 Vereinsmanager: <@${team.managerId}>
+🤝 Co-VM: ${coManagers}`;
   });
 
   return new EmbedBuilder()
@@ -149,47 +147,90 @@ async function refreshRegisteredTeams(guild) {
   writeSetupData(setupData);
 }
 
-function findTeamByManagerOrCoManager(userId) {
-  const teams = readTeams();
+function buildMyTeamEmbed(team) {
+  const coManagers =
+    Array.isArray(team.coManagerIds) && team.coManagerIds.length > 0
+      ? team.coManagerIds.map(id => `• <@${id}>`).join('\n')
+      : 'Keine Co-VM eingetragen';
 
-  return teams.find(team => {
-    const isManager = team.managerId === userId;
-    const isCoManager = Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
-    return isManager || isCoManager;
-  });
+  const createdText = team.createdAt
+    ? `<t:${Math.floor(new Date(team.createdAt).getTime() / 1000)}:R>`
+    : '—';
+
+  const updatedText = team.updatedAt
+    ? `<t:${Math.floor(new Date(team.updatedAt).getTime() / 1000)}:R>`
+    : '—';
+
+  return new EmbedBuilder()
+    .setTitle(`🏟️ ${team.clubName}`)
+    .setColor(0xff0000)
+    .addFields(
+      {
+        name: '👑 Vereinsmanager',
+        value: formatUserMention(team.managerId),
+        inline: true,
+      },
+      {
+        name: '🤝 Co-VM Plätze',
+        value: `${Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0}/3`,
+        inline: true,
+      },
+      {
+        name: '🖼️ Logo',
+        value: team.logoFile ? 'Hinterlegt' : 'Kein Logo',
+        inline: true,
+      },
+      {
+        name: '🤝 Aktuelle Co-VMs',
+        value: coManagers,
+        inline: false,
+      },
+      {
+        name: '📅 Erstellt',
+        value: createdText,
+        inline: true,
+      },
+      {
+        name: '🛠️ Zuletzt aktualisiert',
+        value: updatedText,
+        inline: true,
+      }
+    )
+    .setFooter({ text: 'Loco Night Bot • Team-Verwaltung' });
 }
 
-async function sendMyTeamOverview(interaction, team) {
-  const coManagers =
-    team.coManagerIds && team.coManagerIds.length > 0
-      ? team.coManagerIds.map(id => `<@${id}>`).join(', ')
-      : 'Keine';
+function buildMyTeamButtons(team) {
+  const coCount = Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0;
+  const hasCoManagers = coCount > 0;
 
-  const embed = new EmbedBuilder()
-    .setTitle(team.clubName)
-    .setDescription([
-      `**Vereinsmanager:** ${formatUserMention(team.managerId)}`,
-      `**Co-VM:** ${coManagers}`,
-    ].join('\n'))
-    .setColor(0xff0000);
-
-  const row = new ActionRowBuilder().addComponents(
+  return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('team_add_covm_open')
       .setLabel('➕ Co-VM hinzufügen')
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(coCount >= 3),
+    new ButtonBuilder()
+      .setCustomId('team_remove_covm_open')
+      .setLabel('➖ Co-VM entfernen')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!hasCoManagers),
     new ButtonBuilder()
       .setCustomId('team_delete_open')
       .setLabel('🗑️ Team abmelden')
       .setStyle(ButtonStyle.Danger)
   );
+}
+
+async function sendMyTeamOverview(interaction, team) {
+  const embed = buildMyTeamEmbed(team);
+  const row = buildMyTeamButtons(team);
 
   if (team.logoFile) {
     const logoPath = path.join(logosDir, team.logoFile);
 
     if (fs.existsSync(logoPath)) {
       const attachment = new AttachmentBuilder(logoPath, { name: team.logoFile });
-      embed.setImage(`attachment://${team.logoFile}`);
+      embed.setThumbnail(`attachment://${team.logoFile}`);
 
       await interaction.reply({
         embeds: [embed],
@@ -246,10 +287,11 @@ async function handleTeamSetupCommand(interaction) {
     .setTitle('📝 Team-Verwaltung')
     .setDescription(
       'Hier kannst du dein Team verwalten.\n\n' +
-      '• **Team anmelden** → EA FC Clubname eingeben und danach Logo hochladen\n' +
-      '• **Co-VM hinzufügen** → nur der Vereinsmanager kann Co-VMs hinzufügen\n' +
-      '• **Mein Team** → private Übersicht deines Teams\n' +
-      '• **Team abmelden** → nur der Vereinsmanager kann das Team löschen'
+      '• **Team anmelden** → Clubname eingeben und danach Logo hochladen\n' +
+      '• **Co-VM hinzufügen** → nur Vereinsmanager, maximal 3\n' +
+      '• **Co-VM entfernen** → nur Vereinsmanager\n' +
+      '• **Mein Team** → private Team-Übersicht\n' +
+      '• **Team abmelden** → nur Vereinsmanager'
     )
     .setColor(0xff0000);
 
@@ -375,21 +417,90 @@ async function handleTeamButtons(interaction) {
       return true;
     }
 
-    const modal = new ModalBuilder()
-      .setCustomId('team_add_covm_modal')
-      .setTitle('Co-VM hinzufügen');
+    const coCount = Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0;
+    if (coCount >= 3) {
+      await interaction.reply({
+        content: '❌ Dein Team hat bereits 3 Co-VMs. Mehr sind nicht erlaubt.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
 
-    const coVmInput = new TextInputBuilder()
-      .setCustomId('covm_user')
-      .setLabel('Discord ID oder @Erwähnung')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setPlaceholder('@User oder 123456789012345678');
+    const embed = new EmbedBuilder()
+      .setTitle('➕ Co-VM hinzufügen')
+      .setDescription(
+        `Wähle unten einen Spieler aus, der als Co-VM für **${team.clubName}** hinzugefügt werden soll.\n\n` +
+        `Aktuell belegt: **${coCount}/3**`
+      )
+      .setColor(0xff0000);
 
-    const row = new ActionRowBuilder().addComponents(coVmInput);
-    modal.addComponents(row);
+    const row = new ActionRowBuilder().addComponents(
+      new UserSelectMenuBuilder()
+        .setCustomId('team_add_covm_select')
+        .setPlaceholder('Spieler als Co-VM auswählen')
+        .setMinValues(1)
+        .setMaxValues(1)
+    );
 
-    await interaction.showModal(modal);
+    await interaction.reply({
+      embeds: [embed],
+      components: [row],
+      flags: MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
+
+  if (interaction.customId === 'team_remove_covm_open') {
+    const teams = readTeams();
+    const team = teams.find(t => t.managerId === interaction.user.id);
+
+    if (!team) {
+      await interaction.reply({
+        content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs entfernen.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    if (!Array.isArray(team.coManagerIds) || team.coManagerIds.length === 0) {
+      await interaction.reply({
+        content: '❌ Dein Team hat aktuell keine Co-VMs.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const options = team.coManagerIds.slice(0, 25).map(userId => ({
+      label: `Co-VM entfernen`,
+      description: `User-ID: ${userId}`,
+      value: userId,
+    }));
+
+    const embed = new EmbedBuilder()
+      .setTitle('➖ Co-VM entfernen')
+      .setDescription(`Wähle unten aus, welcher Co-VM aus **${team.clubName}** entfernt werden soll.`)
+      .setColor(0xff0000);
+
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('team_remove_covm_select')
+        .setPlaceholder('Co-VM auswählen')
+        .addOptions(
+          team.coManagerIds.slice(0, 25).map(userId => ({
+            label: guild.members.cache.get(userId)?.displayName || `User ${userId}`,
+            description: `Entfernen als Co-VM`,
+            value: userId,
+          }))
+        )
+    );
+
+    await interaction.reply({
+      embeds: [embed],
+      components: [row],
+      flags: MessageFlags.Ephemeral,
+    });
+
     return true;
   }
 
@@ -473,6 +584,172 @@ async function handleTeamButtons(interaction) {
   return false;
 }
 
+async function handleTeamUserSelect(interaction) {
+  if (interaction.customId !== 'team_add_covm_select') return false;
+
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({
+      content: '❌ Diese Aktion funktioniert nur auf einem Server.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const playerRole = guild.roles.cache.get(process.env.PLAYER_ROLE_ID);
+  if (!playerRole) {
+    await interaction.reply({
+      content: '❌ Spieler-Rolle wurde nicht gefunden. Prüfe PLAYER_ROLE_ID.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const teams = readTeams();
+  const team = teams.find(t => t.managerId === interaction.user.id);
+
+  if (!team) {
+    await interaction.reply({
+      content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs hinzufügen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (!Array.isArray(team.coManagerIds)) {
+    team.coManagerIds = [];
+  }
+
+  if (team.coManagerIds.length >= 3) {
+    await interaction.reply({
+      content: '❌ Dein Team hat bereits 3 Co-VMs. Mehr sind nicht erlaubt.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const userId = interaction.values?.[0];
+  if (!userId) {
+    await interaction.reply({
+      content: '❌ Kein User ausgewählt.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (userId === team.managerId) {
+    await interaction.reply({
+      content: '❌ Der Vereinsmanager kann nicht zusätzlich Co-VM sein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  let selectedMember;
+  try {
+    selectedMember = await guild.members.fetch(userId);
+  } catch (error) {
+    await interaction.reply({
+      content: '❌ Dieser User ist nicht auf dem Server.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (!selectedMember.roles.cache.has(playerRole.id)) {
+    await interaction.reply({
+      content: '❌ Dieser User hat nicht die Spieler-Rolle und kann deshalb kein Co-VM werden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (team.coManagerIds.includes(userId)) {
+    await interaction.reply({
+      content: '❌ Dieser User ist bereits Co-VM.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  team.coManagerIds.push(userId);
+  team.updatedAt = new Date().toISOString();
+
+  writeTeams(teams);
+  await refreshRegisteredTeams(guild);
+
+  await interaction.update({
+    content: `✅ <@${userId}> wurde als Co-VM hinzugefügt. Jetzt belegt: **${team.coManagerIds.length}/3**`,
+    embeds: [],
+    components: [],
+  });
+
+  return true;
+}
+
+async function handleTeamStringSelect(interaction) {
+  if (interaction.customId !== 'team_remove_covm_select') return false;
+
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({
+      content: '❌ Diese Aktion funktioniert nur auf einem Server.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const teams = readTeams();
+  const team = teams.find(t => t.managerId === interaction.user.id);
+
+  if (!team) {
+    await interaction.reply({
+      content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs entfernen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (!Array.isArray(team.coManagerIds) || team.coManagerIds.length === 0) {
+    await interaction.reply({
+      content: '❌ Dein Team hat aktuell keine Co-VMs.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const userId = interaction.values?.[0];
+  if (!userId) {
+    await interaction.reply({
+      content: '❌ Kein Co-VM ausgewählt.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (!team.coManagerIds.includes(userId)) {
+    await interaction.reply({
+      content: '❌ Dieser User ist aktuell kein Co-VM.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  team.coManagerIds = team.coManagerIds.filter(id => id !== userId);
+  team.updatedAt = new Date().toISOString();
+
+  writeTeams(teams);
+  await refreshRegisteredTeams(guild);
+
+  await interaction.update({
+    content: `✅ <@${userId}> wurde als Co-VM entfernt.`,
+    embeds: [],
+    components: [],
+  });
+
+  return true;
+}
+
 async function handleTeamModals(interaction) {
   if (interaction.customId === 'team_register_modal') {
     const guild = interaction.guild;
@@ -531,82 +808,6 @@ async function handleTeamModals(interaction) {
         `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
         `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
         `Du hast dafür 10 Minuten Zeit.`,
-      flags: MessageFlags.Ephemeral,
-    });
-
-    return true;
-  }
-
-  if (interaction.customId === 'team_add_covm_modal') {
-    const guild = interaction.guild;
-    if (!guild) {
-      await interaction.reply({
-        content: '❌ Diese Aktion funktioniert nur auf einem Server.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    const teams = readTeams();
-    const team = teams.find(t => t.managerId === interaction.user.id);
-
-    if (!team) {
-      await interaction.reply({
-        content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs hinzufügen.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    const input = interaction.fields.getTextInputValue('covm_user');
-    const userId = parseUserId(input);
-
-    if (!userId) {
-      await interaction.reply({
-        content: '❌ Bitte gib eine gültige Discord ID oder @Erwähnung ein.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    if (userId === team.managerId) {
-      await interaction.reply({
-        content: '❌ Der Vereinsmanager kann nicht zusätzlich Co-VM sein.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    try {
-      await guild.members.fetch(userId);
-    } catch (error) {
-      await interaction.reply({
-        content: '❌ Dieser User ist nicht auf dem Server.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    if (!Array.isArray(team.coManagerIds)) {
-      team.coManagerIds = [];
-    }
-
-    if (team.coManagerIds.includes(userId)) {
-      await interaction.reply({
-        content: '❌ Dieser User ist bereits Co-VM.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    team.coManagerIds.push(userId);
-    team.updatedAt = new Date().toISOString();
-
-    writeTeams(teams);
-    await refreshRegisteredTeams(guild);
-
-    await interaction.reply({
-      content: `✅ <@${userId}> wurde als Co-VM hinzugefügt.`,
       flags: MessageFlags.Ephemeral,
     });
 
@@ -696,6 +897,14 @@ module.exports = {
 
     if (interaction.isButton()) {
       return handleTeamButtons(interaction);
+    }
+
+    if (interaction.isUserSelectMenu()) {
+      return handleTeamUserSelect(interaction);
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      return handleTeamStringSelect(interaction);
     }
 
     if (interaction.isModalSubmit()) {
