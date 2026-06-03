@@ -21,6 +21,7 @@ const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
+const MANAGERS_WITHOUT_TEAM_CHANNEL_ID = '1487537056245616802';
 
 let clientRef = null;
 
@@ -269,15 +270,19 @@ function buildLiveControlRows() {
   );
 
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('live_manual_group_result')
-      .setLabel('🏆 Gruppenergebnis')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('live_manual_ko_result')
-      .setLabel('🏁 K.O.-Ergebnis')
-      .setStyle(ButtonStyle.Secondary)
-  );
+  new ButtonBuilder()
+    .setCustomId('live_manual_group_result')
+    .setLabel('🏆 Gruppenergebnis')
+    .setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder()
+    .setCustomId('live_manual_ko_result')
+    .setLabel('🏁 K.O.-Ergebnis')
+    .setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder()
+    .setCustomId('live_managers_without_team')
+    .setLabel('👥 Manager ohne Team')
+    .setStyle(ButtonStyle.Secondary)
+);
 
   return [row1, row2, row3];
 }
@@ -673,6 +678,59 @@ function updateRegisteredTeam({
 
   return team;
 }
+async function getManagersWithoutTeam(guild) {
+  const managerRoleId = process.env.MANAGER_ROLE_ID;
+
+  if (!managerRoleId) {
+    throw new Error('MANAGER_ROLE_ID fehlt in Railway.');
+  }
+
+  const managerRole = await guild.roles.fetch(managerRoleId).catch(() => null);
+
+  if (!managerRole) {
+    throw new Error('Manager-Rolle wurde nicht gefunden.');
+  }
+
+  await guild.members.fetch();
+
+  const teams = loadTeams();
+  const registeredManagerIds = new Set(
+    teams
+      .filter(team => !team.isTest)
+      .map(team => String(team.managerId))
+      .filter(Boolean)
+  );
+
+  const managersWithoutTeam = managerRole.members.filter(member => {
+    return !registeredManagerIds.has(String(member.id));
+  });
+
+  return [...managersWithoutTeam.values()].sort((a, b) => {
+    return a.displayName.localeCompare(b.displayName, 'de');
+  });
+}
+
+function buildManagersWithoutTeamText(members) {
+  if (!members.length) {
+    return [
+      '👥 **Manager ohne registriertes Team**',
+      '',
+      '✅ Aktuell haben alle Manager ein registriertes Team.',
+    ].join('\n');
+  }
+
+  const lines = members.map((member, index) => {
+    return `**${index + 1}.** <@${member.id}>`;
+  });
+
+  return [
+    '👥 **Manager ohne registriertes Team**',
+    '',
+    `Gefunden: **${members.length} Manager**`,
+    '',
+    ...lines,
+  ].join('\n');
+}
 
 // =========================
 // LIVE DATA OPERATIONS
@@ -998,14 +1056,15 @@ module.exports = {
     if (interaction.isButton()) {
       const adminButton =
         [
-          'live_show_teams',
-          'live_team_details',
-          'live_edit_team',
-          'live_delete_team',
-          'live_manual_backup',
-          'live_manual_group_result',
-          'live_manual_ko_result',
-        ].includes(interaction.customId) ||
+  'live_show_teams',
+  'live_team_details',
+  'live_edit_team',
+  'live_delete_team',
+  'live_manual_backup',
+  'live_manual_group_result',
+  'live_manual_ko_result',
+  'live_managers_without_team',
+].includes(interaction.customId) ||
         interaction.customId.startsWith('live_edit_team_data:') ||
         interaction.customId.startsWith('live_edit_add_covm:') ||
         interaction.customId.startsWith('live_edit_remove_covm:');
@@ -1019,16 +1078,49 @@ module.exports = {
       }
 
       if (interaction.customId === 'live_show_teams') {
-        const embeds = buildTeamsOverviewEmbeds();
+    const embeds = buildTeamsOverviewEmbeds();
 
-        await replyTemp(interaction, {
-          content: '📋 Hier sind die aktuell registrierten Live-Teams:',
-          embeds,
-          allowedMentions: { parse: ['users'] },
+    await replyTemp(interaction, {
+      content: '📋 Hier sind die aktuell registrierten Live-Teams:',
+      embeds,
+      allowedMentions: { parse: ['users'] },
+    });
+
+    return true;
+}
+
+if (interaction.customId === 'live_managers_without_team') {
+    try {
+      const members = await getManagersWithoutTeam(interaction.guild);
+      const channel = await fetchChannel(MANAGERS_WITHOUT_TEAM_CHANNEL_ID);
+
+      if (!channel) {
+        await interaction.reply({
+          content: '❌ Zielkanal nicht gefunden.',
+          flags: MessageFlags.Ephemeral,
         });
-
         return true;
       }
+
+      await channel.send({
+        content: buildManagersWithoutTeamText(members),
+        allowedMentions: { parse: ['users'] },
+      });
+
+      await interaction.reply({
+        content: `✅ Liste wurde in <#${MANAGERS_WITHOUT_TEAM_CHANNEL_ID}> gepostet.`,
+        flags: MessageFlags.Ephemeral,
+      });
+
+    } catch (error) {
+      await interaction.reply({
+        content: `❌ ${error.message}`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    return true;
+}
 
       if (interaction.customId === 'live_team_details') {
         const rows = buildTeamSelectRows('live_team_details_select', 'Team für Details auswählen');
