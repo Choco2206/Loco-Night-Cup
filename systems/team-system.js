@@ -1049,4 +1049,7 @@ module.exports = {
   async handleMessage(message) {
     return handleLogoUpload(message);
   },
+
+  refreshRegisteredTeams,
+
 };
