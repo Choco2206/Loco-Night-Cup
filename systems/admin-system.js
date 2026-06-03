@@ -6,11 +6,14 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   MessageFlags,
 } = require('discord.js');
+
+const teamSystem = require('./team-system');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 const ADMIN_FILE = path.join(process.cwd(), 'data', 'admin-system.json');
@@ -60,6 +63,7 @@ function writeJson(filePath, data) {
 function loadTeams() {
   return readJson(TEAMS_FILE, []);
 }
+
 function saveTeams(data) {
   writeJson(TEAMS_FILE, data);
 }
@@ -69,6 +73,7 @@ function loadAdminState() {
     liveControlPanelMessageId: null,
   });
 }
+
 function saveAdminState(data) {
   writeJson(ADMIN_FILE, data);
 }
@@ -76,6 +81,7 @@ function saveAdminState(data) {
 function loadCheckins() {
   return readJson(CHECKINS_FILE, { friday: null, saturday: null });
 }
+
 function saveCheckins(data) {
   writeJson(CHECKINS_FILE, data);
 }
@@ -83,6 +89,7 @@ function saveCheckins(data) {
 function loadGroups() {
   return readJson(GROUPS_FILE, { friday: null, saturday: null });
 }
+
 function saveGroups(data) {
   writeJson(GROUPS_FILE, data);
 }
@@ -90,6 +97,7 @@ function saveGroups(data) {
 function loadResults() {
   return readJson(RESULTS_FILE, { friday: null, saturday: null });
 }
+
 function saveResults(data) {
   writeJson(RESULTS_FILE, data);
 }
@@ -97,6 +105,7 @@ function saveResults(data) {
 function loadKo() {
   return readJson(KO_FILE, { friday: null, saturday: null });
 }
+
 function saveKo(data) {
   writeJson(KO_FILE, data);
 }
@@ -135,7 +144,18 @@ function requireAdmin(interaction) {
       flags: MessageFlags.Ephemeral,
     });
   }
+
   return null;
+}
+
+async function refreshRegisteredTeamsSafe(guild) {
+  try {
+    if (teamSystem.refreshRegisteredTeams) {
+      await teamSystem.refreshRegisteredTeams(guild);
+    }
+  } catch (error) {
+    console.error('❌ Registrierte Teams konnten nicht refreshed werden:', error);
+  }
 }
 
 async function logToChannel(channelId, text) {
@@ -165,9 +185,11 @@ function safeText(value, fallback = '—') {
 
 function chunkArray(arr, size) {
   const result = [];
+
   for (let i = 0; i < arr.length; i += size) {
     result.push(arr.slice(i, i + size));
   }
+
   return result;
 }
 
@@ -180,28 +202,20 @@ function sortRows(rows) {
 }
 
 async function replyTemp(interaction, payload, deleteAfterMs = 4000) {
-  const response = await interaction.reply({
+  await interaction.reply({
     ...payload,
     flags: MessageFlags.Ephemeral,
-    fetchReply: true,
   }).catch(async () => {
-    return interaction.followUp({
+    await interaction.followUp({
       ...payload,
       flags: MessageFlags.Ephemeral,
-      fetchReply: true,
-    });
+    }).catch(() => {});
   });
+}
 
-  if (!response) return;
-
-  setTimeout(async () => {
-    try {
-      if (interaction.channel) {
-        const msg = await interaction.channel.messages.fetch(response.id).catch(() => null);
-        if (msg) await msg.delete().catch(() => {});
-      }
-    } catch {}
-  }, deleteAfterMs);
+function formatUserMention(userId) {
+  const id = String(userId || '').trim();
+  return id ? `<@${id}>` : '—';
 }
 
 // =========================
@@ -214,11 +228,11 @@ function buildLiveControlEmbed() {
     .setDescription(
       [
         '**Live Admin-Aktionen:**',
+        '',
         '• Teams anzeigen',
         '• Teamdetails ansehen',
         '• Team bearbeiten',
-        '• Registriertes Team löschen',
-        '• Quick Delete über Auswahlmenü',
+        '• Registriertes Team löschen per Auswahl',
         '• Backup / Team nachrücken',
         '• Gruppenergebnis manuell setzen',
         '• K.O.-Ergebnis manuell setzen',
@@ -247,10 +261,6 @@ function buildLiveControlRows() {
     new ButtonBuilder()
       .setCustomId('live_delete_team')
       .setLabel('🗑️ Team löschen')
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId('live_quick_delete_team')
-      .setLabel('⚡ Quick Delete')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId('live_manual_backup')
@@ -364,6 +374,15 @@ function buildGroupScheduleButtons(eventKey, groupLetter) {
   );
 }
 
+function getRoundLabel(roundKey) {
+  if (roundKey === 'roundOf16') return 'Achtelfinale';
+  if (roundKey === 'quarterFinal') return 'Viertelfinale';
+  if (roundKey === 'semiFinal') return 'Halbfinale';
+  if (roundKey === 'thirdPlace') return 'Spiel um Platz 3';
+  if (roundKey === 'final') return 'Finale';
+  return 'K.O.-Phase';
+}
+
 function buildKoRoundEmbed(eventLabel, roundKey, matches) {
   const lines = matches.map(match => {
     let status = '⏳ Offen';
@@ -415,12 +434,12 @@ function getLiveTeams() {
 }
 
 function findTeamById(teamId) {
-  return loadTeams().find(t => t.id === teamId) || null;
+  return loadTeams().find(t => String(t.id) === String(teamId)) || null;
 }
 
 function findTeamByClubName(clubName) {
   return loadTeams().find(
-    t => t.clubName.toLowerCase() === clubName.toLowerCase()
+    t => String(t.clubName).toLowerCase() === String(clubName).toLowerCase()
   ) || null;
 }
 
@@ -440,7 +459,15 @@ function buildTeamsOverviewEmbeds() {
 
   return chunks.slice(0, 10).map((chunk, index) => {
     const lines = chunk.map((team, i) => {
-      return `**${index * 10 + i + 1}. ${safeText(team.clubName)}**\nManager: \`${safeText(team.managerId)}\``;
+      return [
+        `**${index * 10 + i + 1}. ${safeText(team.clubName)}**`,
+        `Manager: ${formatUserMention(team.managerId)}`,
+        `Co-VMs: ${
+          Array.isArray(team.coManagerIds) && team.coManagerIds.length
+            ? team.coManagerIds.map(formatUserMention).join(', ')
+            : '—'
+        }`,
+      ].join('\n');
     });
 
     return new EmbedBuilder()
@@ -455,16 +482,17 @@ function buildTeamsOverviewEmbeds() {
 }
 
 function buildTeamDetailsEmbed(team) {
-  const coManagers = Array.isArray(team.coManagerIds) && team.coManagerIds.length
-    ? team.coManagerIds.join(', ')
-    : '—';
+  const coManagers =
+    Array.isArray(team.coManagerIds) && team.coManagerIds.length
+      ? team.coManagerIds.map(formatUserMention).join(', ')
+      : '—';
 
   return new EmbedBuilder()
     .setTitle(`🔎 ${safeText(team.clubName)}`)
     .setDescription(
       [
         `**Team-ID:** \`${safeText(team.id)}\``,
-        `**Manager:** \`${safeText(team.managerId)}\``,
+        `**Manager:** ${formatUserMention(team.managerId)}`,
         `**Co-Manager:** ${coManagers}`,
         `**Logo:** ${safeText(team.logoFile)}`,
         `**Erstellt:** ${safeText(team.createdAt)}`,
@@ -474,25 +502,46 @@ function buildTeamDetailsEmbed(team) {
     .setColor(0xff0000);
 }
 
-function buildTeamSelect(customId, placeholder = 'Team auswählen') {
+function buildTeamSelectRows(customIdBase, placeholder = 'Team auswählen') {
   const teams = getLiveTeams();
+  if (!teams.length) return [];
 
-  if (!teams.length) return null;
+  const chunks = chunkArray(teams, 25);
 
-  const limited = teams.slice(0, 25);
+  return chunks.slice(0, 5).map((chunk, index) => {
+    return new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`${customIdBase}:${index}`)
+        .setPlaceholder(`${placeholder} (${index + 1}/${chunks.length})`)
+        .addOptions(
+          chunk.map(team => ({
+            label: team.clubName.slice(0, 100),
+            value: team.id,
+            description: `Manager: ${safeText(team.managerId).slice(0, 80)}`,
+          }))
+        )
+    );
+  });
+}
 
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId(customId)
-      .setPlaceholder(placeholder)
-      .addOptions(
-        limited.map(team => ({
-          label: team.clubName.slice(0, 100),
-          value: team.id,
-          description: `Manager: ${safeText(team.managerId).slice(0, 80)}`,
-        }))
-      )
+function buildEditTeamActionRows(teamId, team) {
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`live_edit_team_data:${teamId}`)
+      .setLabel('✏️ Daten bearbeiten')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`live_edit_add_covm:${teamId}`)
+      .setLabel('➕ Co-VM hinzufügen')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`live_edit_remove_covm:${teamId}`)
+      .setLabel('➖ Co-VM entfernen')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!Array.isArray(team.coManagerIds) || team.coManagerIds.length === 0)
   );
+
+  return [row1];
 }
 
 function syncTeamNameAcrossData(teamId, oldClubName, newClubName) {
@@ -580,7 +629,6 @@ function updateRegisteredTeam({
   teamId,
   newClubName,
   newManagerId,
-  newCoManagerIds,
   newLogoFile,
 }) {
   const teams = loadTeams();
@@ -599,18 +647,16 @@ function updateRegisteredTeam({
         index !== teamIndex &&
         t.clubName.toLowerCase() === newClubName.toLowerCase()
     );
+
     if (duplicate) {
       throw new Error('Ein anderes Team mit diesem Namen existiert bereits.');
     }
+
     team.clubName = newClubName;
   }
 
   if (newManagerId) {
-    team.managerId = newManagerId;
-  }
-
-  if (newCoManagerIds !== null) {
-    team.coManagerIds = newCoManagerIds;
+    team.managerId = String(newManagerId);
   }
 
   if (newLogoFile !== null) {
@@ -659,6 +705,7 @@ async function deleteRegisteredTeam(teamId) {
     if (!event) continue;
 
     event.teams = (event.teams || []).filter(t => t.teamId !== teamId && t.id !== teamId);
+
     if (event.backupDecisions && event.backupDecisions[teamId]) {
       delete event.backupDecisions[teamId];
     }
@@ -855,19 +902,11 @@ async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoal
   await logToLive(`✏️ Admin-Korrektur Gruppe ${groupLetter}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
 }
 
-function getRoundLabel(roundKey) {
-  if (roundKey === 'roundOf16') return 'Achtelfinale';
-  if (roundKey === 'quarterFinal') return 'Viertelfinale';
-  if (roundKey === 'semiFinal') return 'Halbfinale';
-  if (roundKey === 'thirdPlace') return 'Spiel um Platz 3';
-  if (roundKey === 'final') return 'Finale';
-  return 'K.O.-Phase';
-}
-
 async function updateLiveKoRoundMessage(eventKey, roundKey) {
   const koData = loadKo();
   const event = koData[eventKey];
   const round = event?.rounds?.[roundKey];
+
   if (!event || !round) return;
 
   const channel = await fetchChannel(round.channelId);
@@ -938,7 +977,7 @@ function buildEventSelect(customId) {
 }
 
 // =========================
-// INIT
+// INIT / EXPORTS
 // =========================
 
 module.exports = {
@@ -957,18 +996,21 @@ module.exports = {
     // BUTTONS
     // =========================
     if (interaction.isButton()) {
-      const allButtons = [
-        'live_show_teams',
-        'live_team_details',
-        'live_edit_team',
-        'live_delete_team',
-        'live_quick_delete_team',
-        'live_manual_backup',
-        'live_manual_group_result',
-        'live_manual_ko_result',
-      ];
+      const adminButton =
+        [
+          'live_show_teams',
+          'live_team_details',
+          'live_edit_team',
+          'live_delete_team',
+          'live_manual_backup',
+          'live_manual_group_result',
+          'live_manual_ko_result',
+        ].includes(interaction.customId) ||
+        interaction.customId.startsWith('live_edit_team_data:') ||
+        interaction.customId.startsWith('live_edit_add_covm:') ||
+        interaction.customId.startsWith('live_edit_remove_covm:');
 
-      if (!allButtons.includes(interaction.customId)) return false;
+      if (!adminButton) return false;
 
       const denied = requireAdmin(interaction);
       if (denied) {
@@ -978,17 +1020,20 @@ module.exports = {
 
       if (interaction.customId === 'live_show_teams') {
         const embeds = buildTeamsOverviewEmbeds();
+
         await replyTemp(interaction, {
           content: '📋 Hier sind die aktuell registrierten Live-Teams:',
           embeds,
+          allowedMentions: { parse: ['users'] },
         });
+
         return true;
       }
 
       if (interaction.customId === 'live_team_details') {
-        const row = buildTeamSelect('live_team_details_select', 'Team für Details auswählen');
+        const rows = buildTeamSelectRows('live_team_details_select', 'Team für Details auswählen');
 
-        if (!row) {
+        if (!rows.length) {
           await replyTemp(interaction, {
             content: '❌ Aktuell sind keine Teams registriert.',
           });
@@ -997,34 +1042,17 @@ module.exports = {
 
         await interaction.reply({
           content: '🔎 Wähle ein Team aus.',
-          components: [row],
+          components: rows,
           flags: MessageFlags.Ephemeral,
         });
-        return true;
-      }
 
-      if (interaction.customId === 'live_quick_delete_team') {
-        const row = buildTeamSelect('live_quick_delete_team_select', 'Team zum Löschen auswählen');
-
-        if (!row) {
-          await replyTemp(interaction, {
-            content: '❌ Aktuell sind keine Teams registriert.',
-          });
-          return true;
-        }
-
-        await interaction.reply({
-          content: '⚡ Wähle ein Team aus, das direkt gelöscht werden soll.',
-          components: [row],
-          flags: MessageFlags.Ephemeral,
-        });
         return true;
       }
 
       if (interaction.customId === 'live_edit_team') {
-        const row = buildTeamSelect('live_edit_team_select', 'Team zum Bearbeiten auswählen');
+        const rows = buildTeamSelectRows('live_edit_team_select', 'Team zum Bearbeiten auswählen');
 
-        if (!row) {
+        if (!rows.length) {
           await replyTemp(interaction, {
             content: '❌ Aktuell sind keine Teams registriert.',
           });
@@ -1033,29 +1061,154 @@ module.exports = {
 
         await interaction.reply({
           content: '✏️ Wähle ein Team aus, das du bearbeiten willst.',
-          components: [row],
+          components: rows,
           flags: MessageFlags.Ephemeral,
         });
+
         return true;
       }
 
       if (interaction.customId === 'live_delete_team') {
-        const modal = new ModalBuilder()
-          .setCustomId('live_delete_team_modal')
-          .setTitle('Registriertes Team löschen');
+        const rows = buildTeamSelectRows('live_delete_team_select', 'Team zum Löschen auswählen');
 
-        const teamInput = new TextInputBuilder()
-          .setCustomId('club_name')
-          .setLabel('Exakter Teamname')
+        if (!rows.length) {
+          await replyTemp(interaction, {
+            content: '❌ Aktuell sind keine Teams registriert.',
+          });
+          return true;
+        }
+
+        await interaction.reply({
+          content: '🗑️ Wähle ein Team aus, das gelöscht werden soll.',
+          components: rows,
+          flags: MessageFlags.Ephemeral,
+        });
+
+        return true;
+      }
+
+      if (interaction.customId.startsWith('live_edit_team_data:')) {
+        const [, teamId] = interaction.customId.split(':');
+        const team = findTeamById(teamId);
+
+        if (!team) {
+          await replyTemp(interaction, {
+            content: '❌ Team nicht gefunden.',
+          });
+          return true;
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`live_edit_team_modal:${teamId}`)
+          .setTitle('Teamdaten bearbeiten');
+
+        const newClubNameInput = new TextInputBuilder()
+          .setCustomId('new_club_name')
+          .setLabel('Teamname')
           .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setPlaceholder('z. B. Loco Squad');
+          .setRequired(false)
+          .setValue(team.clubName?.slice(0, 100) || '');
+
+        const managerIdInput = new TextInputBuilder()
+          .setCustomId('new_manager_id')
+          .setLabel('Manager ID')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(team.managerId ? String(team.managerId).slice(0, 100) : '');
+
+        const logoFileInput = new TextInputBuilder()
+          .setCustomId('new_logo_file')
+          .setLabel('Logo-Dateiname')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(team.logoFile ? String(team.logoFile).slice(0, 100) : '');
 
         modal.addComponents(
-          new ActionRowBuilder().addComponents(teamInput)
+          new ActionRowBuilder().addComponents(newClubNameInput),
+          new ActionRowBuilder().addComponents(managerIdInput),
+          new ActionRowBuilder().addComponents(logoFileInput)
         );
 
         await interaction.showModal(modal);
+        return true;
+      }
+
+      if (interaction.customId.startsWith('live_edit_add_covm:')) {
+        const [, teamId] = interaction.customId.split(':');
+        const team = findTeamById(teamId);
+
+        if (!team) {
+          await replyTemp(interaction, {
+            content: '❌ Team nicht gefunden.',
+          });
+          return true;
+        }
+
+        if (!Array.isArray(team.coManagerIds)) {
+          team.coManagerIds = [];
+        }
+
+        if (team.coManagerIds.length >= 3) {
+          await replyTemp(interaction, {
+            content: '❌ Dieses Team hat bereits 3 Co-VMs.',
+          });
+          return true;
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+          new UserSelectMenuBuilder()
+            .setCustomId(`live_edit_add_covm_select:${teamId}`)
+            .setPlaceholder('User als Co-VM auswählen')
+            .setMinValues(1)
+            .setMaxValues(1)
+        );
+
+        await interaction.reply({
+          content: `➕ Wähle den neuen Co-VM für **${team.clubName}** aus.`,
+          components: [row],
+          flags: MessageFlags.Ephemeral,
+        });
+
+        return true;
+      }
+
+      if (interaction.customId.startsWith('live_edit_remove_covm:')) {
+        const [, teamId] = interaction.customId.split(':');
+        const team = findTeamById(teamId);
+
+        if (!team) {
+          await replyTemp(interaction, {
+            content: '❌ Team nicht gefunden.',
+          });
+          return true;
+        }
+
+        if (!Array.isArray(team.coManagerIds) || !team.coManagerIds.length) {
+          await replyTemp(interaction, {
+            content: '❌ Dieses Team hat keine Co-VMs.',
+          });
+          return true;
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId(`live_edit_remove_covm_select:${teamId}`)
+            .setPlaceholder('Co-VM entfernen')
+            .addOptions(
+              team.coManagerIds.slice(0, 25).map(userId => ({
+                label: `User ${userId}`.slice(0, 100),
+                description: 'Als Co-VM entfernen',
+                value: String(userId),
+              }))
+            )
+        );
+
+        await interaction.reply({
+          content: `➖ Wähle den Co-VM aus, der bei **${team.clubName}** entfernt werden soll.`,
+          components: [row],
+          flags: MessageFlags.Ephemeral,
+        });
+
         return true;
       }
 
@@ -1115,7 +1268,76 @@ module.exports = {
     }
 
     // =========================
-    // SELECT MENUS
+    // USER SELECT MENUS
+    // =========================
+    if (interaction.isUserSelectMenu()) {
+      const denied = requireAdmin(interaction);
+      if (denied) {
+        await denied;
+        return true;
+      }
+
+      if (interaction.customId.startsWith('live_edit_add_covm_select:')) {
+        const [, teamId] = interaction.customId.split(':');
+        const userId = interaction.values?.[0];
+        const teams = loadTeams();
+        const team = teams.find(t => String(t.id) === String(teamId));
+
+        if (!team || !userId) {
+          await interaction.update({
+            content: '❌ Team oder User nicht gefunden.',
+            components: [],
+          });
+          return true;
+        }
+
+        if (!Array.isArray(team.coManagerIds)) {
+          team.coManagerIds = [];
+        }
+
+        if (String(userId) === String(team.managerId)) {
+          await interaction.update({
+            content: '❌ Der Manager kann nicht zusätzlich Co-VM sein.',
+            components: [],
+          });
+          return true;
+        }
+
+        if (team.coManagerIds.map(String).includes(String(userId))) {
+          await interaction.update({
+            content: '❌ Dieser User ist bereits Co-VM.',
+            components: [],
+          });
+          return true;
+        }
+
+        if (team.coManagerIds.length >= 3) {
+          await interaction.update({
+            content: '❌ Dieses Team hat bereits 3 Co-VMs.',
+            components: [],
+          });
+          return true;
+        }
+
+        team.coManagerIds.push(String(userId));
+        team.updatedAt = new Date().toISOString();
+        saveTeams(teams);
+
+        await refreshRegisteredTeamsSafe(interaction.guild);
+        await logToLive(`➕ Co-VM hinzugefügt: ${formatUserMention(userId)} zu ${team.clubName}`);
+
+        await interaction.update({
+          content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
+          components: [],
+          allowedMentions: { parse: ['users'] },
+        });
+
+        return true;
+      }
+    }
+
+    // =========================
+    // STRING SELECT MENUS
     // =========================
     if (interaction.isStringSelectMenu()) {
       const denied = requireAdmin(interaction);
@@ -1124,7 +1346,7 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId === 'live_team_details_select') {
+      if (interaction.customId.startsWith('live_team_details_select:')) {
         const teamId = interaction.values[0];
         const team = findTeamById(teamId);
 
@@ -1141,15 +1363,19 @@ module.exports = {
           content: '🔎 Teamdetails:',
           embeds: [buildTeamDetailsEmbed(team)],
           components: [],
+          allowedMentions: { parse: ['users'] },
         });
+
         return true;
       }
 
-      if (interaction.customId === 'live_quick_delete_team_select') {
+      if (interaction.customId.startsWith('live_delete_team_select:')) {
         const teamId = interaction.values[0];
 
         try {
           const deletedTeam = await deleteRegisteredTeam(teamId);
+          await refreshRegisteredTeamsSafe(interaction.guild);
+
           await interaction.update({
             content: `✅ Team gelöscht: **${deletedTeam.clubName}**`,
             components: [],
@@ -1160,10 +1386,11 @@ module.exports = {
             components: [],
           });
         }
+
         return true;
       }
 
-      if (interaction.customId === 'live_edit_team_select') {
+      if (interaction.customId.startsWith('live_edit_team_select:')) {
         const teamId = interaction.values[0];
         const team = findTeamById(teamId);
 
@@ -1175,50 +1402,43 @@ module.exports = {
           return true;
         }
 
-        const modal = new ModalBuilder()
-          .setCustomId(`live_edit_team_modal:${teamId}`)
-          .setTitle('Registriertes Team bearbeiten');
+        await interaction.update({
+          content: `✏️ Was möchtest du bei **${team.clubName}** bearbeiten?`,
+          embeds: [buildTeamDetailsEmbed(team)],
+          components: buildEditTeamActionRows(teamId, team),
+          allowedMentions: { parse: ['users'] },
+        });
 
-        const newClubNameInput = new TextInputBuilder()
-          .setCustomId('new_club_name')
-          .setLabel('Neuer Teamname (optional)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setValue(team.clubName?.slice(0, 100) || '');
+        return true;
+      }
 
-        const managerIdInput = new TextInputBuilder()
-          .setCustomId('new_manager_id')
-          .setLabel('Neue Manager ID (optional)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setValue(team.managerId ? String(team.managerId).slice(0, 100) : '');
+      if (interaction.customId.startsWith('live_edit_remove_covm_select:')) {
+        const [, teamId] = interaction.customId.split(':');
+        const userId = interaction.values[0];
+        const teams = loadTeams();
+        const team = teams.find(t => String(t.id) === String(teamId));
 
-        const coManagerIdsInput = new TextInputBuilder()
-          .setCustomId('new_co_manager_ids')
-          .setLabel('Co-Manager IDs, Komma getrennt')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(false)
-          .setValue(
-            Array.isArray(team.coManagerIds) && team.coManagerIds.length
-              ? team.coManagerIds.join(', ')
-              : ''
-          );
+        if (!team || !userId) {
+          await interaction.update({
+            content: '❌ Team oder Co-VM nicht gefunden.',
+            components: [],
+          });
+          return true;
+        }
 
-        const logoFileInput = new TextInputBuilder()
-          .setCustomId('new_logo_file')
-          .setLabel('Logo-Dateiname')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setValue(team.logoFile ? String(team.logoFile).slice(0, 100) : '');
+        team.coManagerIds = (team.coManagerIds || []).filter(id => String(id) !== String(userId));
+        team.updatedAt = new Date().toISOString();
+        saveTeams(teams);
 
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(newClubNameInput),
-          new ActionRowBuilder().addComponents(managerIdInput),
-          new ActionRowBuilder().addComponents(coManagerIdsInput),
-          new ActionRowBuilder().addComponents(logoFileInput)
-        );
+        await refreshRegisteredTeamsSafe(interaction.guild);
+        await logToLive(`➖ Co-VM entfernt: ${formatUserMention(userId)} aus ${team.clubName}`);
 
-        await interaction.showModal(modal);
+        await interaction.update({
+          content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${team.clubName}** entfernt.`,
+          components: [],
+          allowedMentions: { parse: ['users'] },
+        });
+
         return true;
       }
 
@@ -1251,6 +1471,7 @@ module.exports = {
           content: `Event **${eventKey}** gewählt. Wähle jetzt die Gruppe aus.`,
           components: [row],
         });
+
         return true;
       }
 
@@ -1274,7 +1495,7 @@ module.exports = {
             .setPlaceholder('Spiel auswählen')
             .addOptions(
               matches.map(match => ({
-                label: `${match.homeClubName} vs ${match.awayClubName}`,
+                label: `${match.homeClubName} vs ${match.awayClubName}`.slice(0, 100),
                 description: `Spiel ${match.matchNumber} • ${match.timeWindow}`,
                 value: String(match.matchNumber),
               }))
@@ -1285,6 +1506,7 @@ module.exports = {
           content: `Gruppe **${groupLetter}** gewählt. Wähle jetzt das Spiel aus.`,
           components: [row],
         });
+
         return true;
       }
 
@@ -1310,14 +1532,14 @@ module.exports = {
 
         const homeInput = new TextInputBuilder()
           .setCustomId('home_goals')
-          .setLabel(`Tore ${match.homeClubName}`)
+          .setLabel(`Tore ${match.homeClubName}`.slice(0, 45))
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
           .setPlaceholder('z. B. 3');
 
         const awayInput = new TextInputBuilder()
           .setCustomId('away_goals')
-          .setLabel(`Tore ${match.awayClubName}`)
+          .setLabel(`Tore ${match.awayClubName}`.slice(0, 45))
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
           .setPlaceholder('z. B. 1');
@@ -1360,6 +1582,7 @@ module.exports = {
           content: `Event **${eventKey}** gewählt. Wähle jetzt die K.O.-Runde aus.`,
           components: [row],
         });
+
         return true;
       }
 
@@ -1383,7 +1606,7 @@ module.exports = {
             .setPlaceholder('Spiel auswählen')
             .addOptions(
               matches.map(match => ({
-                label: `${match.homeClubName} vs ${match.awayClubName}`,
+                label: `${match.homeClubName} vs ${match.awayClubName}`.slice(0, 100),
                 description: `Spiel ${match.matchNumber} • ${match.timeWindow}`,
                 value: String(match.matchNumber),
               }))
@@ -1394,6 +1617,7 @@ module.exports = {
           content: `${getRoundLabel(roundKey)} gewählt. Wähle jetzt das Spiel aus.`,
           components: [row],
         });
+
         return true;
       }
 
@@ -1419,14 +1643,14 @@ module.exports = {
 
         const homeInput = new TextInputBuilder()
           .setCustomId('home_goals')
-          .setLabel(`Tore ${match.homeClubName}`)
+          .setLabel(`Tore ${match.homeClubName}`.slice(0, 45))
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
           .setPlaceholder('z. B. 3');
 
         const awayInput = new TextInputBuilder()
           .setCustomId('away_goals')
-          .setLabel(`Tore ${match.awayClubName}`)
+          .setLabel(`Tore ${match.awayClubName}`.slice(0, 45))
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
           .setPlaceholder('z. B. 1');
@@ -1471,28 +1695,6 @@ module.exports = {
         return true;
       }
 
-      if (interaction.customId === 'live_delete_team_modal') {
-        const clubName = interaction.fields.getTextInputValue('club_name').trim();
-
-        try {
-          const team = findTeamByClubName(clubName);
-          if (!team) {
-            throw new Error('Team nicht gefunden.');
-          }
-
-          const deletedTeam = await deleteRegisteredTeam(team.id);
-          await replyTemp(interaction, {
-            content: `✅ Team gelöscht: **${deletedTeam.clubName}**`,
-          });
-        } catch (error) {
-          await replyTemp(interaction, {
-            content: `❌ ${error.message}`,
-          });
-        }
-
-        return true;
-      }
-
       if (interaction.customId.startsWith('live_edit_team_modal:')) {
         const [, teamId] = interaction.customId.split(':');
         const team = findTeamById(teamId);
@@ -1506,40 +1708,32 @@ module.exports = {
 
         const newClubNameRaw = interaction.fields.getTextInputValue('new_club_name').trim();
         const newManagerIdRaw = interaction.fields.getTextInputValue('new_manager_id').trim();
-        const newCoManagerIdsRaw = interaction.fields.getTextInputValue('new_co_manager_ids').trim();
         const newLogoFileRaw = interaction.fields.getTextInputValue('new_logo_file').trim();
-
-        const parsedCoManagerIds =
-          newCoManagerIdsRaw === ''
-            ? []
-            : newCoManagerIdsRaw
-                .split(',')
-                .map(id => id.trim())
-                .filter(Boolean);
 
         try {
           const updatedTeam = updateRegisteredTeam({
             teamId,
             newClubName: newClubNameRaw || null,
             newManagerId: newManagerIdRaw || null,
-            newCoManagerIds: parsedCoManagerIds,
             newLogoFile: newLogoFileRaw === '' ? null : newLogoFileRaw,
           });
 
+          await refreshRegisteredTeamsSafe(interaction.guild);
           await logToLive(`✏️ Team bearbeitet: ${team.clubName} → ${updatedTeam.clubName}`);
 
           await replyTemp(interaction, {
             content: [
               `✅ Team erfolgreich bearbeitet.`,
               `**Name:** ${safeText(updatedTeam.clubName)}`,
-              `**Manager:** ${safeText(updatedTeam.managerId)}`,
+              `**Manager:** ${formatUserMention(updatedTeam.managerId)}`,
               `**Co-Manager:** ${
                 Array.isArray(updatedTeam.coManagerIds) && updatedTeam.coManagerIds.length
-                  ? updatedTeam.coManagerIds.join(', ')
+                  ? updatedTeam.coManagerIds.map(formatUserMention).join(', ')
                   : '—'
               }`,
               `**Logo:** ${safeText(updatedTeam.logoFile)}`,
             ].join('\n'),
+            allowedMentions: { parse: ['users'] },
           });
         } catch (error) {
           await replyTemp(interaction, {
