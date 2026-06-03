@@ -93,16 +93,15 @@ function formatUserMention(userId) {
   return id ? `<@${id}>` : '—';
 }
 
-async function formatMemberDisplay(guild, userId) {
+async function formatClickableMember(guild, userId) {
   const id = String(userId || '').trim();
-
   if (!id) return '—';
 
   try {
-    const member = await guild.members.fetch(id);
-    return `<@${member.id}>`;
+    await guild.members.fetch(id);
+    return `<@${id}>`;
   } catch (error) {
-    return `⚠️ Nicht mehr auf dem Server (\`${id}\`)`;
+    return '⚠️ Nicht mehr auf dem Server';
   }
 }
 
@@ -127,44 +126,144 @@ function sortTeamsAlphabetically(teams) {
   });
 }
 
+function chunkTextBlocks(blocks, maxLength = 1900) {
+  const chunks = [];
+  let current = '';
+
+  for (const block of blocks) {
+    const next = current ? `${current}\n\n${block}` : block;
+
+    if (next.length > maxLength) {
+      if (current) chunks.push(current);
+      current = block;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 // =========================
-// EMBED BUILDERS
+// REGISTERED TEAMS VIEW
 // =========================
 
-async function buildRegisteredTeamsEmbed(guild, teams) {
+function buildRegisteredTeamsHeaderEmbed(teams) {
+  return new EmbedBuilder()
+    .setTitle('🏆 LOCO NIGHT CUP • REGISTRIERTE TEAMS')
+    .setDescription(
+      [
+        `Aktuell registriert: **${teams.length} Teams**`,
+        '',
+        'Teams sind alphabetisch sortiert.',
+        'Bei Rückfragen kannst du die VMs direkt anklicken.',
+      ].join('\n')
+    )
+    .setColor(0xff0000)
+    .setFooter({ text: 'Loco Night Bot • Team-Übersicht' });
+}
+
+async function buildRegisteredTeamsContentChunks(guild, teams) {
   const sortedTeams = sortTeamsAlphabetically(teams);
 
-  const lines = [];
+  if (sortedTeams.length === 0) {
+    return ['Noch keine Teams registriert.'];
+  }
+
+  const blocks = [];
 
   for (const [index, team] of sortedTeams.entries()) {
-    const manager = await formatMemberDisplay(guild, team.managerId);
+    const manager = await formatClickableMember(guild, team.managerId);
 
     let coManagers = 'Keine';
-
     if (Array.isArray(team.coManagerIds) && team.coManagerIds.length > 0) {
-      const coManagerDisplays = [];
+      const resolvedCoManagers = [];
 
       for (const userId of team.coManagerIds) {
-        coManagerDisplays.push(await formatMemberDisplay(guild, userId));
+        resolvedCoManagers.push(await formatClickableMember(guild, userId));
       }
 
-      coManagers = coManagerDisplays.join(', ');
+      coManagers = resolvedCoManagers.join(', ');
     }
 
-    lines.push(
+    const number = String(index + 1).padStart(2, '0');
+
+    blocks.push(
       [
-        `**${index + 1}. ${team.clubName}**`,
-        `👑 **Vereinsmanager:** ${manager}`,
+        `🔴 **${number} | ${team.clubName}**`,
+        `👑 **VM:** ${manager}`,
         `🤝 **Co-VM:** ${coManagers}`,
       ].join('\n')
     );
   }
 
-  return new EmbedBuilder()
-    .setTitle('🏆 Registrierte Teams')
-    .setDescription(lines.length > 0 ? lines.join('\n\n') : 'Noch keine Teams registriert.')
-    .setColor(0xff0000);
+  return chunkTextBlocks(blocks);
 }
+
+async function refreshRegisteredTeams(guild) {
+  const setupData = readSetupData();
+  const teams = readTeams();
+
+  const channelId = getRegisteredTeamsChannelId();
+  const registeredTeamsChannel = guild.channels.cache.get(channelId);
+
+  if (!registeredTeamsChannel) {
+    console.error('❌ Kanal für registrierte Teams nicht gefunden.');
+    return;
+  }
+
+  const headerEmbed = buildRegisteredTeamsHeaderEmbed(teams);
+  const chunks = await buildRegisteredTeamsContentChunks(guild, teams);
+
+  const existingIds = Array.isArray(setupData.registeredTeamsMessageIds)
+    ? setupData.registeredTeamsMessageIds
+    : setupData.registeredTeamsMessageId
+      ? [setupData.registeredTeamsMessageId]
+      : [];
+
+  const nextMessageIds = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const payload = {
+      content: chunks[i],
+      embeds: i === 0 ? [headerEmbed] : [],
+      allowedMentions: { parse: ['users'] },
+    };
+
+    const oldId = existingIds[i];
+
+    if (oldId) {
+      try {
+        const oldMessage = await registeredTeamsChannel.messages.fetch(oldId);
+        await oldMessage.edit(payload);
+        nextMessageIds.push(oldMessage.id);
+        continue;
+      } catch (error) {
+        console.warn('⚠️ Alte registrierte Teams Nachricht nicht gefunden, poste neu.');
+      }
+    }
+
+    const newMessage = await registeredTeamsChannel.send(payload);
+    nextMessageIds.push(newMessage.id);
+  }
+
+  for (let i = chunks.length; i < existingIds.length; i++) {
+    try {
+      const oldMessage = await registeredTeamsChannel.messages.fetch(existingIds[i]);
+      await oldMessage.delete();
+    } catch (error) {}
+  }
+
+  setupData.registeredTeamsChannelId = registeredTeamsChannel.id;
+  setupData.registeredTeamsMessageId = nextMessageIds[0] || null;
+  setupData.registeredTeamsMessageIds = nextMessageIds;
+  writeSetupData(setupData);
+}
+
+// =========================
+// MY TEAM EMBED
+// =========================
 
 function buildMyTeamEmbed(team) {
   const coManagers =
@@ -220,49 +319,6 @@ function buildMyTeamButtons(team) {
   );
 }
 
-// =========================
-// REFRESH / SEND HELPERS
-// =========================
-
-async function refreshRegisteredTeams(guild) {
-  const setupData = readSetupData();
-  const teams = readTeams();
-
-  const channelId = getRegisteredTeamsChannelId();
-  const registeredTeamsChannel = guild.channels.cache.get(channelId);
-
-  if (!registeredTeamsChannel) {
-    console.error('❌ Kanal für registrierte Teams nicht gefunden.');
-    return;
-  }
-
-  const embed = await buildRegisteredTeamsEmbed(guild, teams);
-
-  if (setupData.registeredTeamsMessageId) {
-    try {
-      const oldMessage = await registeredTeamsChannel.messages.fetch(setupData.registeredTeamsMessageId);
-
-      await oldMessage.edit({
-        embeds: [embed],
-        allowedMentions: { parse: ['users'] },
-      });
-
-      return;
-    } catch (error) {
-      console.warn('⚠️ Alte registrierte Teams Nachricht nicht gefunden, poste neu.');
-    }
-  }
-
-  const newMessage = await registeredTeamsChannel.send({
-    embeds: [embed],
-    allowedMentions: { parse: ['users'] },
-  });
-
-  setupData.registeredTeamsChannelId = registeredTeamsChannel.id;
-  setupData.registeredTeamsMessageId = newMessage.id;
-  writeSetupData(setupData);
-}
-
 async function sendMyTeamOverview(interaction, team) {
   const embed = buildMyTeamEmbed(team);
   const row = buildMyTeamButtons(team);
@@ -313,7 +369,7 @@ async function handleTeamSetupCommand(interaction) {
 
   const setupData = readSetupData();
 
-  if (setupData.teamPanelMessageId && setupData.registeredTeamsMessageId) {
+  if (setupData.teamPanelMessageId && (setupData.registeredTeamsMessageId || setupData.registeredTeamsMessageIds)) {
     await interaction.reply({
       content: '❌ Team-Setup wurde bereits erstellt.',
       flags: MessageFlags.Ephemeral,
@@ -371,20 +427,14 @@ async function handleTeamSetupCommand(interaction) {
     components: [teamPanelRow],
   });
 
-  const registeredTeamsEmbed = await buildRegisteredTeamsEmbed(guild, readTeams());
-
-  const registeredTeamsMessage = await registeredTeamsChannel.send({
-    embeds: [registeredTeamsEmbed],
-    allowedMentions: { parse: ['users'] },
-  });
-
   writeSetupData({
     ...setupData,
     teamPanelChannelId: teamRegisterChannel.id,
     teamPanelMessageId: panelMessage.id,
     registeredTeamsChannelId: registeredTeamsChannel.id,
-    registeredTeamsMessageId: registeredTeamsMessage.id,
   });
+
+  await refreshRegisteredTeams(guild);
 
   await interaction.reply({
     content: '✅ Team-Setup erfolgreich erstellt.',
