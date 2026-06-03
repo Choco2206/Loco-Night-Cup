@@ -93,6 +93,19 @@ function formatUserMention(userId) {
   return id ? `<@${id}>` : '—';
 }
 
+async function formatMemberDisplay(guild, userId) {
+  const id = String(userId || '').trim();
+
+  if (!id) return '—';
+
+  try {
+    const member = await guild.members.fetch(id);
+    return `<@${member.id}>`;
+  } catch (error) {
+    return `⚠️ Nicht mehr auf dem Server (\`${id}\`)`;
+  }
+}
+
 function findTeamByManagerOrCoManager(userId) {
   const teams = readTeams();
 
@@ -118,21 +131,34 @@ function sortTeamsAlphabetically(teams) {
 // EMBED BUILDERS
 // =========================
 
-function buildRegisteredTeamsEmbed(teams) {
+async function buildRegisteredTeamsEmbed(guild, teams) {
   const sortedTeams = sortTeamsAlphabetically(teams);
 
-  const lines = sortedTeams.map((team, index) => {
-    const coManagers =
-      Array.isArray(team.coManagerIds) && team.coManagerIds.length > 0
-        ? team.coManagerIds.map(id => formatUserMention(id)).join(', ')
-        : 'Keine';
+  const lines = [];
 
-    return [
-      `**${index + 1}. ${team.clubName}**`,
-      `👑 **Vereinsmanager:** ${formatUserMention(team.managerId)}`,
-      `🤝 **Co-VM:** ${coManagers}`,
-    ].join('\n');
-  });
+  for (const [index, team] of sortedTeams.entries()) {
+    const manager = await formatMemberDisplay(guild, team.managerId);
+
+    let coManagers = 'Keine';
+
+    if (Array.isArray(team.coManagerIds) && team.coManagerIds.length > 0) {
+      const coManagerDisplays = [];
+
+      for (const userId of team.coManagerIds) {
+        coManagerDisplays.push(await formatMemberDisplay(guild, userId));
+      }
+
+      coManagers = coManagerDisplays.join(', ');
+    }
+
+    lines.push(
+      [
+        `**${index + 1}. ${team.clubName}**`,
+        `👑 **Vereinsmanager:** ${manager}`,
+        `🤝 **Co-VM:** ${coManagers}`,
+      ].join('\n')
+    );
+  }
 
   return new EmbedBuilder()
     .setTitle('🏆 Registrierte Teams')
@@ -210,15 +236,17 @@ async function refreshRegisteredTeams(guild) {
     return;
   }
 
-  const embed = buildRegisteredTeamsEmbed(teams);
+  const embed = await buildRegisteredTeamsEmbed(guild, teams);
 
   if (setupData.registeredTeamsMessageId) {
     try {
       const oldMessage = await registeredTeamsChannel.messages.fetch(setupData.registeredTeamsMessageId);
+
       await oldMessage.edit({
         embeds: [embed],
         allowedMentions: { parse: ['users'] },
       });
+
       return;
     } catch (error) {
       console.warn('⚠️ Alte registrierte Teams Nachricht nicht gefunden, poste neu.');
@@ -340,10 +368,11 @@ async function handleTeamSetupCommand(interaction) {
 
   const panelMessage = await teamRegisterChannel.send({
     embeds: [teamPanelEmbed],
-  components: [teamPanelRow],
+    components: [teamPanelRow],
   });
 
-  const registeredTeamsEmbed = buildRegisteredTeamsEmbed(readTeams());
+  const registeredTeamsEmbed = await buildRegisteredTeamsEmbed(guild, readTeams());
+
   const registeredTeamsMessage = await registeredTeamsChannel.send({
     embeds: [registeredTeamsEmbed],
     allowedMentions: { parse: ['users'] },
@@ -587,6 +616,7 @@ async function handleTeamButtons(interaction) {
 
     if (team.logoFile) {
       const logoPath = path.join(logosDir, team.logoFile);
+
       if (fs.existsSync(logoPath)) {
         try {
           fs.unlinkSync(logoPath);
@@ -917,9 +947,10 @@ async function handleLogoUpload(message) {
     console.warn('⚠️ Logo-Nachricht konnte nicht gelöscht werden.');
   }
 
-  const confirmMessage = await message.channel.send(
-    `✅ Logo für **${team.clubName}** wurde gespeichert, ${formatUserMention(message.author.id)}.`
-  );
+  const confirmMessage = await message.channel.send({
+    content: `✅ Logo für **${team.clubName}** wurde gespeichert, ${formatUserMention(message.author.id)}.`,
+    allowedMentions: { parse: ['users'] },
+  });
 
   setTimeout(async () => {
     try {
