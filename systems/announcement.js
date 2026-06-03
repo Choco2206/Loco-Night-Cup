@@ -54,10 +54,12 @@ function loadAnnouncementState() {
   return readJson(ANNOUNCEMENT_STATE_FILE, {
     friday: {
       ceremonyPosted: false,
+      cycleKey: null,
       postedAt: null,
     },
     saturday: {
       ceremonyPosted: false,
+      cycleKey: null,
       postedAt: null,
     },
   });
@@ -115,22 +117,42 @@ function getLogoPath(logoFile) {
   return null;
 }
 
+function getKoEvent(eventKey) {
+  const ko = loadKo();
+  return ko[eventKey] || null;
+}
+
+function getCurrentCycleKey(eventKey) {
+  const event = getKoEvent(eventKey);
+  return event?.cycleKey || null;
+}
+
 function hasCeremonyAlreadyPosted(eventKey) {
   const state = loadAnnouncementState();
-  return !!state?.[eventKey]?.ceremonyPosted;
+  const currentCycleKey = getCurrentCycleKey(eventKey);
+
+  if (!currentCycleKey) return false;
+
+  return (
+    state?.[eventKey]?.ceremonyPosted === true &&
+    state?.[eventKey]?.cycleKey === currentCycleKey
+  );
 }
 
 function markCeremonyPosted(eventKey) {
   const state = loadAnnouncementState();
+  const currentCycleKey = getCurrentCycleKey(eventKey);
 
   if (!state[eventKey]) {
     state[eventKey] = {
       ceremonyPosted: false,
+      cycleKey: null,
       postedAt: null,
     };
   }
 
   state[eventKey].ceremonyPosted = true;
+  state[eventKey].cycleKey = currentCycleKey;
   state[eventKey].postedAt = new Date().toISOString();
 
   saveAnnouncementState(state);
@@ -142,11 +164,13 @@ function resetCeremonyPosted(eventKey) {
   if (!state[eventKey]) {
     state[eventKey] = {
       ceremonyPosted: false,
+      cycleKey: null,
       postedAt: null,
     };
   }
 
   state[eventKey].ceremonyPosted = false;
+  state[eventKey].cycleKey = null;
   state[eventKey].postedAt = null;
 
   saveAnnouncementState(state);
@@ -179,6 +203,7 @@ function getPlacementData(eventKey) {
 
   return {
     label: event.label || eventKey,
+    cycleKey: event.cycleKey || null,
     first,
     second,
     third,
@@ -282,12 +307,12 @@ async function sendTournamentCeremonyIfReady(client, eventKey) {
     return false;
   }
 
-  if (hasCeremonyAlreadyPosted(eventKey)) {
+  const placementData = getPlacementData(eventKey);
+  if (!placementData) {
     return false;
   }
 
-  const placementData = getPlacementData(eventKey);
-  if (!placementData) {
+  if (hasCeremonyAlreadyPosted(eventKey)) {
     return false;
   }
 
