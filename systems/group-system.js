@@ -5,6 +5,8 @@ const { EmbedBuilder } = require('discord.js');
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 
+const GROUP_ROLE_CLEANUP_AFTER_MS = 3 * 60 * 60 * 1000;
+
 let clientRef = null;
 let intervalRef = null;
 
@@ -97,8 +99,29 @@ function getGroupLetters(format) {
   return [];
 }
 
+function getAllGroupLetters() {
+  return ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+}
+
 function getChannelIdForLetter(letter) {
   return process.env[`GROUP_${letter}_CHANNEL_ID`] || null;
+}
+
+function getRoleIdForLetter(letter) {
+  return process.env[`GROUP_${letter}_ROLE_ID`] || null;
+}
+
+function getAllGroupRoleIds() {
+  return getAllGroupLetters()
+    .map(letter => getRoleIdForLetter(letter))
+    .filter(Boolean);
+}
+
+function getTeamUserIds(team) {
+  return [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ].filter(Boolean);
 }
 
 function shuffleArray(array) {
@@ -113,7 +136,6 @@ function shuffleArray(array) {
 }
 
 function getDrawTimestamp(event) {
-  // 23:25 = deadline + 25 Minuten
   return event.deadlineAt + 25 * 60 * 1000;
 }
 
@@ -166,8 +188,7 @@ function buildTableEmbed(eventLabel, groupLetter, rows) {
 
 function buildPingMessage(groupLetter, teams) {
   const lines = teams.map(team => {
-    const mentions = [team.managerId, ...(team.coManagerIds || [])]
-      .filter(Boolean)
+    const mentions = getTeamUserIds(team)
       .map(id => `<@${id}>`)
       .join(' ');
 
@@ -219,6 +240,144 @@ async function deleteMessageIfExists(channelId, messageId) {
   }
 }
 
+async function fetchGuildFromGroups() {
+  for (const letter of getAllGroupLetters()) {
+    const channelId = getChannelIdForLetter(letter);
+    if (!channelId) continue;
+
+    const channel = await fetchChannel(channelId);
+    if (channel && channel.guild) return channel.guild;
+  }
+
+  return null;
+}
+
+// =========================
+// ROLE HELPERS
+// =========================
+
+async function removeAllGroupRolesFromMember(member) {
+  const roleIds = getAllGroupRoleIds();
+
+  for (const roleId of roleIds) {
+    if (!member.roles.cache.has(roleId)) continue;
+
+    try {
+      await member.roles.remove(roleId);
+    } catch (error) {
+      console.warn(`⚠️ Gruppenrolle konnte nicht entfernt werden: ${member.id} / ${roleId}`);
+    }
+  }
+}
+
+async function removeAllGroupRolesFromStoredEvent(storedEvent) {
+  if (!storedEvent || !storedEvent.groups) return;
+
+  const guild = await fetchGuildFromGroups();
+
+  if (!guild) {
+    console.warn('⚠️ Server konnte für Rollen-Cleanup nicht geladen werden.');
+    return;
+  }
+
+  const userIds = new Set();
+
+  for (const group of Object.values(storedEvent.groups)) {
+    if (!group || !Array.isArray(group.teams)) continue;
+
+    for (const team of group.teams) {
+      getTeamUserIds(team).forEach(id => userIds.add(id));
+    }
+  }
+
+  for (const userId of userIds) {
+    try {
+      const member = await guild.members.fetch(userId);
+      if (!member) continue;
+
+      await removeAllGroupRolesFromMember(member);
+    } catch (error) {
+      console.warn(`⚠️ Member konnte beim Rollen-Cleanup nicht geladen werden: ${userId}`);
+    }
+  }
+}
+
+async function assignGroupRoleToTeams(letter, teams) {
+  const roleId = getRoleIdForLetter(letter);
+
+  if (!roleId) {
+    console.error(`❌ GROUP_${letter}_ROLE_ID fehlt.`);
+    return;
+  }
+
+  const guild = await fetchGuildFromGroups();
+
+  if (!guild) {
+    console.error('❌ Server konnte für Rollenvergabe nicht geladen werden.');
+    return;
+  }
+
+  const role =
+    guild.roles.cache.get(roleId) ||
+    (await guild.roles.fetch(roleId).catch(() => null));
+
+  if (!role) {
+    console.error(`❌ Rolle für Gruppe ${letter} wurde nicht gefunden: ${roleId}`);
+    return;
+  }
+
+  const userIds = new Set();
+
+  for (const team of teams) {
+    getTeamUserIds(team).forEach(id => userIds.add(id));
+  }
+
+  for (const userId of userIds) {
+    try {
+      const member = await guild.members.fetch(userId);
+      if (!member) continue;
+
+      await removeAllGroupRolesFromMember(member);
+
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Rolle Gruppe ${letter} konnte nicht vergeben werden an User ${userId}`);
+    }
+  }
+}
+
+async function cleanupExpiredGroupRoles() {
+  const groupsData = loadGroups();
+  let changed = false;
+
+  for (const eventKey of ['friday', 'saturday']) {
+    const storedEvent = groupsData[eventKey];
+    if (!storedEvent || !storedEvent.createdAt) continue;
+
+    if (storedEvent.groupRolesCleanedAt) continue;
+
+    const createdAtMs = new Date(storedEvent.createdAt).getTime();
+    if (!createdAtMs) continue;
+
+    const cleanupAt = createdAtMs + GROUP_ROLE_CLEANUP_AFTER_MS;
+
+    if (Date.now() >= cleanupAt) {
+      await removeAllGroupRolesFromStoredEvent(storedEvent);
+
+      storedEvent.groupRolesCleanedAt = new Date().toISOString();
+      changed = true;
+
+      console.log(`✅ Gruppenrollen für ${storedEvent.label} automatisch entfernt.`);
+    }
+  }
+
+  if (changed) {
+    saveGroups(groupsData);
+  }
+}
+
 // =========================
 // GROUP DRAW
 // =========================
@@ -253,15 +412,15 @@ async function drawGroupsForEvent(eventKey) {
   const format = getActualFormat(event.teams.length);
   if (!format) return;
 
-  // Schon für diesen Zyklus ausgelost?
   const existing = groupsData[eventKey];
+
   if (existing && existing.cycleKey === event.cycleKey) {
     return;
   }
 
-  // Alte Gruppenposts aus vorherigem Zyklus löschen
   if (existing) {
     await clearOldGroupPosts(existing);
+    await removeAllGroupRolesFromStoredEvent(existing);
   }
 
   const groupLetters = getGroupLetters(format);
@@ -284,6 +443,8 @@ async function drawGroupsForEvent(eventKey) {
     label: event.label,
     format,
     createdAt: new Date().toISOString(),
+    groupRolesAssignedAt: null,
+    groupRolesCleanedAt: null,
     groups: {},
   };
 
@@ -298,6 +459,8 @@ async function drawGroupsForEvent(eventKey) {
     const channel = await fetchChannel(channelId);
     if (!channel) continue;
 
+    await assignGroupRoleToTeams(letter, grouped[letter]);
+
     const rows = createInitialRows(grouped[letter]);
 
     const tableMessage = await channel.send({
@@ -310,6 +473,7 @@ async function drawGroupsForEvent(eventKey) {
 
     storedEvent.groups[letter] = {
       channelId,
+      roleId: getRoleIdForLetter(letter),
       tableMessageId: tableMessage.id,
       pingMessageId: pingMessage.id,
       rows,
@@ -317,10 +481,12 @@ async function drawGroupsForEvent(eventKey) {
     };
   }
 
+  storedEvent.groupRolesAssignedAt = new Date().toISOString();
+
   groupsData[eventKey] = storedEvent;
   saveGroups(groupsData);
 
-  console.log(`✅ Gruppen für ${event.label} automatisch ausgelost.`);
+  console.log(`✅ Gruppen für ${event.label} automatisch ausgelost und Rollen verteilt.`);
 }
 
 // =========================
@@ -337,6 +503,8 @@ async function reconcileAutoDraw() {
   if (checkins.saturday && checkins.saturday.finalized && shouldDrawNow(checkins.saturday)) {
     await drawGroupsForEvent('saturday');
   }
+
+  await cleanupExpiredGroupRoles();
 }
 
 // =========================
@@ -366,30 +534,30 @@ module.exports = {
   },
 
   async handleMessage(message) {
-  if (!message.guild) return false;
-  if (message.author.bot) return false;
+    if (!message.guild) return false;
+    if (message.author.bot) return false;
 
-  const groupChannelIds = [
-    process.env.GROUP_A_CHANNEL_ID,
-    process.env.GROUP_B_CHANNEL_ID,
-    process.env.GROUP_C_CHANNEL_ID,
-    process.env.GROUP_D_CHANNEL_ID,
-    process.env.GROUP_E_CHANNEL_ID,
-    process.env.GROUP_F_CHANNEL_ID,
-    process.env.GROUP_G_CHANNEL_ID,
-    process.env.GROUP_H_CHANNEL_ID,
-  ].filter(Boolean);
+    const groupChannelIds = [
+      process.env.GROUP_A_CHANNEL_ID,
+      process.env.GROUP_B_CHANNEL_ID,
+      process.env.GROUP_C_CHANNEL_ID,
+      process.env.GROUP_D_CHANNEL_ID,
+      process.env.GROUP_E_CHANNEL_ID,
+      process.env.GROUP_F_CHANNEL_ID,
+      process.env.GROUP_G_CHANNEL_ID,
+      process.env.GROUP_H_CHANNEL_ID,
+    ].filter(Boolean);
 
-  if (!groupChannelIds.includes(message.channel.id)) {
+    if (!groupChannelIds.includes(message.channel.id)) {
+      return false;
+    }
+
+    setTimeout(async () => {
+      try {
+        await message.delete();
+      } catch (error) {}
+    }, 10 * 60 * 1000);
+
     return false;
-  }
-
-  setTimeout(async () => {
-    try {
-      await message.delete();
-    } catch (error) {}
-  }, 10 * 60 * 1000);
-
-  return false;
-},
+  },
 };
