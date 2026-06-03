@@ -119,14 +119,6 @@ function isUserAllowedForTeam(userId, team) {
   return allowedIds.includes(String(userId));
 }
 
-function getActualFormat(teamCount) {
-  if (teamCount < 8) return 0;
-  if (teamCount < 16) return 8;
-  if (teamCount < 24) return 16;
-  if (teamCount < 32) return 24;
-  return 32;
-}
-
 function sortRows(rows) {
   return [...rows].sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
@@ -142,6 +134,25 @@ function getRoundChannelId(roundKey) {
   if (roundKey === 'thirdPlace') return process.env.KO_THIRD_PLACE_CHANNEL_ID;
   if (roundKey === 'final') return process.env.KO_FINAL_CHANNEL_ID;
   return null;
+}
+
+function getRoundRoleId(roundKey) {
+  if (roundKey === 'roundOf16') return process.env.KO_ROUND_OF_16_ROLE_ID;
+  if (roundKey === 'quarterFinal') return process.env.KO_QUARTERFINAL_ROLE_ID;
+  if (roundKey === 'semiFinal') return process.env.KO_SEMIFINAL_ROLE_ID;
+  if (roundKey === 'thirdPlace') return process.env.KO_THIRD_PLACE_ROLE_ID;
+  if (roundKey === 'final') return process.env.KO_FINAL_ROLE_ID;
+  return null;
+}
+
+function getAllKoRoleIds() {
+  return [
+    process.env.KO_ROUND_OF_16_ROLE_ID,
+    process.env.KO_QUARTERFINAL_ROLE_ID,
+    process.env.KO_SEMIFINAL_ROLE_ID,
+    process.env.KO_THIRD_PLACE_ROLE_ID,
+    process.env.KO_FINAL_ROLE_ID,
+  ].filter(Boolean);
 }
 
 function getRoundLabel(roundKey) {
@@ -192,6 +203,30 @@ function cloneTeam(row) {
     managerId: row.managerId,
     coManagerIds: Array.isArray(row.coManagerIds) ? row.coManagerIds : [],
   };
+}
+
+function getTeamUserIds(team) {
+  return [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ].filter(Boolean);
+}
+
+function getUserIdsFromMatches(matches) {
+  const userIds = new Set();
+
+  for (const match of matches) {
+    [
+      match.homeManagerId,
+      ...(match.homeCoManagerIds || []),
+      match.awayManagerId,
+      ...(match.awayCoManagerIds || []),
+    ]
+      .filter(Boolean)
+      .forEach(id => userIds.add(id));
+  }
+
+  return [...userIds];
 }
 
 function getQualifiedTeamsFromGroups(eventKey) {
@@ -289,7 +324,7 @@ function createKoMatches(format, roundKey, pairs) {
       awayManagerId: away.managerId,
       homeCoManagerIds: home.coManagerIds || [],
       awayCoManagerIds: away.coManagerIds || [],
-      status: 'pending', // pending | reported | confirmed
+      status: 'pending',
       reportedByTeamId: null,
       reportedScore: null,
       confirmed: false,
@@ -300,14 +335,144 @@ function createKoMatches(format, roundKey, pairs) {
   });
 }
 
-function getMentionLine(match, side) {
-  const ids =
-    side === 'home'
-      ? [match.homeManagerId, ...(match.homeCoManagerIds || [])]
-      : [match.awayManagerId, ...(match.awayCoManagerIds || [])];
+// =========================
+// DISCORD HELPERS
+// =========================
 
-  return [...new Set(ids.filter(Boolean))].map(id => `<@${id}>`).join(' ');
+async function fetchChannel(channelId) {
+  try {
+    return await clientRef.channels.fetch(channelId);
+  } catch (error) {
+    console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
+    return null;
+  }
 }
+
+async function fetchMessage(channel, messageId) {
+  try {
+    return await channel.messages.fetch(messageId);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function deleteMessageIfExists(channelId, messageId) {
+  if (!channelId || !messageId) return;
+
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  const message = await fetchMessage(channel, messageId);
+  if (!message) return;
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
+  }
+}
+
+async function fetchGuildFromKoChannels() {
+  const channelIds = [
+    process.env.KO_ROUND_OF_16_CHANNEL_ID,
+    process.env.KO_QUARTERFINAL_CHANNEL_ID,
+    process.env.KO_SEMIFINAL_CHANNEL_ID,
+    process.env.KO_THIRD_PLACE_CHANNEL_ID,
+    process.env.KO_FINAL_CHANNEL_ID,
+  ].filter(Boolean);
+
+  for (const channelId of channelIds) {
+    const channel = await fetchChannel(channelId);
+    if (channel && channel.guild) return channel.guild;
+  }
+
+  return null;
+}
+
+// =========================
+// ROLE HELPERS
+// =========================
+
+async function removeAllKoRolesFromMember(member) {
+  const roleIds = getAllKoRoleIds();
+
+  for (const roleId of roleIds) {
+    if (!member.roles.cache.has(roleId)) continue;
+
+    try {
+      await member.roles.remove(roleId);
+    } catch (error) {
+      console.warn(`⚠️ K.O.-Rolle konnte nicht entfernt werden: ${member.id} / ${roleId}`);
+    }
+  }
+}
+
+async function assignKoRoleToUserIds(roundKey, userIds) {
+  const roleId = getRoundRoleId(roundKey);
+
+  if (!roleId) {
+    console.error(`❌ Rollen-ID für ${roundKey} fehlt.`);
+    return;
+  }
+
+  const guild = await fetchGuildFromKoChannels();
+
+  if (!guild) {
+    console.error('❌ Server konnte für K.O.-Rollenvergabe nicht geladen werden.');
+    return;
+  }
+
+  const role =
+    guild.roles.cache.get(roleId) ||
+    (await guild.roles.fetch(roleId).catch(() => null));
+
+  if (!role) {
+    console.error(`❌ K.O.-Rolle wurde nicht gefunden: ${roundKey} / ${roleId}`);
+    return;
+  }
+
+  for (const userId of [...new Set(userIds.filter(Boolean))]) {
+    try {
+      const member = await guild.members.fetch(userId);
+      if (!member) continue;
+
+      await removeAllKoRolesFromMember(member);
+
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role);
+      }
+    } catch (error) {
+      console.warn(`⚠️ K.O.-Rolle ${roundKey} konnte nicht vergeben werden an User ${userId}`);
+    }
+  }
+}
+
+async function removeKoRolesFromMatches(matches) {
+  const guild = await fetchGuildFromKoChannels();
+  if (!guild) return;
+
+  const userIds = getUserIdsFromMatches(matches);
+
+  for (const userId of userIds) {
+    try {
+      const member = await guild.members.fetch(userId);
+      if (!member) continue;
+
+      await removeAllKoRolesFromMember(member);
+    } catch (error) {
+      console.warn(`⚠️ K.O.-Rollen konnten nicht entfernt werden bei User ${userId}`);
+    }
+  }
+}
+
+async function assignKoRoleToMatches(roundKey, matches) {
+  const userIds = getUserIdsFromMatches(matches);
+  await assignKoRoleToUserIds(roundKey, userIds);
+}
+
+// =========================
+// RENDER HELPERS
+// =========================
 
 function buildRoundEmbed(eventLabel, roundKey, matches) {
   const lines = matches.map(match => {
@@ -360,43 +525,6 @@ function buildConfirmButtons(eventKey, roundKey, matchNumber) {
       .setLabel('❌ Ablehnen')
       .setStyle(ButtonStyle.Danger)
   );
-}
-
-// =========================
-// DISCORD HELPERS
-// =========================
-
-async function fetchChannel(channelId) {
-  try {
-    return await clientRef.channels.fetch(channelId);
-  } catch (error) {
-    console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
-    return null;
-  }
-}
-
-async function fetchMessage(channel, messageId) {
-  try {
-    return await channel.messages.fetch(messageId);
-  } catch (error) {
-    return null;
-  }
-}
-
-async function deleteMessageIfExists(channelId, messageId) {
-  if (!channelId || !messageId) return;
-
-  const channel = await fetchChannel(channelId);
-  if (!channel) return;
-
-  const message = await fetchMessage(channel, messageId);
-  if (!message) return;
-
-  try {
-    await message.delete();
-  } catch (error) {
-    console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
-  }
 }
 
 async function sendOrEditRoundMessage(eventKey, roundKey, roundData, eventLabel) {
@@ -459,16 +587,21 @@ async function createInitialKoRound(eventKey) {
     cycleKey: groupEvent.cycleKey,
     label: groupEvent.label,
     format: qualified.format,
+    createdAt: new Date().toISOString(),
     rounds: {},
   };
 
   if (qualified.semiFinal) {
     eventStore.rounds.semiFinal = {
       channelId: getRoundChannelId('semiFinal'),
+      roleId: getRoundRoleId('semiFinal'),
       messageId: null,
       matches: createKoMatches(qualified.format, 'semiFinal', qualified.semiFinal),
       completed: false,
     };
+
+    await assignKoRoleToMatches('semiFinal', eventStore.rounds.semiFinal.matches);
+
     eventStore.rounds.semiFinal = await sendOrEditRoundMessage(
       eventKey,
       'semiFinal',
@@ -480,10 +613,14 @@ async function createInitialKoRound(eventKey) {
   if (qualified.quarterFinal) {
     eventStore.rounds.quarterFinal = {
       channelId: getRoundChannelId('quarterFinal'),
+      roleId: getRoundRoleId('quarterFinal'),
       messageId: null,
       matches: createKoMatches(qualified.format, 'quarterFinal', qualified.quarterFinal),
       completed: false,
     };
+
+    await assignKoRoleToMatches('quarterFinal', eventStore.rounds.quarterFinal.matches);
+
     eventStore.rounds.quarterFinal = await sendOrEditRoundMessage(
       eventKey,
       'quarterFinal',
@@ -495,10 +632,14 @@ async function createInitialKoRound(eventKey) {
   if (qualified.roundOf16) {
     eventStore.rounds.roundOf16 = {
       channelId: getRoundChannelId('roundOf16'),
+      roleId: getRoundRoleId('roundOf16'),
       messageId: null,
       matches: createKoMatches(qualified.format, 'roundOf16', qualified.roundOf16),
       completed: false,
     };
+
+    await assignKoRoleToMatches('roundOf16', eventStore.rounds.roundOf16.matches);
+
     eventStore.rounds.roundOf16 = await sendOrEditRoundMessage(
       eventKey,
       'roundOf16',
@@ -510,7 +651,7 @@ async function createInitialKoRound(eventKey) {
   koData[eventKey] = eventStore;
   saveKo(koData);
 
-  console.log(`✅ Erste K.O.-Runde für ${eventStore.label} erstellt.`);
+  console.log(`✅ Erste K.O.-Runde für ${eventStore.label} erstellt und Rollen verteilt.`);
 }
 
 function roundIsComplete(roundData) {
@@ -518,12 +659,12 @@ function roundIsComplete(roundData) {
 }
 
 function getWinnerStub(match) {
-  const isHomeWinner = Number(match.reportedScore.home) > Number(match.reportedScore.away);
-  const isDraw = Number(match.reportedScore.home) === Number(match.reportedScore.away);
+  const homeGoals = Number(match.reportedScore.home);
+  const awayGoals = Number(match.reportedScore.away);
 
-  if (isDraw) return null;
+  if (homeGoals === awayGoals) return null;
 
-  if (isHomeWinner) {
+  if (homeGoals > awayGoals) {
     return {
       teamId: match.homeTeamId,
       clubName: match.homeClubName,
@@ -541,12 +682,12 @@ function getWinnerStub(match) {
 }
 
 function getLoserStub(match) {
-  const isHomeWinner = Number(match.reportedScore.home) > Number(match.reportedScore.away);
-  const isDraw = Number(match.reportedScore.home) === Number(match.reportedScore.away);
+  const homeGoals = Number(match.reportedScore.home);
+  const awayGoals = Number(match.reportedScore.away);
 
-  if (isDraw) return null;
+  if (homeGoals === awayGoals) return null;
 
-  if (isHomeWinner) {
+  if (homeGoals > awayGoals) {
     return {
       teamId: match.awayTeamId,
       clubName: match.awayClubName,
@@ -563,15 +704,27 @@ function getLoserStub(match) {
   };
 }
 
+function getUserIdsFromTeams(teams) {
+  const ids = new Set();
+
+  for (const team of teams) {
+    getTeamUserIds(team).forEach(id => ids.add(id));
+  }
+
+  return [...ids];
+}
+
 async function advanceKoIfReady(eventKey) {
   const koData = loadKo();
   const event = koData[eventKey];
   if (!event || !event.rounds) return;
 
-  // Achtelfinale -> Viertelfinale
   if (event.rounds.roundOf16 && roundIsComplete(event.rounds.roundOf16) && !event.rounds.quarterFinal) {
     const winners = event.rounds.roundOf16.matches.map(getWinnerStub).filter(Boolean);
+
     if (winners.length === 8) {
+      await removeKoRolesFromMatches(event.rounds.roundOf16.matches);
+
       const pairs = [
         [winners[0], winners[1]],
         [winners[2], winners[3]],
@@ -581,10 +734,13 @@ async function advanceKoIfReady(eventKey) {
 
       event.rounds.quarterFinal = {
         channelId: getRoundChannelId('quarterFinal'),
+        roleId: getRoundRoleId('quarterFinal'),
         messageId: null,
         matches: createKoMatches(event.format, 'quarterFinal', pairs),
         completed: false,
       };
+
+      await assignKoRoleToMatches('quarterFinal', event.rounds.quarterFinal.matches);
 
       event.rounds.quarterFinal = await sendOrEditRoundMessage(
         eventKey,
@@ -598,10 +754,12 @@ async function advanceKoIfReady(eventKey) {
     }
   }
 
-  // Viertelfinale -> Halbfinale
   if (event.rounds.quarterFinal && roundIsComplete(event.rounds.quarterFinal) && !event.rounds.semiFinal) {
     const winners = event.rounds.quarterFinal.matches.map(getWinnerStub).filter(Boolean);
+
     if (winners.length === 4) {
+      await removeKoRolesFromMatches(event.rounds.quarterFinal.matches);
+
       const pairs = [
         [winners[0], winners[1]],
         [winners[2], winners[3]],
@@ -609,10 +767,13 @@ async function advanceKoIfReady(eventKey) {
 
       event.rounds.semiFinal = {
         channelId: getRoundChannelId('semiFinal'),
+        roleId: getRoundRoleId('semiFinal'),
         messageId: null,
         matches: createKoMatches(event.format, 'semiFinal', pairs),
         completed: false,
       };
+
+      await assignKoRoleToMatches('semiFinal', event.rounds.semiFinal.matches);
 
       event.rounds.semiFinal = await sendOrEditRoundMessage(
         eventKey,
@@ -626,20 +787,24 @@ async function advanceKoIfReady(eventKey) {
     }
   }
 
-  // Halbfinale -> Finale + Platz 3
   if (event.rounds.semiFinal && roundIsComplete(event.rounds.semiFinal)) {
     if (!event.rounds.final || !event.rounds.thirdPlace) {
       const winners = event.rounds.semiFinal.matches.map(getWinnerStub).filter(Boolean);
       const losers = event.rounds.semiFinal.matches.map(getLoserStub).filter(Boolean);
 
       if (winners.length === 2 && losers.length === 2) {
+        await removeKoRolesFromMatches(event.rounds.semiFinal.matches);
+
         if (!event.rounds.final) {
           event.rounds.final = {
             channelId: getRoundChannelId('final'),
+            roleId: getRoundRoleId('final'),
             messageId: null,
             matches: createKoMatches(event.format, 'final', [[winners[0], winners[1]]]),
             completed: false,
           };
+
+          await assignKoRoleToUserIds('final', getUserIdsFromTeams(winners));
 
           event.rounds.final = await sendOrEditRoundMessage(
             eventKey,
@@ -652,10 +817,13 @@ async function advanceKoIfReady(eventKey) {
         if (!event.rounds.thirdPlace) {
           event.rounds.thirdPlace = {
             channelId: getRoundChannelId('thirdPlace'),
+            roleId: getRoundRoleId('thirdPlace'),
             messageId: null,
             matches: createKoMatches(event.format, 'thirdPlace', [[losers[0], losers[1]]]),
             completed: false,
           };
+
+          await assignKoRoleToUserIds('thirdPlace', getUserIdsFromTeams(losers));
 
           event.rounds.thirdPlace = await sendOrEditRoundMessage(
             eventKey,
