@@ -682,32 +682,40 @@ async function getManagersWithoutTeam(guild) {
   const managerRoleId = process.env.MANAGER_ROLE_ID;
 
   if (!managerRoleId) {
-    throw new Error('MANAGER_ROLE_ID fehlt in Railway.');
+    throw new Error('MANAGER_ROLE_ID fehlt.');
   }
 
   const managerRole = await guild.roles.fetch(managerRoleId).catch(() => null);
 
   if (!managerRole) {
-    throw new Error('Manager-Rolle wurde nicht gefunden.');
+    throw new Error('Manager Rolle nicht gefunden.');
   }
 
   await guild.members.fetch();
 
   const teams = loadTeams();
-  const registeredManagerIds = new Set(
-    teams
-      .filter(team => !team.isTest)
-      .map(team => String(team.managerId))
-      .filter(Boolean)
-  );
+
+  const assignedUsers = new Set();
+
+  for (const team of teams) {
+    if (team.managerId) {
+      assignedUsers.add(String(team.managerId));
+    }
+
+    if (Array.isArray(team.coManagerIds)) {
+      for (const id of team.coManagerIds) {
+        assignedUsers.add(String(id));
+      }
+    }
+  }
 
   const managersWithoutTeam = managerRole.members.filter(member => {
-    return !registeredManagerIds.has(String(member.id));
+    return !assignedUsers.has(String(member.id));
   });
 
-  return [...managersWithoutTeam.values()].sort((a, b) => {
-    return a.displayName.localeCompare(b.displayName, 'de');
-  });
+  return [...managersWithoutTeam.values()].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, 'de')
+  );
 }
 
 function buildManagersWithoutTeamText(members) {
