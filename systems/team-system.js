@@ -228,6 +228,32 @@ async function refreshRegisteredTeams(guild) {
   const headerEmbed = buildRegisteredTeamsHeaderEmbed(teams);
   const chunks = await buildRegisteredTeamsContentChunks(guild, teams);
 
+  // Header-Nachricht separat bearbeiten oder neu posten
+  let headerMessage = null;
+
+  if (setupData.registeredTeamsHeaderMessageId) {
+    try {
+      headerMessage = await registeredTeamsChannel.messages.fetch(
+        setupData.registeredTeamsHeaderMessageId
+      );
+
+      await headerMessage.edit({
+        content: '',
+        embeds: [headerEmbed],
+      });
+    } catch (error) {
+      headerMessage = null;
+    }
+  }
+
+  if (!headerMessage) {
+    headerMessage = await registeredTeamsChannel.send({
+      embeds: [headerEmbed],
+    });
+
+    setupData.registeredTeamsHeaderMessageId = headerMessage.id;
+  }
+
   const existingIds = Array.isArray(setupData.registeredTeamsMessageIds)
     ? setupData.registeredTeamsMessageIds
     : setupData.registeredTeamsMessageId
@@ -236,10 +262,11 @@ async function refreshRegisteredTeams(guild) {
 
   const nextMessageIds = [];
 
+  // Teamlisten-Nachrichten darunter bearbeiten oder neu posten
   for (let i = 0; i < chunks.length; i++) {
     const payload = {
       content: chunks[i],
-      embeds: i === 0 ? [headerEmbed] : [],
+      embeds: [],
       allowedMentions: { parse: ['users'] },
     };
 
@@ -252,7 +279,7 @@ async function refreshRegisteredTeams(guild) {
         nextMessageIds.push(oldMessage.id);
         continue;
       } catch (error) {
-        console.warn('⚠️ Alte registrierte Teams Nachricht nicht gefunden, poste neu.');
+        console.warn('⚠️ Alte Teamlisten-Nachricht nicht gefunden, poste neu.');
       }
     }
 
@@ -260,6 +287,7 @@ async function refreshRegisteredTeams(guild) {
     nextMessageIds.push(newMessage.id);
   }
 
+  // Überschüssige alte Teamlisten löschen
   for (let i = chunks.length; i < existingIds.length; i++) {
     try {
       const oldMessage = await registeredTeamsChannel.messages.fetch(existingIds[i]);
@@ -270,6 +298,7 @@ async function refreshRegisteredTeams(guild) {
   setupData.registeredTeamsChannelId = registeredTeamsChannel.id;
   setupData.registeredTeamsMessageId = nextMessageIds[0] || null;
   setupData.registeredTeamsMessageIds = nextMessageIds;
+
   writeSetupData(setupData);
 }
 
