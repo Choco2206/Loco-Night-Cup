@@ -14,6 +14,8 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 
+const nicknameSystem = require('./nickname-system');
+
 const setupFile = path.join(process.cwd(), 'data', 'setup-messages.json');
 const teamsFile = path.join(process.cwd(), 'data', 'teams.json');
 const logosDir = path.join(process.cwd(), 'data', 'logos');
@@ -91,6 +93,16 @@ function getFileExtension(attachment) {
 function formatUserMention(userId) {
   const id = String(userId || '').trim();
   return id ? `<@${id}>` : '—';
+}
+
+async function syncNicknamesSafe(guild) {
+  try {
+    if (nicknameSystem.syncNicknames) {
+      await nicknameSystem.syncNicknames(guild);
+    }
+  } catch (error) {
+    console.error('❌ Nicknames konnten nicht synchronisiert werden:', error);
+  }
 }
 
 async function formatClickableMember(guild, userId) {
@@ -435,6 +447,7 @@ async function handleTeamSetupCommand(interaction) {
   });
 
   await refreshRegisteredTeams(guild);
+  await syncNicknamesSafe(guild);
 
   await interaction.reply({
     content: '✅ Team-Setup erfolgreich erstellt.',
@@ -678,6 +691,7 @@ async function handleTeamButtons(interaction) {
 
     pendingLogoUploads.delete(interaction.user.id);
     await refreshRegisteredTeams(guild);
+    await syncNicknamesSafe(guild);
 
     await interaction.reply({
       content: `✅ Dein Team **${team.clubName}** wurde abgemeldet.`,
@@ -791,6 +805,7 @@ async function handleTeamUserSelect(interaction) {
 
   writeTeams(teams);
   await refreshRegisteredTeams(guild);
+  await syncNicknamesSafe(guild);
 
   await interaction.update({
     content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${team.coManagerIds.length}/3**`,
@@ -857,6 +872,7 @@ async function handleTeamStringSelect(interaction) {
 
   writeTeams(teams);
   await refreshRegisteredTeams(guild);
+  await syncNicknamesSafe(guild);
 
   await interaction.update({
     content: `✅ ${formatUserMention(userId)} wurde als Co-VM entfernt.`,
@@ -927,6 +943,7 @@ async function handleTeamModals(interaction) {
   });
 
   await refreshRegisteredTeams(guild);
+  await syncNicknamesSafe(guild);
 
   await interaction.reply({
     content:
@@ -1051,5 +1068,4 @@ module.exports = {
   },
 
   refreshRegisteredTeams,
-
 };
