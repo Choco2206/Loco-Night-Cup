@@ -136,7 +136,7 @@ function shuffleArray(array) {
 }
 
 function getDrawTimestamp(event) {
-  return event.deadlineAt + 25 * 60 * 1000;
+  return event.deadlineAt + 15 * 60 * 1000;
 }
 
 function shouldDrawNow(event) {
