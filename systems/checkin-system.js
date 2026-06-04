@@ -165,7 +165,9 @@ function getNextBoundary(dayOfWeek, hour) {
 function getCycleConfig(type) {
   if (type === 'friday') {
     const resetAt = getNextBoundary(6, 7);
-    const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000);
+    const deadline = new Date(
+  resetAt.getTime() - (7 * 60 + 45) * 60 * 1000
+);
     const start = new Date(deadline.getTime() + 60 * 60 * 1000);
 
     return {
@@ -182,7 +184,9 @@ function getCycleConfig(type) {
   }
 
   const resetAt = getNextBoundary(0, 7);
-  const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000);
+  const deadline = new Date(
+  resetAt.getTime() - (7 * 60 + 45) * 60 * 1000
+);
   const start = new Date(deadline.getTime() + 60 * 60 * 1000);
 
   return {
@@ -325,7 +329,7 @@ function buildSummaryContent(event) {
     '✅ **NightCup findet statt**',
     '',
     `Format: **${actualFormat}er Turnier**`,
-    'Gruppenauslosung findet um **23:15 Uhr** statt.',
+    'Gruppenauslosung findet um **23:30 Uhr** statt.',
     'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
   ].join('\n');
 }
@@ -391,7 +395,7 @@ function buildMainEmbed(event) {
     `**${statusLine}**`,
     `📅 **Datum:** ${event.displayDate}`,
     '',
-    `⏰ **Anmeldeschluss:** 23:00 Uhr`,
+    `⏰ **Anmeldeschluss:** 23:15 Uhr`,
     `⌛ **Noch offen:** ${formatCountdown(event.deadlineAt)}`,
     '',
     `🚀 **Turnierstart:** 00:00 Uhr`,
@@ -407,7 +411,7 @@ function buildMainEmbed(event) {
     '',
     '━━━━━━━━━━━━━━',
     '',
-    `👥 **Teilnehmende Teams (${displaySlots})**`,
+    `👥 **Teilnehmende Teams (${event.teams.length})**`,
     buildSlotsList(event),
   ];
 
