@@ -719,20 +719,18 @@ async function getManagersWithoutTeam(guild) {
   );
 }
 
-function buildManagersWithoutTeamText(members) {
+function buildManagersWithoutTeamTextChunks(members) {
   if (!members.length) {
     return [
-      '👥 **Manager ohne registriertes Team**',
-      '',
-      '✅ Aktuell haben alle Manager ein registriertes Team.',
-    ].join('\n');
+      [
+        '👥 **Manager ohne registriertes Team**',
+        '',
+        '✅ Aktuell haben alle Manager ein registriertes Team.',
+      ].join('\n'),
+    ];
   }
 
-  const lines = members.map((member, index) => {
-    return `**${index + 1}.** <@${member.id}>`;
-  });
-
-  return [
+  const header = [
     '⚠️ **Manager-Rollen Kontrolle**',
     '',
     'Die folgenden Nutzer besitzen aktuell die Manager-Rolle, sind jedoch keinem registrierten Team zugeordnet.',
@@ -745,8 +743,29 @@ function buildManagersWithoutTeamText(members) {
     '',
     `📊 **Gefunden:** ${members.length} Manager`,
     '',
-    ...lines,
   ].join('\n');
+
+  const lines = members.map((member, index) => {
+    return `**${index + 1}.** <@${member.id}>`;
+  });
+
+  const chunks = [];
+  let current = header;
+
+  for (const line of lines) {
+    const next = `${current}\n${line}`;
+
+    if (next.length > 1900) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) chunks.push(current);
+
+  return chunks;
 }
 
 // =========================
@@ -1190,10 +1209,14 @@ if (interaction.customId === 'live_managers_without_team') {
         return true;
       }
 
-      await channel.send({
-        content: buildManagersWithoutTeamText(members),
-        allowedMentions: { parse: ['users'] },
-      });
+      const chunks = buildManagersWithoutTeamTextChunks(members);
+
+for (const chunk of chunks) {
+  await channel.send({
+    content: chunk,
+    allowedMentions: { parse: ['users'] },
+  });
+}
 
       await interaction.reply({
         content: `✅ Liste wurde in <#${MANAGERS_WITHOUT_TEAM_CHANNEL_ID}> gepostet.`,
