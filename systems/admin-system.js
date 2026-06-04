@@ -820,7 +820,7 @@ async function deleteRegisteredTeam(teamId) {
   return team;
 }
 
-async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName) {
+async function promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId) {
   const checkins = loadCheckins();
   const event = checkins[eventKey];
 
@@ -833,12 +833,12 @@ async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName) {
     throw new Error('Für dieses Event gibt es aktuell kein gültiges Turnierformat.');
   }
 
-  const participantIndex = event.teams.findIndex(
-    team => team.clubName.toLowerCase() === outgoingClubName.toLowerCase()
+  const participantIndex = event.teams.findIndex(team =>
+    String(team.teamId || team.id) === String(outgoingTeamId)
   );
 
-  const backupIndex = event.teams.findIndex(
-    team => team.clubName.toLowerCase() === incomingClubName.toLowerCase()
+  const backupIndex = event.teams.findIndex(team =>
+    String(team.teamId || team.id) === String(incomingTeamId)
   );
 
   if (participantIndex === -1) {
@@ -850,11 +850,11 @@ async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName) {
   }
 
   if (participantIndex >= actualFormat) {
-    throw new Error('Das rauszunehmende Team ist aktuell gar nicht teilnahmeberechtigt.');
+    throw new Error('Das rauszunehmende Team ist aktuell gar nicht im Turnier.');
   }
 
   if (backupIndex < actualFormat) {
-    throw new Error('Das nachrückende Team ist aktuell kein Backup.');
+    throw new Error('Das nachrückende Team ist aktuell kein Backup-Team.');
   }
 
   const participant = event.teams[participantIndex];
@@ -864,7 +864,12 @@ async function promoteBackupSwap(eventKey, outgoingClubName, incomingClubName) {
   event.teams[backupIndex] = participant;
 
   saveCheckins(checkins);
-  await logToLive(`🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`);
+
+  await logToLive(
+    `🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`
+  );
+
+  return { participant, backup };
 }
 
 function recalculateRows(rows, matches) {
@@ -1040,6 +1045,72 @@ function buildEventSelect(customId) {
         { label: 'Samstag', value: 'saturday' },
       ])
   );
+}
+function buildActiveBackupEventSelect(customId) {
+  const checkins = loadCheckins();
+
+  const options = ['friday', 'saturday']
+    .filter(eventKey => checkins[eventKey]?.teams?.length)
+    .map(eventKey => ({
+      label: checkins[eventKey]?.label || (eventKey === 'friday' ? 'Freitag' : 'Samstag'),
+      value: eventKey,
+      description: `${checkins[eventKey].teams.length} eingecheckte Teams`,
+    }));
+
+  if (!options.length) return null;
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder('Event auswählen')
+      .addOptions(options)
+  );
+}
+
+function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event?.teams?.length) return [];
+
+  const actualFormat = getActualFormat(event.teams.length);
+  if (!actualFormat) return [];
+
+  const teams =
+    mode === 'outgoing'
+      ? event.teams.slice(0, actualFormat)
+      : event.teams.slice(actualFormat);
+
+  if (!teams.length) return [];
+
+  const chunks = chunkArray(teams, 25);
+
+  return chunks.slice(0, 5).map((chunk, index) => {
+    const customId =
+      mode === 'outgoing'
+        ? `live_backup_pick_outgoing:${eventKey}:${index}`
+        : `live_backup_pick_incoming:${eventKey}:${outgoingTeamId}:${index}`;
+
+    return new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(customId)
+        .setPlaceholder(
+          mode === 'outgoing'
+            ? `Team auswählen, das raus soll (${index + 1}/${chunks.length})`
+            : `Backup-Team auswählen (${index + 1}/${chunks.length})`
+        )
+        .addOptions(
+          chunk.map(team => ({
+            label: safeText(team.clubName).slice(0, 100),
+            value: String(team.teamId || team.id),
+            description:
+              mode === 'outgoing'
+                ? 'Aktuell im Turnier'
+                : 'Aktuell auf Warteliste',
+          }))
+        )
+    );
+  });
 }
 
 // =========================
@@ -1313,40 +1384,23 @@ if (interaction.customId === 'live_managers_without_team') {
       }
 
       if (interaction.customId === 'live_manual_backup') {
-        const modal = new ModalBuilder()
-          .setCustomId('live_backup_modal')
-          .setTitle('Team / Backup nachrücken');
+  const row = buildActiveBackupEventSelect('live_backup_pick_event');
 
-        const eventInput = new TextInputBuilder()
-          .setCustomId('event_key')
-          .setLabel('Event (friday oder saturday)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setPlaceholder('friday');
+  if (!row) {
+    await replyTemp(interaction, {
+      content: '❌ Aktuell gibt es kein aktives Event mit eingecheckten Teams.',
+    });
+    return true;
+  }
 
-        const outgoingInput = new TextInputBuilder()
-          .setCustomId('outgoing_team')
-          .setLabel('Teilnehmendes Team, das raus soll')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setPlaceholder('z. B. Team A');
+  await interaction.reply({
+    content: '🔁 Wähle zuerst das Event aus.',
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
 
-        const incomingInput = new TextInputBuilder()
-          .setCustomId('incoming_team')
-          .setLabel('Backup-Team, das nachrücken soll')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setPlaceholder('z. B. Team B');
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(eventInput),
-          new ActionRowBuilder().addComponents(outgoingInput),
-          new ActionRowBuilder().addComponents(incomingInput)
-        );
-
-        await interaction.showModal(modal);
-        return true;
-      }
+  return true;
+}
 
       if (interaction.customId === 'live_manual_group_result') {
         await interaction.reply({
@@ -1541,7 +1595,74 @@ if (interaction.customId === 'live_managers_without_team') {
 
         return true;
       }
+if (interaction.customId === 'live_backup_pick_event') {
+  const eventKey = interaction.values[0];
 
+  const rows = buildBackupTeamSelectRows(eventKey, 'outgoing');
+
+  if (!rows.length) {
+    await interaction.update({
+      content: '❌ Für dieses Event gibt es kein Team, das ersetzt werden kann.',
+      components: [],
+    });
+    return true;
+  }
+
+  await interaction.update({
+    content: '🔁 Wähle jetzt das Team aus, das raus soll.',
+    components: rows,
+  });
+
+  return true;
+}
+
+if (interaction.customId.startsWith('live_backup_pick_outgoing:')) {
+  const [, eventKey] = interaction.customId.split(':');
+  const outgoingTeamId = interaction.values[0];
+
+  const rows = buildBackupTeamSelectRows(eventKey, 'incoming', outgoingTeamId);
+
+  if (!rows.length) {
+    await interaction.update({
+      content: '❌ Für dieses Event gibt es aktuell kein Backup-Team auf der Warteliste.',
+      components: [],
+    });
+    return true;
+  }
+
+  await interaction.update({
+    content: '🔁 Wähle jetzt das Backup-Team aus, das nachrücken soll.',
+    components: rows,
+  });
+
+  return true;
+}
+
+if (interaction.customId.startsWith('live_backup_pick_incoming:')) {
+  const [, eventKey, outgoingTeamId] = interaction.customId.split(':');
+  const incomingTeamId = interaction.values[0];
+
+  try {
+    const result = await promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId);
+
+    await interaction.update({
+      content: [
+        '✅ Backup-Swap durchgeführt.',
+        '',
+        `Raus: **${result.participant.clubName}**`,
+        `Rein: **${result.backup.clubName}**`,
+      ].join('\n'),
+      components: [],
+    });
+  } catch (error) {
+    await interaction.update({
+      content: `❌ ${error.message}`,
+      components: [],
+    });
+  }
+
+  return true;
+}
       if (interaction.customId === 'live_pick_group_event') {
         const eventKey = interaction.values[0];
         const resultsData = loadResults();
@@ -1772,26 +1893,6 @@ if (interaction.customId === 'live_managers_without_team') {
       const denied = requireAdmin(interaction);
       if (denied) {
         await denied;
-        return true;
-      }
-
-      if (interaction.customId === 'live_backup_modal') {
-        const eventKey = interaction.fields.getTextInputValue('event_key').trim().toLowerCase();
-        const outgoingTeam = interaction.fields.getTextInputValue('outgoing_team').trim();
-        const incomingTeam = interaction.fields.getTextInputValue('incoming_team').trim();
-
-        try {
-          await promoteBackupSwap(eventKey, outgoingTeam, incomingTeam);
-
-          await replyTemp(interaction, {
-            content: `✅ Backup-Swap durchgeführt.\nRaus: **${outgoingTeam}**\nRein: **${incomingTeam}**`,
-          });
-        } catch (error) {
-          await replyTemp(interaction, {
-            content: `❌ ${error.message}`,
-          });
-        }
-
         return true;
       }
 
