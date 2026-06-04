@@ -215,8 +215,8 @@ function getActualFormat(teamCount) {
 }
 
 function getDisplaySlots(teamCount) {
-  if (teamCount >= 28) return 32;
-  if (teamCount >= 20) return 24;
+  if (teamCount >= 22) return 32;
+  if (teamCount >= 14) return 24;
   if (teamCount >= 6) return 16;
   return 8;
 }
