@@ -164,9 +164,9 @@ function getNextBoundary(dayOfWeek, hour) {
 
 function getCycleConfig(type) {
   if (type === 'friday') {
-    const resetAt = getNextBoundary(6, 7); // Samstag 07:00
-    const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000); // Freitag 23:00
-    const start = new Date(deadline.getTime() + 60 * 60 * 1000); // Samstag 00:00
+    const resetAt = getNextBoundary(6, 7);
+    const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000);
+    const start = new Date(deadline.getTime() + 60 * 60 * 1000);
 
     return {
       key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -181,9 +181,9 @@ function getCycleConfig(type) {
     };
   }
 
-  const resetAt = getNextBoundary(0, 7); // Sonntag 07:00
-  const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000); // Samstag 23:00
-  const start = new Date(deadline.getTime() + 60 * 60 * 1000); // Sonntag 00:00
+  const resetAt = getNextBoundary(0, 7);
+  const deadline = new Date(resetAt.getTime() - 8 * 60 * 60 * 1000);
+  const start = new Date(deadline.getTime() + 60 * 60 * 1000);
 
   return {
     key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -202,7 +202,6 @@ function getCycleConfig(type) {
 // FORMAT LOGIC
 // =========================
 
-// Echtes Turnierformat / Erklärung
 function getActualFormat(teamCount) {
   if (teamCount < 8) return 0;
   if (teamCount < 16) return 8;
@@ -211,7 +210,6 @@ function getActualFormat(teamCount) {
   return 32;
 }
 
-// Früher erweiterte Anzeige-Slots
 function getDisplaySlots(teamCount) {
   if (teamCount >= 28) return 32;
   if (teamCount >= 20) return 24;
@@ -269,15 +267,32 @@ function getBackupTeams(event) {
 }
 
 function buildSlotsList(event) {
-  const slots = getDisplaySlots(event.teams.length);
-  const signedUpTeams = event.teams.slice(0, slots);
+  const teamCount = event.teams.length;
+  const slots = getDisplaySlots(teamCount);
+  const actualFormat = getActualFormat(teamCount);
 
   const lines = [];
+
   for (let i = 0; i < slots; i++) {
-    if (signedUpTeams[i]) {
-      lines.push(`${i + 1}. ${signedUpTeams[i].clubName}`);
+    const slotNumber = i + 1;
+    const team = event.teams[i];
+
+    let suffix = '';
+
+    if (team && actualFormat > 0 && slotNumber > actualFormat) {
+      suffix = ' (WL)';
+    }
+
+    if (team) {
+      lines.push(`${slotNumber}. ${team.clubName}${suffix}`);
     } else {
-      lines.push(`${i + 1}. —`);
+      lines.push(`${slotNumber}. —`);
+    }
+
+    if ([8, 16, 24].includes(slotNumber) && slotNumber < slots) {
+      lines.push('');
+      lines.push(`════ ⬆️ ${slotNumber}er Turnier ⬆️ ════`);
+      lines.push('');
     }
   }
 
@@ -356,7 +371,13 @@ function buildBackupContent(event) {
 function buildMainEmbed(event) {
   const actualFormat = getActualFormat(event.teams.length);
   const displaySlots = getDisplaySlots(event.teams.length);
-  const participatingCount = getParticipatingTeams(event).length;
+
+  const guild = clientRef.guilds.cache.get(process.env.GUILD_ID);
+
+  const serverLogo = guild?.iconURL({
+    extension: 'png',
+    size: 1024,
+  });
 
   let statusLine = '🟢 Check-in geöffnet';
   if (event.finalized && event.status === 'confirmed') {
@@ -405,10 +426,16 @@ function buildMainEmbed(event) {
     );
   }
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle(`🌙 Loco NightCup ${event.label}`)
     .setDescription(descriptionParts.join('\n'))
     .setColor(0xff0000);
+
+  if (serverLogo) {
+    embed.setThumbnail(serverLogo);
+  }
+
+  return embed;
 }
 
 function buildMainButtons(event) {
