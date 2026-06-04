@@ -22,6 +22,7 @@ const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
 const MANAGERS_WITHOUT_TEAM_CHANNEL_ID = '1487537056245616802';
+const TEAM_REGISTER_CHANNEL_ID = '1487537568751816764';
 
 let clientRef = null;
 
@@ -732,9 +733,17 @@ function buildManagersWithoutTeamText(members) {
   });
 
   return [
-    '👥 **Manager ohne registriertes Team**',
+    '⚠️ **Manager-Rollen Kontrolle**',
     '',
-    `Gefunden: **${members.length} Manager**`,
+    'Die folgenden Nutzer besitzen aktuell die Manager-Rolle, sind jedoch keinem registrierten Team zugeordnet.',
+    '',
+    `➡️ **Teamregistrierung:** <#${TEAM_REGISTER_CHANNEL_ID}>`,
+    '',
+    'Wer innerhalb von **7 Tagen** kein Team registriert oder keinem Team als Vereinsmanager bzw. Co-VM zugeordnet ist, wird wieder auf die Spieler-Rolle zurückgesetzt.',
+    '',
+    'Bitte bleibt nur dann Manager, wenn ihr aktiv ein Team verwaltet.',
+    '',
+    `📊 **Gefunden:** ${members.length} Manager`,
     '',
     ...lines,
   ].join('\n');
