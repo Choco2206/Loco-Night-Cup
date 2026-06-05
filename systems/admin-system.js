@@ -1256,8 +1256,10 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
   const entries =
     mode === 'incoming'
       ? rawTeams.filter(entry => {
-          const decision = event.backupDecisions?.[entry.team.teamId || entry.team.id];
-          return !decision || decision === 'yes';
+          const decision =
+            event.backupDecisions?.[entry.team.teamId || entry.team.id];
+
+          return decision === 'yes';
         })
       : rawTeams;
 
@@ -1277,7 +1279,7 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
         .setPlaceholder(
           mode === 'outgoing'
             ? `Team auswählen, das raus soll (${index + 1}/${chunks.length})`
-            : `Backup-Team auswählen (${index + 1}/${chunks.length})`
+            : `Bestätigtes Backup auswählen (${index + 1}/${chunks.length})`
         )
         .addOptions(
           chunk.map(entry => {
@@ -1816,12 +1818,12 @@ module.exports = {
         const rows = buildBackupTeamSelectRows(eventKey, 'incoming', outgoingTeamId);
 
         if (!rows.length) {
-          await interaction.update({
-            content: '❌ Für dieses Event gibt es aktuell kein Backup-Team auf der Warteliste.',
-            components: [],
-          });
-          return true;
-        }
+  await interaction.update({
+    content: '❌ Es gibt aktuell kein Backup-Team mit Status "Bereit".',
+    components: [],
+  });
+  return true;
+}
 
         await interaction.update({
           content: '🔁 Wähle jetzt das Backup-Team aus, das nachrücken soll.',
