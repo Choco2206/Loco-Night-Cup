@@ -148,7 +148,10 @@ async function handleRoleButtons(interaction) {
     }
 
     await interaction.reply({
-      content: '🎮 Du hast jetzt die Rolle Spieler.',
+      content:
+        '🎮 **Du hast dich als Spieler registriert. Herzlich willkommen beim Loco Night Cup!**\n\n' +
+        'Gerne kannst du dich im Chat mit anderen Spielern und Managern unterhalten:\n' +
+        '<#1487537056245616802>',
       flags: MessageFlags.Ephemeral,
     });
 
@@ -165,7 +168,10 @@ async function handleRoleButtons(interaction) {
     }
 
     await interaction.reply({
-      content: '🧠 Du hast jetzt die Rolle Manager.',
+      content:
+        '🧠 **Glückwunsch, du hast dich als Manager registriert.**\n\n' +
+        'Um voll mitzumachen, registriere bitte dein Team in diesem Kanal:\n' +
+        '<#1487537568751816764>',
       flags: MessageFlags.Ephemeral,
     });
 
