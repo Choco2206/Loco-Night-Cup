@@ -931,6 +931,13 @@ async function handleTeamModals(interaction) {
     return true;
   }
 
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral,
+  });
+
+  const managerRole = guild.roles.cache.get(process.env.MANAGER_ROLE_ID);
+  }
+
   const managerRole = guild.roles.cache.get(process.env.MANAGER_ROLE_ID);
 
   if (!managerRole || !member.roles.cache.has(managerRole.id)) {
@@ -974,13 +981,12 @@ async function handleTeamModals(interaction) {
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
 
-  await interaction.reply({
-    content:
-      `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
-      `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
-      `Du hast dafür 10 Minuten Zeit.`,
-    flags: MessageFlags.Ephemeral,
-  });
+  await interaction.editReply({
+  content:
+    `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
+    `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
+    `Du hast dafür 10 Minuten Zeit.`,
+});
 
   return true;
 }
