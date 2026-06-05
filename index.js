@@ -12,6 +12,7 @@ const koSystem = require('./systems/ko-system');
 const adminSystem = require('./systems/admin-system');
 const testSystem = require('./systems/test-system');
 const nicknameSystem = require('./systems/nickname-system');
+const nightcupReminderSystem = require('./systems/nightcup-reminder-system');
 
 const client = new Client({
   intents: [
@@ -36,7 +37,7 @@ client.once(Events.ClientReady, async readyClient => {
     if (koSystem.init) await koSystem.init(client);
     if (adminSystem.init) await adminSystem.init(client);
     if (testSystem.init) await testSystem.init(client);
-
+if (nightcupReminderSystem.init) await nightcupReminderSystem.init(client);
     if (nicknameSystem.syncNicknames) {
       for (const guild of readyClient.guilds.cache.values()) {
         await nicknameSystem.syncNicknames(guild);
