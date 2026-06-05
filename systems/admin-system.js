@@ -258,6 +258,79 @@ function buildGroupPingMessage(groupLetter, teams) {
     ...lines,
   ].join('\n');
 }
+function getRoleIdForGroupLetter(letter) {
+  return process.env[`GROUP_${letter}_ROLE_ID`] || null;
+}
+
+async function getMainGuild() {
+  const guildId = process.env.GUILD_ID;
+
+  if (guildId) {
+    const guildFromCache = clientRef.guilds.cache.get(guildId);
+    if (guildFromCache) return guildFromCache;
+
+    try {
+      return await clientRef.guilds.fetch(guildId);
+    } catch {
+      return null;
+    }
+  }
+
+  return clientRef.guilds.cache.first() || null;
+}
+
+async function removeGroupRoleFromTeam(groupLetter, team) {
+  const roleId = getRoleIdForGroupLetter(groupLetter);
+  if (!roleId) return;
+
+  const guild = await getMainGuild();
+  if (!guild) return;
+
+  const userIds = getTeamUserIds(team);
+
+  for (const userId of userIds) {
+    try {
+      const member = await guild.members.fetch(userId);
+      if (!member) continue;
+
+      if (member.roles.cache.has(roleId)) {
+        await member.roles.remove(roleId);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Gruppenrolle konnte nicht entfernt werden: ${userId}`);
+    }
+  }
+}
+
+async function addGroupRoleToTeam(groupLetter, team) {
+  const roleId = getRoleIdForGroupLetter(groupLetter);
+  if (!roleId) return;
+
+  const guild = await getMainGuild();
+  if (!guild) return;
+
+  const userIds = getTeamUserIds(team);
+
+  for (const userId of userIds) {
+    try {
+      const member = await guild.members.fetch(userId);
+      if (!member) continue;
+
+      if (!member.roles.cache.has(roleId)) {
+        await member.roles.add(roleId);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Gruppenrolle konnte nicht vergeben werden: ${userId}`);
+    }
+  }
+}
+
+async function swapGroupRoles(groupLetter, outgoingTeam, incomingTeam) {
+  if (!groupLetter) return;
+
+  await removeGroupRoleFromTeam(groupLetter, outgoingTeam);
+  await addGroupRoleToTeam(groupLetter, incomingTeam);
+}
 
 // =========================
 // LIVE PANEL
@@ -1098,8 +1171,12 @@ async function promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId) {
 
   const changedGroupLetter = await replaceTeamInLiveGroups(eventKey, participant, backup);
 
-  event.teams[participantIndex] = backup;
-  event.teams[backupIndex] = participant;
+if (changedGroupLetter) {
+  await swapGroupRoles(changedGroupLetter, participant, backup);
+}
+
+event.teams[participantIndex] = backup;
+event.teams[backupIndex] = participant;
 
   saveCheckins(checkins);
 
