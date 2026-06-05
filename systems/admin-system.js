@@ -21,6 +21,7 @@ const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
+
 const MANAGERS_WITHOUT_TEAM_CHANNEL_ID = '1487537056245616802';
 const TEAM_REGISTER_CHANNEL_ID = '1487537568751816764';
 
@@ -203,7 +204,7 @@ function sortRows(rows) {
   });
 }
 
-async function replyTemp(interaction, payload, deleteAfterMs = 4000) {
+async function replyTemp(interaction, payload) {
   await interaction.reply({
     ...payload,
     flags: MessageFlags.Ephemeral,
@@ -218,6 +219,43 @@ async function replyTemp(interaction, payload, deleteAfterMs = 4000) {
 function formatUserMention(userId) {
   const id = String(userId || '').trim();
   return id ? `<@${id}>` : '—';
+}
+
+function getTeamKey(team) {
+  return String(team.teamId || team.id);
+}
+
+function normalizeIncomingTeamForGroup(team) {
+  return {
+    teamId: team.teamId || team.id,
+    clubName: team.clubName,
+    managerId: team.managerId,
+    coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
+  };
+}
+
+function getTeamUserIds(team) {
+  return [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ].filter(Boolean);
+}
+
+function buildGroupPingMessage(groupLetter, teams) {
+  const lines = teams.map(team => {
+    const mentions = getTeamUserIds(team)
+      .map(id => `<@${id}>`)
+      .join(' ');
+
+    return `• **${team.clubName}** ${mentions ? `— ${mentions}` : ''}`;
+  });
+
+  return [
+    `📣 **Ihr seid in Gruppe ${groupLetter}**`,
+    '',
+    `Folgende Teams sind in Gruppe ${groupLetter}:`,
+    ...lines,
+  ].join('\n');
 }
 
 // =========================
@@ -238,6 +276,7 @@ function buildLiveControlEmbed() {
         '• Backup / Team nachrücken',
         '• Gruppenergebnis manuell setzen',
         '• K.O.-Ergebnis manuell setzen',
+        '• Manager ohne Team anzeigen',
       ].join('\n')
     )
     .setColor(0xff0000);
@@ -271,19 +310,19 @@ function buildLiveControlRows() {
   );
 
   const row3 = new ActionRowBuilder().addComponents(
-  new ButtonBuilder()
-    .setCustomId('live_manual_group_result')
-    .setLabel('🏆 Gruppenergebnis')
-    .setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder()
-    .setCustomId('live_manual_ko_result')
-    .setLabel('🏁 K.O.-Ergebnis')
-    .setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder()
-    .setCustomId('live_managers_without_team')
-    .setLabel('👥 Manager ohne Team')
-    .setStyle(ButtonStyle.Secondary)
-);
+    new ButtonBuilder()
+      .setCustomId('live_manual_group_result')
+      .setLabel('🏆 Gruppenergebnis')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('live_manual_ko_result')
+      .setLabel('🏁 K.O.-Ergebnis')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('live_managers_without_team')
+      .setLabel('👥 Manager ohne Team')
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   return [row1, row2, row3];
 }
@@ -443,12 +482,6 @@ function findTeamById(teamId) {
   return loadTeams().find(t => String(t.id) === String(teamId)) || null;
 }
 
-function findTeamByClubName(clubName) {
-  return loadTeams().find(
-    t => String(t.clubName).toLowerCase() === String(clubName).toLowerCase()
-  ) || null;
-}
-
 function buildTeamsOverviewEmbeds() {
   const teams = getLiveTeams();
 
@@ -521,7 +554,7 @@ function buildTeamSelectRows(customIdBase, placeholder = 'Team auswählen') {
         .setPlaceholder(`${placeholder} (${index + 1}/${chunks.length})`)
         .addOptions(
           chunk.map(team => ({
-            label: team.clubName.slice(0, 100),
+            label: safeText(team.clubName).slice(0, 100),
             value: team.id,
             description: `Manager: ${safeText(team.managerId).slice(0, 80)}`,
           }))
@@ -631,12 +664,7 @@ function syncTeamNameAcrossData(teamId, oldClubName, newClubName) {
   saveKo(ko);
 }
 
-function updateRegisteredTeam({
-  teamId,
-  newClubName,
-  newManagerId,
-  newLogoFile,
-}) {
+function updateRegisteredTeam({ teamId, newClubName, newManagerId, newLogoFile }) {
   const teams = loadTeams();
   const teamIndex = teams.findIndex(t => t.id === teamId);
 
@@ -679,6 +707,7 @@ function updateRegisteredTeam({
 
   return team;
 }
+
 async function getManagersWithoutTeam(guild) {
   const managerRoleId = process.env.MANAGER_ROLE_ID;
 
@@ -695,13 +724,10 @@ async function getManagersWithoutTeam(guild) {
   await guild.members.fetch();
 
   const teams = loadTeams();
-
   const assignedUsers = new Set();
 
   for (const team of teams) {
-    if (team.managerId) {
-      assignedUsers.add(String(team.managerId));
-    }
+    if (team.managerId) assignedUsers.add(String(team.managerId));
 
     if (Array.isArray(team.coManagerIds)) {
       for (const id of team.coManagerIds) {
@@ -848,58 +874,6 @@ async function deleteRegisteredTeam(teamId) {
   return team;
 }
 
-async function promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId) {
-  const checkins = loadCheckins();
-  const event = checkins[eventKey];
-
-  if (!event) {
-    throw new Error('Check-in Event nicht gefunden.');
-  }
-
-  const actualFormat = getActualFormat(event.teams.length);
-  if (!actualFormat) {
-    throw new Error('Für dieses Event gibt es aktuell kein gültiges Turnierformat.');
-  }
-
-  const participantIndex = event.teams.findIndex(team =>
-    String(team.teamId || team.id) === String(outgoingTeamId)
-  );
-
-  const backupIndex = event.teams.findIndex(team =>
-    String(team.teamId || team.id) === String(incomingTeamId)
-  );
-
-  if (participantIndex === -1) {
-    throw new Error('Das rauszunehmende Team wurde nicht gefunden.');
-  }
-
-  if (backupIndex === -1) {
-    throw new Error('Das nachrückende Backup-Team wurde nicht gefunden.');
-  }
-
-  if (participantIndex >= actualFormat) {
-    throw new Error('Das rauszunehmende Team ist aktuell gar nicht im Turnier.');
-  }
-
-  if (backupIndex < actualFormat) {
-    throw new Error('Das nachrückende Team ist aktuell kein Backup-Team.');
-  }
-
-  const participant = event.teams[participantIndex];
-  const backup = event.teams[backupIndex];
-
-  event.teams[participantIndex] = backup;
-  event.teams[backupIndex] = participant;
-
-  saveCheckins(checkins);
-
-  await logToLive(
-    `🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`
-  );
-
-  return { participant, backup };
-}
-
 function recalculateRows(rows, matches) {
   const nextRows = rows.map(row => ({
     ...row,
@@ -950,29 +924,191 @@ async function updateLiveGroupMessages(eventKey, groupLetter) {
   const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
   const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
 
-  if (!groupMeta || !resultGroup) return;
+  if (!groupMeta) return;
 
   const channel = await fetchChannel(groupMeta.channelId);
   if (!channel) return;
 
-  const newRows = recalculateRows(groupMeta.rows, resultGroup.matches);
-  groupsData[eventKey].groups[groupLetter].rows = newRows;
-  saveGroups(groupsData);
+  let rowsToRender = groupMeta.rows || [];
+
+  if (resultGroup?.matches) {
+    rowsToRender = recalculateRows(groupMeta.rows, resultGroup.matches);
+    groupsData[eventKey].groups[groupLetter].rows = rowsToRender;
+    saveGroups(groupsData);
+  }
 
   const tableMessage = await fetchMessage(channel, groupMeta.tableMessageId);
   if (tableMessage) {
     await tableMessage.edit({
-      embeds: [buildGroupTableEmbed(groupsData[eventKey].label, groupLetter, newRows)],
+      embeds: [buildGroupTableEmbed(groupsData[eventKey].label, groupLetter, rowsToRender)],
     });
   }
 
-  const scheduleMessage = await fetchMessage(channel, resultGroup.scheduleMessageId);
-  if (scheduleMessage) {
-    await scheduleMessage.edit({
-      embeds: [buildGroupScheduleEmbed(groupsData[eventKey].label, groupLetter, resultGroup.matches)],
-      components: [buildGroupScheduleButtons(eventKey, groupLetter)],
-    });
+  if (groupMeta.pingMessageId) {
+    const pingMessage = await fetchMessage(channel, groupMeta.pingMessageId);
+    if (pingMessage) {
+      await pingMessage.edit({
+        content: buildGroupPingMessage(groupLetter, groupMeta.teams || []),
+        allowedMentions: { parse: ['users'] },
+      });
+    }
   }
+
+  if (resultGroup?.scheduleMessageId) {
+    const scheduleMessage = await fetchMessage(channel, resultGroup.scheduleMessageId);
+    if (scheduleMessage) {
+      await scheduleMessage.edit({
+        embeds: [buildGroupScheduleEmbed(groupsData[eventKey].label, groupLetter, resultGroup.matches)],
+        components: [buildGroupScheduleButtons(eventKey, groupLetter)],
+      });
+    }
+  }
+}
+
+async function replaceTeamInLiveGroups(eventKey, outgoingTeam, incomingTeam) {
+  const groupsData = loadGroups();
+  const resultsData = loadResults();
+
+  const eventGroups = groupsData[eventKey];
+  const eventResults = resultsData[eventKey];
+
+  if (!eventGroups?.groups) {
+    return null;
+  }
+
+  const outgoingId = getTeamKey(outgoingTeam);
+  const incoming = normalizeIncomingTeamForGroup(incomingTeam);
+
+  let changedGroupLetter = null;
+
+  for (const letter of Object.keys(eventGroups.groups)) {
+    const group = eventGroups.groups[letter];
+
+    const teamIndex = (group.teams || []).findIndex(team => getTeamKey(team) === outgoingId);
+    const rowIndex = (group.rows || []).findIndex(row => getTeamKey(row) === outgoingId);
+
+    if (teamIndex === -1 && rowIndex === -1) continue;
+
+    changedGroupLetter = letter;
+
+    const resultGroup = eventResults?.groups?.[letter];
+
+    if (resultGroup?.matches?.length) {
+      for (const match of resultGroup.matches) {
+        const touchesOutgoing =
+          String(match.homeTeamId) === outgoingId ||
+          String(match.awayTeamId) === outgoingId;
+
+        if (!touchesOutgoing) continue;
+
+        if (match.status && !['open', 'pending'].includes(match.status)) {
+          throw new Error(
+            `Team kann nicht ersetzt werden, weil in Gruppe ${letter} bereits ein Ergebnis betroffen ist.`
+          );
+        }
+      }
+
+      for (const match of resultGroup.matches) {
+        if (String(match.homeTeamId) === outgoingId) {
+          match.homeTeamId = incoming.teamId;
+          match.homeClubName = incoming.clubName;
+        }
+
+        if (String(match.awayTeamId) === outgoingId) {
+          match.awayTeamId = incoming.teamId;
+          match.awayClubName = incoming.clubName;
+        }
+      }
+    }
+
+    if (teamIndex !== -1) {
+      group.teams[teamIndex] = incoming;
+    }
+
+    if (rowIndex !== -1) {
+      group.rows[rowIndex] = {
+        ...incoming,
+        s: 0,
+        u: 0,
+        n: 0,
+        diff: 0,
+        points: 0,
+      };
+    }
+  }
+
+  if (!changedGroupLetter) {
+    return null;
+  }
+
+  saveGroups(groupsData);
+  saveResults(resultsData);
+
+  await updateLiveGroupMessages(eventKey, changedGroupLetter);
+
+  return changedGroupLetter;
+}
+
+async function promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event) {
+    throw new Error('Check-in Event nicht gefunden.');
+  }
+
+  const actualFormat = getActualFormat(event.teams.length);
+  if (!actualFormat) {
+    throw new Error('Für dieses Event gibt es aktuell kein gültiges Turnierformat.');
+  }
+
+  const participantIndex = event.teams.findIndex(team =>
+    String(team.teamId || team.id) === String(outgoingTeamId)
+  );
+
+  const backupIndex = event.teams.findIndex(team =>
+    String(team.teamId || team.id) === String(incomingTeamId)
+  );
+
+  if (participantIndex === -1) {
+    throw new Error('Das rauszunehmende Team wurde nicht gefunden.');
+  }
+
+  if (backupIndex === -1) {
+    throw new Error('Das nachrückende Backup-Team wurde nicht gefunden.');
+  }
+
+  if (participantIndex >= actualFormat) {
+    throw new Error('Das rauszunehmende Team ist aktuell gar nicht im Turnier.');
+  }
+
+  if (backupIndex < actualFormat) {
+    throw new Error('Das nachrückende Team ist aktuell kein Backup-Team.');
+  }
+
+  const participant = event.teams[participantIndex];
+  const backup = event.teams[backupIndex];
+
+  const backupDecision = event.backupDecisions?.[backup.teamId || backup.id];
+
+  if (backupDecision && backupDecision !== 'yes') {
+    throw new Error('Dieses Backup-Team hat nicht bestätigt, dass es bereitsteht.');
+  }
+
+  const changedGroupLetter = await replaceTeamInLiveGroups(eventKey, participant, backup);
+
+  event.teams[participantIndex] = backup;
+  event.teams[backupIndex] = participant;
+
+  saveCheckins(checkins);
+
+  await logToLive(
+    changedGroupLetter
+      ? `🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup. Gruppe ${changedGroupLetter} wurde aktualisiert.`
+      : `🔁 Manuelles Nachrücken: ${backup.clubName} rückt nach, ${participant.clubName} geht auf Backup.`
+  );
+
+  return { participant, backup, changedGroupLetter };
 }
 
 async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoals, awayGoals) {
@@ -1074,6 +1210,7 @@ function buildEventSelect(customId) {
       ])
   );
 }
+
 function buildActiveBackupEventSelect(customId) {
   const checkins = loadCheckins();
 
@@ -1104,14 +1241,28 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
   const actualFormat = getActualFormat(event.teams.length);
   if (!actualFormat) return [];
 
-  const teams =
+  const rawTeams =
     mode === 'outgoing'
-      ? event.teams.slice(0, actualFormat)
-      : event.teams.slice(actualFormat);
+      ? event.teams.slice(0, actualFormat).map((team, index) => ({
+          team,
+          slotNumber: index + 1,
+        }))
+      : event.teams.slice(actualFormat).map((team, index) => ({
+          team,
+          slotNumber: actualFormat + index + 1,
+        }));
 
-  if (!teams.length) return [];
+  const entries =
+    mode === 'incoming'
+      ? rawTeams.filter(entry => {
+          const decision = event.backupDecisions?.[entry.team.teamId || entry.team.id];
+          return !decision || decision === 'yes';
+        })
+      : rawTeams;
 
-  const chunks = chunkArray(teams, 25);
+  if (!entries.length) return [];
+
+  const chunks = chunkArray(entries, 25);
 
   return chunks.slice(0, 5).map((chunk, index) => {
     const customId =
@@ -1128,14 +1279,23 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
             : `Backup-Team auswählen (${index + 1}/${chunks.length})`
         )
         .addOptions(
-          chunk.map(team => ({
-            label: safeText(team.clubName).slice(0, 100),
-            value: String(team.teamId || team.id),
-            description:
-              mode === 'outgoing'
-                ? 'Aktuell im Turnier'
-                : 'Aktuell auf Warteliste',
-          }))
+          chunk.map(entry => {
+            const team = entry.team;
+            const decision = event.backupDecisions?.[team.teamId || team.id];
+
+            let backupStatus = 'Warteliste';
+            if (decision === 'yes') backupStatus = 'Backup bestätigt';
+            if (decision === 'no') backupStatus = 'Backup abgelehnt';
+
+            return {
+              label: `${entry.slotNumber}. ${safeText(team.clubName)}`.slice(0, 100),
+              value: String(team.teamId || team.id),
+              description:
+                mode === 'outgoing'
+                  ? `Aktuell im Turnier auf Platz ${entry.slotNumber}`
+                  : backupStatus,
+            };
+          })
         )
     );
   });
@@ -1163,15 +1323,15 @@ module.exports = {
     if (interaction.isButton()) {
       const adminButton =
         [
-  'live_show_teams',
-  'live_team_details',
-  'live_edit_team',
-  'live_delete_team',
-  'live_manual_backup',
-  'live_manual_group_result',
-  'live_manual_ko_result',
-  'live_managers_without_team',
-].includes(interaction.customId) ||
+          'live_show_teams',
+          'live_team_details',
+          'live_edit_team',
+          'live_delete_team',
+          'live_manual_backup',
+          'live_manual_group_result',
+          'live_manual_ko_result',
+          'live_managers_without_team',
+        ].includes(interaction.customId) ||
         interaction.customId.startsWith('live_edit_team_data:') ||
         interaction.customId.startsWith('live_edit_add_covm:') ||
         interaction.customId.startsWith('live_edit_remove_covm:');
@@ -1185,53 +1345,52 @@ module.exports = {
       }
 
       if (interaction.customId === 'live_show_teams') {
-    const embeds = buildTeamsOverviewEmbeds();
+        const embeds = buildTeamsOverviewEmbeds();
 
-    await replyTemp(interaction, {
-      content: '📋 Hier sind die aktuell registrierten Live-Teams:',
-      embeds,
-      allowedMentions: { parse: ['users'] },
-    });
-
-    return true;
-}
-
-if (interaction.customId === 'live_managers_without_team') {
-    try {
-      const members = await getManagersWithoutTeam(interaction.guild);
-      const channel = await fetchChannel(MANAGERS_WITHOUT_TEAM_CHANNEL_ID);
-
-      if (!channel) {
-        await interaction.reply({
-          content: '❌ Zielkanal nicht gefunden.',
-          flags: MessageFlags.Ephemeral,
+        await replyTemp(interaction, {
+          content: '📋 Hier sind die aktuell registrierten Live-Teams:',
+          embeds,
+          allowedMentions: { parse: ['users'] },
         });
+
         return true;
       }
 
-      const chunks = buildManagersWithoutTeamTextChunks(members);
+      if (interaction.customId === 'live_managers_without_team') {
+        try {
+          const members = await getManagersWithoutTeam(interaction.guild);
+          const channel = await fetchChannel(MANAGERS_WITHOUT_TEAM_CHANNEL_ID);
 
-for (const chunk of chunks) {
-  await channel.send({
-    content: chunk,
-    allowedMentions: { parse: ['users'] },
-  });
-}
+          if (!channel) {
+            await interaction.reply({
+              content: '❌ Zielkanal nicht gefunden.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return true;
+          }
 
-      await interaction.reply({
-        content: `✅ Liste wurde in <#${MANAGERS_WITHOUT_TEAM_CHANNEL_ID}> gepostet.`,
-        flags: MessageFlags.Ephemeral,
-      });
+          const chunks = buildManagersWithoutTeamTextChunks(members);
 
-    } catch (error) {
-      await interaction.reply({
-        content: `❌ ${error.message}`,
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+          for (const chunk of chunks) {
+            await channel.send({
+              content: chunk,
+              allowedMentions: { parse: ['users'] },
+            });
+          }
 
-    return true;
-}
+          await interaction.reply({
+            content: `✅ Liste wurde in <#${MANAGERS_WITHOUT_TEAM_CHANNEL_ID}> gepostet.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        } catch (error) {
+          await interaction.reply({
+            content: `❌ ${error.message}`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return true;
+      }
 
       if (interaction.customId === 'live_team_details') {
         const rows = buildTeamSelectRows('live_team_details_select', 'Team für Details auswählen');
@@ -1416,23 +1575,23 @@ for (const chunk of chunks) {
       }
 
       if (interaction.customId === 'live_manual_backup') {
-  const row = buildActiveBackupEventSelect('live_backup_pick_event');
+        const row = buildActiveBackupEventSelect('live_backup_pick_event');
 
-  if (!row) {
-    await replyTemp(interaction, {
-      content: '❌ Aktuell gibt es kein aktives Event mit eingecheckten Teams.',
-    });
-    return true;
-  }
+        if (!row) {
+          await replyTemp(interaction, {
+            content: '❌ Aktuell gibt es kein aktives Event mit eingecheckten Teams.',
+          });
+          return true;
+        }
 
-  await interaction.reply({
-    content: '🔁 Wähle zuerst das Event aus.',
-    components: [row],
-    flags: MessageFlags.Ephemeral,
-  });
+        await interaction.reply({
+          content: '🔁 Wähle zuerst das Event aus.',
+          components: [row],
+          flags: MessageFlags.Ephemeral,
+        });
 
-  return true;
-}
+        return true;
+      }
 
       if (interaction.customId === 'live_manual_group_result') {
         await interaction.reply({
@@ -1627,74 +1786,79 @@ for (const chunk of chunks) {
 
         return true;
       }
-if (interaction.customId === 'live_backup_pick_event') {
-  const eventKey = interaction.values[0];
 
-  const rows = buildBackupTeamSelectRows(eventKey, 'outgoing');
+      if (interaction.customId === 'live_backup_pick_event') {
+        const eventKey = interaction.values[0];
 
-  if (!rows.length) {
-    await interaction.update({
-      content: '❌ Für dieses Event gibt es kein Team, das ersetzt werden kann.',
-      components: [],
-    });
-    return true;
-  }
+        const rows = buildBackupTeamSelectRows(eventKey, 'outgoing');
 
-  await interaction.update({
-    content: '🔁 Wähle jetzt das Team aus, das raus soll.',
-    components: rows,
-  });
+        if (!rows.length) {
+          await interaction.update({
+            content: '❌ Für dieses Event gibt es kein Team, das ersetzt werden kann.',
+            components: [],
+          });
+          return true;
+        }
 
-  return true;
-}
+        await interaction.update({
+          content: '🔁 Wähle jetzt das Team aus, das raus soll.',
+          components: rows,
+        });
 
-if (interaction.customId.startsWith('live_backup_pick_outgoing:')) {
-  const [, eventKey] = interaction.customId.split(':');
-  const outgoingTeamId = interaction.values[0];
+        return true;
+      }
 
-  const rows = buildBackupTeamSelectRows(eventKey, 'incoming', outgoingTeamId);
+      if (interaction.customId.startsWith('live_backup_pick_outgoing:')) {
+        const [, eventKey] = interaction.customId.split(':');
+        const outgoingTeamId = interaction.values[0];
 
-  if (!rows.length) {
-    await interaction.update({
-      content: '❌ Für dieses Event gibt es aktuell kein Backup-Team auf der Warteliste.',
-      components: [],
-    });
-    return true;
-  }
+        const rows = buildBackupTeamSelectRows(eventKey, 'incoming', outgoingTeamId);
 
-  await interaction.update({
-    content: '🔁 Wähle jetzt das Backup-Team aus, das nachrücken soll.',
-    components: rows,
-  });
+        if (!rows.length) {
+          await interaction.update({
+            content: '❌ Für dieses Event gibt es aktuell kein Backup-Team auf der Warteliste.',
+            components: [],
+          });
+          return true;
+        }
 
-  return true;
-}
+        await interaction.update({
+          content: '🔁 Wähle jetzt das Backup-Team aus, das nachrücken soll.',
+          components: rows,
+        });
 
-if (interaction.customId.startsWith('live_backup_pick_incoming:')) {
-  const [, eventKey, outgoingTeamId] = interaction.customId.split(':');
-  const incomingTeamId = interaction.values[0];
+        return true;
+      }
 
-  try {
-    const result = await promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId);
+      if (interaction.customId.startsWith('live_backup_pick_incoming:')) {
+        const [, eventKey, outgoingTeamId] = interaction.customId.split(':');
+        const incomingTeamId = interaction.values[0];
 
-    await interaction.update({
-      content: [
-        '✅ Backup-Swap durchgeführt.',
-        '',
-        `Raus: **${result.participant.clubName}**`,
-        `Rein: **${result.backup.clubName}**`,
-      ].join('\n'),
-      components: [],
-    });
-  } catch (error) {
-    await interaction.update({
-      content: `❌ ${error.message}`,
-      components: [],
-    });
-  }
+        try {
+          const result = await promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId);
 
-  return true;
-}
+          await interaction.update({
+            content: [
+              '✅ Backup-Swap durchgeführt.',
+              '',
+              `Raus: **${result.participant.clubName}**`,
+              `Rein: **${result.backup.clubName}**`,
+              result.changedGroupLetter
+                ? `Gruppe **${result.changedGroupLetter}** wurde aktualisiert.`
+                : 'Gruppen waren noch nicht erstellt oder mussten nicht aktualisiert werden.',
+            ].join('\n'),
+            components: [],
+          });
+        } catch (error) {
+          await interaction.update({
+            content: `❌ ${error.message}`,
+            components: [],
+          });
+        }
+
+        return true;
+      }
+
       if (interaction.customId === 'live_pick_group_event') {
         const eventKey = interaction.values[0];
         const resultsData = loadResults();
