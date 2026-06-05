@@ -936,14 +936,10 @@ async function handleTeamModals(interaction) {
   });
 
   const managerRole = guild.roles.cache.get(process.env.MANAGER_ROLE_ID);
-  }
-
-  const managerRole = guild.roles.cache.get(process.env.MANAGER_ROLE_ID);
 
   if (!managerRole || !member.roles.cache.has(managerRole.id)) {
-    await interaction.reply({
+    await interaction.editReply({
       content: '❌ Nur Manager dürfen ein Team anmelden.',
-      flags: MessageFlags.Ephemeral,
     });
     return true;
   }
@@ -982,11 +978,11 @@ async function handleTeamModals(interaction) {
   await syncNicknamesSafe(guild);
 
   await interaction.editReply({
-  content:
-    `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
-    `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
-    `Du hast dafür 10 Minuten Zeit.`,
-});
+    content:
+      `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
+      `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
+      `Du hast dafür 10 Minuten Zeit.`,
+  });
 
   return true;
 }
