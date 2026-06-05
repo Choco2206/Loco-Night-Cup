@@ -136,7 +136,23 @@ function shuffleArray(array) {
 }
 
 function getDrawTimestamp(event) {
-  return event.deadlineAt + 15 * 60 * 1000;
+  const deadlineMs =
+    typeof event.deadlineAt === 'number'
+      ? event.deadlineAt
+      : new Date(event.deadlineAt).getTime();
+
+  return deadlineMs + 15 * 60 * 1000;
+}
+
+function shouldDrawNow(event) {
+  const drawAt = getDrawTimestamp(event);
+
+  if (!drawAt || Number.isNaN(drawAt)) {
+    console.warn('⚠️ Ungültige deadlineAt für Gruppenauslosung:', event.deadlineAt);
+    return false;
+  }
+
+  return Date.now() >= drawAt;
 }
 
 function shouldDrawNow(event) {
