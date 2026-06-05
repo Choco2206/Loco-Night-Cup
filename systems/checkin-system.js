@@ -168,7 +168,7 @@ function getCycleConfig(type) {
     const deadline = new Date(
   resetAt.getTime() - (7 * 60 + 45) * 60 * 1000
 );
-    const start = new Date(deadline.getTime() + 60 * 60 * 1000);
+    const start = new Date(deadline.getTime() + 45 * 60 * 1000);
 
     return {
       key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -187,7 +187,7 @@ function getCycleConfig(type) {
   const deadline = new Date(
   resetAt.getTime() - (7 * 60 + 45) * 60 * 1000
 );
-  const start = new Date(deadline.getTime() + 60 * 60 * 1000);
+  const start = new Date(deadline.getTime() + 45 * 60 * 1000);
 
   return {
     key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
