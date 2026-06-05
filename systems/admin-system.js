@@ -230,8 +230,9 @@ function normalizeIncomingTeamForGroup(team) {
   return {
     teamId: team.teamId || team.id,
     clubName: team.clubName,
-    managerId: team.managerId,
+    managerId: team.managerId || null,
     coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
+    isByeTeam: !!team.isByeTeam,
   };
 }
 
@@ -351,6 +352,7 @@ function buildLiveControlEmbed() {
         '• Gruppenergebnis manuell setzen',
         '• K.O.-Ergebnis manuell setzen',
         '• Manager ohne Team anzeigen',
+        '• Freilos-Team hinzufügen',
       ].join('\n')
     )
     .setColor(0xff0000);
@@ -397,8 +399,15 @@ function buildLiveControlRows() {
       .setLabel('👥 Manager ohne Team')
       .setStyle(ButtonStyle.Secondary)
   );
+  
+  const row4 = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId('live_add_bye_team')
+    .setLabel('🎟️ Freilos hinzufügen')
+    .setStyle(ButtonStyle.Success)
+);
 
-  return [row1, row2, row3];
+  return [row1, row2, row3, row4];
 }
 
 async function ensureLiveControlPanel() {
@@ -1272,6 +1281,48 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
   await updateLiveKoRoundMessage(eventKey, roundKey);
   await logToLive(`✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
 }
+function addByeTeamToCheckins(eventKey) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event) {
+    throw new Error('Event nicht gefunden.');
+  }
+
+  if (event.finalized) {
+    throw new Error('Dieses Event ist bereits finalisiert. Freilos-Teams können nur vor der Finalisierung hinzugefügt werden.');
+  }
+
+  if (!Array.isArray(event.teams)) {
+    event.teams = [];
+  }
+
+  if (event.teams.length >= 32) {
+    throw new Error('Das Event hat bereits 32 Teams. Mehr geht aktuell nicht.');
+  }
+
+  const existingByeTeams = event.teams.filter(team => team.isByeTeam);
+  const nextNumber = existingByeTeams.length + 1;
+
+  const byeTeam = {
+    teamId: `bye_${eventKey}_${Date.now()}_${nextNumber}`,
+    clubName: `Freilos-Team ${nextNumber}`,
+    managerId: null,
+    coManagerIds: [],
+    isByeTeam: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  event.teams.push(byeTeam);
+
+  saveCheckins(checkins);
+
+  return {
+    event,
+    byeTeam,
+    totalTeams: event.teams.length,
+  };
+}
 
 // =========================
 // SELECT BUILDERS
@@ -1411,6 +1462,7 @@ module.exports = {
           'live_manual_group_result',
           'live_manual_ko_result',
           'live_managers_without_team',
+          'live_add_bye_team',
         ].includes(interaction.customId) ||
         interaction.customId.startsWith('live_edit_team_data:') ||
         interaction.customId.startsWith('live_edit_add_covm:') ||
@@ -1690,7 +1742,17 @@ module.exports = {
         });
         return true;
       }
+      if (interaction.customId === 'live_add_bye_team') {
+  await interaction.reply({
+    content: '🎟️ Für welches Event möchtest du ein Freilos-Team hinzufügen?',
+    components: [buildEventSelect('live_add_bye_event')],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
     }
+    
 
     // =========================
     // USER SELECT MENUS
@@ -2164,6 +2226,38 @@ if (checkinSystem.refreshEvent) {
         await interaction.showModal(modal);
         return true;
       }
+      if (interaction.customId === 'live_add_bye_event') {
+  const eventKey = interaction.values[0];
+
+  try {
+    const result = addByeTeamToCheckins(eventKey);
+
+    if (checkinSystem.refreshEvent) {
+      await checkinSystem.refreshEvent(eventKey);
+    }
+
+    await logToLive(
+      `🎟️ Freilos hinzugefügt: ${result.byeTeam.clubName} für ${result.event.label || eventKey}. Teams jetzt: ${result.totalTeams}`
+    );
+
+    await interaction.update({
+      content: [
+        `✅ **${result.byeTeam.clubName}** wurde hinzugefügt.`,
+        '',
+        `Event: **${result.event.label || eventKey}**`,
+        `Teams jetzt: **${result.totalTeams}**`,
+      ].join('\n'),
+      components: [],
+    });
+  } catch (error) {
+    await interaction.update({
+      content: `❌ ${error.message}`,
+      components: [],
+    });
+  }
+
+  return true;
+}
     }
 
     // =========================
