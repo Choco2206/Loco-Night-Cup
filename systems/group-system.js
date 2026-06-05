@@ -151,8 +151,9 @@ function createInitialRows(teams) {
   return teams.map(team => ({
     teamId: team.teamId,
     clubName: team.clubName,
-    managerId: team.managerId,
+    managerId: team.managerId || null,
     coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
+    isByeTeam: !!team.isByeTeam,
     s: 0,
     u: 0,
     n: 0,
