@@ -135,6 +135,11 @@ function enrichMatches(groupLetter, teams) {
     const home = teams.find(t => t.teamId === match.homeTeamId);
     const away = teams.find(t => t.teamId === match.awayTeamId);
 
+    const homeIsBye = !!home?.isByeTeam;
+    const awayIsBye = !!away?.isByeTeam;
+    const hasByeTeam = homeIsBye || awayIsBye;
+    const realTeam = homeIsBye ? away : home;
+
     return {
       id: `${groupLetter}_match_${index + 1}`,
       groupLetter,
@@ -144,11 +149,17 @@ function enrichMatches(groupLetter, teams) {
       awayTeamId: match.awayTeamId,
       homeClubName: home?.clubName || 'Unbekannt',
       awayClubName: away?.clubName || 'Unbekannt',
-      status: 'pending', // pending | reported | confirmed
-      reportedByTeamId: null,
-      reportedScore: null,
-      confirmed: false,
+      status: hasByeTeam ? 'confirmed' : 'pending',
+      reportedByTeamId: hasByeTeam ? realTeam?.teamId || null : null,
+      reportedScore: hasByeTeam
+        ? {
+            home: homeIsBye ? 0 : 1,
+            away: awayIsBye ? 0 : 1,
+          }
+        : null,
+      confirmed: hasByeTeam,
       confirmationMessageId: null,
+      isByeMatch: hasByeTeam,
     };
   });
 }
@@ -169,8 +180,10 @@ function buildScheduleText(matches) {
       }
 
       if (match.status === 'confirmed' && match.reportedScore) {
-        status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
-      }
+  status = match.isByeMatch
+    ? `🎟️ Freilos-Wertung: ${match.reportedScore.home}:${match.reportedScore.away}`
+    : `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+}
 
       return `**${match.matchNumber}.** ${match.homeClubName} vs ${match.awayClubName}\n🕒 ${match.timeWindow} • ${status}`;
     })
@@ -440,9 +453,13 @@ async function createScheduleForEvent(eventKey) {
   }
 
   resultsData[eventKey] = storedEvent;
-  saveResults(resultsData);
+saveResults(resultsData);
 
-  console.log(`✅ Spielpläne für ${event.label} erstellt.`);
+for (const letter of Object.keys(storedEvent.groups)) {
+  await updateGroupMessages(eventKey, letter);
+}
+
+console.log(`✅ Spielpläne für ${event.label} erstellt.`);
 }
 
 function shouldCreateSchedule(event) {
@@ -488,12 +505,13 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
   }
 
   const allowedMatches = data.group.matches.filter(match => {
-    if (match.status === 'reported') return false;
-    if (match.status === 'confirmed') return false;
+  if (match.isByeMatch) return false;
+  if (match.status === 'reported') return false;
+  if (match.status === 'confirmed') return false;
 
-    const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
-    return isTeamAuthorized(interaction.user.id, home) || isTeamAuthorized(interaction.user.id, away);
-  });
+  const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
+  return isTeamAuthorized(interaction.user.id, home) || isTeamAuthorized(interaction.user.id, away);
+});
 
   if (allowedMatches.length === 0) {
     await interaction.reply({
@@ -546,6 +564,13 @@ async function handleSelectResult(interaction, eventKey, groupLetter) {
     });
     return true;
   }
+  if (match.isByeMatch) {
+  await interaction.reply({
+    content: '❌ Dieses Spiel ist eine automatische Freilos-Wertung und muss nicht eingetragen werden.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   if (match.status === 'reported') {
     await interaction.reply({
@@ -613,6 +638,13 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
     });
     return true;
   }
+  if (match.isByeMatch) {
+  await interaction.reply({
+    content: '❌ Dieses Spiel ist eine automatische Freilos-Wertung und muss nicht eingetragen werden.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   if (match.status === 'reported') {
     await interaction.reply({
