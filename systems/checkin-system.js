@@ -739,6 +739,25 @@ async function reconcileAll() {
   saveCheckins(data);
 }
 
+async function refreshEvent(type) {
+  if (!clientRef) return false;
+
+  const data = loadCheckins();
+  const event = findEventByType(data, type);
+
+  if (!event) return false;
+
+  data[type] = await ensureMainMessage(event);
+
+  if (data[type].finalized) {
+    data[type] = await ensureSummaryMessage(data[type]);
+    data[type] = await ensureBackupMessage(data[type]);
+  }
+
+  saveCheckins(data);
+  return true;
+}
+
 // =========================
 // BUTTON HANDLERS
 // =========================
@@ -962,7 +981,9 @@ module.exports = {
     return false;
   },
 
-  async handleMessage() {
+    async handleMessage() {
     return false;
   },
+
+  refreshEvent,
 };
