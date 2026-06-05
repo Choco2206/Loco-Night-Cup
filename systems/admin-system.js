@@ -1200,17 +1200,41 @@ event.teams[backupIndex] = participant;
 
 async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoals, awayGoals) {
   const resultsData = loadResults();
-  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+  const groupsData = loadGroups();
 
-  if (!resultGroup) {
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+
+  if (!resultGroup || !groupMeta) {
     throw new Error('Gruppenspiel nicht gefunden.');
   }
 
   const match = resultGroup.matches.find(m => m.matchNumber === Number(matchNumber));
+
   if (!match) {
     throw new Error('Match nicht gefunden.');
   }
 
+  if (match.isByeMatch) {
+    throw new Error('Freilos-Spiele können nicht manuell überschrieben werden.');
+  }
+
+  // Alte Bestätigungsnachricht löschen, falls vorher ein Team gemeldet hatte
+  if (match.confirmationMessageId) {
+    const channel = await fetchChannel(groupMeta.channelId);
+
+    if (channel) {
+      const message = await fetchMessage(channel, match.confirmationMessageId);
+
+      if (message) {
+        await message.delete().catch(() => {});
+      }
+    }
+
+    match.confirmationMessageId = null;
+  }
+
+  // Admin überschreibt alles und bestätigt direkt final
   match.status = 'confirmed';
   match.reportedByTeamId = 'admin-manual';
   match.reportedScore = {
@@ -1220,8 +1244,12 @@ async function manualSetGroupResult(eventKey, groupLetter, matchNumber, homeGoal
   match.confirmed = true;
 
   saveResults(resultsData);
+
   await updateLiveGroupMessages(eventKey, groupLetter);
-  await logToLive(`✏️ Admin-Korrektur Gruppe ${groupLetter}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
+
+  await logToLive(
+    `✏️ Admin-Korrektur Gruppe ${groupLetter}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`
+  );
 }
 
 async function updateLiveKoRoundMessage(eventKey, roundKey) {
