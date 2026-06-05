@@ -14,6 +14,7 @@ const {
 } = require('discord.js');
 
 const teamSystem = require('./team-system');
+const checkinSystem = require('./checkin-system');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 const ADMIN_FILE = path.join(process.cwd(), 'data', 'admin-system.json');
@@ -1836,6 +1837,10 @@ module.exports = {
 
         try {
           const result = await promoteBackupSwap(eventKey, outgoingTeamId, incomingTeamId);
+
+if (checkinSystem.refreshEvent) {
+  await checkinSystem.refreshEvent(eventKey);
+}
 
           await interaction.update({
             content: [
