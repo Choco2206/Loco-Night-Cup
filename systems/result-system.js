@@ -353,7 +353,6 @@ async function updateGroupMessages(eventKey, groupLetter) {
   const channel = await fetchChannel(groupMeta.channelId);
   if (!channel) return;
 
-  // Tabelle aktualisieren
   const newRows = recalculateRows(groupMeta.rows, resultGroup.matches);
   groupMeta.rows = newRows;
   groupsData[eventKey].groups[groupLetter].rows = newRows;
@@ -366,7 +365,6 @@ async function updateGroupMessages(eventKey, groupLetter) {
     });
   }
 
-  // Spielplan aktualisieren
   const scheduleMessage = await fetchMessage(channel, resultGroup.scheduleMessageId);
   if (scheduleMessage) {
     await scheduleMessage.edit({
@@ -392,7 +390,6 @@ async function createScheduleForEvent(eventKey) {
     return;
   }
 
-  // Alte Spielpläne löschen
   if (existing && existing.groups) {
     for (const letter of Object.keys(existing.groups)) {
       const group = existing.groups[letter];
@@ -402,7 +399,6 @@ async function createScheduleForEvent(eventKey) {
         await deleteMessageIfExists(group.channelId, group.scheduleMessageId);
       }
 
-      // Alte Bestätigungsnachrichten löschen
       if (group.matches) {
         for (const match of group.matches) {
           if (match.confirmationMessageId) {
@@ -492,13 +488,16 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
   }
 
   const allowedMatches = data.group.matches.filter(match => {
+    if (match.status === 'reported') return false;
+    if (match.status === 'confirmed') return false;
+
     const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
     return isTeamAuthorized(interaction.user.id, home) || isTeamAuthorized(interaction.user.id, away);
   });
 
   if (allowedMatches.length === 0) {
     await interaction.reply({
-      content: '❌ Du darfst für keine Paarung in dieser Gruppe ein Ergebnis eintragen.',
+      content: '❌ Für dich gibt es aktuell kein offenes Spiel zum Eintragen.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -543,6 +542,22 @@ async function handleSelectResult(interaction, eventKey, groupLetter) {
   if (!match) {
     await interaction.reply({
       content: '❌ Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.status === 'reported') {
+    await interaction.reply({
+      content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.status === 'confirmed') {
+    await interaction.reply({
+      content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -599,6 +614,22 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
     return true;
   }
 
+  if (match.status === 'reported') {
+    await interaction.reply({
+      content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.status === 'confirmed') {
+    await interaction.reply({
+      content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
   const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
 
   const canReport =
@@ -613,12 +644,23 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
     return true;
   }
 
-  const homeGoals = interaction.fields.getTextInputValue('home_goals').trim();
-  const awayGoals = interaction.fields.getTextInputValue('away_goals').trim();
+  const homeGoalsRaw = interaction.fields.getTextInputValue('home_goals').trim();
+  const awayGoalsRaw = interaction.fields.getTextInputValue('away_goals').trim();
 
-  if (!/^\d+$/.test(homeGoals) || !/^\d+$/.test(awayGoals)) {
+  if (!/^\d+$/.test(homeGoalsRaw) || !/^\d+$/.test(awayGoalsRaw)) {
     await interaction.reply({
       content: '❌ Bitte gib nur ganze Zahlen ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const homeGoals = Number(homeGoalsRaw);
+  const awayGoals = Number(awayGoalsRaw);
+
+  if (homeGoals > 20 || awayGoals > 20) {
+    await interaction.reply({
+      content: '❌ Bitte gib ein Ergebnis zwischen 0 und 20 ein.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -630,8 +672,8 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
   match.status = 'reported';
   match.reportedByTeamId = reportingTeam.teamId;
   match.reportedScore = {
-    home: Number(homeGoals),
-    away: Number(awayGoals),
+    home: homeGoals,
+    away: awayGoals,
   };
   match.confirmed = false;
 
@@ -649,6 +691,14 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
     match.confirmationMessageId = null;
   }
 
+  const opponentMentions = [
+    opponentTeam.managerId,
+    ...(Array.isArray(opponentTeam.coManagerIds) ? opponentTeam.coManagerIds : []),
+  ]
+    .filter(Boolean)
+    .map(id => `<@${id}>`)
+    .join(' ');
+
   const confirmMessage = await channel.send({
     content: [
       `⚠️ **Ergebnis gemeldet**`,
@@ -656,7 +706,7 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
       `**${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
       '',
       `Nur das gegnerische Team darf jetzt bestätigen oder ablehnen.`,
-      `${[opponentTeam.managerId, ...(opponentTeam.coManagerIds || [])].map(id => `<@${id}>`).join(' ')}`,
+      opponentMentions || '*Keine VM/Co-VM-Verlinkung gefunden.*',
     ].join('\n'),
     components: [buildConfirmationButtons(eventKey, groupLetter, match.matchNumber)],
   });
@@ -783,7 +833,7 @@ async function handleRejectResult(interaction, eventKey, groupLetter, matchNumbe
   }
 
   await interaction.reply({
-    content: '❌ Ergebnis wurde abgelehnt. Ein Admin muss das später manuell klären oder das Spiel neu gemeldet werden.',
+    content: '❌ Ergebnis wurde abgelehnt. Das Spiel ist jetzt wieder offen und kann neu gemeldet werden.',
     flags: MessageFlags.Ephemeral,
   });
 
