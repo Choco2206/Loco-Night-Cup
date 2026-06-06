@@ -354,6 +354,7 @@ function buildLiveControlEmbed() {
         '• K.O.-Ergebnis manuell setzen',
         '• Manager ohne Team anzeigen',
         '• Freilos-Team hinzufügen',
+'• Freilos-Team entfernen',
       ].join('\n')
     )
     .setColor(0xff0000);
@@ -400,12 +401,17 @@ function buildLiveControlRows() {
       .setLabel('👥 Manager ohne Team')
       .setStyle(ButtonStyle.Secondary)
   );
-  
-  const row4 = new ActionRowBuilder().addComponents(
+
+const row4 = new ActionRowBuilder().addComponents(
   new ButtonBuilder()
     .setCustomId('live_add_bye_team')
     .setLabel('🎟️ Freilos hinzufügen')
-    .setStyle(ButtonStyle.Success)
+    .setStyle(ButtonStyle.Success),
+
+  new ButtonBuilder()
+    .setCustomId('live_remove_bye_team')
+    .setLabel('🚫 Freilos entfernen')
+    .setStyle(ButtonStyle.Danger)
 );
 
   return [row1, row2, row3, row4];
@@ -1371,12 +1377,48 @@ function addByeTeamToCheckins(eventKey) {
 
   saveCheckins(checkins);
 
-  return {
+    return {
     event,
     byeTeam,
     totalTeams: event.teams.length,
   };
 }
+
+function removeByeTeamFromCheckins(eventKey) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event) {
+    throw new Error('Event nicht gefunden.');
+  }
+
+  if (event.finalized) {
+    throw new Error('Dieses Event ist bereits finalisiert. Freilos-Teams können nur vor der Finalisierung entfernt werden.');
+  }
+
+  if (!Array.isArray(event.teams) || !event.teams.length) {
+    throw new Error('Für dieses Event gibt es keine eingecheckten Teams.');
+  }
+
+  const byeIndex = event.teams.findLastIndex(team => team.isByeTeam);
+
+  if (byeIndex === -1) {
+    throw new Error('Für dieses Event gibt es aktuell kein Freilos-Team.');
+  }
+
+  const removedByeTeam = event.teams[byeIndex];
+
+  event.teams.splice(byeIndex, 1);
+
+  saveCheckins(checkins);
+
+  return {
+    event,
+    removedByeTeam,
+    totalTeams: event.teams.length,
+  };
+}
+
 
 // =========================
 // SELECT BUILDERS
@@ -1517,6 +1559,7 @@ module.exports = {
           'live_manual_ko_result',
           'live_managers_without_team',
           'live_add_bye_team',
+          'live_remove_bye_team',
         ].includes(interaction.customId) ||
         interaction.customId.startsWith('live_edit_team_data:') ||
         interaction.customId.startsWith('live_edit_add_covm:') ||
@@ -1805,9 +1848,20 @@ module.exports = {
 
   return true;
 }
-    }
-    
 
+if (interaction.customId === 'live_remove_bye_team') {
+  await interaction.reply({
+    content: '🚫 Für welches Event möchtest du ein Freilos-Team entfernen?',
+    components: [buildEventSelect('live_remove_bye_event')],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+    }
+
+    
     // =========================
     // USER SELECT MENUS
     // =========================
@@ -2312,6 +2366,40 @@ if (checkinSystem.refreshEvent) {
 
   return true;
 }
+
+if (interaction.customId === 'live_remove_bye_event') {
+  const eventKey = interaction.values[0];
+
+  try {
+    const result = removeByeTeamFromCheckins(eventKey);
+
+    if (checkinSystem.refreshEvent) {
+      await checkinSystem.refreshEvent(eventKey);
+    }
+
+    await logToLive(
+      `🚫 Freilos entfernt: ${result.removedByeTeam.clubName} aus ${result.event.label || eventKey}. Teams jetzt: ${result.totalTeams}`
+    );
+
+    await interaction.update({
+      content: [
+        `✅ **${result.removedByeTeam.clubName}** wurde entfernt.`,
+        '',
+        `Event: **${result.event.label || eventKey}**`,
+        `Teams jetzt: **${result.totalTeams}**`,
+      ].join('\n'),
+      components: [],
+    });
+  } catch (error) {
+    await interaction.update({
+      content: `❌ ${error.message}`,
+      components: [],
+    });
+  }
+
+    return true;
+}
+
     }
 
     // =========================
