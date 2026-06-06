@@ -15,6 +15,7 @@ const {
 
 const teamSystem = require('./team-system');
 const checkinSystem = require('./checkin-system');
+const { sendTournamentCeremonyIfReady } = require('./announcement');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 const ADMIN_FILE = path.join(process.cwd(), 'data', 'admin-system.json');
@@ -1323,11 +1324,13 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
 
   saveKo(koData);
 
-  await updateLiveKoRoundMessage(eventKey, roundKey);
-
-  await logToLive(
+    await logToLive(
     `✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`
   );
+
+  if (roundKey === 'final' || roundKey === 'thirdPlace') {
+    await sendTournamentCeremonyIfReady(clientRef, eventKey);
+  }
 }
 function addByeTeamToCheckins(eventKey) {
   const checkins = loadCheckins();
