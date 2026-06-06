@@ -408,6 +408,7 @@ async function purgeGroupChannel(channelId) {
 
 async function cleanupGroupsAfterReset() {
   const groupsData = loadGroups();
+  const checkinsData = loadCheckins();
   let changed = false;
 
   for (const eventKey of ['friday', 'saturday']) {
@@ -415,10 +416,11 @@ async function cleanupGroupsAfterReset() {
     if (!storedEvent || !storedEvent.groups) continue;
 
     if (storedEvent.groupChannelsCleanedAt) continue;
-    if (!storedEvent.resetAt) continue;
 
-    if (Date.now() < Number(storedEvent.resetAt) + GROUP_CLEANUP_GRACE_MS) continue;
+    const resetAt = storedEvent.resetAt || checkinsData[eventKey]?.resetAt;
+    if (!resetAt) continue;
 
+    if (Date.now() < Number(resetAt) + GROUP_CLEANUP_GRACE_MS) continue;
     await removeAllGroupRolesFromStoredEvent(storedEvent);
 
     for (const group of Object.values(storedEvent.groups)) {
@@ -426,6 +428,7 @@ async function cleanupGroupsAfterReset() {
       await purgeGroupChannel(group.channelId);
     }
 
+        storedEvent.resetAt = resetAt;
     storedEvent.groupRolesCleanedAt = new Date().toISOString();
     storedEvent.groupChannelsCleanedAt = new Date().toISOString();
 
