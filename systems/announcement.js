@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
-const { generateCeremonyImage } = require('./ceremony');
+const { generateCeremonyImage } = require('./ceremony-image');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
