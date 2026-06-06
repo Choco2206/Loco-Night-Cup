@@ -268,6 +268,46 @@ function buildThanksEmbed() {
     .setColor(0xff0000);
 }
 
+function buildCeremonyText(eventLabel, first, second, third) {
+  return [
+    `🏆 **SIEGEREHRUNG • ${safeText(eventLabel).toUpperCase()}**`,
+    '',
+    'Der Loco Night Cup ist beendet. Hier ist die offizielle Top 3:',
+    '',
+    `🥇 **1. Platz:** ${safeText(first?.clubName)}`,
+    `👑 Manager / Co-Manager:`,
+    `${buildMentions(first) || '—'}`,
+    '',
+    'Verdient den Titel geholt und über das gesamte Turnier hinweg überzeugt. Herzlichen Glückwunsch zum Turniersieg! 🏆',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    `🥈 **2. Platz:** ${safeText(second?.clubName)}`,
+    `👑 Manager / Co-Manager:`,
+    `${buildMentions(second) || '—'}`,
+    '',
+    'Starke Leistungen gezeigt und völlig verdient auf dem Podium gelandet. 👏',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    `🥉 **3. Platz:** ${safeText(third?.clubName)}`,
+    `👑 Manager / Co-Manager:`,
+    `${buildMentions(third) || '—'}`,
+    '',
+    'Ebenfalls ein starkes Turnier gespielt und sich den Platz auf dem Treppchen verdient gesichert. 👏',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    '❤️ **Danke an alle Teilnehmer**',
+    '',
+    'Vielen Dank an alle Teams für die Teilnahme am heutigen Cup.',
+    '',
+    'Wir hoffen, ihr hattet Spaß und seid auch beim nächsten Loco Night Cup wieder dabei.',
+    '',
+    'Bis zum nächsten Mal! 🏆🐺',
+  ].join('\n');
+}
+
 // =========================
 // SEND HELPERS
 // =========================
@@ -346,47 +386,22 @@ async function sendTournamentCeremonyIfReady(client, eventKey) {
   });
 
   await channel.send({
-    embeds: [
-      buildHeaderEmbed(
-        placementData.label,
-        placementData.first,
-        placementData.second,
-        placementData.third
-      ).setImage('attachment://loco-night-cup-siegerehrung.png'),
-    ],
-    files: [ceremonyAttachment],
-  });
+  content: '@everyone',
+  files: [ceremonyAttachment],
+  allowedMentions: {
+    parse: ['everyone'],
+  },
+});
 
-  await sendPlacementMessage(channel, {
-    place: 1,
-    emoji: '🥇',
-    team: placementData.first,
-    text: 'Herzlichen Glückwunsch an',
-    color: 0xf1c40f,
-    useLogo: true,
-  });
-
-  await sendPlacementMessage(channel, {
-    place: 2,
-    emoji: '🥈',
-    team: placementData.second,
-    text: 'Starker Auftritt von',
-    color: 0xc0c0c0,
-    useLogo: true,
-  });
-
-  await sendPlacementMessage(channel, {
-    place: 3,
-    emoji: '🥉',
-    team: placementData.third,
-    text: 'Glückwunsch auch an',
-    color: 0xcd7f32,
-    useLogo: true,
-  });
-
-  await channel.send({
-    embeds: [buildThanksEmbed()],
-  });
+await channel.send({
+  content: buildCeremonyText(
+    placementData.label,
+    placementData.first,
+    placementData.second,
+    placementData.third
+  ),
+  allowedMentions: { parse: ['users'] },
+});
 
   markCeremonyPosted(eventKey);
   return true;
