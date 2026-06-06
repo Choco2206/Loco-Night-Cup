@@ -79,6 +79,9 @@ function loadResults() {
     console.error('❌ Fehler beim Lesen von results.json:', error);
     return { friday: null, saturday: null };
   }
+}
+
+function loadCheckins() {
   
 function loadCheckins() {
   try {
