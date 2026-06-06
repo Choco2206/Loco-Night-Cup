@@ -408,7 +408,6 @@ async function purgeGroupChannel(channelId) {
 
 async function cleanupGroupsAfterReset() {
   const groupsData = loadGroups();
-  const checkinsData = loadCheckins();
   let changed = false;
 
   for (const eventKey of ['friday', 'saturday']) {
@@ -417,10 +416,18 @@ async function cleanupGroupsAfterReset() {
 
     if (storedEvent.groupChannelsCleanedAt) continue;
 
-    const resetAt = storedEvent.resetAt || checkinsData[eventKey]?.resetAt;
-    if (!resetAt) continue;
+    let cleanupAt = Number(storedEvent.resetAt);
 
-    if (Date.now() < Number(resetAt) + GROUP_CLEANUP_GRACE_MS) continue;
+    // Fallback für alte Gruppen, die noch kein resetAt gespeichert haben
+    if (!cleanupAt || Number.isNaN(cleanupAt)) {
+      const createdAtMs = new Date(storedEvent.createdAt).getTime();
+      if (!createdAtMs || Number.isNaN(createdAtMs)) continue;
+
+      cleanupAt = createdAtMs + 8 * 60 * 60 * 1000;
+    }
+
+    if (Date.now() < cleanupAt + GROUP_CLEANUP_GRACE_MS) continue;
+
     await removeAllGroupRolesFromStoredEvent(storedEvent);
 
     for (const group of Object.values(storedEvent.groups)) {
@@ -428,13 +435,13 @@ async function cleanupGroupsAfterReset() {
       await purgeGroupChannel(group.channelId);
     }
 
-        storedEvent.resetAt = resetAt;
+    storedEvent.resetAt = cleanupAt;
     storedEvent.groupRolesCleanedAt = new Date().toISOString();
     storedEvent.groupChannelsCleanedAt = new Date().toISOString();
 
     changed = true;
 
-    console.log(`✅ Gruppenkanäle für ${storedEvent.label} um 07:00 Uhr bereinigt.`);
+    console.log(`✅ Gruppenkanäle für ${storedEvent.label} bereinigt.`);
   }
 
   if (changed) {
