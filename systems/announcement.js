@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const { generateCeremonyImage } = require('./ceremony');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
@@ -80,10 +81,13 @@ function safeText(value, fallback = '—') {
 }
 
 function findTeamById(teamId) {
-  return loadTeams().find(team =>
-    String(team.id) === String(teamId) ||
-    String(team.teamId) === String(teamId)
-  ) || null;
+  return (
+    loadTeams().find(
+      team =>
+        String(team.id) === String(teamId) ||
+        String(team.teamId) === String(teamId)
+    ) || null
+  );
 }
 
 function buildMentions(team) {
@@ -254,7 +258,7 @@ function buildThanksEmbed() {
       [
         '**Danke an alle Teams, Manager und Spieler fürs Mitmachen.**',
         '',
-        'Der erste Loco Night Cup ist gespielt und genau so soll es weitergehen.',
+        'Der Loco Night Cup ist gespielt und genau so soll es weitergehen.',
         '',
         'Wenn euch das Turnier gefallen hat, erzählt es gerne weiter und bringt beim nächsten Mal wieder Teams mit.',
         '',
@@ -271,8 +275,6 @@ function buildThanksEmbed() {
 async function sendPlacementMessage(channel, { place, emoji, team, text, color, useLogo }) {
   if (!channel || !team) return;
 
-  const mentions = buildMentions(team);
-
   const embed = buildPlacementEmbed({
     place,
     emoji,
@@ -282,9 +284,9 @@ async function sendPlacementMessage(channel, { place, emoji, team, text, color, 
   });
 
   const payload = {
-  embeds: [embed],
-  allowedMentions: { parse: ['users'] },
-};
+    embeds: [embed],
+    allowedMentions: { parse: ['users'] },
+  };
 
   if (useLogo) {
     const logoPath = getLogoPath(team.logoFile);
@@ -308,8 +310,6 @@ async function sendPlacementMessage(channel, { place, emoji, team, text, color, 
 async function sendTournamentCeremonyIfReady(client, eventKey) {
   const channelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
-  console.log('ANNOUNCEMENT_CHANNEL_ID:', process.env.ANNOUNCEMENT_CHANNEL_ID);
-
   if (!channelId) {
     console.error('❌ ANNOUNCEMENT_CHANNEL_ID fehlt in der .env');
     return false;
@@ -330,6 +330,21 @@ async function sendTournamentCeremonyIfReady(client, eventKey) {
     return false;
   }
 
+  const ceremonyImagePath = await generateCeremonyImage({
+    eventKey,
+    eventLabel: placementData.label,
+    first: placementData.first,
+    second: placementData.second,
+    third: placementData.third,
+    firstLogoPath: getLogoPath(placementData.first.logoFile),
+    secondLogoPath: getLogoPath(placementData.second.logoFile),
+    thirdLogoPath: getLogoPath(placementData.third.logoFile),
+  });
+
+  const ceremonyAttachment = new AttachmentBuilder(ceremonyImagePath, {
+    name: 'loco-night-cup-siegerehrung.png',
+  });
+
   await channel.send({
     embeds: [
       buildHeaderEmbed(
@@ -337,8 +352,9 @@ async function sendTournamentCeremonyIfReady(client, eventKey) {
         placementData.first,
         placementData.second,
         placementData.third
-      ),
+      ).setImage('attachment://loco-night-cup-siegerehrung.png'),
     ],
+    files: [ceremonyAttachment],
   });
 
   await sendPlacementMessage(channel, {
