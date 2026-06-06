@@ -20,6 +20,7 @@ const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
 
 let clientRef = null;
 let intervalRef = null;
+let koProcessing = false;
 
 // =========================
 // FILE HELPERS
@@ -841,11 +842,19 @@ async function advanceKoIfReady(eventKey) {
 }
 
 async function reconcileKoAuto() {
-  await createInitialKoRound('friday');
-  await createInitialKoRound('saturday');
+  if (koProcessing) return;
 
-  await advanceKoIfReady('friday');
-  await advanceKoIfReady('saturday');
+  koProcessing = true;
+
+  try {
+    await createInitialKoRound('friday');
+    await createInitialKoRound('saturday');
+
+    await advanceKoIfReady('friday');
+    await advanceKoIfReady('saturday');
+  } finally {
+    koProcessing = false;
+  }
 }
 
 // =========================
@@ -1140,7 +1149,7 @@ async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
     flags: MessageFlags.Ephemeral,
   });
 
-  await advanceKoIfReady(eventKey);
+  await reconcileKoAuto();
 
   try {
     if (roundKey === 'final' || roundKey === 'thirdPlace') {
