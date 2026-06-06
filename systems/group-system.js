@@ -155,6 +155,14 @@ function shouldDrawNow(event) {
   return Date.now() >= drawAt;
 }
 
+function isEventExpired(event) {
+  if (!event?.resetAt) return false;
+  return Date.now() >= Number(event.resetAt);
+}
+
+function isEventInactive(event) {
+  return !event || event.completed || event.archived || isEventExpired(event);
+}
 
 // =========================
 // RENDER HELPERS
@@ -454,10 +462,11 @@ async function drawGroupsForEvent(eventKey) {
   const groupsData = loadGroups();
 
   const event = checkins[eventKey];
-  if (!event) return;
+if (!event) return;
+if (isEventInactive(event)) return;
 
-  if (!event.finalized) return;
-  if (event.status !== 'confirmed') return;
+if (!event.finalized) return;
+if (event.status !== 'confirmed') return;
 
   const format = getActualFormat(event.teams.length);
   if (!format) return;
@@ -548,13 +557,23 @@ async function drawGroupsForEvent(eventKey) {
 async function reconcileAutoDraw() {
   const checkins = loadCheckins();
 
-  if (checkins.friday && checkins.friday.finalized && shouldDrawNow(checkins.friday)) {
-    await drawGroupsForEvent('friday');
-  }
+  if (
+  checkins.friday &&
+  !isEventInactive(checkins.friday) &&
+  checkins.friday.finalized &&
+  shouldDrawNow(checkins.friday)
+) {
+  await drawGroupsForEvent('friday');
+}
 
-  if (checkins.saturday && checkins.saturday.finalized && shouldDrawNow(checkins.saturday)) {
-    await drawGroupsForEvent('saturday');
-  }
+  if (
+  checkins.saturday &&
+  !isEventInactive(checkins.saturday) &&
+  checkins.saturday.finalized &&
+  shouldDrawNow(checkins.saturday)
+) {
+  await drawGroupsForEvent('saturday');
+}
 
   await cleanupGroupsAfterReset();
 }
