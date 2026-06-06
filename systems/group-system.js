@@ -5,7 +5,7 @@ const { EmbedBuilder } = require('discord.js');
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 
-const GROUP_ROLE_CLEANUP_AFTER_MS = 3 * 60 * 60 * 1000;
+const GROUP_CLEANUP_GRACE_MS = 0;
 
 let clientRef = null;
 let intervalRef = null;
@@ -155,9 +155,6 @@ function shouldDrawNow(event) {
   return Date.now() >= drawAt;
 }
 
-function shouldDrawNow(event) {
-  return Date.now() >= getDrawTimestamp(event);
-}
 
 // =========================
 // RENDER HELPERS
@@ -365,35 +362,7 @@ async function assignGroupRoleToTeams(letter, teams) {
   }
 }
 
-async function cleanupExpiredGroupRoles() {
-  const groupsData = loadGroups();
-  let changed = false;
 
-  for (const eventKey of ['friday', 'saturday']) {
-    const storedEvent = groupsData[eventKey];
-    if (!storedEvent || !storedEvent.createdAt) continue;
-
-    if (storedEvent.groupRolesCleanedAt) continue;
-
-    const createdAtMs = new Date(storedEvent.createdAt).getTime();
-    if (!createdAtMs) continue;
-
-    const cleanupAt = createdAtMs + GROUP_ROLE_CLEANUP_AFTER_MS;
-
-    if (Date.now() >= cleanupAt) {
-      await removeAllGroupRolesFromStoredEvent(storedEvent);
-
-      storedEvent.groupRolesCleanedAt = new Date().toISOString();
-      changed = true;
-
-      console.log(`✅ Gruppenrollen für ${storedEvent.label} automatisch entfernt.`);
-    }
-  }
-
-  if (changed) {
-    saveGroups(groupsData);
-  }
-}
 
 // =========================
 // GROUP DRAW
@@ -413,6 +382,60 @@ async function clearOldGroupPosts(storedEvent) {
     if (group.pingMessageId) {
       await deleteMessageIfExists(group.channelId, group.pingMessageId);
     }
+  }
+}
+
+async function purgeGroupChannel(channelId) {
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  try {
+    let messages;
+
+    do {
+      messages = await channel.messages.fetch({ limit: 100 });
+
+      const deletable = messages.filter(message => !message.pinned);
+
+      if (deletable.size > 0) {
+        await channel.bulkDelete(deletable, true);
+      }
+    } while (messages.size === 100);
+  } catch (error) {
+    console.error(`❌ Gruppenkanal konnte nicht geleert werden: ${channelId}`, error);
+  }
+}
+
+async function cleanupGroupsAfterReset() {
+  const groupsData = loadGroups();
+  let changed = false;
+
+  for (const eventKey of ['friday', 'saturday']) {
+    const storedEvent = groupsData[eventKey];
+    if (!storedEvent || !storedEvent.groups) continue;
+
+    if (storedEvent.groupChannelsCleanedAt) continue;
+    if (!storedEvent.resetAt) continue;
+
+    if (Date.now() < Number(storedEvent.resetAt) + GROUP_CLEANUP_GRACE_MS) continue;
+
+    await removeAllGroupRolesFromStoredEvent(storedEvent);
+
+    for (const group of Object.values(storedEvent.groups)) {
+      if (!group?.channelId) continue;
+      await purgeGroupChannel(group.channelId);
+    }
+
+    storedEvent.groupRolesCleanedAt = new Date().toISOString();
+    storedEvent.groupChannelsCleanedAt = new Date().toISOString();
+
+    changed = true;
+
+    console.log(`✅ Gruppenkanäle für ${storedEvent.label} um 07:00 Uhr bereinigt.`);
+  }
+
+  if (changed) {
+    saveGroups(groupsData);
   }
 }
 
@@ -455,15 +478,17 @@ async function drawGroupsForEvent(eventKey) {
   });
 
   const storedEvent = {
-    eventKey,
-    cycleKey: event.cycleKey,
-    label: event.label,
-    format,
-    createdAt: new Date().toISOString(),
-    groupRolesAssignedAt: null,
-    groupRolesCleanedAt: null,
-    groups: {},
-  };
+  eventKey,
+  cycleKey: event.cycleKey,
+  label: event.label,
+  format,
+  createdAt: new Date().toISOString(),
+  resetAt: event.resetAt,
+  groupRolesAssignedAt: null,
+  groupRolesCleanedAt: null,
+  groupChannelsCleanedAt: null,
+  groups: {},
+};
 
   for (const letter of groupLetters) {
     const channelId = getChannelIdForLetter(letter);
@@ -521,7 +546,7 @@ async function reconcileAutoDraw() {
     await drawGroupsForEvent('saturday');
   }
 
-  await cleanupExpiredGroupRoles();
+  await cleanupGroupsAfterReset();
 }
 
 // =========================
@@ -569,12 +594,7 @@ module.exports = {
       return false;
     }
 
-    setTimeout(async () => {
-      try {
-        await message.delete();
-      } catch (error) {}
-    }, 10 * 60 * 1000);
-
+    
     return false;
   },
 };
