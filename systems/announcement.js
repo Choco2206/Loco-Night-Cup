@@ -305,6 +305,8 @@ async function sendPlacementMessage(channel, { place, emoji, team, text, color, 
 async function sendTournamentCeremonyIfReady(client, eventKey) {
   const channelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
+  console.log('ANNOUNCEMENT_CHANNEL_ID:', process.env.ANNOUNCEMENT_CHANNEL_ID);
+
   if (!channelId) {
     console.error('❌ ANNOUNCEMENT_CHANNEL_ID fehlt in der .env');
     return false;
