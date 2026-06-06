@@ -421,25 +421,31 @@ function getQualifiedTeamsFromGroups(eventKey) {
   }
 
   if (format === 24) {
-    const winners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][0]));
-    const runners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][1]));
-    const thirds = groupLetters.map(letter => cloneTeam(groupPlacements[letter][2]));
-    const bestThirds = sortRows(thirds).slice(0, 4).map(cloneTeam);
+  const winners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][0]));
+  const runners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][1]));
 
-    return {
-      format,
-      roundOf16: [
-        [winners[0], bestThirds[3]],
-        [winners[1], bestThirds[2]],
-        [winners[2], bestThirds[1]],
-        [winners[3], bestThirds[0]],
-        [winners[4], runners[5]],
-        [winners[5], runners[4]],
-        [runners[0], runners[3]],
-        [runners[1], runners[2]],
-      ],
-    };
-  }
+  const thirdRows = groupLetters
+    .map(letter => groupPlacements[letter][2])
+    .filter(Boolean);
+
+  const bestThirds = sortRows(thirdRows)
+    .slice(0, 4)
+    .map(cloneTeam);
+
+  return {
+    format,
+    roundOf16: [
+      [winners[0], bestThirds[3]],
+      [winners[1], bestThirds[2]],
+      [winners[2], bestThirds[1]],
+      [winners[3], bestThirds[0]],
+      [winners[4], runners[5]],
+      [winners[5], runners[4]],
+      [runners[0], runners[3]],
+      [runners[1], runners[2]],
+    ],
+  };
+}
 
   if (format === 32) {
     return {
