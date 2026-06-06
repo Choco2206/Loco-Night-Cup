@@ -18,6 +18,7 @@ const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
 const KO_CLEANUP_GRACE_MS = 0;
+const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 
 let clientRef = null;
 let intervalRef = null;
@@ -76,6 +77,20 @@ function loadResults() {
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von results.json:', error);
+    return { friday: null, saturday: null };
+  }
+  
+function loadCheckins() {
+  try {
+    if (!fs.existsSync(CHECKINS_FILE)) return { friday: null, saturday: null };
+    const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+    };
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von checkins.json:', error);
     return { friday: null, saturday: null };
   }
 }
@@ -397,6 +412,7 @@ async function purgeKoChannel(channelId) {
 async function cleanupKoAfterReset() {
   const koData = loadKo();
   const groupsData = loadGroups();
+const checkinsData = loadCheckins();
   let changed = false;
 
   for (const eventKey of ['friday', 'saturday']) {
@@ -405,7 +421,10 @@ async function cleanupKoAfterReset() {
 
     if (event.koChannelsCleanedAt) continue;
 
-    const resetAt = event.resetAt || groupsData[eventKey]?.resetAt;
+    const resetAt =
+  event.resetAt ||
+  groupsData[eventKey]?.resetAt ||
+  checkinsData[eventKey]?.resetAt;
     if (!resetAt) continue;
 
     if (Date.now() < Number(resetAt) + KO_CLEANUP_GRACE_MS) continue;
