@@ -1313,6 +1313,7 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
     away: Number(awayGoals),
   };
   match.confirmed = true;
+  match.confirmedAt = new Date().toISOString();
 
   if (Number(homeGoals) > Number(awayGoals)) {
     match.winnerTeamId = match.homeTeamId;
@@ -1323,6 +1324,8 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
   }
 
   saveKo(koData);
+  
+  await updateLiveKoRoundMessage(eventKey, roundKey);
 
     await logToLive(
     `✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`
