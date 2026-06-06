@@ -249,13 +249,16 @@ function buildPlacementEmbed({ place, emoji, team, text, color }) {
 
 function buildThanksEmbed() {
   return new EmbedBuilder()
-    .setTitle('❤️ Danke an alle Teilnehmer')
+    .setTitle('❤️ Danke für diesen Cup')
     .setDescription(
       [
-        'Danke an alle Teams fürs Mitmachen.',
-        'Wir hoffen, der Cup hat euch Spaß gemacht.',
+        '**Danke an alle Teams, Manager und Spieler fürs Mitmachen.**',
         '',
-        'Wenn euch das Turnier gefallen hat, erzählt es gern weiter und macht andere Teams auf den Cup aufmerksam.',
+        'Der erste Loco Night Cup ist gespielt und genau so soll es weitergehen.',
+        '',
+        'Wenn euch das Turnier gefallen hat, erzählt es gerne weiter und bringt beim nächsten Mal wieder Teams mit.',
+        '',
+        'GG an alle. Bis zum nächsten Cup. 🏆',
       ].join('\n')
     )
     .setColor(0xff0000);
@@ -279,9 +282,9 @@ async function sendPlacementMessage(channel, { place, emoji, team, text, color, 
   });
 
   const payload = {
-    content: mentions || undefined,
-    embeds: [embed],
-  };
+  embeds: [embed],
+  allowedMentions: { parse: ['users'] },
+};
 
   if (useLogo) {
     const logoPath = getLogoPath(team.logoFile);
