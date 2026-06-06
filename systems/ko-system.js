@@ -82,8 +82,6 @@ function loadResults() {
 }
 
 function loadCheckins() {
-  
-function loadCheckins() {
   try {
     if (!fs.existsSync(CHECKINS_FILE)) return { friday: null, saturday: null };
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
