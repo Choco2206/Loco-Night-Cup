@@ -17,6 +17,7 @@ const { sendTournamentCeremonyIfReady } = require('./announcement');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
+const KO_CLEANUP_GRACE_MS = 0;
 
 let clientRef = null;
 let intervalRef = null;
@@ -372,6 +373,66 @@ async function deleteMessageIfExists(channelId, messageId) {
     console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
   }
 }
+async function purgeKoChannel(channelId) {
+  const channel = await fetchChannel(channelId);
+  if (!channel) return;
+
+  try {
+    let messages;
+
+    do {
+      messages = await channel.messages.fetch({ limit: 100 });
+
+      const deletable = messages.filter(message => !message.pinned);
+
+      if (deletable.size > 0) {
+        await channel.bulkDelete(deletable, true);
+      }
+    } while (messages.size === 100);
+  } catch (error) {
+    console.error(`❌ K.O.-Kanal konnte nicht geleert werden: ${channelId}`, error);
+  }
+}
+
+async function cleanupKoAfterReset() {
+  const koData = loadKo();
+  const groupsData = loadGroups();
+  let changed = false;
+
+  for (const eventKey of ['friday', 'saturday']) {
+    const event = koData[eventKey];
+    if (!event || !event.rounds) continue;
+
+    if (event.koChannelsCleanedAt) continue;
+
+    const resetAt = event.resetAt || groupsData[eventKey]?.resetAt;
+    if (!resetAt) continue;
+
+    if (Date.now() < Number(resetAt) + KO_CLEANUP_GRACE_MS) continue;
+
+    for (const round of Object.values(event.rounds)) {
+      if (round?.matches) {
+        await removeKoRolesFromMatches(round.matches);
+      }
+
+      if (round?.channelId) {
+        await purgeKoChannel(round.channelId);
+      }
+    }
+
+    event.resetAt = resetAt;
+    event.koRolesCleanedAt = new Date().toISOString();
+    event.koChannelsCleanedAt = new Date().toISOString();
+
+    changed = true;
+
+    console.log(`✅ K.O.-Kanäle für ${event.label} um 07:00 Uhr bereinigt.`);
+  }
+
+  if (changed) {
+    saveKo(koData);
+  }
+}
 
 async function fetchGuildFromKoChannels() {
   const channelIds = [
@@ -585,12 +646,15 @@ async function createInitialKoRound(eventKey) {
   if (!qualified) return;
 
   const eventStore = {
-    cycleKey: groupEvent.cycleKey,
-    label: groupEvent.label,
-    format: qualified.format,
-    createdAt: new Date().toISOString(),
-    rounds: {},
-  };
+  cycleKey: groupEvent.cycleKey,
+  label: groupEvent.label,
+  format: qualified.format,
+  createdAt: new Date().toISOString(),
+  resetAt: groupEvent.resetAt,
+  koChannelsCleanedAt: null,
+  koRolesCleanedAt: null,
+  rounds: {},
+};
 
   if (qualified.semiFinal) {
     eventStore.rounds.semiFinal = {
@@ -852,6 +916,8 @@ async function reconcileKoAuto() {
 
     await advanceKoIfReady('friday');
     await advanceKoIfReady('saturday');
+    
+    await cleanupKoAfterReset();
   } finally {
     koProcessing = false;
   }
