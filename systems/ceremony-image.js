@@ -184,7 +184,7 @@ async function generateCeremonyImage({
 
   const secondLogo = await logoOverlay(
     secondLogoPath,
-    310,
+    350,
     455,
     240
   );
