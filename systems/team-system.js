@@ -997,23 +997,36 @@ async function handleLogoUpload(message) {
   if (message.channel.id !== process.env.TEAM_REGISTER_CHANNEL_ID) return false;
   if (message.attachments.size === 0) return false;
 
-  const pending = pendingLogoUploads.get(message.author.id);
-  if (!pending) return false;
+  const teams = readTeams();
 
+const pending = pendingLogoUploads.get(message.author.id);
+
+let team = null;
+
+if (pending) {
   if (pending.channelId !== message.channel.id) return false;
+
+  if (Date.now() <= pending.expiresAt) {
+    team = teams.find(
+      t =>
+        t.id === pending.teamId &&
+        String(t.managerId) === String(message.author.id)
+    );
+  }
 
   if (Date.now() > pending.expiresAt) {
     pendingLogoUploads.delete(message.author.id);
-    return false;
   }
+}
 
-  const teams = readTeams();
-  const team = teams.find(t => t.id === pending.teamId && String(t.managerId) === String(message.author.id));
+// Fallback: Falls der Bot neu gestartet wurde und pendingLogoUploads leer ist
+if (!team) {
+  team = teams.find(t => String(t.managerId) === String(message.author.id));
+}
 
-  if (!team) {
-    pendingLogoUploads.delete(message.author.id);
-    return false;
-  }
+if (!team) {
+  return false;
+}
 
   const attachment = message.attachments.first();
   if (!attachment) return false;
@@ -1026,7 +1039,8 @@ if (!fs.existsSync(logosDir)) {
   fs.mkdirSync(logosDir, { recursive: true });
 }
 
-const response = await fetch(attachment.url);
+try {
+  const response = await fetch(attachment.url);
 
   if (!response.ok) {
     throw new Error(`Download fehlgeschlagen: ${response.status}`);
@@ -1034,6 +1048,15 @@ const response = await fetch(attachment.url);
 
   const arrayBuffer = await response.arrayBuffer();
   fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+} catch (error) {
+  console.error('❌ Logo konnte nicht gespeichert werden:', error);
+
+  await message.reply({
+    content: `❌ Logo konnte nicht gespeichert werden. Bitte lade es nochmal als PNG, JPG oder WEBP hoch.`,
+  }).catch(() => {});
+
+  return true;
+}
 
   team.logoFile = fileName;
   team.updatedAt = new Date().toISOString();
