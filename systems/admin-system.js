@@ -1289,6 +1289,22 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
     throw new Error('In der K.O.-Phase ist kein Unentschieden erlaubt.');
   }
 
+  // Alte Bestätigungsnachricht löschen, falls vorher ein Team gemeldet hatte
+  if (match.confirmationMessageId) {
+    const channel = await fetchChannel(round.channelId);
+
+    if (channel) {
+      const message = await fetchMessage(channel, match.confirmationMessageId);
+
+      if (message) {
+        await message.delete().catch(() => {});
+      }
+    }
+
+    match.confirmationMessageId = null;
+  }
+
+  // Admin überschreibt alles und bestätigt direkt final
   match.status = 'confirmed';
   match.reportedByTeamId = 'admin-manual';
   match.reportedScore = {
@@ -1306,8 +1322,12 @@ async function manualSetKoResult(eventKey, roundKey, matchNumber, homeGoals, awa
   }
 
   saveKo(koData);
+
   await updateLiveKoRoundMessage(eventKey, roundKey);
-  await logToLive(`✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`);
+
+  await logToLive(
+    `✏️ Admin-Korrektur ${getRoundLabel(roundKey)}: ${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}`
+  );
 }
 function addByeTeamToCheckins(eventKey) {
   const checkins = loadCheckins();
