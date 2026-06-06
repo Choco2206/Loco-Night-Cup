@@ -170,6 +170,7 @@ function getCycleConfig(type) {
 );
 
 const start = new Date(deadline.getTime() + 30 * 60 * 1000);
+const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
 
     return {
       key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -177,6 +178,7 @@ const start = new Date(deadline.getTime() + 30 * 60 * 1000);
       label: 'Freitag',
       channelId: process.env.FRIDAY_CHECKIN_CHANNEL_ID,
       deadlineAt: deadline.getTime(),
+      lateDeadlineAt: lateDeadline.getTime(),
       startAt: start.getTime(),
       resetAt: resetAt.getTime(),
       displayDate: formatDateGerman(deadline),
@@ -190,6 +192,7 @@ const start = new Date(deadline.getTime() + 30 * 60 * 1000);
 );
 
 const start = new Date(deadline.getTime() + 30 * 60 * 1000);
+const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
 
   return {
     key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -197,6 +200,7 @@ const start = new Date(deadline.getTime() + 30 * 60 * 1000);
     label: 'Samstag',
     channelId: process.env.SATURDAY_CHECKIN_CHANNEL_ID,
     deadlineAt: deadline.getTime(),
+    lateDeadlineAt: lateDeadline.getTime(),
     startAt: start.getTime(),
     resetAt: resetAt.getTime(),
     displayDate: formatDateGerman(deadline),
@@ -397,9 +401,10 @@ function buildMainEmbed(event) {
     `**${statusLine}**`,
     `📅 **Datum:** ${event.displayDate}`,
     '',
-`⏰ **Anmeldeschluss:** 23:30 Uhr`,
+`⏰ **Offizieller Anmeldeschluss:** 23:30 Uhr`,
+`🕚 **Nachmeldungen möglich bis:** 23:44 Uhr`,
 `🎲 **Gruppenauslosung:** 23:45 Uhr`,
-`⌛ **Noch offen:** ${formatCountdown(event.deadlineAt)}`,
+`⌛ **Nachmeldefrist endet in:** ${formatCountdown(event.lateDeadlineAt || event.deadlineAt)}`,
     '',
     `🚀 **Turnierstart:** 00:00 Uhr`,
     `${event.startLine}`,
@@ -446,7 +451,8 @@ function buildMainEmbed(event) {
 }
 
 function buildMainButtons(event) {
-  const disabled = event.finalized || Date.now() >= event.deadlineAt;
+  const lateDeadlineAt = event.lateDeadlineAt || event.deadlineAt;
+const disabled = Date.now() >= lateDeadlineAt;
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -541,7 +547,8 @@ function createNewEventState(type, previousState = null) {
     label: cfg.label,
     channelId: cfg.channelId,
     deadlineAt: cfg.deadlineAt,
-    startAt: cfg.startAt,
+lateDeadlineAt: cfg.lateDeadlineAt,
+startAt: cfg.startAt,
     resetAt: cfg.resetAt,
     displayDate: cfg.displayDate,
     startLine: cfg.startLine,
@@ -706,7 +713,8 @@ async function reconcileEvent(type, data) {
   }
 
   current.deadlineAt = cfg.deadlineAt;
-  current.startAt = cfg.startAt;
+current.lateDeadlineAt = cfg.lateDeadlineAt;
+current.startAt = cfg.startAt;
   current.resetAt = cfg.resetAt;
   current.displayDate = cfg.displayDate;
   current.startLine = cfg.startLine;
@@ -777,7 +785,9 @@ async function handleJoin(interaction, type) {
     return true;
   }
 
-  if (event.finalized || Date.now() >= event.deadlineAt) {
+  const lateDeadlineAt = event.lateDeadlineAt || event.deadlineAt;
+
+if (Date.now() >= lateDeadlineAt) {
     await interaction.reply({
       content: '❌ Die Anmeldung ist bereits geschlossen.',
       flags: MessageFlags.Ephemeral,
@@ -830,7 +840,9 @@ async function handleLeave(interaction, type) {
     return true;
   }
 
-  if (event.finalized || Date.now() >= event.deadlineAt) {
+  const lateDeadlineAt = event.lateDeadlineAt || event.deadlineAt;
+
+if (Date.now() >= lateDeadlineAt) {
     await interaction.reply({
       content: '❌ Die Anmeldung ist bereits geschlossen.',
       flags: MessageFlags.Ephemeral,
