@@ -90,6 +90,21 @@ function getFileExtension(attachment) {
   return 'png';
 }
 
+function normalizeClubName(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase();
+}
+
+function isDuplicateClubName(teams, clubName, ignoreTeamId = null) {
+  const normalizedName = normalizeClubName(clubName);
+
+  return teams.some(team => {
+    if (ignoreTeamId && String(team.id) === String(ignoreTeamId)) return false;
+    return normalizeClubName(team.clubName) === normalizedName;
+  });
+}
+
 function formatUserMention(userId) {
   const id = String(userId || '').trim();
   return id ? `<@${id}>` : '—';
@@ -342,7 +357,7 @@ function buildMyTeamButtons(team) {
   const coCount = Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0;
   const hasCoManagers = coCount > 0;
 
-  return new ActionRowBuilder().addComponents(
+  const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('team_add_covm_open')
       .setLabel('➕ Co-VM hinzufügen')
@@ -352,12 +367,21 @@ function buildMyTeamButtons(team) {
       .setCustomId('team_remove_covm_open')
       .setLabel('➖ Co-VM entfernen')
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!hasCoManagers),
+      .setDisabled(!hasCoManagers)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('team_logo_update_open')
+      .setLabel('🖼️ Logo hochladen/ändern')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('team_delete_open')
       .setLabel('🗑️ Team abmelden')
       .setStyle(ButtonStyle.Danger)
   );
+
+  return [row1, row2];
 }
 
 async function sendMyTeamOverview(interaction, team) {
@@ -373,7 +397,7 @@ async function sendMyTeamOverview(interaction, team) {
 
       await interaction.reply({
         embeds: [embed],
-        components: [row],
+        components: row,
         files: [attachment],
         flags: MessageFlags.Ephemeral,
         allowedMentions: { parse: ['users'] },
@@ -385,7 +409,7 @@ async function sendMyTeamOverview(interaction, team) {
 
   await interaction.reply({
     embeds: [embed],
-    components: [row],
+    components: row,
     flags: MessageFlags.Ephemeral,
     allowedMentions: { parse: ['users'] },
   });
@@ -650,6 +674,34 @@ async function handleTeamButtons(interaction) {
 
     return true;
   }
+
+if (interaction.customId === 'team_logo_update_open') {
+  const teams = readTeams();
+  const team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+
+  if (!team) {
+    await interaction.reply({
+      content: '❌ Nur der Vereinsmanager kann das Teamlogo ändern.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  pendingLogoUploads.set(interaction.user.id, {
+    teamId: team.id,
+    channelId: process.env.TEAM_REGISTER_CHANNEL_ID,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+
+  await interaction.reply({
+    content:
+      `🖼️ Lade jetzt dein neues Teamlogo für **${team.clubName}** in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
+      `Du hast dafür 10 Minuten Zeit.`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
 
   if (interaction.customId === 'team_delete_open') {
     const teams = readTeams();
@@ -948,6 +1000,13 @@ async function handleTeamModals(interaction) {
   const teams = readTeams();
 
   let team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+
+if (isDuplicateClubName(teams, clubName, team?.id || null)) {
+  await interaction.editReply({
+    content: `❌ Der Teamname **${clubName}** ist bereits vergeben. Bitte wähle einen anderen Namen.`,
+  });
+  return true;
+}
 
   if (team) {
     team.clubName = clubName;
