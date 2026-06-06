@@ -411,4 +411,6 @@ module.exports = {
   sendTournamentCeremonyIfReady,
   hasCeremonyAlreadyPosted,
   resetCeremonyPosted,
+  buildCeremonyText,
+  getLogoPath,
 };
