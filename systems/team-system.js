@@ -1019,10 +1019,14 @@ async function handleLogoUpload(message) {
   if (!attachment) return false;
 
   const ext = getFileExtension(attachment);
-  const fileName = `${team.id}.${ext}`;
-  const filePath = path.join(logosDir, fileName);
+const fileName = `${team.id}.${ext}`;
+const filePath = path.join(logosDir, fileName);
 
-  const response = await fetch(attachment.url);
+if (!fs.existsSync(logosDir)) {
+  fs.mkdirSync(logosDir, { recursive: true });
+}
+
+const response = await fetch(attachment.url);
 
   if (!response.ok) {
     throw new Error(`Download fehlgeschlagen: ${response.status}`);
