@@ -403,6 +403,7 @@ function buildLiveControlEmbed() {
         '• Team bearbeiten',
         '• Registriertes Team löschen per Auswahl',
         '• Backup / Team nachrücken',
+        '• Team aus Check-in abmelden',
         '• Gruppenergebnis manuell setzen',
         '• K.O.-Ergebnis manuell setzen',
         '• Manager ohne Team anzeigen',
@@ -431,15 +432,21 @@ function buildLiveControlRows() {
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('live_delete_team')
-      .setLabel('🗑️ Team löschen')
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId('live_manual_backup')
-      .setLabel('🔁 Nachrücken')
-      .setStyle(ButtonStyle.Secondary)
-  );
+  new ButtonBuilder()
+    .setCustomId('live_delete_team')
+    .setLabel('🗑️ Team löschen')
+    .setStyle(ButtonStyle.Danger),
+
+  new ButtonBuilder()
+    .setCustomId('live_manual_backup')
+    .setLabel('🔁 Nachrücken')
+    .setStyle(ButtonStyle.Secondary),
+
+  new ButtonBuilder()
+    .setCustomId('live_remove_checkin_team')
+    .setLabel('🚪 Check-in abmelden')
+    .setStyle(ButtonStyle.Danger)
+);
 
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -1478,6 +1485,49 @@ function removeByeTeamFromCheckins(eventKey) {
   };
 }
 
+function removeTeamFromCheckin(eventKey, teamId) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event) {
+    throw new Error('Event nicht gefunden.');
+  }
+
+  if (event.finalized) {
+    throw new Error('Dieses Event ist bereits finalisiert. Nutze ab jetzt lieber Nachrücken oder manuelle Anpassung.');
+  }
+
+  if (!Array.isArray(event.teams) || !event.teams.length) {
+    throw new Error('Für dieses Event gibt es keine eingecheckten Teams.');
+  }
+
+  const teamIndex = event.teams.findIndex(team =>
+    String(team.teamId || team.id) === String(teamId)
+  );
+
+  if (teamIndex === -1) {
+    throw new Error('Team wurde im Check-in nicht gefunden.');
+  }
+
+  const removedTeam = event.teams[teamIndex];
+
+  event.teams.splice(teamIndex, 1);
+
+  const removedTeamId = String(removedTeam.teamId || removedTeam.id);
+
+if (event.backupDecisions && event.backupDecisions[removedTeamId]) {
+  delete event.backupDecisions[removedTeamId];
+}
+
+  saveCheckins(checkins);
+
+  return {
+    event,
+    removedTeam,
+    totalTeams: event.teams.length,
+  };
+}
+
 
 // =========================
 // SELECT BUILDERS
@@ -1514,6 +1564,37 @@ function buildActiveBackupEventSelect(customId) {
       .setPlaceholder('Event auswählen')
       .addOptions(options)
   );
+}
+
+function buildCheckinTeamSelectRows(eventKey) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event?.teams?.length) return [];
+
+  const entries = event.teams.map((team, index) => ({
+    team,
+    slotNumber: index + 1,
+  }));
+
+  const chunks = chunkArray(entries, 25);
+
+  return chunks.slice(0, 5).map((chunk, index) => {
+    return new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`live_remove_checkin_team_select:${eventKey}:${index}`)
+        .setPlaceholder(`Team aus Check-in entfernen (${index + 1}/${chunks.length})`)
+        .addOptions(
+          chunk.map(entry => ({
+            label: `${entry.slotNumber}. ${safeText(entry.team.clubName)}`.slice(0, 100),
+            value: String(entry.team.teamId || entry.team.id),
+            description: entry.team.isByeTeam
+              ? 'Freilos-Team'
+              : `Slot ${entry.slotNumber} im Check-in`,
+          }))
+        )
+    );
+  });
 }
 
 function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
@@ -1614,6 +1695,7 @@ module.exports = {
           'live_edit_team',
           'live_delete_team',
           'live_manual_backup',
+          'live_remove_checkin_team',
           'live_manual_group_result',
           'live_manual_ko_result',
           'live_managers_without_team',
@@ -1881,6 +1963,25 @@ module.exports = {
 
         return true;
       }
+
+if (interaction.customId === 'live_remove_checkin_team') {
+  const row = buildActiveBackupEventSelect('live_remove_checkin_event');
+
+  if (!row) {
+    await replyTemp(interaction, {
+      content: '❌ Aktuell gibt es kein aktives Event mit eingecheckten Teams.',
+    });
+    return true;
+  }
+
+  await interaction.reply({
+    content: '🚪 Für welches Event möchtest du ein Team aus dem Check-in abmelden?',
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
 
       if (interaction.customId === 'live_manual_group_result') {
         await interaction.reply({
@@ -2480,7 +2581,62 @@ if (interaction.customId === 'live_remove_bye_event') {
     });
   }
 
+        return true;
+}
+
+if (interaction.customId === 'live_remove_checkin_event') {
+  const eventKey = interaction.values[0];
+
+  const rows = buildCheckinTeamSelectRows(eventKey);
+
+  if (!rows.length) {
+    await interaction.update({
+      content: '❌ Für dieses Event gibt es keine eingecheckten Teams.',
+      components: [],
+    });
     return true;
+  }
+
+  await interaction.update({
+    content: '🚪 Wähle das Team aus, das aus dem Check-in abgemeldet werden soll.',
+    components: rows,
+  });
+
+  return true;
+}
+
+if (interaction.customId.startsWith('live_remove_checkin_team_select:')) {
+  const [, eventKey] = interaction.customId.split(':');
+  const teamId = interaction.values[0];
+
+  try {
+    const result = removeTeamFromCheckin(eventKey, teamId);
+
+    if (checkinSystem.refreshEvent) {
+      await checkinSystem.refreshEvent(eventKey);
+    }
+
+    await logToLive(
+      `🚪 Check-in abgemeldet: ${result.removedTeam.clubName} aus ${result.event.label || eventKey}. Teams jetzt: ${result.totalTeams}`
+    );
+
+    await interaction.update({
+      content: [
+        `✅ **${result.removedTeam.clubName}** wurde aus dem Check-in abgemeldet.`,
+        '',
+        `Event: **${result.event.label || eventKey}**`,
+        `Teams jetzt: **${result.totalTeams}**`,
+      ].join('\n'),
+      components: [],
+    });
+  } catch (error) {
+    await interaction.update({
+      content: `❌ ${error.message}`,
+      components: [],
+    });
+  }
+
+  return true;
 }
 
     }
