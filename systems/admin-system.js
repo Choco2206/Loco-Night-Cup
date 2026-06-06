@@ -16,7 +16,11 @@ const {
 
 const teamSystem = require('./team-system');
 const checkinSystem = require('./checkin-system');
-const { sendTournamentCeremonyIfReady } = require('./announcement');
+const {
+  sendTournamentCeremonyIfReady,
+  buildCeremonyText,
+  getLogoPath,
+} = require('./announcement');
 const { generateCeremonyImage } = require('./ceremony-image');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
@@ -191,15 +195,24 @@ async function sendTestCeremony(interaction) {
     throw new Error('Ankündigungskanal nicht gefunden. Prüfe ANNOUNCEMENT_CHANNEL_ID.');
   }
 
+  const teams = getLiveTeams();
+
+  if (teams.length < 3) {
+    throw new Error('Für den Test brauchst du mindestens 3 registrierte Teams.');
+  }
+
+  const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+  const [first, second, third] = shuffledTeams.slice(0, 3);
+
   const imagePath = await generateCeremonyImage({
     eventKey: 'friday',
     eventLabel: 'TEST CUP',
-    first: { clubName: 'Loco United' },
-    second: { clubName: 'Night Kings' },
-    third: { clubName: 'Red Wolves' },
-    firstLogoPath: null,
-    secondLogoPath: null,
-    thirdLogoPath: null,
+    first,
+    second,
+    third,
+    firstLogoPath: getLogoPath(first.logoFile),
+    secondLogoPath: getLogoPath(second.logoFile),
+    thirdLogoPath: getLogoPath(third.logoFile),
   });
 
   const attachment = new AttachmentBuilder(imagePath, {
@@ -207,8 +220,18 @@ async function sendTestCeremony(interaction) {
   });
 
   await channel.send({
-    content: '🧪 **Test-Siegerehrung**',
+    content: '@everyone',
     files: [attachment],
+    allowedMentions: {
+      parse: ['everyone'],
+    },
+  });
+
+  await channel.send({
+    content: buildCeremonyText('TEST CUP', first, second, third),
+    allowedMentions: {
+      parse: ['users'],
+    },
   });
 }
 
@@ -1869,17 +1892,19 @@ module.exports = {
       }
 
 if (interaction.customId === 'live_test_ceremony') {
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral,
+  });
+
   try {
     await sendTestCeremony(interaction);
 
-    await interaction.reply({
+    await interaction.editReply({
       content: '✅ Test-Siegerehrung wurde gepostet.',
-      flags: MessageFlags.Ephemeral,
     });
   } catch (error) {
-    await interaction.reply({
+    await interaction.editReply({
       content: `❌ ${error.message}`,
-      flags: MessageFlags.Ephemeral,
     });
   }
 
