@@ -391,6 +391,21 @@ function getCurrentMinutes() {
   return now.getHours() * 60 + now.getMinutes();
 }
 
+function getPlannedTimestamp(event, time) {
+  const [hours, minutes] = time.split(':').map(Number);
+
+  const base = event?.createdAt ? new Date(event.createdAt) : new Date();
+  const planned = new Date(base);
+
+  planned.setHours(hours, minutes, 0, 0);
+
+  if (planned.getTime() <= base.getTime()) {
+    planned.setDate(planned.getDate() + 1);
+  }
+
+  return planned.getTime();
+}
+
 function formatMinutes(minutes) {
   const normalized = ((minutes % 1440) + 1440) % 1440;
   const h = String(Math.floor(normalized / 60)).padStart(2, '0');
@@ -663,7 +678,7 @@ async function releaseGroupSlot(eventKey, groupLetter, slot, dynamic = false) {
 releaseState.inviteStart = window.startText;
 releaseState.inviteEnd = window.endText;
 releaseState.releasedAt = nowIso();
-releaseState.lastReminderAt = nowIso();
+releaseState.lastReminderAt = null;
 
   saveResults(resultsData);
 
@@ -685,7 +700,7 @@ async function processGroupReleaseTimes(eventKey) {
   if (!event || !event.groups) return;
 if (isEventInactive(event)) return;
 
-  const nowMinutes = getCurrentMinutes();
+  const nowMs = Date.now();
 
   for (const groupLetter of Object.keys(event.groups)) {
     const resultGroup = event.groups[groupLetter];
@@ -697,8 +712,8 @@ if (isEventInactive(event)) return;
       const releaseState = resultGroup.release.slots[slot.slot];
       if (releaseState.released) continue;
 
-      const plannedStartMinutes = parseTimeToMinutes(slot.plannedStart);
-      if (nowMinutes < plannedStartMinutes) continue;
+      const plannedStartMs = getPlannedTimestamp(event, slot.plannedStart);
+if (nowMs < plannedStartMs) continue;
 
       const previousSlot =
         slot.slot === 1
@@ -713,7 +728,7 @@ if (isEventInactive(event)) return;
       const previousMatches = getMatchesForSlot(resultGroup, previousSlot);
 
       if (areMatchesConfirmed(previousMatches)) {
-        const isLate = nowMinutes > plannedStartMinutes;
+        const isLate = nowMs > plannedStartMs;
         await releaseGroupSlot(eventKey, groupLetter, slot, isLate);
         continue;
       }
@@ -739,10 +754,10 @@ async function processKoWaitingNotices(eventKey) {
   if (!event || !event.groups) return;
   if (isEventInactive(event)) return;
 
-  const nowMinutes = getCurrentMinutes();
-  const koStartMinutes = parseTimeToMinutes(KO_EARLIEST_START);
+  const nowMs = Date.now();
+const koStartMs = getPlannedTimestamp(event, KO_EARLIEST_START);
 
-  if (nowMinutes < koStartMinutes) return;
+if (nowMs < koStartMs) return;
 
   const allFinished = areAllGroupsFinished(event);
   if (allFinished) return;
@@ -1253,7 +1268,6 @@ await interaction.reply({
   flags: MessageFlags.Ephemeral,
 });
 
-await processGroupReleaseTimes(eventKey);
 
 return true;
 }
@@ -1313,8 +1327,6 @@ await interaction.reply({
   content: '❌ Ergebnis wurde abgelehnt. Das Spiel ist jetzt wieder offen und kann neu gemeldet werden.',
   flags: MessageFlags.Ephemeral,
 });
-
-await processGroupReleaseTimes(eventKey);
 
 return true;
 }
