@@ -1873,63 +1873,66 @@ if (interaction.customId === 'live_remove_bye_team') {
       }
 
       if (interaction.customId.startsWith('live_edit_add_covm_select:')) {
-        const [, teamId] = interaction.customId.split(':');
-        const userId = interaction.values?.[0];
-        const teams = loadTeams();
-        const team = teams.find(t => String(t.id) === String(teamId));
+  await interaction.deferUpdate();
 
-        if (!team || !userId) {
-          await interaction.update({
-            content: '❌ Team oder User nicht gefunden.',
-            components: [],
-          });
-          return true;
-        }
+  const [, teamId] = interaction.customId.split(':');
+  const userId = interaction.values?.[0];
+  const teams = loadTeams();
+  const team = teams.find(t => String(t.id) === String(teamId));
 
-        if (!Array.isArray(team.coManagerIds)) {
-          team.coManagerIds = [];
-        }
+  if (!team || !userId) {
+    await interaction.editReply({
+      content: '❌ Team oder User nicht gefunden.',
+      components: [],
+    });
+    return true;
+  }
 
-        if (String(userId) === String(team.managerId)) {
-          await interaction.update({
-            content: '❌ Der Manager kann nicht zusätzlich Co-VM sein.',
-            components: [],
-          });
-          return true;
-        }
+  if (!Array.isArray(team.coManagerIds)) {
+    team.coManagerIds = [];
+  }
 
-        if (team.coManagerIds.map(String).includes(String(userId))) {
-          await interaction.update({
-            content: '❌ Dieser User ist bereits Co-VM.',
-            components: [],
-          });
-          return true;
-        }
+  if (String(userId) === String(team.managerId)) {
+    await interaction.editReply({
+      content: '❌ Der Manager kann nicht zusätzlich Co-VM sein.',
+      components: [],
+    });
+    return true;
+  }
 
-        if (team.coManagerIds.length >= 3) {
-          await interaction.update({
-            content: '❌ Dieses Team hat bereits 3 Co-VMs.',
-            components: [],
-          });
-          return true;
-        }
+  if (team.coManagerIds.map(String).includes(String(userId))) {
+    await interaction.editReply({
+      content: '❌ Dieser User ist bereits Co-VM.',
+      components: [],
+    });
+    return true;
+  }
 
-        team.coManagerIds.push(String(userId));
-        team.updatedAt = new Date().toISOString();
-        saveTeams(teams);
+  if (team.coManagerIds.length >= 3) {
+    await interaction.editReply({
+      content: '❌ Dieses Team hat bereits 3 Co-VMs.',
+      components: [],
+    });
+    return true;
+  }
+  
+  team.coManagerIds.push(String(userId));
+team.updatedAt = new Date().toISOString();
+saveTeams(teams);
 
-        await refreshRegisteredTeamsSafe(interaction.guild);
-        await logToLive(`➕ Co-VM hinzugefügt: ${formatUserMention(userId)} zu ${team.clubName}`);
+await refreshRegisteredTeamsSafe(interaction.guild);
+await logToLive(`➕ Co-VM hinzugefügt: ${formatUserMention(userId)} zu ${team.clubName}`);
 
-        await interaction.update({
-          content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
-          components: [],
-          allowedMentions: { parse: ['users'] },
-        });
+await interaction.editReply({
+  content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
+  components: [],
+  allowedMentions: { parse: ['users'] },
+});
 
-        return true;
-      }
-    }
+return true;
+}
+
+}
 
     // =========================
     // STRING SELECT MENUS
