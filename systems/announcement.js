@@ -80,7 +80,10 @@ function safeText(value, fallback = '—') {
 }
 
 function findTeamById(teamId) {
-  return loadTeams().find(team => String(team.id) === String(teamId)) || null;
+  return loadTeams().find(team =>
+    String(team.id) === String(teamId) ||
+    String(team.teamId) === String(teamId)
+  ) || null;
 }
 
 function buildMentions(team) {
