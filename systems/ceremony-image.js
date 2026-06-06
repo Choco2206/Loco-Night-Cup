@@ -178,21 +178,21 @@ async function generateCeremonyImage({
   const firstLogo = await logoOverlay(
   firstLogoPath,
   810,
-  410, // 20px tiefer
+  430,
   300
 );
 
 const secondLogo = await logoOverlay(
   secondLogoPath,
   350,
-  475, // 20px tiefer
+  495,
   240
 );
 
 const thirdLogo = await logoOverlay(
   thirdLogoPath,
-  1340, // 30px nach links
-  475,  // 20px tiefer
+  1320,
+  495,
   240
 );
 
