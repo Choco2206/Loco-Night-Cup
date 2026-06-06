@@ -216,6 +216,105 @@ function getRoundTimeWindow(format, roundKey) {
   return windowsByFormat[format]?.[roundKey] || '01:00–01:05';
 }
 
+function parseTimeToMinutes(time) {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function getCurrentMinutes() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function formatMinutes(minutes) {
+  const normalized = ((minutes % 1440) + 1440) % 1440;
+  const h = String(Math.floor(normalized / 60)).padStart(2, '0');
+  const m = String(normalized % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function getDynamicWindowFromNow() {
+  const start = getCurrentMinutes();
+  const end = start + INVITE_WINDOW_MINUTES;
+
+  return {
+    startText: formatMinutes(start),
+    endText: formatMinutes(end),
+    windowText: `${formatMinutes(start)}–${formatMinutes(end)}`,
+  };
+}
+
+function getPlannedWindowParts(format, roundKey) {
+  const windowText = getRoundTimeWindow(format, roundKey);
+  const [startText, endText] = windowText.split('–');
+
+  return {
+    startText,
+    endText,
+    windowText,
+  };
+}
+
+function ensureRoundReleaseState(round) {
+  if (!round.release) {
+    round.release = {
+      released: false,
+      releasedAt: null,
+      inviteStart: null,
+      inviteEnd: null,
+      lastReminderAt: null,
+    };
+  }
+}
+
+function isRoundReleased(round) {
+  ensureRoundReleaseState(round);
+  return round.release.released === true;
+}
+
+function canSendKoReminder(lastReminderAt) {
+  if (!lastReminderAt) return true;
+  return Date.now() - new Date(lastReminderAt).getTime() >= KO_REMINDER_INTERVAL_MS;
+}
+
+function getOpenKoMatches(matches) {
+  return matches.filter(match => match.status !== 'confirmed');
+}
+
+function buildKoOpenMatchesText(matches) {
+  if (!matches.length) return 'Keine offenen Spiele gefunden.';
+
+  return matches
+    .map(match => {
+      const homeMentions = [
+        match.homeManagerId,
+        ...(match.homeCoManagerIds || []),
+      ]
+        .filter(Boolean)
+        .map(id => `<@${id}>`)
+        .join(' ');
+
+      const awayMentions = [
+        match.awayManagerId,
+        ...(match.awayCoManagerIds || []),
+      ]
+        .filter(Boolean)
+        .map(id => `<@${id}>`)
+        .join(' ');
+
+      return [
+        `**${match.homeClubName} vs ${match.awayClubName}**`,
+        homeMentions || '*Keine VM/Co-VM gefunden*',
+        awayMentions || '*Keine VM/Co-VM gefunden*',
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
 function cloneTeam(row) {
   return {
     teamId: row.teamId,
@@ -391,6 +490,40 @@ async function deleteMessageIfExists(channelId, messageId) {
     console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
   }
 }
+
+async function sendKoReleaseMessage(eventKey, roundKey, round, startText, endText) {
+  const channel = await fetchChannel(round.channelId);
+  if (!channel) return;
+
+  await channel.send({
+    content: [
+      `✅ **${getRoundLabel(roundKey)} ist freigegeben**`,
+      '',
+      `Die Spiele dürfen jetzt gestartet werden.`,
+      `**Einladezeit: ${startText} – ${endText} Uhr**`,
+      '',
+      `Bitte meldet euer Ergebnis direkt nach dem Spiel über den Button im K.O.-Plan.`,
+    ].join('\n'),
+  });
+}
+
+async function sendKoMissingResultReminder(roundKey, round) {
+  const channel = await fetchChannel(round.channelId);
+  if (!channel) return;
+
+  const openMatches = getOpenKoMatches(round.matches);
+
+  await channel.send({
+    content: [
+      `⚠️ **${getRoundLabel(roundKey)} ist noch nicht abgeschlossen**`,
+      '',
+      `Bitte meldet oder bestätigt die offenen Ergebnisse, damit die nächste K.O.-Runde freigegeben werden kann.`,
+      '',
+      buildKoOpenMatchesText(openMatches),
+    ].join('\n'),
+  });
+}
+
 async function purgeKoChannel(channelId) {
   const channel = await fetchChannel(channelId);
   if (!channel) return;
@@ -685,54 +818,59 @@ async function createInitialKoRound(eventKey) {
       messageId: null,
       matches: createKoMatches(qualified.format, 'semiFinal', qualified.semiFinal),
       completed: false,
+release: {
+  released: false,
+  releasedAt: null,
+  inviteStart: null,
+  inviteEnd: null,
+  lastReminderAt: null,
+},
     };
 
     await assignKoRoleToMatches('semiFinal', eventStore.rounds.semiFinal.matches);
 
-    eventStore.rounds.semiFinal = await sendOrEditRoundMessage(
-      eventKey,
-      'semiFinal',
-      eventStore.rounds.semiFinal,
-      eventStore.label
-    );
   }
 
   if (qualified.quarterFinal) {
     eventStore.rounds.quarterFinal = {
-      channelId: getRoundChannelId('quarterFinal'),
-      roleId: getRoundRoleId('quarterFinal'),
-      messageId: null,
-      matches: createKoMatches(qualified.format, 'quarterFinal', qualified.quarterFinal),
-      completed: false,
-    };
+  channelId: getRoundChannelId('quarterFinal'),
+  roleId: getRoundRoleId('quarterFinal'),
+  messageId: null,
+  matches: createKoMatches(qualified.format, 'quarterFinal', qualified.quarterFinal),
+  completed: false,
+  release: {
+    released: false,
+    releasedAt: null,
+    inviteStart: null,
+    inviteEnd: null,
+    lastReminderAt: null,
+  },
+};
 
     await assignKoRoleToMatches('quarterFinal', eventStore.rounds.quarterFinal.matches);
 
-    eventStore.rounds.quarterFinal = await sendOrEditRoundMessage(
-      eventKey,
-      'quarterFinal',
-      eventStore.rounds.quarterFinal,
-      eventStore.label
-    );
+    
   }
 
   if (qualified.roundOf16) {
     eventStore.rounds.roundOf16 = {
-      channelId: getRoundChannelId('roundOf16'),
-      roleId: getRoundRoleId('roundOf16'),
-      messageId: null,
-      matches: createKoMatches(qualified.format, 'roundOf16', qualified.roundOf16),
-      completed: false,
-    };
+  channelId: getRoundChannelId('roundOf16'),
+  roleId: getRoundRoleId('roundOf16'),
+  messageId: null,
+  matches: createKoMatches(qualified.format, 'roundOf16', qualified.roundOf16),
+  completed: false,
+  release: {
+    released: false,
+    releasedAt: null,
+    inviteStart: null,
+    inviteEnd: null,
+    lastReminderAt: null,
+  },
+};
 
     await assignKoRoleToMatches('roundOf16', eventStore.rounds.roundOf16.matches);
 
-    eventStore.rounds.roundOf16 = await sendOrEditRoundMessage(
-      eventKey,
-      'roundOf16',
-      eventStore.rounds.roundOf16,
-      eventStore.label
-    );
+    
   }
 
   koData[eventKey] = eventStore;
@@ -825,16 +963,18 @@ async function advanceKoIfReady(eventKey) {
         messageId: null,
         matches: createKoMatches(event.format, 'quarterFinal', pairs),
         completed: false,
+        release: {
+  released: false,
+  releasedAt: null,
+  inviteStart: null,
+  inviteEnd: null,
+  lastReminderAt: null,
+},
       };
 
       await assignKoRoleToMatches('quarterFinal', event.rounds.quarterFinal.matches);
 
-      event.rounds.quarterFinal = await sendOrEditRoundMessage(
-        eventKey,
-        'quarterFinal',
-        event.rounds.quarterFinal,
-        event.label
-      );
+      
 
       saveKo(koData);
       return;
@@ -858,16 +998,18 @@ async function advanceKoIfReady(eventKey) {
         messageId: null,
         matches: createKoMatches(event.format, 'semiFinal', pairs),
         completed: false,
+        release: {
+  released: false,
+  releasedAt: null,
+  inviteStart: null,
+  inviteEnd: null,
+  lastReminderAt: null,
+},
       };
 
       await assignKoRoleToMatches('semiFinal', event.rounds.semiFinal.matches);
 
-      event.rounds.semiFinal = await sendOrEditRoundMessage(
-        eventKey,
-        'semiFinal',
-        event.rounds.semiFinal,
-        event.label
-      );
+      
 
       saveKo(koData);
       return;
@@ -889,16 +1031,18 @@ async function advanceKoIfReady(eventKey) {
             messageId: null,
             matches: createKoMatches(event.format, 'final', [[winners[0], winners[1]]]),
             completed: false,
+            release: {
+  released: false,
+  releasedAt: null,
+  inviteStart: null,
+  inviteEnd: null,
+  lastReminderAt: null,
+},
           };
 
           await assignKoRoleToUserIds('final', getUserIdsFromTeams(winners));
 
-          event.rounds.final = await sendOrEditRoundMessage(
-            eventKey,
-            'final',
-            event.rounds.final,
-            event.label
-          );
+          
         }
 
         if (!event.rounds.thirdPlace) {
@@ -908,22 +1052,106 @@ async function advanceKoIfReady(eventKey) {
             messageId: null,
             matches: createKoMatches(event.format, 'thirdPlace', [[losers[0], losers[1]]]),
             completed: false,
+            release: {
+  released: false,
+  releasedAt: null,
+  inviteStart: null,
+  inviteEnd: null,
+  lastReminderAt: null,
+},
           };
 
           await assignKoRoleToUserIds('thirdPlace', getUserIdsFromTeams(losers));
 
-          event.rounds.thirdPlace = await sendOrEditRoundMessage(
-            eventKey,
-            'thirdPlace',
-            event.rounds.thirdPlace,
-            event.label
-          );
+          
         }
 
         saveKo(koData);
         return;
       }
     }
+  }
+}
+
+async function releaseKoRound(eventKey, roundKey, dynamic = false) {
+  const koData = loadKo();
+  const event = koData[eventKey];
+  const round = event?.rounds?.[roundKey];
+
+  if (!event || !round) return;
+
+  ensureRoundReleaseState(round);
+
+  if (round.release.released) return;
+
+  const window = dynamic
+    ? getDynamicWindowFromNow()
+    : getPlannedWindowParts(event.format, roundKey);
+
+  for (const match of round.matches) {
+    match.timeWindow = window.windowText;
+  }
+
+  round.release.released = true;
+  round.release.releasedAt = nowIso();
+  round.release.inviteStart = window.startText;
+  round.release.inviteEnd = window.endText;
+round.release.lastReminderAt = nowIso();
+
+  saveKo(koData);
+
+  await sendKoReleaseMessage(eventKey, roundKey, round, window.startText, window.endText);
+
+  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
+  saveKo(koData);
+}
+
+async function processKoReleaseTimes(eventKey) {
+  const koData = loadKo();
+  const event = koData[eventKey];
+
+  if (!event || !event.rounds) return;
+
+  const nowMinutes = getCurrentMinutes();
+
+  for (const roundKey of Object.keys(event.rounds)) {
+    const round = event.rounds[roundKey];
+    if (!round) continue;
+
+    ensureRoundReleaseState(round);
+
+    if (round.release.released) continue;
+
+    const planned = getPlannedWindowParts(event.format, roundKey);
+    const plannedStartMinutes = parseTimeToMinutes(planned.startText);
+
+    if (nowMinutes < plannedStartMinutes) continue;
+
+    await releaseKoRound(eventKey, roundKey, nowMinutes > plannedStartMinutes);
+  }
+}
+
+async function processKoReminders(eventKey) {
+  const koData = loadKo();
+  const event = koData[eventKey];
+
+  if (!event || !event.rounds) return;
+
+  for (const roundKey of Object.keys(event.rounds)) {
+    const round = event.rounds[roundKey];
+    if (!round) continue;
+
+    ensureRoundReleaseState(round);
+
+    if (!round.release.released) continue;
+    if (roundIsComplete(round)) continue;
+
+    if (!canSendKoReminder(round.release.lastReminderAt)) continue;
+
+    round.release.lastReminderAt = nowIso();
+    saveKo(koData);
+
+    await sendKoMissingResultReminder(roundKey, round);
   }
 }
 
@@ -938,6 +1166,12 @@ async function reconcileKoAuto() {
 
     await advanceKoIfReady('friday');
     await advanceKoIfReady('saturday');
+    
+    await processKoReleaseTimes('friday');
+await processKoReleaseTimes('saturday');
+
+await processKoReminders('friday');
+await processKoReminders('saturday');
     
     await cleanupKoAfterReset();
   } finally {
@@ -988,6 +1222,14 @@ async function handleOpenResult(interaction, eventKey, roundKey) {
     return true;
   }
 
+  if (!isRoundReleased(round)) {
+    await interaction.reply({
+      content: `❌ ${getRoundLabel(roundKey)} wurde noch nicht freigegeben.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
   const allowedMatches = round.matches.filter(match => {
   if (match.status === 'reported') return false;
   if (match.status === 'confirmed') return false;
@@ -1033,6 +1275,14 @@ async function handleSelectResult(interaction, eventKey, roundKey) {
   if (!round) {
     await interaction.reply({
       content: '❌ Runde nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (!isRoundReleased(round)) {
+    await interaction.reply({
+      content: `❌ ${getRoundLabel(roundKey)} wurde noch nicht freigegeben.`,
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -1103,6 +1353,14 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
   }
 
   const { round, match } = found;
+  
+  if (!isRoundReleased(round)) {
+  await interaction.reply({
+    content: `❌ ${getRoundLabel(roundKey)} wurde noch nicht freigegeben.`,
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
   
   if (match.status === 'reported') {
   await interaction.reply({
