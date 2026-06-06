@@ -402,6 +402,23 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function isEventExpired(event) {
+  if (event?.resetAt) {
+    return Date.now() >= Number(event.resetAt);
+  }
+
+  if (event?.createdAt) {
+    const ageMs = Date.now() - new Date(event.createdAt).getTime();
+    return ageMs >= 8 * 60 * 60 * 1000;
+  }
+
+  return false;
+}
+
+function isEventInactive(event) {
+  return !event || event.completed || event.archived || isEventExpired(event);
+}
+
 function minutesWindowFromNow() {
   const start = getCurrentMinutes();
   const end = start + INVITE_WINDOW_MINUTES;
@@ -643,9 +660,10 @@ async function releaseGroupSlot(eventKey, groupLetter, slot, dynamic = false) {
   }
 
   releaseState.released = true;
-  releaseState.inviteStart = window.startText;
-  releaseState.inviteEnd = window.endText;
-  releaseState.releasedAt = nowIso();
+releaseState.inviteStart = window.startText;
+releaseState.inviteEnd = window.endText;
+releaseState.releasedAt = nowIso();
+releaseState.lastReminderAt = nowIso();
 
   saveResults(resultsData);
 
@@ -665,6 +683,7 @@ async function processGroupReleaseTimes(eventKey) {
   const event = resultsData[eventKey];
 
   if (!event || !event.groups) return;
+if (isEventInactive(event)) return;
 
   const nowMinutes = getCurrentMinutes();
 
@@ -718,6 +737,7 @@ async function processKoWaitingNotices(eventKey) {
   const event = resultsData[eventKey];
 
   if (!event || !event.groups) return;
+  if (isEventInactive(event)) return;
 
   const nowMinutes = getCurrentMinutes();
   const koStartMinutes = parseTimeToMinutes(KO_EARLIEST_START);
@@ -746,7 +766,7 @@ async function processKoWaitingNotices(eventKey) {
       continue;
     }
 
-    if (canSendReminder(resultGroup.release.koWaiting.lastBlockerNoticeAt)) {
+        if (canSendReminder(resultGroup.release.koWaiting.lastBlockerNoticeAt)) {
       resultGroup.release.koWaiting.lastBlockerNoticeAt = nowIso();
       saveResults(resultsData);
 
@@ -767,9 +787,15 @@ async function createScheduleForEvent(eventKey) {
   if (!event || !event.groups) return;
 
   const existing = resultsData[eventKey];
-  if (existing && existing.cycleKey === event.cycleKey) {
-    return;
-  }
+
+if (existing && existing.cycleKey === event.cycleKey && !existing.resetAt && event.resetAt) {
+  existing.resetAt = event.resetAt;
+  saveResults(resultsData);
+}
+
+if (existing && existing.cycleKey === event.cycleKey) {
+  return;
+}
 
   if (existing && existing.groups) {
     for (const letter of Object.keys(existing.groups)) {
@@ -791,13 +817,16 @@ async function createScheduleForEvent(eventKey) {
   }
 
   const storedEvent = {
-    eventKey,
-    cycleKey: event.cycleKey,
-    label: event.label,
-    format: event.format,
-    createdAt: new Date().toISOString(),
-    groups: {},
-  };
+  eventKey,
+  cycleKey: event.cycleKey,
+  label: event.label,
+  format: event.format,
+  createdAt: new Date().toISOString(),
+  resetAt: event.resetAt || null,
+  completed: false,
+  archived: false,
+  groups: {},
+};
 
   for (const letter of Object.keys(event.groups)) {
     const group = event.groups[letter];
@@ -866,11 +895,11 @@ function shouldCreateSchedule(event) {
 async function reconcileSchedules() {
   const groupsData = loadGroups();
 
-  if (groupsData.friday && shouldCreateSchedule(groupsData.friday)) {
+  if (groupsData.friday && !isEventInactive(groupsData.friday) && shouldCreateSchedule(groupsData.friday)) {
     await createScheduleForEvent('friday');
   }
 
-  if (groupsData.saturday && shouldCreateSchedule(groupsData.saturday)) {
+  if (groupsData.saturday && !isEventInactive(groupsData.saturday) && shouldCreateSchedule(groupsData.saturday)) {
     await createScheduleForEvent('saturday');
   }
 }
