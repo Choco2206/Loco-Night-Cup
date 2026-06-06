@@ -166,9 +166,10 @@ function getCycleConfig(type) {
   if (type === 'friday') {
     const resetAt = getNextBoundary(6, 7);
     const deadline = new Date(
-  resetAt.getTime() - (7 * 60 + 45) * 60 * 1000
+  resetAt.getTime() - (7 * 60 + 30) * 60 * 1000
 );
-    const start = new Date(deadline.getTime() + 45 * 60 * 1000);
+
+const start = new Date(deadline.getTime() + 30 * 60 * 1000);
 
     return {
       key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -185,9 +186,10 @@ function getCycleConfig(type) {
 
   const resetAt = getNextBoundary(0, 7);
   const deadline = new Date(
-  resetAt.getTime() - (7 * 60 + 45) * 60 * 1000
+  resetAt.getTime() - (7 * 60 + 30) * 60 * 1000
 );
-  const start = new Date(deadline.getTime() + 45 * 60 * 1000);
+
+const start = new Date(deadline.getTime() + 30 * 60 * 1000);
 
   return {
     key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -329,7 +331,7 @@ function buildSummaryContent(event) {
     '✅ **NightCup findet statt**',
     '',
     `Format: **${actualFormat}er Turnier**`,
-    'Gruppenauslosung findet um **23:30 Uhr** statt.',
+    'Gruppenauslosung findet um **23:45 Uhr** statt.',
     'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
   ].join('\n');
 }
@@ -395,8 +397,9 @@ function buildMainEmbed(event) {
     `**${statusLine}**`,
     `📅 **Datum:** ${event.displayDate}`,
     '',
-    `⏰ **Anmeldeschluss:** 23:15 Uhr`,
-    `⌛ **Noch offen:** ${formatCountdown(event.deadlineAt)}`,
+`⏰ **Anmeldeschluss:** 23:30 Uhr`,
+`🎲 **Gruppenauslosung:** 23:45 Uhr`,
+`⌛ **Noch offen:** ${formatCountdown(event.deadlineAt)}`,
     '',
     `🚀 **Turnierstart:** 00:00 Uhr`,
     `${event.startLine}`,
