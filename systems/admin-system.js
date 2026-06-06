@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   EmbedBuilder,
+  AttachmentBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -16,6 +17,7 @@ const {
 const teamSystem = require('./team-system');
 const checkinSystem = require('./checkin-system');
 const { sendTournamentCeremonyIfReady } = require('./announcement');
+const { generateCeremonyImage } = require('./ceremony-image');
 
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 const ADMIN_FILE = path.join(process.cwd(), 'data', 'admin-system.json');
@@ -180,6 +182,34 @@ async function logToChannel(channelId, text) {
 
 async function logToLive(text) {
   await logToChannel(process.env.LIVE_LOGS_CHANNEL_ID, text);
+}
+
+async function sendTestCeremony(interaction) {
+  const channel = await fetchChannel(process.env.ANNOUNCEMENT_CHANNEL_ID);
+
+  if (!channel) {
+    throw new Error('Ankündigungskanal nicht gefunden. Prüfe ANNOUNCEMENT_CHANNEL_ID.');
+  }
+
+  const imagePath = await generateCeremonyImage({
+    eventKey: 'friday',
+    eventLabel: 'TEST CUP',
+    first: { clubName: 'Loco United' },
+    second: { clubName: 'Night Kings' },
+    third: { clubName: 'Red Wolves' },
+    firstLogoPath: null,
+    secondLogoPath: null,
+    thirdLogoPath: null,
+  });
+
+  const attachment = new AttachmentBuilder(imagePath, {
+    name: 'test-siegerehrung.png',
+  });
+
+  await channel.send({
+    content: '🧪 **Test-Siegerehrung**',
+    files: [attachment],
+  });
 }
 
 function safeText(value, fallback = '—') {
@@ -355,6 +385,7 @@ function buildLiveControlEmbed() {
         '• Manager ohne Team anzeigen',
         '• Freilos-Team hinzufügen',
 '• Freilos-Team entfernen',
+'• Ceremony-Testbild posten',
       ].join('\n')
     )
     .setColor(0xff0000);
@@ -411,7 +442,12 @@ const row4 = new ActionRowBuilder().addComponents(
   new ButtonBuilder()
     .setCustomId('live_remove_bye_team')
     .setLabel('🚫 Freilos entfernen')
-    .setStyle(ButtonStyle.Danger)
+    .setStyle(ButtonStyle.Danger),
+
+  new ButtonBuilder()
+    .setCustomId('live_test_ceremony')
+    .setLabel('🧪 Ceremony Test')
+    .setStyle(ButtonStyle.Secondary)
 );
 
   return [row1, row2, row3, row4];
@@ -1560,6 +1596,7 @@ module.exports = {
           'live_managers_without_team',
           'live_add_bye_team',
           'live_remove_bye_team',
+          'live_test_ceremony',
         ].includes(interaction.customId) ||
         interaction.customId.startsWith('live_edit_team_data:') ||
         interaction.customId.startsWith('live_edit_add_covm:') ||
@@ -1830,6 +1867,24 @@ module.exports = {
         });
         return true;
       }
+
+if (interaction.customId === 'live_test_ceremony') {
+  try {
+    await sendTestCeremony(interaction);
+
+    await interaction.reply({
+      content: '✅ Test-Siegerehrung wurde gepostet.',
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error) {
+    await interaction.reply({
+      content: `❌ ${error.message}`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  return true;
+}
 
       if (interaction.customId === 'live_manual_ko_result') {
         await interaction.reply({
