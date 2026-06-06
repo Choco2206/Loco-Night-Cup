@@ -21,6 +21,7 @@ const KO_CLEANUP_GRACE_MS = 0;
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const INVITE_WINDOW_MINUTES = 5;
 const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
+const KO_NEXT_ROUND_BUFFER_MS = 5 * 60 * 1000;
 
 let clientRef = null;
 let intervalRef = null;
@@ -248,6 +249,36 @@ function getDynamicWindowFromNow() {
   };
 }
 
+function isEventExpired(event) {
+  if (!event?.resetAt) return false;
+  return Date.now() >= Number(event.resetAt);
+}
+
+function isEventInactive(event) {
+  return !event || event.completed || event.archived || isEventExpired(event);
+}
+
+function getRoundCompletedAt(round) {
+  if (!round?.matches?.length) return null;
+
+  const confirmedTimes = round.matches
+    .map(match => match.confirmedAt)
+    .filter(Boolean)
+    .map(value => new Date(value).getTime())
+    .filter(value => !Number.isNaN(value));
+
+  if (!confirmedTimes.length) return null;
+
+  return Math.max(...confirmedTimes);
+}
+
+function canAdvanceAfterBuffer(round) {
+  const completedAt = getRoundCompletedAt(round);
+  if (!completedAt) return false;
+
+  return Date.now() >= completedAt + KO_NEXT_ROUND_BUFFER_MS;
+}
+
 function getPlannedWindowParts(format, roundKey) {
   const windowText = getRoundTimeWindow(format, roundKey);
   const [startText, endText] = windowText.split('–');
@@ -267,7 +298,12 @@ function ensureRoundReleaseState(round) {
       inviteStart: null,
       inviteEnd: null,
       lastReminderAt: null,
+      earliestReleaseAt: null,
     };
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(round.release, 'earliestReleaseAt')) {
+    round.release.earliestReleaseAt = null;
   }
 }
 
@@ -793,9 +829,10 @@ async function createInitialKoRound(eventKey) {
   const groupsData = loadGroups();
   const groupEvent = groupsData[eventKey];
 
-  if (!groupEvent) return;
-  if (koData[eventKey] && koData[eventKey].cycleKey === groupEvent.cycleKey) return;
-  if (!allGroupMatchesConfirmed(eventKey)) return;
+if (!groupEvent) return;
+if (isEventInactive(groupEvent)) return;
+if (koData[eventKey] && koData[eventKey].cycleKey === groupEvent.cycleKey) return;
+if (!allGroupMatchesConfirmed(eventKey)) return;
 
   const qualified = getQualifiedTeamsFromGroups(eventKey);
   if (!qualified) return;
@@ -943,8 +980,10 @@ async function advanceKoIfReady(eventKey) {
   const koData = loadKo();
   const event = koData[eventKey];
   if (!event || !event.rounds) return;
+  if (isEventInactive(event)) return;
 
   if (event.rounds.roundOf16 && roundIsComplete(event.rounds.roundOf16) && !event.rounds.quarterFinal) {
+        if (!canAdvanceAfterBuffer(event.rounds.roundOf16)) return;
     const winners = event.rounds.roundOf16.matches.map(getWinnerStub).filter(Boolean);
 
     if (winners.length === 8) {
@@ -982,6 +1021,7 @@ async function advanceKoIfReady(eventKey) {
   }
 
   if (event.rounds.quarterFinal && roundIsComplete(event.rounds.quarterFinal) && !event.rounds.semiFinal) {
+        if (!canAdvanceAfterBuffer(event.rounds.quarterFinal)) return;
     const winners = event.rounds.quarterFinal.matches.map(getWinnerStub).filter(Boolean);
 
     if (winners.length === 4) {
@@ -1017,6 +1057,7 @@ async function advanceKoIfReady(eventKey) {
   }
 
   if (event.rounds.semiFinal && roundIsComplete(event.rounds.semiFinal)) {
+        if (!canAdvanceAfterBuffer(event.rounds.semiFinal)) return;
     if (!event.rounds.final || !event.rounds.thirdPlace) {
       const winners = event.rounds.semiFinal.matches.map(getWinnerStub).filter(Boolean);
       const losers = event.rounds.semiFinal.matches.map(getLoserStub).filter(Boolean);
@@ -1111,6 +1152,7 @@ async function processKoReleaseTimes(eventKey) {
   const event = koData[eventKey];
 
   if (!event || !event.rounds) return;
+  if (isEventInactive(event)) return;
 
   const nowMinutes = getCurrentMinutes();
 
@@ -1136,6 +1178,7 @@ async function processKoReminders(eventKey) {
   const event = koData[eventKey];
 
   if (!event || !event.rounds) return;
+  if (isEventInactive(event)) return;
 
   for (const roundKey of Object.keys(event.rounds)) {
     const round = event.rounds[roundKey];
@@ -1500,6 +1543,7 @@ async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
 
   match.status = 'confirmed';
   match.confirmed = true;
+  match.confirmedAt = nowIso();
 
   const homeGoals = Number(match.reportedScore.home);
   const awayGoals = Number(match.reportedScore.away);
