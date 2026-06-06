@@ -19,6 +19,8 @@ const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
 const KO_CLEANUP_GRACE_MS = 0;
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
+const INVITE_WINDOW_MINUTES = 5;
+const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
 
 let clientRef = null;
 let intervalRef = null;
@@ -186,28 +188,28 @@ function getRoundTimeWindow(format, roundKey) {
   const windowsByFormat = {
     8: {
       semiFinal: '01:00–01:05',
-      thirdPlace: '01:20–01:25',
-      final: '01:20–01:25',
+      thirdPlace: '01:25–01:30',
+      final: '01:25–01:30',
     },
     16: {
       quarterFinal: '01:00–01:05',
-      semiFinal: '01:20–01:25',
-      thirdPlace: '01:40–01:45',
-      final: '01:40–01:45',
+      semiFinal: '01:25–01:30',
+      thirdPlace: '01:50–01:55',
+      final: '01:50–01:55',
     },
     24: {
       roundOf16: '01:00–01:05',
-      quarterFinal: '01:20–01:25',
-      semiFinal: '01:40–01:45',
-      thirdPlace: '02:00–02:05',
-      final: '02:00–02:05',
+      quarterFinal: '01:25–01:30',
+      semiFinal: '01:50–01:55',
+      thirdPlace: '02:10–02:15',
+      final: '02:10–02:15',
     },
     32: {
       roundOf16: '01:00–01:05',
-      quarterFinal: '01:20–01:25',
-      semiFinal: '01:40–01:45',
-      thirdPlace: '02:00–02:05',
-      final: '02:00–02:05',
+      quarterFinal: '01:25–01:30',
+      semiFinal: '01:50–01:55',
+      thirdPlace: '02:10–02:15',
+      final: '02:10–02:15',
     },
   };
 
@@ -986,11 +988,16 @@ async function handleOpenResult(interaction, eventKey, roundKey) {
     return true;
   }
 
-  const allowedMatches = round.matches.filter(match => isAuthorizedForMatch(interaction.user.id, match));
+  const allowedMatches = round.matches.filter(match => {
+  if (match.status === 'reported') return false;
+  if (match.status === 'confirmed') return false;
+
+  return isAuthorizedForMatch(interaction.user.id, match);
+});
 
   if (allowedMatches.length === 0) {
     await interaction.reply({
-      content: '❌ Du darfst für keine Paarung in dieser Runde ein Ergebnis eintragen.',
+      content: '❌ Für dich gibt es aktuell kein offenes K.O.-Spiel zum Eintragen.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -1039,6 +1046,22 @@ async function handleSelectResult(interaction, eventKey, roundKey) {
     });
     return true;
   }
+  
+  if (match.status === 'reported') {
+  await interaction.reply({
+    content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
+
+if (match.status === 'confirmed') {
+  await interaction.reply({
+    content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   const modal = new ModalBuilder()
     .setCustomId(`ko_modal:${eventKey}:${roundKey}:${matchNumber}`)
@@ -1080,6 +1103,22 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
   }
 
   const { round, match } = found;
+  
+  if (match.status === 'reported') {
+  await interaction.reply({
+    content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
+
+if (match.status === 'confirmed') {
+  await interaction.reply({
+    content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   if (!isAuthorizedForMatch(interaction.user.id, match)) {
     await interaction.reply({
