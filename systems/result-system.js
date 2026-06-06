@@ -14,6 +14,30 @@ const {
 
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
+const GROUP_RELEASE_SLOTS = [
+  {
+    slot: 1,
+    matchNumbers: [1, 2],
+    plannedStart: '00:00',
+    plannedEnd: '00:05',
+  },
+  {
+    slot: 2,
+    matchNumbers: [3, 4],
+    plannedStart: '00:25',
+    plannedEnd: '00:30',
+  },
+  {
+    slot: 3,
+    matchNumbers: [5, 6],
+    plannedStart: '00:50',
+    plannedEnd: '00:55',
+  },
+];
+
+const INVITE_WINDOW_MINUTES = 5;
+const REMINDER_INTERVAL_MS = 5 * 60 * 1000;
+const KO_EARLIEST_START = '01:00';
 
 let clientRef = null;
 let intervalRef = null;
@@ -118,12 +142,12 @@ function createRoundRobinMatches(teams) {
 
 function getGroupMatchWindows() {
   return [
-    '00:00–00:05',
-    '00:00–00:05',
-    '00:20–00:25',
-    '00:20–00:25',
-    '00:40–00:45',
-    '00:40–00:45',
+    'Noch nicht freigegeben',
+    'Noch nicht freigegeben',
+    'Noch nicht freigegeben',
+    'Noch nicht freigegeben',
+    'Noch nicht freigegeben',
+    'Noch nicht freigegeben',
   ];
 }
 
@@ -285,9 +309,221 @@ async function deleteMessageIfExists(channelId, messageId) {
   }
 }
 
+async function sendGroupSlotReleaseMessage(eventKey, groupLetter, slot, startText, endText) {
+  const groupsData = loadGroups();
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+  if (!groupMeta) return;
+
+  const channel = await fetchChannel(groupMeta.channelId);
+  if (!channel) return;
+
+  await channel.send({
+    content: [
+      `✅ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist freigegeben**`,
+      '',
+      `Die Spiele dürfen jetzt gestartet werden.`,
+      `**Einladezeit: ${startText} – ${endText} Uhr**`,
+      '',
+      `Bitte meldet euer Ergebnis direkt nach dem Spiel über den Button im Spielplan.`,
+    ].join('\n'),
+  });
+}
+
+async function sendMissingResultReminder(eventKey, groupLetter, slot, openMatches) {
+  const groupsData = loadGroups();
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+  if (!groupMeta) return;
+
+  const channel = await fetchChannel(groupMeta.channelId);
+  if (!channel) return;
+
+  await channel.send({
+    content: [
+      `⚠️ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist noch nicht abgeschlossen**`,
+      '',
+      `Bitte meldet oder bestätigt die offenen Ergebnisse, damit der nächste Zeitslot freigegeben werden kann.`,
+      '',
+      buildOpenMatchesText(openMatches, groupMeta.teams),
+    ].join('\n'),
+  });
+}
+
+async function sendKoWaitingNotice(eventKey, groupLetter, isBlocker) {
+  const groupsData = loadGroups();
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+  if (!groupMeta) return;
+
+  const channel = await fetchChannel(groupMeta.channelId);
+  if (!channel) return;
+
+  if (isBlocker) {
+    await channel.send({
+      content: [
+        `⚠️ **Eure Gruppe hält aktuell den Turnierfortschritt auf.**`,
+        '',
+        `Bitte meldet oder bestätigt die noch offenen Ergebnisse, damit die K.O.-Phase gestartet werden kann.`,
+      ].join('\n'),
+    });
+    return;
+  }
+
+  await channel.send({
+    content: [
+      `⏳ **Die K.O.-Phase kann noch nicht gestartet werden.**`,
+      '',
+      `Es laufen noch Gruppenspiele in anderen Gruppen.`,
+      `Sobald alle Gruppen abgeschlossen sind, wird die K.O.-Phase automatisch ausgelost und freigegeben.`,
+    ].join('\n'),
+  });
+}
+
 // =========================
 // CORE HELPERS
 // =========================
+
+function parseTimeToMinutes(time) {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function getCurrentMinutes() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function formatMinutes(minutes) {
+  const normalized = ((minutes % 1440) + 1440) % 1440;
+  const h = String(Math.floor(normalized / 60)).padStart(2, '0');
+  const m = String(normalized % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function minutesWindowFromNow() {
+  const start = getCurrentMinutes();
+  const end = start + INVITE_WINDOW_MINUTES;
+
+  return {
+    startText: formatMinutes(start),
+    endText: formatMinutes(end),
+    windowText: `${formatMinutes(start)}–${formatMinutes(end)}`,
+  };
+}
+
+function plannedWindow(slot) {
+  return {
+    startText: slot.plannedStart,
+    endText: slot.plannedEnd,
+    windowText: `${slot.plannedStart}–${slot.plannedEnd}`,
+  };
+}
+
+function ensureGroupReleaseState(resultGroup) {
+  if (!resultGroup.release) {
+    resultGroup.release = {
+      slots: {},
+      koWaiting: {
+        lastDoneNoticeAt: null,
+        lastBlockerNoticeAt: null,
+      },
+    };
+  }
+
+  for (const slot of GROUP_RELEASE_SLOTS) {
+    if (!resultGroup.release.slots[slot.slot]) {
+      resultGroup.release.slots[slot.slot] = {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        lastReminderAt: null,
+      };
+    }
+  }
+
+  if (!resultGroup.release.koWaiting) {
+    resultGroup.release.koWaiting = {
+      lastDoneNoticeAt: null,
+      lastBlockerNoticeAt: null,
+    };
+  }
+}
+
+function getSlotByMatchNumber(matchNumber) {
+  return GROUP_RELEASE_SLOTS.find(slot => slot.matchNumbers.includes(Number(matchNumber)));
+}
+
+function isMatchReleased(resultGroup, matchNumber) {
+  ensureGroupReleaseState(resultGroup);
+
+  const slot = getSlotByMatchNumber(matchNumber);
+  if (!slot) return false;
+
+  return !!resultGroup.release.slots[slot.slot]?.released;
+}
+
+function getMatchesForSlot(resultGroup, slot) {
+  return resultGroup.matches.filter(match =>
+    slot.matchNumbers.includes(Number(match.matchNumber))
+  );
+}
+
+function areMatchesConfirmed(matches) {
+  return matches.every(match => match.status === 'confirmed');
+}
+
+function getOpenMatches(matches) {
+  return matches.filter(match => match.status !== 'confirmed' && !match.isByeMatch);
+}
+
+function canSendReminder(lastReminderAt) {
+  if (!lastReminderAt) return true;
+
+  const last = new Date(lastReminderAt).getTime();
+  return Date.now() - last >= REMINDER_INTERVAL_MS;
+}
+
+function buildTeamMentions(team) {
+  if (!team) return '';
+
+  return [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ]
+    .filter(Boolean)
+    .map(id => `<@${id}>`)
+    .join(' ');
+}
+
+function buildOpenMatchesText(openMatches, groupTeams) {
+  if (!openMatches.length) return 'Keine offenen Begegnungen gefunden.';
+
+  return openMatches
+    .map(match => {
+      const { home, away } = getTeamsOfMatch(match, groupTeams);
+
+      const homeMentions = buildTeamMentions(home) || '*Keine VM/Co-VM gefunden*';
+      const awayMentions = buildTeamMentions(away) || '*Keine VM/Co-VM gefunden*';
+
+      return [
+        `**${match.homeClubName} vs ${match.awayClubName}**`,
+        `${homeMentions}`,
+        `${awayMentions}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
+function isGroupFinished(resultGroup) {
+  return resultGroup.matches.every(match => match.status === 'confirmed');
+}
+
+function areAllGroupsFinished(event) {
+  return Object.values(event.groups || {}).every(group => isGroupFinished(group));
+}
 
 function getEventAndGroup(resultsData, eventKey, groupLetter) {
   const event = resultsData[eventKey];
@@ -386,6 +622,138 @@ async function updateGroupMessages(eventKey, groupLetter) {
     });
   }
 }
+async function releaseGroupSlot(eventKey, groupLetter, slot, dynamic = false) {
+  const resultsData = loadResults();
+  const event = resultsData[eventKey];
+  const resultGroup = event?.groups?.[groupLetter];
+
+  if (!event || !resultGroup) return;
+
+  ensureGroupReleaseState(resultGroup);
+
+  const releaseState = resultGroup.release.slots[slot.slot];
+  if (releaseState.released) return;
+
+  const window = dynamic ? minutesWindowFromNow() : plannedWindow(slot);
+
+  const slotMatches = getMatchesForSlot(resultGroup, slot);
+
+  for (const match of slotMatches) {
+    match.timeWindow = window.windowText;
+  }
+
+  releaseState.released = true;
+  releaseState.inviteStart = window.startText;
+  releaseState.inviteEnd = window.endText;
+  releaseState.releasedAt = nowIso();
+
+  saveResults(resultsData);
+
+  await sendGroupSlotReleaseMessage(
+    eventKey,
+    groupLetter,
+    slot,
+    window.startText,
+    window.endText
+  );
+
+  await updateGroupMessages(eventKey, groupLetter);
+}
+
+async function processGroupReleaseTimes(eventKey) {
+  const resultsData = loadResults();
+  const event = resultsData[eventKey];
+
+  if (!event || !event.groups) return;
+
+  const nowMinutes = getCurrentMinutes();
+
+  for (const groupLetter of Object.keys(event.groups)) {
+    const resultGroup = event.groups[groupLetter];
+    if (!resultGroup) continue;
+
+    ensureGroupReleaseState(resultGroup);
+
+    for (const slot of GROUP_RELEASE_SLOTS) {
+      const releaseState = resultGroup.release.slots[slot.slot];
+      if (releaseState.released) continue;
+
+      const plannedStartMinutes = parseTimeToMinutes(slot.plannedStart);
+      if (nowMinutes < plannedStartMinutes) continue;
+
+      const previousSlot =
+        slot.slot === 1
+          ? null
+          : GROUP_RELEASE_SLOTS.find(s => s.slot === slot.slot - 1);
+
+      if (!previousSlot) {
+        await releaseGroupSlot(eventKey, groupLetter, slot, false);
+        continue;
+      }
+
+      const previousMatches = getMatchesForSlot(resultGroup, previousSlot);
+
+      if (areMatchesConfirmed(previousMatches)) {
+        const isLate = nowMinutes > plannedStartMinutes;
+        await releaseGroupSlot(eventKey, groupLetter, slot, isLate);
+        continue;
+      }
+
+      const openMatches = getOpenMatches(previousMatches);
+
+      if (openMatches.length && canSendReminder(releaseState.lastReminderAt)) {
+        releaseState.lastReminderAt = nowIso();
+        saveResults(resultsData);
+
+        await sendMissingResultReminder(eventKey, groupLetter, previousSlot, openMatches);
+      }
+    }
+  }
+
+  await processKoWaitingNotices(eventKey);
+}
+
+async function processKoWaitingNotices(eventKey) {
+  const resultsData = loadResults();
+  const event = resultsData[eventKey];
+
+  if (!event || !event.groups) return;
+
+  const nowMinutes = getCurrentMinutes();
+  const koStartMinutes = parseTimeToMinutes(KO_EARLIEST_START);
+
+  if (nowMinutes < koStartMinutes) return;
+
+  const allFinished = areAllGroupsFinished(event);
+  if (allFinished) return;
+
+  for (const groupLetter of Object.keys(event.groups)) {
+    const resultGroup = event.groups[groupLetter];
+    if (!resultGroup) continue;
+
+    ensureGroupReleaseState(resultGroup);
+
+    const groupFinished = isGroupFinished(resultGroup);
+
+    if (groupFinished) {
+      if (canSendReminder(resultGroup.release.koWaiting.lastDoneNoticeAt)) {
+        resultGroup.release.koWaiting.lastDoneNoticeAt = nowIso();
+        saveResults(resultsData);
+
+        await sendKoWaitingNotice(eventKey, groupLetter, false);
+      }
+
+      continue;
+    }
+
+    if (canSendReminder(resultGroup.release.koWaiting.lastBlockerNoticeAt)) {
+      resultGroup.release.koWaiting.lastBlockerNoticeAt = nowIso();
+      saveResults(resultsData);
+
+      await sendKoWaitingNotice(eventKey, groupLetter, true);
+    }
+  }
+}
 
 // =========================
 // AUTO SCHEDULE CREATION
@@ -446,10 +814,39 @@ async function createScheduleForEvent(eventKey) {
     });
 
     storedEvent.groups[letter] = {
-      channelId: group.channelId,
-      scheduleMessageId: scheduleMessage.id,
-      matches,
-    };
+  channelId: group.channelId,
+  scheduleMessageId: scheduleMessage.id,
+  matches,
+  release: {
+    slots: {
+      1: {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        lastReminderAt: null,
+      },
+      2: {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        lastReminderAt: null,
+      },
+      3: {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        lastReminderAt: null,
+      },
+    },
+    koWaiting: {
+      lastDoneNoticeAt: null,
+      lastBlockerNoticeAt: null,
+    },
+  },
+};
   }
 
   resultsData[eventKey] = storedEvent;
@@ -508,6 +905,7 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
   if (match.isByeMatch) return false;
   if (match.status === 'reported') return false;
   if (match.status === 'confirmed') return false;
+  if (!isMatchReleased(data.group, match.matchNumber)) return false;
 
   const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
   return isTeamAuthorized(interaction.user.id, home) || isTeamAuthorized(interaction.user.id, away);
@@ -515,7 +913,7 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
 
   if (allowedMatches.length === 0) {
     await interaction.reply({
-      content: '❌ Für dich gibt es aktuell kein offenes Spiel zum Eintragen.',
+      content: '❌ Für dich gibt es aktuell kein freigegebenes offenes Spiel zum Eintragen.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -587,6 +985,14 @@ async function handleSelectResult(interaction, eventKey, groupLetter) {
     });
     return true;
   }
+  
+  if (!isMatchReleased(resultGroup, match.matchNumber)) {
+  await interaction.reply({
+    content: '❌ Dieses Spiel wurde noch nicht freigegeben.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   const modal = new ModalBuilder()
     .setCustomId(`result_modal:${eventKey}:${groupLetter}:${matchNumber}`)
@@ -661,6 +1067,14 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
     });
     return true;
   }
+  
+  if (!isMatchReleased(resultGroup, match.matchNumber)) {
+  await interaction.reply({
+    content: '❌ Dieses Spiel wurde noch nicht freigegeben.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
 
@@ -799,18 +1213,20 @@ async function handleConfirmResult(interaction, eventKey, groupLetter, matchNumb
 
   await updateGroupMessages(eventKey, groupLetter);
 
-  if (match.confirmationMessageId) {
-    setTimeout(async () => {
-      await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-    }, 4000);
-  }
+if (match.confirmationMessageId) {
+  setTimeout(async () => {
+    await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
+  }, 4000);
+}
 
-  await interaction.reply({
-    content: `✅ Ergebnis bestätigt: **${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
-    flags: MessageFlags.Ephemeral,
-  });
+await interaction.reply({
+  content: `✅ Ergebnis bestätigt: **${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
+  flags: MessageFlags.Ephemeral,
+});
 
-  return true;
+await processGroupReleaseTimes(eventKey);
+
+return true;
 }
 
 async function handleRejectResult(interaction, eventKey, groupLetter, matchNumber) {
@@ -858,18 +1274,20 @@ async function handleRejectResult(interaction, eventKey, groupLetter, matchNumbe
 
   await updateGroupMessages(eventKey, groupLetter);
 
-  if (match.confirmationMessageId) {
-    setTimeout(async () => {
-      await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-    }, 4000);
-  }
+if (match.confirmationMessageId) {
+  setTimeout(async () => {
+    await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
+  }, 4000);
+}
 
-  await interaction.reply({
-    content: '❌ Ergebnis wurde abgelehnt. Das Spiel ist jetzt wieder offen und kann neu gemeldet werden.',
-    flags: MessageFlags.Ephemeral,
-  });
+await interaction.reply({
+  content: '❌ Ergebnis wurde abgelehnt. Das Spiel ist jetzt wieder offen und kann neu gemeldet werden.',
+  flags: MessageFlags.Ephemeral,
+});
 
-  return true;
+await processGroupReleaseTimes(eventKey);
+
+return true;
 }
 
 // =========================
@@ -877,16 +1295,23 @@ async function handleRejectResult(interaction, eventKey, groupLetter, matchNumbe
 // =========================
 
 module.exports = {
+  processGroupReleaseTimes,
+
   async init(client) {
     clientRef = client;
     ensureResultsFile();
 
     await reconcileSchedules();
+    await processGroupReleaseTimes('friday');
+await processGroupReleaseTimes('saturday');
 
     if (!intervalRef) {
       intervalRef = setInterval(async () => {
         try {
           await reconcileSchedules();
+          
+          await processGroupReleaseTimes('friday');
+await processGroupReleaseTimes('saturday');
         } catch (error) {
           console.error('❌ Fehler im Result-Intervall:', error);
         }
