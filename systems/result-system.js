@@ -194,15 +194,17 @@ function enrichMatches(groupLetter, teams) {
       awayClubName: away?.clubName || 'Unbekannt',
       status: hasByeTeam ? 'confirmed' : 'pending',
       reportedByTeamId: hasByeTeam ? realTeam?.teamId || null : null,
-      reportedScore: hasByeTeam
-        ? {
-            home: homeIsBye ? 0 : 1,
-            away: awayIsBye ? 0 : 1,
-          }
-        : null,
-      confirmed: hasByeTeam,
-      confirmationMessageId: null,
-      isByeMatch: hasByeTeam,
+reportedScore: hasByeTeam
+  ? {
+      home: homeIsBye ? 0 : 1,
+      away: awayIsBye ? 0 : 1,
+    }
+  : null,
+teamReports: {},
+confirmed: hasByeTeam,
+confirmationMessageId: null,
+disputeMessageId: null,
+isByeMatch: hasByeTeam,
     };
   });
 }
@@ -218,15 +220,19 @@ function buildScheduleText(matches) {
     .map(match => {
       let status = '⏳ Offen';
 
-      if (match.status === 'reported' && match.reportedScore) {
-        status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
+      if (match.status === 'awaiting' && match.waitingForClubName) {
+        status = `⏳ Wartet auf Eintragung von ${match.waitingForClubName}`;
+      }
+
+      if (match.status === 'disputed') {
+        status = '🚨 In Klärung mit Admin';
       }
 
       if (match.status === 'confirmed' && match.reportedScore) {
-  status = match.isByeMatch
-    ? `🎟️ Freilos-Wertung: ${match.reportedScore.home}:${match.reportedScore.away}`
-    : `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
-}
+        status = match.isByeMatch
+          ? `🎟️ Freilos-Wertung: ${match.reportedScore.home}:${match.reportedScore.away}`
+          : `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+      }
 
       return `**${match.matchNumber}.** ${match.homeClubName} vs ${match.awayClubName}\n🕒 ${match.timeWindow} • ${status}`;
     })
@@ -284,19 +290,6 @@ function buildTableEmbed(eventLabel, groupLetter, rows) {
       rows.length > 0 ? buildTableText(rows) : 'Noch keine Teams in dieser Gruppe.'
     )
     .setColor(0xff0000);
-}
-
-function buildConfirmationButtons(eventKey, groupLetter, matchNumber) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`result_confirm:${eventKey}:${groupLetter}:${matchNumber}`)
-      .setLabel('✅ Bestätigen')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`result_reject:${eventKey}:${groupLetter}:${matchNumber}`)
-      .setLabel('❌ Ablehnen')
-      .setStyle(ButtonStyle.Danger)
-  );
 }
 
 function isAdmin(interaction) {
@@ -433,12 +426,12 @@ async function sendMissingResultReminder(eventKey, groupLetter, slot, openMatche
 
   await channel.send({
     content: [
-      `⚠️ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist noch nicht abgeschlossen**`,
-      '',
-      `Bitte meldet oder bestätigt die offenen Ergebnisse, damit der nächste Zeitslot freigegeben werden kann.`,
-      '',
-      buildOpenMatchesText(openMatches, groupMeta.teams),
-    ].join('\n'),
+  `⚠️ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist noch nicht abgeschlossen**`,
+  '',
+  `Bitte tragt die offenen Ergebnisse ein, damit der nächste Zeitslot freigegeben werden kann.`,
+  '',
+  buildOpenMatchesText(openMatches, groupMeta.teams),
+].join('\n'),
   });
 }
 
@@ -455,7 +448,7 @@ async function sendKoWaitingNotice(eventKey, groupLetter, isBlocker) {
       content: [
         `⚠️ **Eure Gruppe hält aktuell den Turnierfortschritt auf.**`,
         '',
-        `Bitte meldet oder bestätigt die noch offenen Ergebnisse, damit die K.O.-Phase gestartet werden kann.`,
+        `Bitte tragt die noch offenen Ergebnisse ein, damit die K.O.-Phase gestartet werden kann.`,
       ].join('\n'),
     });
     return;
@@ -537,6 +530,35 @@ function minutesWindowFromNow() {
     endText: formatMinutes(end),
     windowText: `${formatMinutes(start)}–${formatMinutes(end)}`,
   };
+}
+
+function scoresMatch(scoreA, scoreB) {
+  return (
+    Number(scoreA.home) === Number(scoreB.home) &&
+    Number(scoreA.away) === Number(scoreB.away)
+  );
+}
+
+function getAdminPing() {
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+  return adminRoleId ? `<@&${adminRoleId}>` : '@Admin';
+}
+
+async function sendDisputeNotice(eventKey, groupLetter, match, groupMeta) {
+  const channel = await fetchChannel(groupMeta.channelId);
+  if (!channel) return null;
+
+  const message = await channel.send({
+    content: [
+      `🚨 ${getAdminPing()} **Ergebnis stimmt nicht überein**`,
+      '',
+      `**${match.homeClubName} vs ${match.awayClubName}**`,
+      '',
+      `Bitte prüfen und per **Admin-Ergebnis** final eintragen.`,
+    ].join('\n'),
+  });
+
+  return message.id;
 }
 
 function plannedWindow(slot) {
@@ -1109,11 +1131,15 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
 
   const allowedMatches = data.group.matches.filter(match => {
   if (match.isByeMatch) return false;
-  if (match.status === 'reported') return false;
   if (match.status === 'confirmed') return false;
+if (match.status === 'disputed') return false;
   if (!isMatchReleased(data.group, match.matchNumber)) return false;
 
   const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
+  const ownTeam = isTeamAuthorized(interaction.user.id, home) ? home : away;
+if (!ownTeam) return false;
+
+if (match.teamReports && match.teamReports[ownTeam.teamId]) return false;
   return isTeamAuthorized(interaction.user.id, home) || isTeamAuthorized(interaction.user.id, away);
 });
 
@@ -1421,6 +1447,11 @@ async function handleAdminResultModal(interaction, eventKey, groupLetter, matchN
     match.confirmationMessageId = null;
   }
 
+if (match.disputeMessageId) {
+  await deleteMessageIfExists(groupMeta.channelId, match.disputeMessageId);
+  match.disputeMessageId = null;
+}
+
   match.status = 'confirmed';
   match.reportedByTeamId = null;
   match.reportedScore = {
@@ -1428,6 +1459,10 @@ async function handleAdminResultModal(interaction, eventKey, groupLetter, matchN
     away: awayGoals,
   };
   match.confirmed = true;
+  match.teamReports = {};
+match.waitingForTeamId = null;
+match.waitingForClubName = null;
+match.status = 'confirmed';
 
   saveResults(resultsData);
 
@@ -1470,21 +1505,21 @@ async function handleSelectResult(interaction, eventKey, groupLetter) {
   return true;
 }
 
-  if (match.status === 'reported') {
-    await interaction.reply({
-      content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
   if (match.status === 'confirmed') {
-    await interaction.reply({
-      content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
+  await interaction.reply({
+    content: '❌ Dieses Spiel wurde bereits bestätigt.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
+
+if (match.status === 'disputed') {
+  await interaction.reply({
+    content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
   
   if (!isMatchReleased(resultGroup, match.matchNumber)) {
   await interaction.reply({
@@ -1552,14 +1587,6 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
   return true;
 }
 
-  if (match.status === 'reported') {
-    await interaction.reply({
-      content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
   if (match.status === 'confirmed') {
     await interaction.reply({
       content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
@@ -1567,6 +1594,14 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
     });
     return true;
   }
+  
+  if (match.status === 'disputed') {
+  await interaction.reply({
+    content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
   
   if (!isMatchReleased(resultGroup, match.matchNumber)) {
   await interaction.reply({
@@ -1613,178 +1648,74 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
   }
 
   const reportingTeam = isTeamAuthorized(interaction.user.id, home) ? home : away;
-  const opponentTeam = reportingTeam.teamId === home.teamId ? away : home;
+const opponentTeam = reportingTeam.teamId === home.teamId ? away : home;
 
-  match.status = 'reported';
-  match.reportedByTeamId = reportingTeam.teamId;
-  match.reportedScore = {
-    home: homeGoals,
-    away: awayGoals,
-  };
-  match.confirmed = false;
+if (!match.teamReports) {
+  match.teamReports = {};
+}
 
-  const channel = await fetchChannel(groupMeta.channelId);
-  if (!channel) {
-    await interaction.reply({
-      content: '❌ Kanal konnte nicht geladen werden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  if (match.confirmationMessageId) {
-    await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-    match.confirmationMessageId = null;
-  }
-
-  const opponentMentions = [
-    opponentTeam.managerId,
-    ...(Array.isArray(opponentTeam.coManagerIds) ? opponentTeam.coManagerIds : []),
-  ]
-    .filter(Boolean)
-    .map(id => `<@${id}>`)
-    .join(' ');
-
-  const confirmMessage = await channel.send({
-    content: [
-      `⚠️ **Ergebnis gemeldet**`,
-      '',
-      `**${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
-      '',
-      `Nur das gegnerische Team darf jetzt bestätigen oder ablehnen.`,
-      opponentMentions || '*Keine VM/Co-VM-Verlinkung gefunden.*',
-    ].join('\n'),
-    components: [buildConfirmationButtons(eventKey, groupLetter, match.matchNumber)],
-  });
-
-  match.confirmationMessageId = confirmMessage.id;
-  saveResults(resultsData);
-
-  await updateGroupMessages(eventKey, groupLetter);
-
+if (match.teamReports[reportingTeam.teamId]) {
   await interaction.reply({
-    content: `✅ Ergebnis wurde gemeldet. Jetzt muss **${opponentTeam.clubName}** bestätigen.`,
+    content: '❌ Dein Team hat für dieses Spiel bereits ein Ergebnis eingetragen.',
     flags: MessageFlags.Ephemeral,
   });
-
   return true;
 }
 
-async function handleConfirmResult(interaction, eventKey, groupLetter, matchNumber) {
-  const resultsData = loadResults();
-  const groupsData = loadGroups();
+match.teamReports[reportingTeam.teamId] = {
+  home: homeGoals,
+  away: awayGoals,
+  reportedByUserId: interaction.user.id,
+  reportedAt: nowIso(),
+};
 
-  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
-  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+const homeReport = match.teamReports[home.teamId];
+const awayReport = match.teamReports[away.teamId];
 
-  if (!resultGroup || !groupMeta) {
-    await interaction.reply({
-      content: '❌ Gruppenspiel nicht gefunden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
+if (homeReport && awayReport) {
+  if (scoresMatch(homeReport, awayReport)) {
+    match.status = 'confirmed';
+    match.reportedScore = {
+      home: homeGoals,
+      away: awayGoals,
+    };
+    match.confirmed = true;
+    match.reportedByTeamId = null;
+    match.waitingForTeamId = null;
+    match.waitingForClubName = null;
+  } else {
+    match.status = 'disputed';
+    match.confirmed = false;
+    match.reportedScore = null;
+    match.waitingForTeamId = null;
+    match.waitingForClubName = null;
+
+    if (!match.disputeMessageId) {
+      match.disputeMessageId = await sendDisputeNotice(eventKey, groupLetter, match, groupMeta);
+    }
   }
-
-  const match = resultGroup.matches.find(m => m.matchNumber === Number(matchNumber));
-  if (!match || match.status !== 'reported' || !match.reportedScore) {
-    await interaction.reply({
-      content: '❌ Für dieses Spiel gibt es aktuell kein offenes Ergebnis zur Bestätigung.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
-
-  const reportingTeamId = match.reportedByTeamId;
-  const opponentTeam = reportingTeamId === home.teamId ? away : home;
-
-  if (!isTeamAuthorized(interaction.user.id, opponentTeam)) {
-    await interaction.reply({
-      content: '❌ Nur das gegnerische Team darf dieses Ergebnis bestätigen.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  match.status = 'confirmed';
-  match.confirmed = true;
-  saveResults(resultsData);
-
-  await updateGroupMessages(eventKey, groupLetter);
-
-if (match.confirmationMessageId) {
-  setTimeout(async () => {
-    await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-  }, 4000);
-}
-
-await interaction.reply({
-  content: `✅ Ergebnis bestätigt: **${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
-  flags: MessageFlags.Ephemeral,
-});
-
-
-return true;
-}
-
-async function handleRejectResult(interaction, eventKey, groupLetter, matchNumber) {
-  const resultsData = loadResults();
-  const groupsData = loadGroups();
-
-  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
-  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
-
-  if (!resultGroup || !groupMeta) {
-    await interaction.reply({
-      content: '❌ Gruppenspiel nicht gefunden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const match = resultGroup.matches.find(m => m.matchNumber === Number(matchNumber));
-  if (!match || match.status !== 'reported' || !match.reportedScore) {
-    await interaction.reply({
-      content: '❌ Für dieses Spiel gibt es aktuell kein offenes Ergebnis zur Ablehnung.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
-
-  const reportingTeamId = match.reportedByTeamId;
-  const opponentTeam = reportingTeamId === home.teamId ? away : home;
-
-  if (!isTeamAuthorized(interaction.user.id, opponentTeam)) {
-    await interaction.reply({
-      content: '❌ Nur das gegnerische Team darf dieses Ergebnis ablehnen.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  match.status = 'pending';
-  match.reportedByTeamId = null;
-  match.reportedScore = null;
+} else {
+  match.status = 'awaiting';
   match.confirmed = false;
-  saveResults(resultsData);
-
-  await updateGroupMessages(eventKey, groupLetter);
-
-if (match.confirmationMessageId) {
-  setTimeout(async () => {
-    await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
-  }, 4000);
+  match.reportedScore = null;
+  match.waitingForTeamId = opponentTeam.teamId;
+  match.waitingForClubName = opponentTeam.clubName;
 }
 
+saveResults(resultsData);
+
+await updateGroupMessages(eventKey, groupLetter);
+
 await interaction.reply({
-  content: '❌ Ergebnis wurde abgelehnt. Das Spiel ist jetzt wieder offen und kann neu gemeldet werden.',
+  content:
+    match.status === 'confirmed'
+      ? `✅ Ergebnis passt bei beiden Teams. Spiel bestätigt: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`
+      : match.status === 'disputed'
+        ? '🚨 Ergebnis weicht ab. Admin wurde zur Klärung informiert.'
+        : `✅ Ergebnis eingetragen. Wartet jetzt auf **${opponentTeam.clubName}**.`,
   flags: MessageFlags.Ephemeral,
 });
-
-return true;
+    return true;
 }
 
 // =========================
@@ -1823,24 +1754,14 @@ await processGroupReleaseTimes('saturday');
       return handleOpenResult(interaction, eventKey, groupLetter);
     }
 
-if (interaction.customId.startsWith('admin_result_open:')) {
-  const [, eventKey, groupLetter] = interaction.customId.split(':');
-  return handleAdminResultOpen(interaction, eventKey, groupLetter);
-}
+    if (interaction.customId.startsWith('admin_result_open:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleAdminResultOpen(interaction, eventKey, groupLetter);
+    }
 
     if (interaction.customId.startsWith('backup_replace_open:')) {
       const [, eventKey, groupLetter] = interaction.customId.split(':');
       return handleBackupReplaceOpen(interaction, eventKey, groupLetter);
-    }
-
-    if (interaction.customId.startsWith('result_confirm:')) {
-      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-      return handleConfirmResult(interaction, eventKey, groupLetter, matchNumber);
-    }
-
-    if (interaction.customId.startsWith('result_reject:')) {
-      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-      return handleRejectResult(interaction, eventKey, groupLetter, matchNumber);
     }
   }
 
@@ -1850,10 +1771,10 @@ if (interaction.customId.startsWith('admin_result_open:')) {
       return handleSelectResult(interaction, eventKey, groupLetter);
     }
 
-if (interaction.customId.startsWith('admin_result_select:')) {
-  const [, eventKey, groupLetter] = interaction.customId.split(':');
-  return handleAdminResultSelect(interaction, eventKey, groupLetter);
-}
+    if (interaction.customId.startsWith('admin_result_select:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleAdminResultSelect(interaction, eventKey, groupLetter);
+    }
 
     if (interaction.customId.startsWith('backup_replace_target:')) {
       const [, eventKey, groupLetter] = interaction.customId.split(':');
@@ -1867,16 +1788,16 @@ if (interaction.customId.startsWith('admin_result_select:')) {
   }
 
   if (interaction.isModalSubmit()) {
-  if (interaction.customId.startsWith('result_modal:')) {
-    const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-    return handleResultModal(interaction, eventKey, groupLetter, matchNumber);
-  }
+    if (interaction.customId.startsWith('result_modal:')) {
+      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+      return handleResultModal(interaction, eventKey, groupLetter, matchNumber);
+    }
 
-  if (interaction.customId.startsWith('admin_result_modal:')) {
-    const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-    return handleAdminResultModal(interaction, eventKey, groupLetter, matchNumber);
+    if (interaction.customId.startsWith('admin_result_modal:')) {
+      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+      return handleAdminResultModal(interaction, eventKey, groupLetter, matchNumber);
+    }
   }
-}
 
   return false;
 },
