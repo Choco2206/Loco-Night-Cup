@@ -253,6 +253,10 @@ function buildScheduleButtons(eventKey, groupLetter) {
       .setLabel('⚽ Ergebnis eintragen')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
+      .setCustomId(`admin_result_open:${eventKey}:${groupLetter}`)
+      .setLabel('🛠️ Admin-Ergebnis')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
       .setCustomId(`backup_replace_open:${eventKey}:${groupLetter}`)
       .setLabel('🔁 Nachrücker einsetzen')
       .setStyle(ButtonStyle.Secondary)
@@ -1263,6 +1267,180 @@ await interaction.update({
   return true;
 }
 
+async function handleAdminResultOpen(interaction, eventKey, groupLetter) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen Ergebnisse manuell eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const resultsData = loadResults();
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+
+  if (!resultGroup || !Array.isArray(resultGroup.matches)) {
+    await interaction.reply({
+      content: '❌ Spielplan nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const matches = resultGroup.matches.filter(match => !match.isByeMatch);
+
+  if (matches.length === 0) {
+    await interaction.reply({
+      content: '❌ Keine Spiele gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`admin_result_select:${eventKey}:${groupLetter}`)
+      .setPlaceholder('Welches Spiel willst du eintragen?')
+      .addOptions(
+        matches.map(match => ({
+          label: `${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}`,
+          description: match.reportedScore
+            ? `Aktuell: ${match.reportedScore.home}:${match.reportedScore.away}`
+            : 'Noch kein Ergebnis',
+          value: String(match.matchNumber),
+        }))
+      )
+  );
+
+  await interaction.reply({
+    content: 'Wähle das Spiel aus, das du als Admin eintragen willst.',
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleAdminResultSelect(interaction, eventKey, groupLetter) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen Ergebnisse manuell eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const resultsData = loadResults();
+  const matchNumber = Number(interaction.values[0]);
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+  const match = resultGroup?.matches?.find(m => Number(m.matchNumber) === matchNumber);
+
+  if (!match) {
+    await interaction.reply({
+      content: '❌ Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`admin_result_modal:${eventKey}:${groupLetter}:${matchNumber}`)
+    .setTitle('Admin-Ergebnis eintragen');
+
+  const homeInput = new TextInputBuilder()
+    .setCustomId('home_goals')
+    .setLabel(`Tore ${match.homeClubName}`)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('z. B. 3');
+
+  const awayInput = new TextInputBuilder()
+    .setCustomId('away_goals')
+    .setLabel(`Tore ${match.awayClubName}`)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('z. B. 1');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(homeInput),
+    new ActionRowBuilder().addComponents(awayInput)
+  );
+
+  await interaction.showModal(modal);
+  return true;
+}
+
+async function handleAdminResultModal(interaction, eventKey, groupLetter, matchNumber) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen Ergebnisse manuell eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const resultsData = loadResults();
+  const groupsData = loadGroups();
+
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+  const match = resultGroup?.matches?.find(m => Number(m.matchNumber) === Number(matchNumber));
+
+  if (!resultGroup || !groupMeta || !match) {
+    await interaction.reply({
+      content: '❌ Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const homeGoalsRaw = interaction.fields.getTextInputValue('home_goals').trim();
+  const awayGoalsRaw = interaction.fields.getTextInputValue('away_goals').trim();
+
+  if (!/^\d+$/.test(homeGoalsRaw) || !/^\d+$/.test(awayGoalsRaw)) {
+    await interaction.reply({
+      content: '❌ Bitte gib nur ganze Zahlen ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const homeGoals = Number(homeGoalsRaw);
+  const awayGoals = Number(awayGoalsRaw);
+
+  if (homeGoals > 20 || awayGoals > 20) {
+    await interaction.reply({
+      content: '❌ Bitte gib ein Ergebnis zwischen 0 und 20 ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.confirmationMessageId) {
+    await deleteMessageIfExists(groupMeta.channelId, match.confirmationMessageId);
+    match.confirmationMessageId = null;
+  }
+
+  match.status = 'confirmed';
+  match.reportedByTeamId = null;
+  match.reportedScore = {
+    home: homeGoals,
+    away: awayGoals,
+  };
+  match.confirmed = true;
+
+  saveResults(resultsData);
+
+  await updateGroupMessages(eventKey, groupLetter);
+
+  await interaction.reply({
+    content: `✅ Admin-Ergebnis eingetragen: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
 async function handleSelectResult(interaction, eventKey, groupLetter) {
   const resultsData = loadResults();
   const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
@@ -1645,6 +1823,11 @@ await processGroupReleaseTimes('saturday');
       return handleOpenResult(interaction, eventKey, groupLetter);
     }
 
+if (interaction.customId.startsWith('admin_result_open:')) {
+  const [, eventKey, groupLetter] = interaction.customId.split(':');
+  return handleAdminResultOpen(interaction, eventKey, groupLetter);
+}
+
     if (interaction.customId.startsWith('backup_replace_open:')) {
       const [, eventKey, groupLetter] = interaction.customId.split(':');
       return handleBackupReplaceOpen(interaction, eventKey, groupLetter);
@@ -1667,6 +1850,11 @@ await processGroupReleaseTimes('saturday');
       return handleSelectResult(interaction, eventKey, groupLetter);
     }
 
+if (interaction.customId.startsWith('admin_result_select:')) {
+  const [, eventKey, groupLetter] = interaction.customId.split(':');
+  return handleAdminResultSelect(interaction, eventKey, groupLetter);
+}
+
     if (interaction.customId.startsWith('backup_replace_target:')) {
       const [, eventKey, groupLetter] = interaction.customId.split(':');
       return handleBackupReplaceTarget(interaction, eventKey, groupLetter);
@@ -1679,11 +1867,16 @@ await processGroupReleaseTimes('saturday');
   }
 
   if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith('result_modal:')) {
-      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-      return handleResultModal(interaction, eventKey, groupLetter, matchNumber);
-    }
+  if (interaction.customId.startsWith('result_modal:')) {
+    const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+    return handleResultModal(interaction, eventKey, groupLetter, matchNumber);
   }
+
+  if (interaction.customId.startsWith('admin_result_modal:')) {
+    const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+    return handleAdminResultModal(interaction, eventKey, groupLetter, matchNumber);
+  }
+}
 
   return false;
 },
