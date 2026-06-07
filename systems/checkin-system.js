@@ -8,6 +8,8 @@ const {
   MessageFlags,
 } = require('discord.js');
 
+const banlistSystem = require('./banlist-system');
+
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 
@@ -100,6 +102,63 @@ function normalizeTeamForCheckin(team) {
     coManagerIds: Array.isArray(team.coManagerIds) ? team.coManagerIds : [],
     joinedAt: Date.now(),
   };
+}
+
+function getBanReasonText(ban) {
+  if (!ban) return null;
+
+  return [
+    '🚫 **Dein Team ist aktuell für den Loco Night Cup gesperrt.**',
+    '',
+    `**Team:** ${ban.clubName}`,
+    `**Grund:** ${ban.reason}`,
+    `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
+    '',
+    'Während dieser Sperre können VM und Co-VMs nicht am Check-in teilnehmen.',
+  ].join('\n');
+}
+
+function formatDateDE(dateString) {
+  if (!dateString) return '—';
+
+  const [year, month, day] = String(dateString).split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function getTeamBan(team, userId = null) {
+  if (!team) return null;
+
+  const teamBan = banlistSystem.isTeamOrUserBanned({
+    teamId: team.id || team.teamId,
+  });
+
+  if (teamBan) return teamBan;
+
+  const managerBan = banlistSystem.isTeamOrUserBanned({
+    userId: team.managerId,
+  });
+
+  if (managerBan) return managerBan;
+
+  const coManagerIds = Array.isArray(team.coManagerIds) ? team.coManagerIds : [];
+
+  for (const coManagerId of coManagerIds) {
+    const coManagerBan = banlistSystem.isTeamOrUserBanned({
+      userId: coManagerId,
+    });
+
+    if (coManagerBan) return coManagerBan;
+  }
+
+  if (userId) {
+    const userBan = banlistSystem.isTeamOrUserBanned({
+      userId,
+    });
+
+    if (userBan) return userBan;
+  }
+
+  return null;
 }
 
 function isUserAllowedForTeam(userId, team) {
@@ -750,6 +809,44 @@ async function reconcileAll() {
   saveCheckins(data);
 }
 
+async function removeTeamFromOpenCheckinsById(teamId) {
+  if (!clientRef) return [];
+
+  const data = loadCheckins();
+  const removedFrom = [];
+
+  for (const type of ['friday', 'saturday']) {
+    const event = data[type];
+
+    if (!event || !Array.isArray(event.teams)) continue;
+
+    const before = event.teams.length;
+
+    event.teams = event.teams.filter(team => {
+      return String(team.teamId || team.id) !== String(teamId);
+    });
+
+    if (event.backupDecisions && event.backupDecisions[teamId]) {
+      delete event.backupDecisions[teamId];
+    }
+
+    if (before !== event.teams.length) {
+      removedFrom.push(event.label || type);
+
+      data[type] = await ensureMainMessage(event);
+
+      if (data[type].finalized) {
+        data[type] = await ensureSummaryMessage(data[type]);
+        data[type] = await ensureBackupMessage(data[type]);
+      }
+    }
+  }
+
+  saveCheckins(data);
+
+  return removedFrom;
+}
+
 async function refreshEvent(type) {
   if (!clientRef) return false;
 
@@ -804,6 +901,16 @@ if (Date.now() >= lateDeadlineAt) {
     });
     return true;
   }
+
+const ban = getTeamBan(team, interaction.user.id);
+
+if (ban) {
+  await interaction.reply({
+    content: getBanReasonText(ban),
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   const alreadyIn = event.teams.find(entry => entry.teamId === team.id);
   if (alreadyIn) {
@@ -860,6 +967,16 @@ if (Date.now() >= lateDeadlineAt) {
     return true;
   }
 
+const ban = getTeamBan(team, interaction.user.id);
+
+if (ban) {
+  await interaction.reply({
+    content: getBanReasonText(ban),
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
+
   const before = event.teams.length;
   event.teams = event.teams.filter(entry => entry.teamId !== team.id);
 
@@ -903,6 +1020,16 @@ async function handleBackupDecision(interaction, type, decision) {
     });
     return true;
   }
+
+const ban = getTeamBan(userTeam, interaction.user.id);
+
+if (ban) {
+  await interaction.reply({
+    content: getBanReasonText(ban),
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   const backups = getBackupTeams(event);
   const backupTeam = backups.find(team => team.teamId === userTeam.id);
@@ -1001,4 +1128,5 @@ module.exports = {
   },
 
   refreshEvent,
+removeTeamFromOpenCheckinsById,
 };
