@@ -1019,10 +1019,9 @@ async function advanceKoIfReady(eventKey) {
 
       await assignKoRoleToMatches('quarterFinal', event.rounds.quarterFinal.matches);
 
-      
-
-      saveKo(koData);
-      return;
+saveKo(koData);
+await releaseKoRound(eventKey, 'quarterFinal', true);
+return;
     }
   }
 
@@ -1055,10 +1054,9 @@ async function advanceKoIfReady(eventKey) {
 
       await assignKoRoleToMatches('semiFinal', event.rounds.semiFinal.matches);
 
-      
-
-      saveKo(koData);
-      return;
+saveKo(koData);
+await releaseKoRound(eventKey, 'semiFinal', true);
+return;
     }
   }
 
@@ -1114,7 +1112,9 @@ async function advanceKoIfReady(eventKey) {
         }
 
         saveKo(koData);
-        return;
+await releaseKoRound(eventKey, 'final', true);
+await releaseKoRound(eventKey, 'thirdPlace', true);
+return;
       }
     }
   }
