@@ -380,6 +380,37 @@ function buildBackupShortSection(event) {
   ].join('\n');
 }
 
+function buildPreDrawContent(event) {
+  const actualFormat = getActualFormat(event.teams.length);
+
+  if (actualFormat === 0) {
+    return [
+      '⚠️ **Aktueller Stand nach offiziellem Anmeldeschluss**',
+      '',
+      'Aktuell sind noch nicht genug Teams für den NightCup angemeldet.',
+      'Minimum sind **8 Teams**.',
+      '',
+      'Teams können sich noch bis **23:45 Uhr** anmelden oder abmelden.',
+      'Um **23:45 Uhr** wird final geprüft, ob ein gültiges Format zustande kommt.',
+      '',
+      '⚠️ Abmeldungen nach 23:30 Uhr führen automatisch zu einer **7-Tage-Sperre**.',
+    ].join('\n');
+  }
+
+  return [
+    '✅ **Aktueller Stand nach offiziellem Anmeldeschluss**',
+    '',
+    `Aktuelles Format: **${actualFormat}er Turnier**`,
+    '',
+    'Teams können sich noch bis **23:45 Uhr** anmelden oder abmelden.',
+    'Um **23:45 Uhr** wird final geprüft, welches Format zustande kommt.',
+    '',
+    '🎲 Die Gruppenauslosung findet um **23:50 Uhr** statt.',
+    '',
+    '⚠️ Abmeldungen nach 23:30 Uhr führen automatisch zu einer **7-Tage-Sperre**.',
+  ].join('\n');
+}
+
 function buildSummaryContent(event) {
   const actualFormat = getActualFormat(event.teams.length);
 
@@ -698,6 +729,29 @@ async function ensureWarningMessage(event) {
   return event;
 }
 
+async function ensurePreDrawMessage(event) {
+  if (event.finalized) return event;
+
+  const channel = await fetchChannel(event.channelId);
+  if (!channel) return event;
+
+  const content = buildPreDrawContent(event);
+  let message = null;
+
+  if (event.summaryMessageId) {
+    message = await fetchMessage(channel, event.summaryMessageId);
+  }
+
+  if (!message) {
+    const created = await channel.send({ content });
+    event.summaryMessageId = created.id;
+    return event;
+  }
+
+  await message.edit({ content });
+  return event;
+}
+
 async function ensureSummaryMessage(event) {
   if (!event.finalized) return event;
 
@@ -808,6 +862,10 @@ current.startAt = cfg.startAt;
   current.displayDate = cfg.displayDate;
   current.startLine = cfg.startLine;
   current.channelId = cfg.channelId;
+
+if (!current.finalized && Date.now() >= current.deadlineAt) {
+  data[type] = await ensurePreDrawMessage(current);
+}
 
   if (!current.finalized && Date.now() >= (current.drawAt || current.lateDeadlineAt || current.deadlineAt)) {
     data[type] = await finalizeEvent(current);
