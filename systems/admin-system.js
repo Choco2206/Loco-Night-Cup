@@ -16,6 +16,7 @@ const {
 
 const teamSystem = require('./team-system');
 const checkinSystem = require('./checkin-system');
+const banlistSystem = require('./banlist-system');
 const {
   sendTournamentCeremonyIfReady,
   buildCeremonyText,
@@ -404,7 +405,8 @@ function buildLiveControlEmbed() {
         '• Registriertes Team löschen per Auswahl',
         '• Backup / Team nachrücken',
         '• Team aus Check-in abmelden',
-        '• Gruppenergebnis manuell setzen',
+'• Team auf Sperrliste setzen',
+'• Gruppenergebnis manuell setzen',
         '• K.O.-Ergebnis manuell setzen',
         '• Manager ohne Team anzeigen',
         '• Freilos-Team hinzufügen',
@@ -472,6 +474,11 @@ const row4 = new ActionRowBuilder().addComponents(
   new ButtonBuilder()
     .setCustomId('live_remove_bye_team')
     .setLabel('🚫 Freilos entfernen')
+    .setStyle(ButtonStyle.Danger),
+
+  new ButtonBuilder()
+    .setCustomId('live_ban_team')
+    .setLabel('⛔ Team sperren')
     .setStyle(ButtonStyle.Danger),
 
   new ButtonBuilder()
@@ -1545,6 +1552,36 @@ function buildEventSelect(customId) {
   );
 }
 
+function buildBanReasonSelect(teamId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`live_ban_reason_select:${teamId}`)
+      .setPlaceholder('Sperrgrund auswählen')
+      .addOptions([
+        {
+          label: 'Eingecheckt, aber nicht erschienen',
+          value: 'Eingecheckt, aber nicht erschienen',
+          description: 'Team war eingecheckt, ist aber nicht aufgetaucht.',
+        },
+        {
+          label: 'Turnier laufend verlassen',
+          value: 'Während laufendem Turnierbetrieb rausgegangen',
+          description: 'Team hat den Cup ohne saubere Abmeldung verlassen.',
+        },
+        {
+          label: 'Respektlos / beleidigend',
+          value: 'Respektloses, beleidigendes oder unsportliches Verhalten',
+          description: 'Beleidigungen, Stress oder respektloses Verhalten.',
+        },
+        {
+          label: 'Sonstiger schwerer Regelverstoß',
+          value: 'Sonstiger schwerer Regelverstoß',
+          description: 'Andere schwere Verstöße gegen den Ablauf.',
+        },
+      ])
+  );
+}
+
 function buildActiveBackupEventSelect(customId) {
   const checkins = loadCheckins();
 
@@ -1681,6 +1718,7 @@ module.exports = {
     });
 
     await ensureLiveControlPanel();
+    await banlistSystem.init(client);
   },
 
   async handleInteraction(interaction) {
@@ -1696,7 +1734,8 @@ module.exports = {
           'live_delete_team',
           'live_manual_backup',
           'live_remove_checkin_team',
-          'live_manual_group_result',
+'live_ban_team',
+'live_manual_group_result',
           'live_manual_ko_result',
           'live_managers_without_team',
           'live_add_bye_team',
@@ -1983,6 +2022,25 @@ if (interaction.customId === 'live_remove_checkin_team') {
   return true;
 }
 
+if (interaction.customId === 'live_ban_team') {
+  const rows = buildTeamSelectRows('live_ban_team_select', 'Team für Sperre auswählen');
+
+  if (!rows.length) {
+    await replyTemp(interaction, {
+      content: '❌ Aktuell sind keine Teams registriert.',
+    });
+    return true;
+  }
+
+  await interaction.reply({
+    content: '⛔ Wähle das Team aus, das auf die Sperrliste soll.',
+    components: rows,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
       if (interaction.customId === 'live_manual_group_result') {
         await interaction.reply({
           content: 'Für welches Event willst du ein Gruppenergebnis manuell setzen?',
@@ -2124,6 +2182,66 @@ return true;
         await denied;
         return true;
       }
+
+if (interaction.customId.startsWith('live_ban_team_select:')) {
+  const teamId = interaction.values[0];
+  const team = findTeamById(teamId);
+
+  if (!team) {
+    await interaction.update({
+      content: '❌ Team nicht gefunden.',
+      components: [],
+    });
+    return true;
+  }
+
+  await interaction.update({
+    content: `⛔ Wähle den Sperrgrund für **${team.clubName}** aus.`,
+    components: [buildBanReasonSelect(teamId)],
+  });
+
+  return true;
+}
+
+if (interaction.customId.startsWith('live_ban_reason_select:')) {
+  const [, teamId] = interaction.customId.split(':');
+  const reason = interaction.values[0];
+  const team = findTeamById(teamId);
+
+  if (!team) {
+    await interaction.update({
+      content: '❌ Team nicht gefunden.',
+      components: [],
+    });
+    return true;
+  }
+
+  try {
+    const result = await banlistSystem.addTeamBan(team, reason, interaction.user.id);
+
+    await logToLive(
+      `⛔ Team gesperrt: ${team.clubName} | Grund: ${reason} | Bis: ${result.bannedUntilDate}`
+    );
+
+    await interaction.update({
+      content: [
+        `✅ **${team.clubName}** wurde auf die Sperrliste gesetzt.`,
+        '',
+        `**Grund:** ${reason}`,
+        `**Sperre ab:** ${result.bannedAtDate}`,
+        `**Sperre bis:** ${result.bannedUntilDate}`,
+      ].join('\n'),
+      components: [],
+    });
+  } catch (error) {
+    await interaction.update({
+      content: `❌ ${error.message}`,
+      components: [],
+    });
+  }
+
+  return true;
+}
 
       if (interaction.customId.startsWith('live_team_details_select:')) {
         const teamId = interaction.values[0];
