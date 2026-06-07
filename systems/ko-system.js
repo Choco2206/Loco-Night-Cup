@@ -24,8 +24,6 @@ const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
 const KO_NEXT_ROUND_BUFFER_MS = 0;
 
 let clientRef = null;
-
-let clientRef = null;
 let intervalRef = null;
 let koProcessing = false;
 
