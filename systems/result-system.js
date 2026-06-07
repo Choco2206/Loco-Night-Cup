@@ -283,11 +283,36 @@ function buildTableText(rows) {
     .join('\n');
 }
 
-function buildTableEmbed(eventLabel, groupLetter, rows) {
+function getFormatText(format) {
+  if (Number(format) === 24) {
+    return '🏆 **Turnierformat:** 24er Cup • Platz 1 & 2 kommen weiter + die 4 besten Drittplatzierten';
+  }
+
+  if (Number(format) === 18) {
+    return '🏆 **Turnierformat:** 18er Cup • Platz 1 kommt weiter';
+  }
+
+  if (Number(format) === 16) {
+    return '🏆 **Turnierformat:** 16er Cup • Platz 1 & 2 kommen weiter';
+  }
+
+  return format ? `🏆 **Turnierformat:** ${format}er Cup` : null;
+}
+
+function buildTableEmbed(eventLabel, groupLetter, rows, format = null) {
+  const tableText = rows.length > 0
+    ? buildTableText(rows)
+    : 'Noch keine Teams in dieser Gruppe.';
+
+  const formatText = getFormatText(format);
+
   return new EmbedBuilder()
     .setTitle(`🏆 ${eventLabel} • Gruppe ${groupLetter} • Live-Tabelle`)
     .setDescription(
-      rows.length > 0 ? buildTableText(rows) : 'Noch keine Teams in dieser Gruppe.'
+      [
+        tableText,
+        formatText ? `\n${formatText}` : null,
+      ].filter(Boolean).join('\n')
     )
     .setColor(0xff0000);
 }
