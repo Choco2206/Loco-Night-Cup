@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const { EmbedBuilder } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require('discord.js');
 
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
@@ -206,6 +211,15 @@ function buildTableEmbed(eventLabel, groupLetter, rows) {
         : 'Noch keine Teams in dieser Gruppe.'
     )
     .setColor(0xff0000);
+}
+
+function buildGroupAdminButtons(eventKey, groupLetter) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`group_backup_replace:${eventKey}:${groupLetter}`)
+      .setLabel('🔁 Nachrücker einsetzen')
+      .setStyle(ButtonStyle.Secondary)
+  );
 }
 
 function buildPingMessage(groupLetter, teams) {
@@ -525,8 +539,9 @@ if (event.status !== 'confirmed') return;
     const rows = createInitialRows(grouped[letter]);
 
     const tableMessage = await channel.send({
-      embeds: [buildTableEmbed(event.label, letter, rows)],
-    });
+  embeds: [buildTableEmbed(event.label, letter, rows)],
+  components: [buildGroupAdminButtons(eventKey, letter)],
+});
 
     const pingMessage = await channel.send({
       content: buildPingMessage(letter, grouped[letter]),
