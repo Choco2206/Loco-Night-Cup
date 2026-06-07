@@ -238,6 +238,43 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function scoresMatch(scoreA, scoreB) {
+  return (
+    Number(scoreA.home) === Number(scoreB.home) &&
+    Number(scoreA.away) === Number(scoreB.away)
+  );
+}
+
+function getAdminPing() {
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+  return adminRoleId ? `<@&${adminRoleId}>` : '@Admin';
+}
+
+function isAdmin(interaction) {
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+  if (!adminRoleId) return false;
+
+  return interaction.member?.roles?.cache?.has(adminRoleId);
+}
+
+async function sendKoDisputeNotice(eventKey, roundKey, match, round) {
+  const channel = await fetchChannel(round.channelId);
+  if (!channel) return null;
+
+  const message = await channel.send({
+    content: [
+      `🚨 ${getAdminPing()} **K.O.-Ergebnis stimmt nicht überein**`,
+      '',
+      `**${getRoundLabel(roundKey)}**`,
+      `**${match.homeClubName} vs ${match.awayClubName}**`,
+      '',
+      `Bitte prüfen und per **Admin-Ergebnis** final eintragen.`,
+    ].join('\n'),
+  });
+
+  return message.id;
+}
+
 function getDynamicWindowFromNow() {
   const start = getCurrentMinutes();
   const end = start + INVITE_WINDOW_MINUTES;
@@ -490,8 +527,12 @@ function createKoMatches(format, roundKey, pairs) {
       reportedScore: null,
       confirmed: false,
       confirmationMessageId: null,
-      winnerTeamId: null,
-      loserTeamId: null,
+disputeMessageId: null,
+teamReports: {},
+waitingForTeamId: null,
+waitingForClubName: null,
+winnerTeamId: null,
+loserTeamId: null,
     };
   });
 }
@@ -559,7 +600,7 @@ async function sendKoMissingResultReminder(roundKey, round) {
     content: [
       `⚠️ **${getRoundLabel(roundKey)} ist noch nicht abgeschlossen**`,
       '',
-      `Bitte meldet oder bestätigt die offenen Ergebnisse, damit die nächste K.O.-Runde freigegeben werden kann.`,
+      `Bitte tragt die offenen Ergebnisse ein, damit die nächste K.O.-Runde freigegeben werden kann.`,
       '',
       buildKoOpenMatchesText(openMatches),
     ].join('\n'),
@@ -737,13 +778,17 @@ function buildRoundEmbed(eventLabel, roundKey, matches) {
   const lines = matches.map(match => {
     let status = '⏳ Offen';
 
-    if (match.status === 'reported' && match.reportedScore) {
-      status = `📝 Gemeldet: ${match.reportedScore.home}:${match.reportedScore.away}`;
-    }
+    if (match.status === 'awaiting' && match.waitingForClubName) {
+  status = `⏳ Wartet auf Eintragung von ${match.waitingForClubName}`;
+}
 
-    if (match.status === 'confirmed' && match.reportedScore) {
-      status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
-    }
+if (match.status === 'disputed') {
+  status = '🚨 In Klärung mit Admin';
+}
+
+if (match.status === 'confirmed' && match.reportedScore) {
+  status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+}
 
     return [
       `**${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}**`,
@@ -769,19 +814,10 @@ function buildRoundButtons(eventKey, roundKey) {
     new ButtonBuilder()
       .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
       .setLabel('⚽ Ergebnis eintragen')
-      .setStyle(ButtonStyle.Primary)
-  );
-}
-
-function buildConfirmButtons(eventKey, roundKey, matchNumber) {
-  return new ActionRowBuilder().addComponents(
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`ko_confirm:${eventKey}:${roundKey}:${matchNumber}`)
-      .setLabel('✅ Bestätigen')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`ko_reject:${eventKey}:${roundKey}:${matchNumber}`)
-      .setLabel('❌ Ablehnen')
+      .setCustomId(`ko_admin_result_open:${eventKey}:${roundKey}`)
+      .setLabel('🛠️ Admin-Ergebnis')
       .setStyle(ButtonStyle.Danger)
   );
 }
@@ -1280,10 +1316,20 @@ async function handleOpenResult(interaction, eventKey, roundKey) {
   }
 
   const allowedMatches = round.matches.filter(match => {
-  if (match.status === 'reported') return false;
   if (match.status === 'confirmed') return false;
+  if (match.status === 'disputed') return false;
+  if (!isAuthorizedForMatch(interaction.user.id, match)) return false;
 
-  return isAuthorizedForMatch(interaction.user.id, match);
+  const ownTeamId = isUserAllowedForTeam(interaction.user.id, {
+    managerId: match.homeManagerId,
+    coManagerIds: match.homeCoManagerIds || [],
+  })
+    ? match.homeTeamId
+    : match.awayTeamId;
+
+  if (match.teamReports && match.teamReports[ownTeamId]) return false;
+
+  return true;
 });
 
   if (allowedMatches.length === 0) {
@@ -1312,6 +1358,204 @@ async function handleOpenResult(interaction, eventKey, roundKey) {
     components: [row],
     flags: MessageFlags.Ephemeral,
   });
+
+  return true;
+}
+
+async function handleAdminResultOpen(interaction, eventKey, roundKey) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen K.O.-Ergebnisse manuell eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const koData = loadKo();
+  const round = koData[eventKey]?.rounds?.[roundKey];
+
+  if (!round || !Array.isArray(round.matches)) {
+    await interaction.reply({
+      content: '❌ K.O.-Runde nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`ko_admin_result_select:${eventKey}:${roundKey}`)
+      .setPlaceholder('Welches K.O.-Spiel willst du eintragen?')
+      .addOptions(
+        round.matches.map(match => ({
+          label: `${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}`,
+          description: match.reportedScore
+            ? `Aktuell: ${match.reportedScore.home}:${match.reportedScore.away}`
+            : 'Noch kein Ergebnis',
+          value: String(match.matchNumber),
+        }))
+      )
+  );
+
+  await interaction.reply({
+    content: 'Wähle das K.O.-Spiel aus, das du als Admin eintragen willst.',
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleAdminResultSelect(interaction, eventKey, roundKey) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen K.O.-Ergebnisse manuell eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const koData = loadKo();
+  const round = koData[eventKey]?.rounds?.[roundKey];
+  const matchNumber = Number(interaction.values[0]);
+  const match = round?.matches?.find(m => Number(m.matchNumber) === matchNumber);
+
+  if (!match) {
+    await interaction.reply({
+      content: '❌ K.O.-Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`ko_admin_result_modal:${eventKey}:${roundKey}:${matchNumber}`)
+    .setTitle('Admin-Ergebnis eintragen');
+
+  const homeInput = new TextInputBuilder()
+    .setCustomId('home_goals')
+    .setLabel(`Tore ${match.homeClubName}`)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('z. B. 3');
+
+  const awayInput = new TextInputBuilder()
+    .setCustomId('away_goals')
+    .setLabel(`Tore ${match.awayClubName}`)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('z. B. 1');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(homeInput),
+    new ActionRowBuilder().addComponents(awayInput)
+  );
+
+  await interaction.showModal(modal);
+  return true;
+}
+
+async function handleAdminResultModal(interaction, eventKey, roundKey, matchNumber) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen K.O.-Ergebnisse manuell eintragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const koData = loadKo();
+  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
+
+  if (!found) {
+    await interaction.reply({
+      content: '❌ K.O.-Spiel nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const { event, round, match } = found;
+
+  const homeGoalsRaw = interaction.fields.getTextInputValue('home_goals').trim();
+  const awayGoalsRaw = interaction.fields.getTextInputValue('away_goals').trim();
+
+  if (!/^\d+$/.test(homeGoalsRaw) || !/^\d+$/.test(awayGoalsRaw)) {
+    await interaction.reply({
+      content: '❌ Bitte gib nur ganze Zahlen ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const homeGoals = Number(homeGoalsRaw);
+  const awayGoals = Number(awayGoalsRaw);
+
+  if (homeGoals > 20 || awayGoals > 20) {
+    await interaction.reply({
+      content: '❌ Bitte gib ein Ergebnis zwischen 0 und 20 ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (homeGoals === awayGoals) {
+    await interaction.reply({
+      content: '❌ In der K.O.-Phase muss es einen Sieger geben.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.confirmationMessageId) {
+    await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+    match.confirmationMessageId = null;
+  }
+
+  if (match.disputeMessageId) {
+    await deleteMessageIfExists(round.channelId, match.disputeMessageId);
+    match.disputeMessageId = null;
+  }
+
+  match.status = 'confirmed';
+  match.reportedByTeamId = null;
+  match.reportedScore = {
+    home: homeGoals,
+    away: awayGoals,
+  };
+  match.confirmed = true;
+  match.confirmedAt = nowIso();
+  match.teamReports = {};
+  match.waitingForTeamId = null;
+  match.waitingForClubName = null;
+
+  if (homeGoals > awayGoals) {
+    match.winnerTeamId = match.homeTeamId;
+    match.loserTeamId = match.awayTeamId;
+  } else {
+    match.winnerTeamId = match.awayTeamId;
+    match.loserTeamId = match.homeTeamId;
+  }
+
+  saveKo(koData);
+
+  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
+  saveKo(koData);
+
+  await interaction.reply({
+    content: `✅ Admin-Ergebnis eingetragen: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  await reconcileKoAuto();
+
+  try {
+    if (roundKey === 'final' || roundKey === 'thirdPlace') {
+      await sendTournamentCeremonyIfReady(clientRef, eventKey);
+    }
+  } catch (error) {
+    console.error('❌ Fehler bei der automatischen Siegerehrung:', error);
+  }
 
   return true;
 }
@@ -1346,9 +1590,9 @@ async function handleSelectResult(interaction, eventKey, roundKey) {
     return true;
   }
   
-  if (match.status === 'reported') {
+  if (match.status === 'disputed') {
   await interaction.reply({
-    content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
+    content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
     flags: MessageFlags.Ephemeral,
   });
   return true;
@@ -1401,31 +1645,31 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
     return true;
   }
 
-  const { round, match } = found;
-  
-  if (!isRoundReleased(round)) {
-  await interaction.reply({
-    content: `❌ ${getRoundLabel(roundKey)} wurde noch nicht freigegeben.`,
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
-  
-  if (match.status === 'reported') {
-  await interaction.reply({
-    content: '❌ Für dieses Spiel wurde bereits ein Ergebnis gemeldet. Bitte warte auf Bestätigung oder Ablehnung.',
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
+  const { event, round, match } = found;
 
-if (match.status === 'confirmed') {
-  await interaction.reply({
-    content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
+  if (!isRoundReleased(round)) {
+    await interaction.reply({
+      content: `❌ ${getRoundLabel(roundKey)} wurde noch nicht freigegeben.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.status === 'confirmed') {
+    await interaction.reply({
+      content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.status === 'disputed') {
+    await interaction.reply({
+      content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
 
   if (!isAuthorizedForMatch(interaction.user.id, match)) {
     await interaction.reply({
@@ -1435,10 +1679,10 @@ if (match.status === 'confirmed') {
     return true;
   }
 
-  const homeGoals = interaction.fields.getTextInputValue('home_goals').trim();
-  const awayGoals = interaction.fields.getTextInputValue('away_goals').trim();
+  const homeGoalsRaw = interaction.fields.getTextInputValue('home_goals').trim();
+  const awayGoalsRaw = interaction.fields.getTextInputValue('away_goals').trim();
 
-  if (!/^\d+$/.test(homeGoals) || !/^\d+$/.test(awayGoals)) {
+  if (!/^\d+$/.test(homeGoalsRaw) || !/^\d+$/.test(awayGoalsRaw)) {
     await interaction.reply({
       content: '❌ Bitte gib nur ganze Zahlen ein.',
       flags: MessageFlags.Ephemeral,
@@ -1446,7 +1690,18 @@ if (match.status === 'confirmed') {
     return true;
   }
 
-  if (Number(homeGoals) === Number(awayGoals)) {
+  const homeGoals = Number(homeGoalsRaw);
+  const awayGoals = Number(awayGoalsRaw);
+
+  if (homeGoals > 20 || awayGoals > 20) {
+    await interaction.reply({
+      content: '❌ Bitte gib ein Ergebnis zwischen 0 und 20 ein.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (homeGoals === awayGoals) {
     await interaction.reply({
       content: '❌ In der K.O.-Phase muss es einen Sieger geben. Bitte trage kein Unentschieden ein.',
       flags: MessageFlags.Ephemeral,
@@ -1460,202 +1715,99 @@ if (match.status === 'confirmed') {
   });
 
   const reportingTeamId = reportingHome ? match.homeTeamId : match.awayTeamId;
-  const opponentMentions = reportingHome
-    ? [...new Set([match.awayManagerId, ...(match.awayCoManagerIds || [])].filter(Boolean))]
-    : [...new Set([match.homeManagerId, ...(match.homeCoManagerIds || [])].filter(Boolean))];
+  const opponentTeamId = reportingHome ? match.awayTeamId : match.homeTeamId;
+  const opponentClubName = reportingHome ? match.awayClubName : match.homeClubName;
 
-  match.status = 'reported';
-  match.reportedByTeamId = reportingTeamId;
-  match.reportedScore = {
-    home: Number(homeGoals),
-    away: Number(awayGoals),
+  if (!match.teamReports) {
+    match.teamReports = {};
+  }
+
+  if (match.teamReports[reportingTeamId]) {
+    await interaction.reply({
+      content: '❌ Dein Team hat für dieses Spiel bereits ein Ergebnis eingetragen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  match.teamReports[reportingTeamId] = {
+    home: homeGoals,
+    away: awayGoals,
+    reportedByUserId: interaction.user.id,
+    reportedAt: nowIso(),
   };
-  match.confirmed = false;
 
-  const channel = await fetchChannel(round.channelId);
-  if (!channel) {
-    await interaction.reply({
-      content: '❌ Kanal konnte nicht geladen werden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
+  const homeReport = match.teamReports[match.homeTeamId];
+  const awayReport = match.teamReports[match.awayTeamId];
 
-  if (match.confirmationMessageId) {
-    await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
-    match.confirmationMessageId = null;
-  }
+  if (homeReport && awayReport) {
+    if (scoresMatch(homeReport, awayReport)) {
+      match.status = 'confirmed';
+      match.reportedScore = {
+        home: homeGoals,
+        away: awayGoals,
+      };
+      match.confirmed = true;
+      match.confirmedAt = nowIso();
+      match.reportedByTeamId = null;
+      match.waitingForTeamId = null;
+      match.waitingForClubName = null;
 
-  const confirmMessage = await channel.send({
-    content: [
-      `⚠️ **Ergebnis gemeldet**`,
-      '',
-      `**${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
-      '',
-      `Nur das gegnerische Team darf jetzt bestätigen oder ablehnen.`,
-      opponentMentions.map(id => `<@${id}>`).join(' '),
-    ].join('\n'),
-    components: [buildConfirmButtons(eventKey, roundKey, match.matchNumber)],
-  });
+      if (homeGoals > awayGoals) {
+        match.winnerTeamId = match.homeTeamId;
+        match.loserTeamId = match.awayTeamId;
+      } else {
+        match.winnerTeamId = match.awayTeamId;
+        match.loserTeamId = match.homeTeamId;
+      }
+    } else {
+      match.status = 'disputed';
+      match.confirmed = false;
+      match.reportedScore = null;
+      match.confirmedAt = null;
+      match.winnerTeamId = null;
+      match.loserTeamId = null;
+      match.waitingForTeamId = null;
+      match.waitingForClubName = null;
 
-  match.confirmationMessageId = confirmMessage.id;
-  saveKo(koData);
-
-  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, found.event.label)).messageId;
-  saveKo(koData);
-
-  await interaction.reply({
-    content: '✅ Ergebnis wurde gemeldet. Jetzt muss das gegnerische Team bestätigen.',
-    flags: MessageFlags.Ephemeral,
-  });
-
-  return true;
-}
-
-async function handleConfirm(interaction, eventKey, roundKey, matchNumber) {
-  const koData = loadKo();
-  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
-
-  if (!found) {
-    await interaction.reply({
-      content: '❌ K.O.-Spiel nicht gefunden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const { event, round, match } = found;
-
-  if (match.status !== 'reported' || !match.reportedScore) {
-    await interaction.reply({
-      content: '❌ Für dieses Spiel gibt es aktuell kein offenes Ergebnis zur Bestätigung.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const opponentTeam =
-    match.reportedByTeamId === match.homeTeamId
-      ? { managerId: match.awayManagerId, coManagerIds: match.awayCoManagerIds || [] }
-      : { managerId: match.homeManagerId, coManagerIds: match.homeCoManagerIds || [] };
-
-  if (!isUserAllowedForTeam(interaction.user.id, opponentTeam)) {
-    await interaction.reply({
-      content: '❌ Nur das gegnerische Team darf dieses Ergebnis bestätigen.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  match.status = 'confirmed';
-  match.confirmed = true;
-  match.confirmedAt = nowIso();
-
-  const homeGoals = Number(match.reportedScore.home);
-  const awayGoals = Number(match.reportedScore.away);
-
-  if (homeGoals > awayGoals) {
-    match.winnerTeamId = match.homeTeamId;
-    match.loserTeamId = match.awayTeamId;
-  } else {
-    match.winnerTeamId = match.awayTeamId;
-    match.loserTeamId = match.homeTeamId;
-  }
-
-  saveKo(koData);
-
-  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
-  saveKo(koData);
-
-  const confirmationMessageId = match.confirmationMessageId;
-  match.confirmationMessageId = null;
-  saveKo(koData);
-
-  if (confirmationMessageId) {
-    setTimeout(async () => {
-      await deleteMessageIfExists(round.channelId, confirmationMessageId);
-    }, 4000);
-  }
-
-  await interaction.reply({
-    content: `✅ Ergebnis bestätigt: **${match.homeClubName} ${match.reportedScore.home}:${match.reportedScore.away} ${match.awayClubName}**`,
-    flags: MessageFlags.Ephemeral,
-  });
-
-  await reconcileKoAuto();
-
-  try {
-    if (roundKey === 'final' || roundKey === 'thirdPlace') {
-      await sendTournamentCeremonyIfReady(clientRef, eventKey);
+      if (!match.disputeMessageId) {
+        match.disputeMessageId = await sendKoDisputeNotice(eventKey, roundKey, match, round);
+      }
     }
-  } catch (error) {
-    console.error('❌ Fehler bei der automatischen Siegerehrung:', error);
+  } else {
+    match.status = 'awaiting';
+    match.confirmed = false;
+    match.reportedScore = null;
+    match.waitingForTeamId = opponentTeamId;
+    match.waitingForClubName = opponentClubName;
   }
-
-  return true;
-}
-
-async function handleReject(interaction, eventKey, roundKey, matchNumber) {
-  const koData = loadKo();
-  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
-
-  if (!found) {
-    await interaction.reply({
-      content: '❌ K.O.-Spiel nicht gefunden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const { event, round, match } = found;
-
-  if (match.status !== 'reported' || !match.reportedScore) {
-    await interaction.reply({
-      content: '❌ Für dieses Spiel gibt es aktuell kein offenes Ergebnis zur Ablehnung.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const opponentTeam =
-    match.reportedByTeamId === match.homeTeamId
-      ? { managerId: match.awayManagerId, coManagerIds: match.awayCoManagerIds || [] }
-      : { managerId: match.homeManagerId, coManagerIds: match.homeCoManagerIds || [] };
-
-  if (!isUserAllowedForTeam(interaction.user.id, opponentTeam)) {
-    await interaction.reply({
-      content: '❌ Nur das gegnerische Team darf dieses Ergebnis ablehnen.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  match.status = 'pending';
-  match.reportedByTeamId = null;
-  match.reportedScore = null;
-  match.confirmed = false;
-  match.winnerTeamId = null;
-  match.loserTeamId = null;
 
   saveKo(koData);
 
   round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
   saveKo(koData);
 
-  const confirmationMessageId = match.confirmationMessageId;
-  match.confirmationMessageId = null;
-  saveKo(koData);
-
-  if (confirmationMessageId) {
-    setTimeout(async () => {
-      await deleteMessageIfExists(round.channelId, confirmationMessageId);
-    }, 4000);
-  }
-
   await interaction.reply({
-    content: '❌ Ergebnis wurde abgelehnt. Das Spiel muss neu gemeldet oder später manuell geklärt werden.',
+    content:
+      match.status === 'confirmed'
+        ? `✅ Ergebnis passt bei beiden Teams. Spiel bestätigt: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`
+        : match.status === 'disputed'
+          ? '🚨 Ergebnis weicht ab. Admin wurde zur Klärung informiert.'
+          : `✅ Ergebnis eingetragen. Wartet jetzt auf **${opponentClubName}**.`,
     flags: MessageFlags.Ephemeral,
   });
+
+  if (match.status === 'confirmed') {
+    await reconcileKoAuto();
+
+    try {
+      if (roundKey === 'final' || roundKey === 'thirdPlace') {
+        await sendTournamentCeremonyIfReady(clientRef, eventKey);
+      }
+    } catch (error) {
+      console.error('❌ Fehler bei der automatischen Siegerehrung:', error);
+    }
+  }
 
   return true;
 }
@@ -1683,39 +1835,44 @@ module.exports = {
   },
 
   async handleInteraction(interaction) {
-    if (interaction.isButton()) {
-      if (interaction.customId.startsWith('ko_result_open:')) {
-        const [, eventKey, roundKey] = interaction.customId.split(':');
-        return handleOpenResult(interaction, eventKey, roundKey);
-      }
-
-      if (interaction.customId.startsWith('ko_confirm:')) {
-        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
-        return handleConfirm(interaction, eventKey, roundKey, matchNumber);
-      }
-
-      if (interaction.customId.startsWith('ko_reject:')) {
-        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
-        return handleReject(interaction, eventKey, roundKey, matchNumber);
-      }
+  if (interaction.isButton()) {
+    if (interaction.customId.startsWith('ko_result_open:')) {
+      const [, eventKey, roundKey] = interaction.customId.split(':');
+      return handleOpenResult(interaction, eventKey, roundKey);
     }
 
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId.startsWith('ko_select:')) {
-        const [, eventKey, roundKey] = interaction.customId.split(':');
-        return handleSelectResult(interaction, eventKey, roundKey);
-      }
+    if (interaction.customId.startsWith('ko_admin_result_open:')) {
+      const [, eventKey, roundKey] = interaction.customId.split(':');
+      return handleAdminResultOpen(interaction, eventKey, roundKey);
+    }
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId.startsWith('ko_select:')) {
+      const [, eventKey, roundKey] = interaction.customId.split(':');
+      return handleSelectResult(interaction, eventKey, roundKey);
     }
 
-    if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith('ko_modal:')) {
-        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
-        return handleResultModal(interaction, eventKey, roundKey, matchNumber);
-      }
+    if (interaction.customId.startsWith('ko_admin_result_select:')) {
+      const [, eventKey, roundKey] = interaction.customId.split(':');
+      return handleAdminResultSelect(interaction, eventKey, roundKey);
+    }
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('ko_modal:')) {
+      const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+      return handleResultModal(interaction, eventKey, roundKey, matchNumber);
     }
 
-    return false;
-  },
+    if (interaction.customId.startsWith('ko_admin_result_modal:')) {
+      const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+      return handleAdminResultModal(interaction, eventKey, roundKey, matchNumber);
+    }
+  }
+
+  return false;
+},
 
   async handleMessage() {
     return false;
