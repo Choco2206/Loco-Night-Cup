@@ -141,7 +141,7 @@ function getDrawTimestamp(event) {
       ? event.deadlineAt
       : new Date(event.deadlineAt).getTime();
 
-  return deadlineMs + 15 * 60 * 1000;
+  return deadlineMs + 20 * 60 * 1000;
 }
 
 function shouldDrawNow(event) {
