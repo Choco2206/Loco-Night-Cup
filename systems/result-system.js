@@ -12,6 +12,7 @@ const {
   MessageFlags,
 } = require('discord.js');
 
+const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const GROUP_RELEASE_SLOTS = [
@@ -83,6 +84,24 @@ function loadGroups() {
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von groups.json:', error);
+    return { friday: null, saturday: null };
+  }
+}
+
+function loadCheckins() {
+  try {
+    if (!fs.existsSync(CHECKINS_FILE)) {
+      return { friday: null, saturday: null };
+    }
+
+    const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+    };
+  } catch (error) {
+    console.error('❌ Fehler beim Lesen von checkins.json:', error);
     return { friday: null, saturday: null };
   }
 }
@@ -232,7 +251,11 @@ function buildScheduleButtons(eventKey, groupLetter) {
     new ButtonBuilder()
       .setCustomId(`result_open:${eventKey}:${groupLetter}`)
       .setLabel('⚽ Ergebnis eintragen')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`backup_replace_open:${eventKey}:${groupLetter}`)
+      .setLabel('🔁 Nachrücker einsetzen')
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -270,6 +293,73 @@ function buildConfirmationButtons(eventKey, groupLetter, matchNumber) {
       .setLabel('❌ Ablehnen')
       .setStyle(ButtonStyle.Danger)
   );
+}
+
+function isAdmin(interaction) {
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+  if (!adminRoleId) return false;
+
+  return interaction.member?.roles?.cache?.has(adminRoleId);
+}
+
+function getBackupTeamsForEvent(eventKey) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event || !Array.isArray(event.teams)) return [];
+
+  const format = event.format || null;
+  const actualFormat =
+    format ||
+    (event.teams.length < 8
+      ? 0
+      : event.teams.length < 16
+        ? 8
+        : event.teams.length < 24
+          ? 16
+          : event.teams.length < 32
+            ? 24
+            : 32);
+
+  if (!actualFormat) return [];
+
+  return event.teams.slice(actualFormat);
+}
+
+function getTeamUserIds(team) {
+  return [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ].filter(Boolean);
+}
+
+function getRoleIdForLetter(letter) {
+  return process.env[`GROUP_${letter}_ROLE_ID`] || null;
+}
+
+async function updateGroupRoleForReplacement(groupLetter, oldTeam, newTeam) {
+  const roleId = getRoleIdForLetter(groupLetter);
+  if (!roleId) return;
+
+  const guild = clientRef.guilds.cache.get(process.env.GUILD_ID);
+  if (!guild) return;
+
+  const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+  if (!role) return;
+
+  for (const userId of getTeamUserIds(oldTeam)) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member && member.roles.cache.has(role.id)) {
+      await member.roles.remove(role).catch(() => {});
+    }
+  }
+
+  for (const userId of getTeamUserIds(newTeam)) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member && !member.roles.cache.has(role.id)) {
+      await member.roles.add(role).catch(() => {});
+    }
+  }
 }
 
 // =========================
@@ -620,6 +710,74 @@ function recalculateRows(rows, matches) {
   }
 
   return nextRows;
+}
+
+async function replaceTeamInGroup(eventKey, groupLetter, targetTeamId, backupTeamId) {
+  const groupsData = loadGroups();
+  const resultsData = loadResults();
+
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+
+  if (!groupMeta || !resultGroup) return false;
+
+  const checkinsPath = path.join(process.cwd(), 'data', 'checkins.json');
+  const checkins = fs.existsSync(checkinsPath)
+    ? JSON.parse(fs.readFileSync(checkinsPath, 'utf8') || '{}')
+    : {};
+
+  const checkinEvent = checkins[eventKey];
+  const backupTeam = checkinEvent?.teams?.find(t => String(t.teamId) === String(backupTeamId));
+
+  if (!backupTeam) return false;
+  
+  const oldTeam = groupMeta.teams.find(t => String(t.teamId) === String(targetTeamId));
+if (!oldTeam) return false;
+
+checkinEvent.teams = checkinEvent.teams.filter(
+  t => String(t.teamId) !== String(backupTeamId)
+);
+
+fs.writeFileSync(checkinsPath, JSON.stringify(checkins, null, 2), 'utf8');
+
+  groupMeta.teams = groupMeta.teams.map(t =>
+    String(t.teamId) === String(targetTeamId) ? backupTeam : t
+  );
+
+  groupMeta.rows = groupMeta.rows.map(row =>
+    String(row.teamId) === String(targetTeamId)
+      ? {
+          ...row,
+          teamId: backupTeam.teamId,
+          clubName: backupTeam.clubName,
+          managerId: backupTeam.managerId || null,
+          coManagerIds: Array.isArray(backupTeam.coManagerIds) ? backupTeam.coManagerIds : [],
+        }
+      : row
+  );
+
+  resultGroup.matches = resultGroup.matches.map(match => {
+    if (String(match.homeTeamId) === String(targetTeamId)) {
+      match.homeTeamId = backupTeam.teamId;
+      match.homeClubName = backupTeam.clubName;
+    }
+
+    if (String(match.awayTeamId) === String(targetTeamId)) {
+      match.awayTeamId = backupTeam.teamId;
+      match.awayClubName = backupTeam.clubName;
+    }
+
+    return match;
+  });
+
+  await updateGroupRoleForReplacement(groupLetter, oldTeam, backupTeam);
+
+saveGroups(groupsData);
+saveResults(resultsData);
+
+await updateGroupMessages(eventKey, groupLetter);
+  
+  return true;
 }
 
 async function updateGroupMessages(eventKey, groupLetter) {
@@ -981,6 +1139,126 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
     components: [row],
     flags: MessageFlags.Ephemeral,
   });
+
+  return true;
+}
+
+async function handleBackupReplaceOpen(interaction, eventKey, groupLetter) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen Nachrücker einsetzen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const groupsData = loadGroups();
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+
+  if (!groupMeta || !Array.isArray(groupMeta.teams)) {
+    await interaction.reply({
+      content: '❌ Gruppendaten nicht gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const options = groupMeta.teams.map(team => ({
+    label: team.clubName,
+    description: 'Dieses Team ersetzen',
+    value: team.teamId,
+  }));
+
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`backup_replace_target:${eventKey}:${groupLetter}`)
+      .setPlaceholder('Welches Team soll ersetzt werden?')
+      .addOptions(options)
+  );
+
+  await interaction.reply({
+    content: 'Wähle zuerst das Team aus, das ersetzt werden soll.',
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return true;
+}
+
+async function handleBackupReplaceTarget(interaction, eventKey, groupLetter) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen Nachrücker einsetzen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const targetTeamId = interaction.values?.[0];
+  const backups = getBackupTeamsForEvent(eventKey);
+
+  if (!targetTeamId || backups.length === 0) {
+    await interaction.reply({
+      content: '❌ Kein Zielteam oder kein Nachrücker gefunden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const options = backups.map(team => ({
+    label: team.clubName,
+    description: 'Dieses Team einsetzen',
+    value: `${targetTeamId}|${team.teamId}`,
+  }));
+
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`backup_replace_insert:${eventKey}:${groupLetter}`)
+      .setPlaceholder('Welches Nachrücker-Team soll rein?')
+      .addOptions(options)
+  );
+
+  await interaction.update({
+    content: 'Wähle jetzt das Nachrücker-Team aus.',
+    components: [row],
+  });
+
+  return true;
+}
+
+async function handleBackupReplaceInsert(interaction, eventKey, groupLetter) {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({
+      content: '❌ Nur Admins dürfen Nachrücker einsetzen.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const [targetTeamId, backupTeamId] = String(interaction.values?.[0] || '').split('|');
+
+  if (!targetTeamId || !backupTeamId) {
+    await interaction.reply({
+      content: '❌ Auswahl ungültig.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  const replaced = await replaceTeamInGroup(eventKey, groupLetter, targetTeamId, backupTeamId);
+
+if (!replaced) {
+  await interaction.update({
+    content: '❌ Nachrücker konnte nicht eingesetzt werden. Prüfe, ob Zielteam und Nachrücker noch vorhanden sind.',
+    components: [],
+  });
+  return true;
+}
+
+await interaction.update({
+  content: '✅ Nachrücker wurde eingesetzt und Gruppe/Spielplan wurden aktualisiert.',
+  components: [],
+});
 
   return true;
 }
@@ -1361,39 +1639,54 @@ await processGroupReleaseTimes('saturday');
   },
 
   async handleInteraction(interaction) {
-    if (interaction.isButton()) {
-      if (interaction.customId.startsWith('result_open:')) {
-        const [, eventKey, groupLetter] = interaction.customId.split(':');
-        return handleOpenResult(interaction, eventKey, groupLetter);
-      }
-
-      if (interaction.customId.startsWith('result_confirm:')) {
-        const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-        return handleConfirmResult(interaction, eventKey, groupLetter, matchNumber);
-      }
-
-      if (interaction.customId.startsWith('result_reject:')) {
-        const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-        return handleRejectResult(interaction, eventKey, groupLetter, matchNumber);
-      }
+  if (interaction.isButton()) {
+    if (interaction.customId.startsWith('result_open:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleOpenResult(interaction, eventKey, groupLetter);
     }
 
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId.startsWith('result_select:')) {
-        const [, eventKey, groupLetter] = interaction.customId.split(':');
-        return handleSelectResult(interaction, eventKey, groupLetter);
-      }
+    if (interaction.customId.startsWith('backup_replace_open:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleBackupReplaceOpen(interaction, eventKey, groupLetter);
     }
 
-    if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith('result_modal:')) {
-        const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
-        return handleResultModal(interaction, eventKey, groupLetter, matchNumber);
-      }
+    if (interaction.customId.startsWith('result_confirm:')) {
+      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+      return handleConfirmResult(interaction, eventKey, groupLetter, matchNumber);
     }
 
-    return false;
-  },
+    if (interaction.customId.startsWith('result_reject:')) {
+      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+      return handleRejectResult(interaction, eventKey, groupLetter, matchNumber);
+    }
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId.startsWith('result_select:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleSelectResult(interaction, eventKey, groupLetter);
+    }
+
+    if (interaction.customId.startsWith('backup_replace_target:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleBackupReplaceTarget(interaction, eventKey, groupLetter);
+    }
+
+    if (interaction.customId.startsWith('backup_replace_insert:')) {
+      const [, eventKey, groupLetter] = interaction.customId.split(':');
+      return handleBackupReplaceInsert(interaction, eventKey, groupLetter);
+    }
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('result_modal:')) {
+      const [, eventKey, groupLetter, matchNumber] = interaction.customId.split(':');
+      return handleResultModal(interaction, eventKey, groupLetter, matchNumber);
+    }
+  }
+
+  return false;
+},
 
   async handleMessage() {
     return false;
