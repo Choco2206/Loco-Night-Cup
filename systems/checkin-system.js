@@ -396,7 +396,7 @@ function buildSummaryContent(event) {
     '✅ **NightCup findet statt**',
     '',
     `Format: **${actualFormat}er Turnier**`,
-    'Gruppenauslosung findet um **23:45 Uhr** statt.',
+    'Gruppenauslosung findet um **23:50 Uhr** statt.',
     'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
   ].join('\n');
 }
@@ -463,9 +463,8 @@ function buildMainEmbed(event) {
     `📅 **Datum:** ${event.displayDate}`,
     '',
 `⏰ **Offizieller Anmeldeschluss:** 23:30 Uhr`,
-`🎲 **Gruppenauslosung:** 23:45 Uhr`,
+`🎲 **Gruppenauslosung:** 23:50 Uhr`,
 `⌛ **Anmeldung offen bis:** ${formatCountdown(event.drawAt || event.lateDeadlineAt || event.deadlineAt)}`,
-'⚠️ **Wichtig:** Abmeldung nach 23:30 Uhr führt automatisch zu einer 7-Tage-Sperre.',
     '',
     `🚀 **Turnierstart:** 00:00 Uhr`,
     `${event.startLine}`,
@@ -608,6 +607,7 @@ function createNewEventState(type, previousState = null) {
     label: cfg.label,
     channelId: cfg.channelId,
     deadlineAt: cfg.deadlineAt,
+drawAt: cfg.drawAt,
 lateDeadlineAt: cfg.lateDeadlineAt,
 startAt: cfg.startAt,
     resetAt: cfg.resetAt,
@@ -615,8 +615,9 @@ startAt: cfg.startAt,
     startLine: cfg.startLine,
 
     messageId: previousState?.messageId || null,
-    summaryMessageId: null,
-    backupMessageId: null,
+warningMessageId: previousState?.warningMessageId || null,
+summaryMessageId: null,
+backupMessageId: null,
 
     teams: [],
     backupDecisions: {},
@@ -669,6 +670,31 @@ async function ensureMainMessage(event) {
     components: [buildMainButtons(event)],
   });
 
+  return event;
+}
+
+async function ensureWarningMessage(event) {
+  const channel = await fetchChannel(event.channelId);
+  if (!channel) return event;
+
+  const content = [
+    '⚠️ **Wichtiger Hinweis zur Abmeldung**',
+    'Nach dem offiziellen Anmeldeschluss um **23:30 Uhr** führt eine Abmeldung automatisch zu einer **7-Tage-Sperre**.',
+  ].join('\n');
+
+  let message = null;
+
+  if (event.warningMessageId) {
+    message = await fetchMessage(channel, event.warningMessageId);
+  }
+
+  if (!message) {
+    const created = await channel.send({ content });
+    event.warningMessageId = created.id;
+    return event;
+  }
+
+  await message.edit({ content });
   return event;
 }
 
@@ -763,10 +789,11 @@ async function reconcileEvent(type, data) {
   const cfg = getCycleConfig(type);
 
   if (!current) {
-    const created = createNewEventState(type, null);
-    data[type] = await ensureMainMessage(created);
-    return;
-  }
+  const created = createNewEventState(type, null);
+  data[type] = await ensureMainMessage(created);
+  data[type] = await ensureWarningMessage(data[type]);
+  return;
+}
 
   if (current.cycleKey !== cfg.key) {
     data[type] = await resetEvent(current, type);
@@ -793,8 +820,9 @@ current.startAt = cfg.startAt;
   if (current.lastRenderMinute !== renderMinute) {
     current.lastRenderMinute = renderMinute;
     data[type] = await ensureMainMessage(current);
+data[type] = await ensureWarningMessage(data[type]);
 
-    if (current.finalized) {
+if (current.finalized) {
       data[type] = await ensureSummaryMessage(current);
       data[type] = await ensureBackupMessage(current);
     }
@@ -859,8 +887,9 @@ async function refreshEvent(type) {
   if (!event) return false;
 
   data[type] = await ensureMainMessage(event);
+data[type] = await ensureWarningMessage(data[type]);
 
-  if (data[type].finalized) {
+if (data[type].finalized) {
     data[type] = await ensureSummaryMessage(data[type]);
     data[type] = await ensureBackupMessage(data[type]);
   }
@@ -969,16 +998,6 @@ if (Date.now() >= closeAt) {
     });
     return true;
   }
-
-const ban = getTeamBan(team, interaction.user.id);
-
-if (ban) {
-  await interaction.reply({
-    content: getBanReasonText(ban),
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
 
   const before = event.teams.length;
   event.teams = event.teams.filter(entry => entry.teamId !== team.id);
