@@ -20,7 +20,7 @@ const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
 const KO_CLEANUP_GRACE_MS = 0;
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const INVITE_WINDOW_MINUTES = 5;
-const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
+const KO_REMINDER_INTERVAL_MS = 20 * 60 * 1000;
 const KO_NEXT_ROUND_BUFFER_MS = 0;
 
 let clientRef = null;
@@ -1143,7 +1143,7 @@ async function releaseKoRound(eventKey, roundKey, dynamic = false) {
   round.release.releasedAt = nowIso();
   round.release.inviteStart = window.startText;
   round.release.inviteEnd = window.endText;
-round.release.lastReminderAt = nowIso();
+round.release.lastReminderAt = new Date(Date.now() + INVITE_WINDOW_MINUTES * 60 * 1000).toISOString();
 
   saveKo(koData);
 
