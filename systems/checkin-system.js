@@ -229,7 +229,7 @@ function getCycleConfig(type) {
 );
 
 const start = new Date(deadline.getTime() + 30 * 60 * 1000);
-const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
+const drawAt = new Date(deadline.getTime() + 15 * 60 * 1000);
 
     return {
       key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -237,7 +237,8 @@ const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
       label: 'Freitag',
       channelId: process.env.FRIDAY_CHECKIN_CHANNEL_ID,
       deadlineAt: deadline.getTime(),
-      lateDeadlineAt: lateDeadline.getTime(),
+      drawAt: drawAt.getTime(),
+lateDeadlineAt: drawAt.getTime(),
       startAt: start.getTime(),
       resetAt: resetAt.getTime(),
       displayDate: formatDateGerman(deadline),
@@ -251,7 +252,7 @@ const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
 );
 
 const start = new Date(deadline.getTime() + 30 * 60 * 1000);
-const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
+const drawAt = new Date(deadline.getTime() + 15 * 60 * 1000);
 
   return {
     key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -259,7 +260,8 @@ const lateDeadline = new Date(deadline.getTime() + 14 * 60 * 1000);
     label: 'Samstag',
     channelId: process.env.SATURDAY_CHECKIN_CHANNEL_ID,
     deadlineAt: deadline.getTime(),
-    lateDeadlineAt: lateDeadline.getTime(),
+    drawAt: drawAt.getTime(),
+lateDeadlineAt: drawAt.getTime(),
     startAt: start.getTime(),
     resetAt: resetAt.getTime(),
     displayDate: formatDateGerman(deadline),
@@ -461,9 +463,9 @@ function buildMainEmbed(event) {
     `📅 **Datum:** ${event.displayDate}`,
     '',
 `⏰ **Offizieller Anmeldeschluss:** 23:30 Uhr`,
-`🕚 **Nachmeldungen möglich bis:** 23:44 Uhr`,
 `🎲 **Gruppenauslosung:** 23:45 Uhr`,
-`⌛ **Nachmeldefrist endet in:** ${formatCountdown(event.lateDeadlineAt || event.deadlineAt)}`,
+`⌛ **Anmeldung offen bis:** ${formatCountdown(event.drawAt || event.lateDeadlineAt || event.deadlineAt)}`,
+'⚠️ **Wichtig:** Abmeldung nach 23:30 Uhr führt automatisch zu einer 7-Tage-Sperre.',
     '',
     `🚀 **Turnierstart:** 00:00 Uhr`,
     `${event.startLine}`,
@@ -510,8 +512,8 @@ function buildMainEmbed(event) {
 }
 
 function buildMainButtons(event) {
-  const lateDeadlineAt = event.lateDeadlineAt || event.deadlineAt;
-const disabled = Date.now() >= lateDeadlineAt;
+  const closeAt = event.drawAt || event.lateDeadlineAt || event.deadlineAt;
+const disabled = Date.now() >= closeAt;
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -772,6 +774,7 @@ async function reconcileEvent(type, data) {
   }
 
   current.deadlineAt = cfg.deadlineAt;
+current.drawAt = cfg.drawAt;
 current.lateDeadlineAt = cfg.lateDeadlineAt;
 current.startAt = cfg.startAt;
   current.resetAt = cfg.resetAt;
@@ -779,7 +782,7 @@ current.startAt = cfg.startAt;
   current.startLine = cfg.startLine;
   current.channelId = cfg.channelId;
 
-  if (!current.finalized && Date.now() >= current.deadlineAt) {
+  if (!current.finalized && Date.now() >= (current.drawAt || current.lateDeadlineAt || current.deadlineAt)) {
     data[type] = await finalizeEvent(current);
     return;
   }
@@ -882,9 +885,9 @@ async function handleJoin(interaction, type) {
     return true;
   }
 
-  const lateDeadlineAt = event.lateDeadlineAt || event.deadlineAt;
+  const closeAt = event.drawAt || event.lateDeadlineAt || event.deadlineAt;
 
-if (Date.now() >= lateDeadlineAt) {
+if (Date.now() >= closeAt) {
     await interaction.reply({
       content: '❌ Die Anmeldung ist bereits geschlossen.',
       flags: MessageFlags.Ephemeral,
@@ -947,9 +950,9 @@ async function handleLeave(interaction, type) {
     return true;
   }
 
-  const lateDeadlineAt = event.lateDeadlineAt || event.deadlineAt;
+  const closeAt = event.drawAt || event.lateDeadlineAt || event.deadlineAt;
 
-if (Date.now() >= lateDeadlineAt) {
+if (Date.now() >= closeAt) {
     await interaction.reply({
       content: '❌ Die Anmeldung ist bereits geschlossen.',
       flags: MessageFlags.Ephemeral,
@@ -989,12 +992,27 @@ if (ban) {
   }
 
   data[type] = await ensureMainMessage(event);
-  saveCheckins(data);
+saveCheckins(data);
 
-  await interaction.reply({
-    content: `⬇️ **${team.clubName}** wurde abgemeldet.`,
-    flags: MessageFlags.Ephemeral,
-  });
+let extraText = '';
+
+if (Date.now() >= event.deadlineAt) {
+  await banlistSystem.addTeamBan(
+    team,
+    'Abmeldung nach offiziellem Anmeldeschluss',
+    interaction.user.id,
+    7
+  );
+
+  await removeTeamFromOpenCheckinsById(team.id);
+
+  extraText = '\n\n🚫 Da die Abmeldung nach 23:30 Uhr erfolgt ist, wurde dein Team automatisch für **7 Tage** gesperrt.';
+}
+
+await interaction.reply({
+  content: `⬇️ **${team.clubName}** wurde abgemeldet.${extraText}`,
+  flags: MessageFlags.Ephemeral,
+});
 
   return true;
 }
