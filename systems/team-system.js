@@ -346,6 +346,39 @@ async function refreshRegisteredTeams(guild) {
   writeSetupData(setupData);
 }
 
+async function promoteUserToManagerRole(guild, userId) {
+  try {
+    const managerRole = guild.roles.cache.get(process.env.MANAGER_ROLE_ID);
+    const playerRole = guild.roles.cache.get(process.env.PLAYER_ROLE_ID);
+
+    if (!managerRole) return;
+
+    const member = await guild.members.fetch(userId);
+
+    if (!member.roles.cache.has(managerRole.id)) {
+      await member.roles.add(managerRole);
+    }
+
+    if (playerRole && member.roles.cache.has(playerRole.id)) {
+      await member.roles.remove(playerRole);
+    }
+  } catch (error) {
+    console.error('❌ Managerrolle konnte nicht vergeben werden:', error);
+  }
+}
+
+async function syncCoManagerRoles(guild) {
+  const teams = readTeams();
+
+  for (const team of teams) {
+    const coManagerIds = Array.isArray(team.coManagerIds) ? team.coManagerIds : [];
+
+    for (const userId of coManagerIds) {
+      await promoteUserToManagerRole(guild, userId);
+    }
+  }
+}
+
 // =========================
 // MY TEAM EMBED
 // =========================
@@ -968,9 +1001,11 @@ if (selectedUserBan) {
   }
 
   team.coManagerIds.push(String(userId));
-  team.updatedAt = new Date().toISOString();
+team.updatedAt = new Date().toISOString();
 
-  writeTeams(teams);
+await promoteUserToManagerRole(guild, userId);
+
+writeTeams(teams);
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
 
@@ -1195,7 +1230,6 @@ if (!team) {
     return isManager || isCoManager;
   });
 }
-}
 
 if (!team) {
   return false;
@@ -1264,11 +1298,20 @@ try {
 // =========================
 
 module.exports = {
-  async init() {
-    if (!fs.existsSync(logosDir)) {
-      fs.mkdirSync(logosDir, { recursive: true });
-    }
-  },
+  async init(client) {
+  if (!fs.existsSync(logosDir)) {
+    fs.mkdirSync(logosDir, { recursive: true });
+  }
+
+  const guildId = process.env.GUILD_ID;
+  const guild = guildId
+    ? client.guilds.cache.get(guildId)
+    : client.guilds.cache.first();
+
+  if (guild) {
+    await syncCoManagerRoles(guild);
+  }
+},
 
   async handleInteraction(interaction) {
     if (interaction.isChatInputCommand() && interaction.commandName === 'teamsetup') {
