@@ -2218,21 +2218,28 @@ if (interaction.customId.startsWith('live_ban_reason_select:')) {
 
   try {
     const result = await banlistSystem.addTeamBan(team, reason, interaction.user.id);
+const removedFrom = checkinSystem.removeTeamFromOpenCheckinsById
+  ? await checkinSystem.removeTeamFromOpenCheckinsById(team.id)
+  : [];
 
     await logToLive(
       `⛔ Team gesperrt: ${team.clubName} | Grund: ${reason} | Bis: ${result.bannedUntilDate}`
     );
 
     await interaction.update({
-      content: [
-        `✅ **${team.clubName}** wurde auf die Sperrliste gesetzt.`,
-        '',
-        `**Grund:** ${reason}`,
-        `**Sperre ab:** ${result.bannedAtDate}`,
-        `**Sperre bis:** ${result.bannedUntilDate}`,
-      ].join('\n'),
-      components: [],
-    });
+  content: [
+    `✅ **${team.clubName}** wurde auf die Sperrliste gesetzt.`,
+    '',
+    `**Grund:** ${reason}`,
+    `**Sperre ab:** ${result.bannedAtDate}`,
+    `**Sperre bis:** ${result.bannedUntilDate}`,
+    '',
+    removedFrom.length
+      ? `🚪 Aus Check-ins entfernt: **${removedFrom.join(', ')}**`
+      : 'ℹ️ Team war in keinem offenen Check-in eingetragen.',
+  ].join('\n'),
+  components: [],
+});
   } catch (error) {
     await interaction.update({
       content: `❌ ${error.message}`,
