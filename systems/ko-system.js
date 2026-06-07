@@ -20,7 +20,8 @@ const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
 const KO_CLEANUP_GRACE_MS = 0;
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const INVITE_WINDOW_MINUTES = 5;
-const KO_REMINDER_INTERVAL_MS = 20 * 60 * 1000;
+const KO_FIRST_REMINDER_AFTER_INVITE_MS = 20 * 60 * 1000;
+const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
 const KO_NEXT_ROUND_BUFFER_MS = 0;
 
 let clientRef = null;
@@ -185,43 +186,6 @@ function getRoundLabel(roundKey) {
   return 'K.O.-Phase';
 }
 
-function getRoundTimeWindow(format, roundKey) {
-  const windowsByFormat = {
-    8: {
-      semiFinal: '01:00–01:05',
-      thirdPlace: '01:25–01:30',
-      final: '01:25–01:30',
-    },
-    16: {
-      quarterFinal: '01:00–01:05',
-      semiFinal: '01:25–01:30',
-      thirdPlace: '01:50–01:55',
-      final: '01:50–01:55',
-    },
-    24: {
-      roundOf16: '01:00–01:05',
-      quarterFinal: '01:25–01:30',
-      semiFinal: '01:50–01:55',
-      thirdPlace: '02:10–02:15',
-      final: '02:10–02:15',
-    },
-    32: {
-      roundOf16: '01:00–01:05',
-      quarterFinal: '01:25–01:30',
-      semiFinal: '01:50–01:55',
-      thirdPlace: '02:10–02:15',
-      final: '02:10–02:15',
-    },
-  };
-
-  return windowsByFormat[format]?.[roundKey] || '01:00–01:05';
-}
-
-function parseTimeToMinutes(time) {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
-}
-
 function getCurrentMinutes() {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
@@ -314,17 +278,6 @@ function canAdvanceAfterBuffer(round) {
   if (!completedAt) return false;
 
   return Date.now() >= completedAt + KO_NEXT_ROUND_BUFFER_MS;
-}
-
-function getPlannedWindowParts(format, roundKey) {
-  const windowText = getRoundTimeWindow(format, roundKey);
-  const [startText, endText] = windowText.split('–');
-
-  return {
-    startText,
-    endText,
-    windowText,
-  };
 }
 
 function ensureRoundReleaseState(round) {
@@ -421,6 +374,14 @@ function getUserIdsFromMatches(matches) {
   return [...userIds];
 }
 
+function buildKoRoundMentions(matches) {
+  const userIds = getUserIdsFromMatches(matches);
+
+  return userIds.length
+    ? userIds.map(id => `<@${id}>`).join(' ')
+    : '';
+}
+
 function getQualifiedTeamsFromGroups(eventKey) {
   const groupsData = loadGroups();
   const event = groupsData[eventKey];
@@ -504,7 +465,7 @@ function getQualifiedTeamsFromGroups(eventKey) {
 }
 
 function createKoMatches(format, roundKey, pairs) {
-  const timeWindow = getRoundTimeWindow(format, roundKey);
+  const timeWindow = 'Noch nicht freigegeben';
 
   return pairs.map((pair, index) => {
     const [home, away] = pair;
@@ -578,15 +539,19 @@ async function sendKoReleaseMessage(eventKey, roundKey, round, startText, endTex
   const channel = await fetchChannel(round.channelId);
   if (!channel) return;
 
+  const mentions = buildKoRoundMentions(round.matches);
+
   await channel.send({
     content: [
+      mentions,
+      '',
       `✅ **${getRoundLabel(roundKey)} ist freigegeben**`,
       '',
       `Die Spiele dürfen jetzt gestartet werden.`,
       `**Einladezeit: ${startText} – ${endText} Uhr**`,
       '',
       `Bitte meldet euer Ergebnis direkt nach dem Spiel über den Button im K.O.-Plan.`,
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
   });
 }
 
@@ -600,7 +565,7 @@ async function sendKoMissingResultReminder(roundKey, round) {
     content: [
       `⚠️ **${getRoundLabel(roundKey)} ist noch nicht abgeschlossen**`,
       '',
-      `Bitte tragt die offenen Ergebnisse ein, damit die nächste K.O.-Runde freigegeben werden kann.`,
+      `Bitte tragt die offenen Ergebnisse innerhalb von **5 Minuten** ein.`,
       '',
       buildKoOpenMatchesText(openMatches),
     ].join('\n'),
@@ -1056,7 +1021,7 @@ async function advanceKoIfReady(eventKey) {
       await assignKoRoleToMatches('quarterFinal', event.rounds.quarterFinal.matches);
 
 saveKo(koData);
-await releaseKoRound(eventKey, 'quarterFinal', true);
+await releaseKoRound(eventKey, 'quarterFinal');
 return;
     }
   }
@@ -1091,7 +1056,7 @@ return;
       await assignKoRoleToMatches('semiFinal', event.rounds.semiFinal.matches);
 
 saveKo(koData);
-await releaseKoRound(eventKey, 'semiFinal', true);
+await releaseKoRound(eventKey, 'semiFinal');
 return;
     }
   }
@@ -1148,15 +1113,15 @@ return;
         }
 
         saveKo(koData);
-await releaseKoRound(eventKey, 'final', true);
-await releaseKoRound(eventKey, 'thirdPlace', true);
+await releaseKoRound(eventKey, 'final');
+await releaseKoRound(eventKey, 'thirdPlace');
 return;
       }
     }
   }
 }
 
-async function releaseKoRound(eventKey, roundKey, dynamic = false) {
+async function releaseKoRound(eventKey, roundKey) {
   const koData = loadKo();
   const event = koData[eventKey];
   const round = event?.rounds?.[roundKey];
@@ -1167,9 +1132,7 @@ async function releaseKoRound(eventKey, roundKey, dynamic = false) {
 
   if (round.release.released) return;
 
-  const window = dynamic
-    ? getDynamicWindowFromNow()
-    : getPlannedWindowParts(event.format, roundKey);
+  const window = getDynamicWindowFromNow();
 
   for (const match of round.matches) {
     match.timeWindow = window.windowText;
@@ -1179,40 +1142,19 @@ async function releaseKoRound(eventKey, roundKey, dynamic = false) {
   round.release.releasedAt = nowIso();
   round.release.inviteStart = window.startText;
   round.release.inviteEnd = window.endText;
-round.release.lastReminderAt = new Date(Date.now() + INVITE_WINDOW_MINUTES * 60 * 1000).toISOString();
+round.release.lastReminderAt = new Date(
+  Date.now() +
+  INVITE_WINDOW_MINUTES * 60 * 1000 +
+  KO_FIRST_REMINDER_AFTER_INVITE_MS -
+  KO_REMINDER_INTERVAL_MS
+).toISOString();
 
   saveKo(koData);
-
-  await sendKoReleaseMessage(eventKey, roundKey, round, window.startText, window.endText);
 
   round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
-  saveKo(koData);
-}
+saveKo(koData);
 
-async function processKoReleaseTimes(eventKey) {
-  const koData = loadKo();
-  const event = koData[eventKey];
-
-  if (!event || !event.rounds) return;
-  if (isEventInactive(event)) return;
-
-  const nowMinutes = getCurrentMinutes();
-
-  for (const roundKey of Object.keys(event.rounds)) {
-    const round = event.rounds[roundKey];
-    if (!round) continue;
-
-    ensureRoundReleaseState(round);
-
-    if (round.release.released) continue;
-
-    const planned = getPlannedWindowParts(event.format, roundKey);
-    const plannedStartMinutes = parseTimeToMinutes(planned.startText);
-
-    if (nowMinutes < plannedStartMinutes) continue;
-
-    await releaseKoRound(eventKey, roundKey, nowMinutes > plannedStartMinutes);
-  }
+await sendKoReleaseMessage(eventKey, roundKey, round, window.startText, window.endText);
 }
 
 async function processKoReminders(eventKey) {
@@ -1240,6 +1182,25 @@ async function processKoReminders(eventKey) {
   }
 }
 
+async function releasePendingKoRounds(eventKey) {
+  const koData = loadKo();
+  const event = koData[eventKey];
+
+  if (!event || !event.rounds) return;
+  if (isEventInactive(event)) return;
+
+  for (const roundKey of Object.keys(event.rounds)) {
+    const round = event.rounds[roundKey];
+    if (!round) continue;
+
+    ensureRoundReleaseState(round);
+
+    if (round.release.released) continue;
+
+    await releaseKoRound(eventKey, roundKey);
+  }
+}
+
 async function reconcileKoAuto() {
   if (koProcessing) return;
 
@@ -1252,8 +1213,8 @@ async function reconcileKoAuto() {
     await advanceKoIfReady('friday');
     await advanceKoIfReady('saturday');
     
-    await processKoReleaseTimes('friday');
-await processKoReleaseTimes('saturday');
+    await releasePendingKoRounds('friday');
+await releasePendingKoRounds('saturday');
 
 await processKoReminders('friday');
 await processKoReminders('saturday');
