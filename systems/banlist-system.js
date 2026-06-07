@@ -266,14 +266,14 @@ function scheduleMidnightCleanup() {
   }, msUntilMidnight);
 }
 
-async function addTeamBan(team, reason, bannedByUserId = null) {
+async function addTeamBan(team, reason, bannedByUserId = null, durationDays = 14) {
   const data = loadBanlist();
 
   cleanupExpiredBans(data);
 
   const teamId = String(team.id || team.teamId);
   const bannedAtDate = todayDateString();
-  const bannedUntilDate = addDaysDateString(14);
+  const bannedUntilDate = addDaysDateString(durationDays);
 
   data.bans = data.bans.filter(ban => String(ban.teamId) !== teamId);
 
