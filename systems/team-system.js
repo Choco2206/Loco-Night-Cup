@@ -15,12 +15,14 @@ const {
 } = require('discord.js');
 
 const nicknameSystem = require('./nickname-system');
+const banlistSystem = require('./banlist-system');
 
 const setupFile = path.join(process.cwd(), 'data', 'setup-messages.json');
 const teamsFile = path.join(process.cwd(), 'data', 'teams.json');
 const logosDir = path.join(process.cwd(), 'data', 'logos');
 
 const pendingLogoUploads = new Map();
+const MAX_CO_MANAGERS = 5;
 
 // =========================
 // FILE HELPERS
@@ -130,6 +132,33 @@ async function formatClickableMember(guild, userId) {
   } catch (error) {
     return '⚠️ Nicht mehr auf dem Server';
   }
+}
+
+function formatBanDateDE(dateString) {
+  if (!dateString) return '—';
+
+  const [year, month, day] = String(dateString).split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function buildBanMessage(ban) {
+  return [
+    '🚫 **Du bist aktuell für den Loco Night Cup gesperrt.**',
+    '',
+    `**Team:** ${ban.clubName}`,
+    `**Grund:** ${ban.reason}`,
+    `**Sperre bis:** ${formatBanDateDE(ban.bannedUntilDate)}`,
+    '',
+    'Während dieser Sperre kannst du kein Team anmelden und nicht als Co-VM eingetragen werden.',
+  ].join('\n');
+}
+
+function findManageableTeam(userId) {
+  return findTeamByManagerOrCoManager(userId);
+}
+
+function isTeamOwner(userId, team) {
+  return String(team?.managerId) === String(userId);
 }
 
 function findTeamByManagerOrCoManager(userId) {
@@ -342,7 +371,7 @@ function buildMyTeamEmbed(team) {
         `👑 **Vereinsmanager**`,
         formatUserMention(team.managerId),
         '',
-        `🤝 **Co-VMs (${Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0}/3)**`,
+        `🤝 **Co-VMs (${Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0}/${MAX_CO_MANAGERS})**`,
         coManagers,
         '',
         `📅 **Erstellt:** ${createdText}`,
@@ -362,7 +391,7 @@ function buildMyTeamButtons(team) {
       .setCustomId('team_add_covm_open')
       .setLabel('➕ Co-VM hinzufügen')
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(coCount >= 3),
+      .setDisabled(coCount >= MAX_CO_MANAGERS),
     new ButtonBuilder()
       .setCustomId('team_remove_covm_open')
       .setLabel('➖ Co-VM entfernen')
@@ -460,8 +489,8 @@ async function handleTeamSetupCommand(interaction) {
         'Hier kannst du dein Team verwalten.',
         '',
         '• **Team anmelden** → Clubname eingeben und danach Logo hochladen',
-        '• **Co-VM hinzufügen** → nur Vereinsmanager, maximal 3',
-        '• **Co-VM entfernen** → nur Vereinsmanager',
+        '• **Co-VM hinzufügen** → VM und Co-VM, maximal 5',
+'• **Co-VM entfernen** → VM und Co-VM',
         '• **Mein Team** → private Team-Übersicht',
         '• **Team abmelden** → nur Vereinsmanager',
       ].join('\n')
@@ -537,6 +566,17 @@ async function handleTeamButtons(interaction) {
   }
 
   if (interaction.customId === 'team_register_open') {
+    const ban = banlistSystem.isTeamOrUserBanned({
+  userId: interaction.user.id,
+});
+
+if (ban) {
+  await interaction.reply({
+    content: buildBanMessage(ban),
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
     if (!member.roles.cache.has(managerRole.id)) {
       await interaction.reply({
         content: '❌ Nur Manager dürfen ein Team anmelden.',
@@ -580,11 +620,18 @@ async function handleTeamButtons(interaction) {
 
   if (interaction.customId === 'team_add_covm_open') {
     const teams = readTeams();
-    const team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+const team = teams.find(t => {
+  const isManager = String(t.managerId) === String(interaction.user.id);
+  const isCoManager =
+    Array.isArray(t.coManagerIds) &&
+    t.coManagerIds.map(String).includes(String(interaction.user.id));
+
+  return isManager || isCoManager;
+});
 
     if (!team) {
       await interaction.reply({
-        content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs hinzufügen.',
+        content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs hinzufügen.',
         flags: MessageFlags.Ephemeral,
       });
       return true;
@@ -592,9 +639,9 @@ async function handleTeamButtons(interaction) {
 
     const coCount = Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0;
 
-    if (coCount >= 3) {
+    if (coCount >= MAX_CO_MANAGERS) {
       await interaction.reply({
-        content: '❌ Dein Team hat bereits 3 Co-VMs. Mehr sind nicht erlaubt.',
+        content: `❌ Dein Team hat bereits ${MAX_CO_MANAGERS} Co-VMs. Mehr sind nicht erlaubt.`,
         flags: MessageFlags.Ephemeral,
       });
       return true;
@@ -606,7 +653,7 @@ async function handleTeamButtons(interaction) {
         [
           `Wähle unten einen Spieler aus, der als Co-VM für **${team.clubName}** hinzugefügt werden soll.`,
           '',
-          `Aktuell belegt: **${coCount}/3**`,
+          `Aktuell belegt: **${coCount}/${MAX_CO_MANAGERS}**`,
         ].join('\n')
       )
       .setColor(0xff0000);
@@ -630,11 +677,18 @@ async function handleTeamButtons(interaction) {
 
   if (interaction.customId === 'team_remove_covm_open') {
     const teams = readTeams();
-    const team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+const team = teams.find(t => {
+  const isManager = String(t.managerId) === String(interaction.user.id);
+  const isCoManager =
+    Array.isArray(t.coManagerIds) &&
+    t.coManagerIds.map(String).includes(String(interaction.user.id));
+
+  return isManager || isCoManager;
+});
 
     if (!team) {
       await interaction.reply({
-        content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs entfernen.',
+        content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs entfernen.',
         flags: MessageFlags.Ephemeral,
       });
       return true;
@@ -677,11 +731,18 @@ async function handleTeamButtons(interaction) {
 
 if (interaction.customId === 'team_logo_update_open') {
   const teams = readTeams();
-  const team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+const team = teams.find(t => {
+  const isManager = String(t.managerId) === String(interaction.user.id);
+  const isCoManager =
+    Array.isArray(t.coManagerIds) &&
+    t.coManagerIds.map(String).includes(String(interaction.user.id));
+
+  return isManager || isCoManager;
+});
 
   if (!team) {
     await interaction.reply({
-      content: '❌ Nur der Vereinsmanager kann das Teamlogo ändern.',
+      content: '❌ Nur VM oder Co-VM dieses Teams können das Teamlogo ändern.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -813,11 +874,18 @@ async function handleTeamUserSelect(interaction) {
   }
 
   const teams = readTeams();
-  const team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+const team = teams.find(t => {
+  const isManager = String(t.managerId) === String(interaction.user.id);
+  const isCoManager =
+    Array.isArray(t.coManagerIds) &&
+    t.coManagerIds.map(String).includes(String(interaction.user.id));
+
+  return isManager || isCoManager;
+});
 
   if (!team) {
     await interaction.reply({
-      content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs hinzufügen.',
+      content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs hinzufügen.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -827,9 +895,9 @@ async function handleTeamUserSelect(interaction) {
     team.coManagerIds = [];
   }
 
-  if (team.coManagerIds.length >= 3) {
+  if (team.coManagerIds.length >= MAX_CO_MANAGERS) {
     await interaction.reply({
-      content: '❌ Dein Team hat bereits 3 Co-VMs. Mehr sind nicht erlaubt.',
+      content: `❌ Dein Team hat bereits ${MAX_CO_MANAGERS} Co-VMs. Mehr sind nicht erlaubt.`,
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -844,6 +912,24 @@ async function handleTeamUserSelect(interaction) {
     });
     return true;
   }
+
+const selectedUserBan = banlistSystem.isTeamOrUserBanned({
+  userId,
+});
+
+if (selectedUserBan) {
+  await interaction.reply({
+    content: [
+      '🚫 **Dieser User ist aktuell gesperrt und kann nicht als Co-VM eingetragen werden.**',
+      '',
+      `**Team:** ${selectedUserBan.clubName}`,
+      `**Grund:** ${selectedUserBan.reason}`,
+      `**Sperre bis:** ${formatBanDateDE(selectedUserBan.bannedUntilDate)}`,
+    ].join('\n'),
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   if (String(userId) === String(team.managerId)) {
     await interaction.reply({
@@ -889,7 +975,7 @@ async function handleTeamUserSelect(interaction) {
   await syncNicknamesSafe(guild);
 
   await interaction.update({
-    content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${team.coManagerIds.length}/3**`,
+    content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${team.coManagerIds.length}/${MAX_CO_MANAGERS}**`,
     embeds: [],
     components: [],
     allowedMentions: { parse: ['users'] },
@@ -912,11 +998,17 @@ async function handleTeamStringSelect(interaction) {
   }
 
   const teams = readTeams();
-  const team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+const team = teams.find(t => {
+  const isManager = String(t.managerId) === String(interaction.user.id);
+  const isCoManager =
+    Array.isArray(t.coManagerIds) &&
+    t.coManagerIds.map(String).includes(String(interaction.user.id));
 
+  return isManager || isCoManager;
+});
   if (!team) {
     await interaction.reply({
-      content: '❌ Nur der Vereinsmanager des Teams kann Co-VMs entfernen.',
+      content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs entfernen.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -996,6 +1088,17 @@ async function handleTeamModals(interaction) {
     return true;
   }
 
+const ban = banlistSystem.isTeamOrUserBanned({
+  userId: interaction.user.id,
+});
+
+if (ban) {
+  await interaction.editReply({
+    content: buildBanMessage(ban),
+  });
+  return true;
+}
+
   const clubName = interaction.fields.getTextInputValue('club_name').trim();
   const teams = readTeams();
 
@@ -1067,10 +1170,13 @@ if (pending) {
 
   if (Date.now() <= pending.expiresAt) {
     team = teams.find(
-      t =>
-        t.id === pending.teamId &&
-        String(t.managerId) === String(message.author.id)
-    );
+  t =>
+    t.id === pending.teamId &&
+    (
+      String(t.managerId) === String(message.author.id) ||
+      (Array.isArray(t.coManagerIds) && t.coManagerIds.map(String).includes(String(message.author.id)))
+    )
+);
   }
 
   if (Date.now() > pending.expiresAt) {
@@ -1080,7 +1186,15 @@ if (pending) {
 
 // Fallback: Falls der Bot neu gestartet wurde und pendingLogoUploads leer ist
 if (!team) {
-  team = teams.find(t => String(t.managerId) === String(message.author.id));
+  team = teams.find(t => {
+    const isManager = String(t.managerId) === String(message.author.id);
+    const isCoManager =
+      Array.isArray(t.coManagerIds) &&
+      t.coManagerIds.map(String).includes(String(message.author.id));
+
+    return isManager || isCoManager;
+  });
+}
 }
 
 if (!team) {
