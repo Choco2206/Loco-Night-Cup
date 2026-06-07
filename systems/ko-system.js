@@ -765,12 +765,18 @@ if (match.status === 'confirmed' && match.reportedScore) {
   return new EmbedBuilder()
     .setTitle(`🏆 ${eventLabel} • ${getRoundLabel(roundKey)}`)
     .setDescription(
-      [
-        'Ergebnisse werden über den Button darunter eingetragen.',
-        '',
-        ...lines,
-      ].join('\n\n')
-    )
+  [
+    'Ergebnisse werden über den Button darunter eingetragen.',
+    '',
+    ...lines,
+    ...(roundKey === 'semiFinal'
+      ? [
+          '',
+          '⚠️ **Hinweis:** Die Verlierer aus dem Halbfinale spielen danach noch das **Spiel um Platz 3**.',
+        ]
+      : []),
+  ].join('\n\n')
+)
     .setColor(0xff0000);
 }
 
