@@ -21,7 +21,9 @@ const KO_CLEANUP_GRACE_MS = 0;
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const INVITE_WINDOW_MINUTES = 5;
 const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
-const KO_NEXT_ROUND_BUFFER_MS = 5 * 60 * 1000;
+const KO_NEXT_ROUND_BUFFER_MS = 0;
+
+let clientRef = null;
 
 let clientRef = null;
 let intervalRef = null;
