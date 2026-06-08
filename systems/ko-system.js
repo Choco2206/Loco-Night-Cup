@@ -565,9 +565,14 @@ async function sendKoMissingResultReminder(roundKey, round) {
     content: [
       `⚠️ **${getRoundLabel(roundKey)} ist noch nicht abgeschlossen**`,
       '',
-      `Bitte tragt die offenen Ergebnisse innerhalb von **5 Minuten** ein.`,
+      `Folgende K.O.-Spiele sind noch offen:`,
       '',
       buildKoOpenMatchesText(openMatches),
+      '',
+      `Falls ihr noch spielt, in der Verlängerung seid oder ins Elfmeterschießen geht: bitte kurz Bescheid geben.`,
+      `Tragt danach das Ergebnis schnellstmöglich ein, damit der Turnierlauf weitergehen kann.`,
+      '',
+      `Die nächste Runde wird automatisch freigegeben, sobald alle Ergebnisse bestätigt sind.`,
     ].join('\n'),
   });
 }
