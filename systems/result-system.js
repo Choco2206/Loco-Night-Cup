@@ -19,26 +19,21 @@ const GROUP_RELEASE_SLOTS = [
   {
     slot: 1,
     matchNumbers: [1, 2],
-    plannedStart: '00:00',
-    plannedEnd: '00:05',
   },
   {
     slot: 2,
     matchNumbers: [3, 4],
-    plannedStart: '00:25',
-    plannedEnd: '00:30',
   },
   {
     slot: 3,
     matchNumbers: [5, 6],
-    plannedStart: '00:50',
-    plannedEnd: '00:55',
   },
 ];
 
 const INVITE_WINDOW_MINUTES = 5;
+const GROUP_FIRST_REMINDER_AFTER_INVITE_MS = 20 * 60 * 1000;
+const GROUP_AUTO_SCORE_AFTER_INVITE_MS = 25 * 60 * 1000;
 const REMINDER_INTERVAL_MS = 5 * 60 * 1000;
-const KO_EARLIEST_START = '01:00';
 
 let clientRef = null;
 let intervalRef = null;
@@ -431,62 +426,59 @@ async function sendGroupSlotReleaseMessage(eventKey, groupLetter, slot, startTex
 
   await channel.send({
     content: [
-      `✅ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist freigegeben**`,
-      '',
-      `Die Spiele dürfen jetzt gestartet werden.`,
-      `**Einladezeit: ${startText} – ${endText} Uhr**`,
-      '',
-      `Bitte meldet euer Ergebnis direkt nach dem Spiel über den Button im Spielplan.`,
-    ].join('\n'),
+  `✅ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist freigegeben**`,
+  '',
+  `Die Spiele dürfen jetzt gestartet werden.`,
+  `**Einladezeit: ${startText} – ${endText} Uhr**`,
+  '',
+  `Bitte meldet euer Ergebnis direkt nach dem Spiel über den Button im Spielplan.`,
+  slot.slot === 3
+    ? [
+        '',
+        `⚠️ **Wichtig:** Nach diesem Spieltag wird die K.O.-Phase automatisch eingeleitet, sobald alle Gruppenergebnisse bestätigt sind.`,
+        `Bleibt also bitte im Turnier und wartet ab, ob ihr weiterkommt.`,
+      ].join('\n')
+    : null,
+].filter(Boolean).join('\n'),
   });
 }
 
-async function sendMissingResultReminder(eventKey, groupLetter, slot, openMatches) {
+async function sendGlobalMissingResultReminder(eventKey, slot) {
+  const resultsData = loadResults();
   const groupsData = loadGroups();
-  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
-  if (!groupMeta) return;
+  const event = resultsData[eventKey];
 
-  const channel = await fetchChannel(groupMeta.channelId);
-  if (!channel) return;
+  if (!event || !event.groups) return;
 
-  await channel.send({
-    content: [
-  `⚠️ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist noch nicht abgeschlossen**`,
-  '',
-  `Bitte tragt die offenen Ergebnisse ein, damit der nächste Zeitslot freigegeben werden kann.`,
-  '',
-  buildOpenMatchesText(openMatches, groupMeta.teams),
-].join('\n'),
-  });
-}
+  const text = buildGlobalOpenMatchesText(event, slot);
 
-async function sendKoWaitingNotice(eventKey, groupLetter, isBlocker) {
-  const groupsData = loadGroups();
-  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
-  if (!groupMeta) return;
+  for (const groupLetter of Object.keys(event.groups)) {
+    const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+    if (!groupMeta) continue;
 
-  const channel = await fetchChannel(groupMeta.channelId);
-  if (!channel) return;
+    const channel = await fetchChannel(groupMeta.channelId);
+    if (!channel) continue;
 
-  if (isBlocker) {
     await channel.send({
       content: [
-        `⚠️ **Eure Gruppe hält aktuell den Turnierfortschritt auf.**`,
+  `⚠️ **Spieltag ${slot.slot} ist noch nicht vollständig eingetragen**`,
+  '',
+  `Aktuell sind noch folgende Spiele offen:`,
+  '',
+  text,
+  '',
+  `Wenn die Ergebnisse nicht innerhalb von **5 Minuten** eingetragen werden, werden die offenen Spiele mit **0:0** gewertet.`,
+  `Wir wollen den Turnierlauf flüssig halten, daher ohne Diskussion.`,
+  slot.slot === 3
+    ? [
         '',
-        `Bitte tragt die noch offenen Ergebnisse ein, damit die K.O.-Phase gestartet werden kann.`,
-      ].join('\n'),
+        `⚠️ **Hinweis:** Nach der Wertung dieses Spieltags ist die Gruppenphase beendet und die K.O.-Phase wird automatisch eingeleitet.`,
+        `Bleibt bitte im Turnier, bis klar ist, wer weiterkommt.`,
+      ].join('\n')
+    : null,
+].filter(Boolean).join('\n'),
     });
-    return;
   }
-
-  await channel.send({
-    content: [
-      `⏳ **Die K.O.-Phase kann noch nicht gestartet werden.**`,
-      '',
-      `Es laufen noch Gruppenspiele in anderen Gruppen.`,
-      `Sobald alle Gruppen abgeschlossen sind, wird die K.O.-Phase automatisch ausgelost und freigegeben.`,
-    ].join('\n'),
-  });
 }
 
 // =========================
@@ -557,6 +549,82 @@ function minutesWindowFromNow() {
   };
 }
 
+function ensureGlobalReleaseState(event) {
+  if (!event.globalRelease) {
+    event.globalRelease = {
+      slots: {},
+    };
+  }
+
+  for (const slot of GROUP_RELEASE_SLOTS) {
+    if (!event.globalRelease.slots[slot.slot]) {
+      event.globalRelease.slots[slot.slot] = {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        reminderSentAt: null,
+        autoScoredAt: null,
+      };
+    }
+  }
+}
+
+function getGlobalSlotState(event, slot) {
+  ensureGlobalReleaseState(event);
+  return event.globalRelease.slots[slot.slot];
+}
+
+function getGlobalOpenMatchesForSlot(event, slot) {
+  const open = [];
+
+  for (const [groupLetter, group] of Object.entries(event.groups || {})) {
+    const matches = getMatchesForSlot(group, slot)
+      .filter(match => match.status !== 'confirmed' && !match.isByeMatch);
+
+    for (const match of matches) {
+      open.push({
+        groupLetter,
+        match,
+      });
+    }
+  }
+
+  return open;
+}
+
+function buildGlobalOpenMatchesText(event, slot) {
+  const groupsData = loadGroups();
+  const openMatches = getGlobalOpenMatchesForSlot(event, slot);
+
+  if (!openMatches.length) {
+    return 'Keine offenen Spiele gefunden.';
+  }
+
+  return openMatches
+    .map(({ groupLetter, match }) => {
+      const groupTeams = groupsData[event.eventKey]?.groups?.[groupLetter]?.teams || [];
+      const { home, away } = getTeamsOfMatch(match, groupTeams);
+
+      const homeMentions = buildTeamMentions(home) || '*Keine VM/Co-VM gefunden*';
+      const awayMentions = buildTeamMentions(away) || '*Keine VM/Co-VM gefunden*';
+
+      return [
+        `**Gruppe ${groupLetter}: ${match.homeClubName} vs ${match.awayClubName}**`,
+        homeMentions,
+        awayMentions,
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
+function areAllGroupsConfirmedForSlot(event, slot) {
+  return Object.values(event.groups || {}).every(group => {
+    const matches = getMatchesForSlot(group, slot);
+    return areMatchesConfirmed(matches);
+  });
+}
+
 function scoresMatch(scoreA, scoreB) {
   return (
     Number(scoreA.home) === Number(scoreB.home) &&
@@ -584,14 +652,6 @@ async function sendDisputeNotice(eventKey, groupLetter, match, groupMeta) {
   });
 
   return message.id;
-}
-
-function plannedWindow(slot) {
-  return {
-    startText: slot.plannedStart,
-    endText: slot.plannedEnd,
-    windowText: `${slot.plannedStart}–${slot.plannedEnd}`,
-  };
 }
 
 function ensureGroupReleaseState(resultGroup) {
@@ -863,7 +923,7 @@ async function updateGroupMessages(eventKey, groupLetter) {
     });
   }
 }
-async function releaseGroupSlot(eventKey, groupLetter, slot, dynamic = false) {
+async function releaseGroupSlot(eventKey, groupLetter, slot, window) {
   const resultsData = loadResults();
   const event = resultsData[eventKey];
   const resultGroup = event?.groups?.[groupLetter];
@@ -875,8 +935,6 @@ async function releaseGroupSlot(eventKey, groupLetter, slot, dynamic = false) {
   const releaseState = resultGroup.release.slots[slot.slot];
   if (releaseState.released) return;
 
-  const window = dynamic ? minutesWindowFromNow() : plannedWindow(slot);
-
   const slotMatches = getMatchesForSlot(resultGroup, slot);
 
   for (const match of slotMatches) {
@@ -884,12 +942,14 @@ async function releaseGroupSlot(eventKey, groupLetter, slot, dynamic = false) {
   }
 
   releaseState.released = true;
-releaseState.inviteStart = window.startText;
-releaseState.inviteEnd = window.endText;
-releaseState.releasedAt = nowIso();
-releaseState.lastReminderAt = null;
+  releaseState.inviteStart = window.startText;
+  releaseState.inviteEnd = window.endText;
+  releaseState.releasedAt = nowIso();
+  releaseState.lastReminderAt = null;
 
   saveResults(resultsData);
+
+  await updateGroupMessages(eventKey, groupLetter);
 
   await sendGroupSlotReleaseMessage(
     eventKey,
@@ -898,8 +958,119 @@ releaseState.lastReminderAt = null;
     window.startText,
     window.endText
   );
+}
 
-  await updateGroupMessages(eventKey, groupLetter);
+async function releaseGlobalGroupSlot(eventKey, slot) {
+  const resultsData = loadResults();
+  const event = resultsData[eventKey];
+
+  if (!event || !event.groups) return;
+  if (isEventInactive(event)) return;
+
+  ensureGlobalReleaseState(event);
+
+  const globalSlot = getGlobalSlotState(event, slot);
+  if (globalSlot.released) return;
+
+  const window = minutesWindowFromNow();
+
+  globalSlot.released = true;
+  globalSlot.inviteStart = window.startText;
+  globalSlot.inviteEnd = window.endText;
+  globalSlot.releasedAt = nowIso();
+  globalSlot.reminderSentAt = null;
+  globalSlot.autoScoredAt = null;
+
+  saveResults(resultsData);
+
+  for (const groupLetter of Object.keys(event.groups)) {
+    await releaseGroupSlot(eventKey, groupLetter, slot, window);
+  }
+}
+
+async function autoScoreOpenMatchesForSlot(eventKey, slot) {
+  const resultsData = loadResults();
+  const groupsData = loadGroups();
+  const event = resultsData[eventKey];
+
+  if (!event || !event.groups) return;
+
+  ensureGlobalReleaseState(event);
+
+  const globalSlot = getGlobalSlotState(event, slot);
+  if (globalSlot.autoScoredAt) return;
+
+  let changed = false;
+
+  for (const [groupLetter, group] of Object.entries(event.groups)) {
+    let groupChanged = false;
+
+    const matches = getMatchesForSlot(group, slot);
+
+    for (const match of matches) {
+      if (match.status === 'confirmed' || match.isByeMatch) continue;
+
+      if (match.confirmationMessageId) {
+        await deleteMessageIfExists(group.channelId, match.confirmationMessageId);
+        match.confirmationMessageId = null;
+      }
+
+      if (match.disputeMessageId) {
+        await deleteMessageIfExists(group.channelId, match.disputeMessageId);
+        match.disputeMessageId = null;
+      }
+
+      match.status = 'confirmed';
+      match.reportedByTeamId = null;
+      match.reportedScore = {
+        home: 0,
+        away: 0,
+      };
+      match.confirmed = true;
+      match.teamReports = {};
+      match.waitingForTeamId = null;
+      match.waitingForClubName = null;
+      match.autoScored = true;
+      match.autoScoredAt = nowIso();
+
+      changed = true;
+      groupChanged = true;
+    }
+
+    if (groupChanged) {
+      const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+
+      if (groupMeta) {
+        const channel = await fetchChannel(groupMeta.channelId);
+
+        if (channel) {
+          await channel.send({
+            content: [
+  `⏱️ **Spieltag ${slot.slot}: offene Spiele wurden gewertet**`,
+  '',
+  `Nicht eingetragene Spiele wurden automatisch mit **0:0** gewertet.`,
+  slot.slot === 3
+    ? [
+        '',
+        `⚠️ Die Gruppenphase ist damit beendet. Die K.O.-Phase wird jetzt automatisch eingeleitet.`,
+        `Bitte bleibt im Turnier und achtet auf den K.O.-Plan.`,
+      ].join('\n')
+    : null,
+].filter(Boolean).join('\n'),
+          });
+        }
+      }
+    }
+  }
+
+  globalSlot.autoScoredAt = nowIso();
+  saveResults(resultsData);
+
+  if (!changed) return;
+
+  for (const groupLetter of Object.keys(event.groups)) {
+    await updateGroupMessages(eventKey, groupLetter);
+  }
 }
 
 async function processGroupReleaseTimes(eventKey) {
@@ -907,94 +1078,59 @@ async function processGroupReleaseTimes(eventKey) {
   const event = resultsData[eventKey];
 
   if (!event || !event.groups) return;
-if (isEventInactive(event)) return;
-
-  const nowMs = Date.now();
-
-  for (const groupLetter of Object.keys(event.groups)) {
-    const resultGroup = event.groups[groupLetter];
-    if (!resultGroup) continue;
-
-    ensureGroupReleaseState(resultGroup);
-
-    for (const slot of GROUP_RELEASE_SLOTS) {
-      const releaseState = resultGroup.release.slots[slot.slot];
-      if (releaseState.released) continue;
-
-      const plannedStartMs = getPlannedTimestamp(event, slot.plannedStart);
-if (nowMs < plannedStartMs) continue;
-
-      const previousSlot =
-        slot.slot === 1
-          ? null
-          : GROUP_RELEASE_SLOTS.find(s => s.slot === slot.slot - 1);
-
-      if (!previousSlot) {
-        await releaseGroupSlot(eventKey, groupLetter, slot, false);
-        continue;
-      }
-
-      const previousMatches = getMatchesForSlot(resultGroup, previousSlot);
-
-      if (areMatchesConfirmed(previousMatches)) {
-        const isLate = nowMs > plannedStartMs;
-        await releaseGroupSlot(eventKey, groupLetter, slot, isLate);
-        continue;
-      }
-
-      const openMatches = getOpenMatches(previousMatches);
-
-      if (openMatches.length && canSendReminder(releaseState.lastReminderAt)) {
-        releaseState.lastReminderAt = nowIso();
-        saveResults(resultsData);
-
-        await sendMissingResultReminder(eventKey, groupLetter, previousSlot, openMatches);
-      }
-    }
-  }
-
-  await processKoWaitingNotices(eventKey);
-}
-
-async function processKoWaitingNotices(eventKey) {
-  const resultsData = loadResults();
-  const event = resultsData[eventKey];
-
-  if (!event || !event.groups) return;
   if (isEventInactive(event)) return;
 
-  const nowMs = Date.now();
-const koStartMs = getPlannedTimestamp(event, KO_EARLIEST_START);
+  ensureGlobalReleaseState(event);
+  saveResults(resultsData);
 
-if (nowMs < koStartMs) return;
+  for (const slot of GROUP_RELEASE_SLOTS) {
+    const globalSlot = getGlobalSlotState(event, slot);
 
-  const allFinished = areAllGroupsFinished(event);
-  if (allFinished) return;
+    const previousSlot =
+      slot.slot === 1
+        ? null
+        : GROUP_RELEASE_SLOTS.find(s => s.slot === slot.slot - 1);
 
-  for (const groupLetter of Object.keys(event.groups)) {
-    const resultGroup = event.groups[groupLetter];
-    if (!resultGroup) continue;
+    if (!globalSlot.released) {
+      if (!previousSlot) {
+        await releaseGlobalGroupSlot(eventKey, slot);
+        return;
+      }
 
-    ensureGroupReleaseState(resultGroup);
-
-    const groupFinished = isGroupFinished(resultGroup);
-
-    if (groupFinished) {
-      if (canSendReminder(resultGroup.release.koWaiting.lastDoneNoticeAt)) {
-        resultGroup.release.koWaiting.lastDoneNoticeAt = nowIso();
-        saveResults(resultsData);
-
-        await sendKoWaitingNotice(eventKey, groupLetter, false);
+      if (areAllGroupsConfirmedForSlot(event, previousSlot)) {
+        await releaseGlobalGroupSlot(eventKey, slot);
+        return;
       }
 
       continue;
     }
 
-        if (canSendReminder(resultGroup.release.koWaiting.lastBlockerNoticeAt)) {
-      resultGroup.release.koWaiting.lastBlockerNoticeAt = nowIso();
+    if (areAllGroupsConfirmedForSlot(event, slot)) {
+      continue;
+    }
+
+    const releasedAtMs = new Date(globalSlot.releasedAt).getTime();
+    const reminderAtMs =
+      releasedAtMs +
+      INVITE_WINDOW_MINUTES * 60 * 1000 +
+      GROUP_FIRST_REMINDER_AFTER_INVITE_MS;
+
+    const autoScoreAtMs =
+      releasedAtMs +
+      INVITE_WINDOW_MINUTES * 60 * 1000 +
+      GROUP_AUTO_SCORE_AFTER_INVITE_MS;
+
+    if (!globalSlot.reminderSentAt && Date.now() >= reminderAtMs) {
+      globalSlot.reminderSentAt = nowIso();
       saveResults(resultsData);
 
-      await sendKoWaitingNotice(eventKey, groupLetter, true);
+      await sendGlobalMissingResultReminder(eventKey, slot);
+      return;
+    }
+
+    if (!globalSlot.autoScoredAt && Date.now() >= autoScoreAtMs) {
+      await autoScoreOpenMatchesForSlot(eventKey, slot);
+      return;
     }
   }
 }
@@ -1049,6 +1185,34 @@ if (existing && existing.cycleKey === event.cycleKey) {
   resetAt: event.resetAt || null,
   completed: false,
   archived: false,
+  globalRelease: {
+    slots: {
+      1: {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        reminderSentAt: null,
+        autoScoredAt: null,
+      },
+      2: {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        reminderSentAt: null,
+        autoScoredAt: null,
+      },
+      3: {
+        released: false,
+        inviteStart: null,
+        inviteEnd: null,
+        releasedAt: null,
+        reminderSentAt: null,
+        autoScoredAt: null,
+      },
+    },
+  },
   groups: {},
 };
 
