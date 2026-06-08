@@ -15,6 +15,15 @@ const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 
 let clientRef = null;
 let intervalRef = null;
+const CHECKIN_TYPES = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
 
 // =========================
 // FILE HELPERS
@@ -32,8 +41,13 @@ function ensureCheckinsFile() {
       CHECKINS_FILE,
       JSON.stringify(
         {
+          monday: null,
+          tuesday: null,
+          wednesday: null,
+          thursday: null,
           friday: null,
           saturday: null,
+          sunday: null,
         },
         null,
         2
@@ -49,13 +63,26 @@ function loadCheckins() {
   try {
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
-    return {
-      friday: parsed.friday || null,
-      saturday: parsed.saturday || null,
-    };
+   return {
+  monday: parsed.monday || null,
+  tuesday: parsed.tuesday || null,
+  wednesday: parsed.wednesday || null,
+  thursday: parsed.thursday || null,
+  friday: parsed.friday || null,
+  saturday: parsed.saturday || null,
+  sunday: parsed.sunday || null,
+};
   } catch (error) {
     console.error('❌ Fehler beim Lesen von checkins.json:', error);
-    return { friday: null, saturday: null };
+    return {
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+};
   }
 }
 
@@ -221,51 +248,79 @@ function getNextBoundary(dayOfWeek, hour) {
   }
 }
 
-function getCycleConfig(type) {
-  if (type === 'friday') {
-    const resetAt = getNextBoundary(6, 7);
-    const deadline = new Date(
-  resetAt.getTime() - (7 * 60 + 30) * 60 * 1000
-);
-
-const start = new Date(deadline.getTime() + 30 * 60 * 1000);
-const drawAt = new Date(deadline.getTime() + 15 * 60 * 1000);
-
-    return {
-      key: `friday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
-      type: 'friday',
-      label: 'Freitag',
-      channelId: process.env.FRIDAY_CHECKIN_CHANNEL_ID,
-      deadlineAt: deadline.getTime(),
-      drawAt: drawAt.getTime(),
-lateDeadlineAt: drawAt.getTime(),
-      startAt: start.getTime(),
-      resetAt: resetAt.getTime(),
-      displayDate: formatDateGerman(deadline),
-      startLine: '🌙 Nacht von Freitag auf Samstag',
-    };
-  }
-
-  const resetAt = getNextBoundary(0, 7);
-  const deadline = new Date(
-  resetAt.getTime() - (7 * 60 + 30) * 60 * 1000
-);
-
-const start = new Date(deadline.getTime() + 30 * 60 * 1000);
-const drawAt = new Date(deadline.getTime() + 15 * 60 * 1000);
-
-  return {
-    key: `saturday-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
-    type: 'saturday',
+const CHECKIN_DAY_CONFIGS = {
+  monday: {
+    label: 'Montag',
+    channelId: process.env.MONDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 2,
+    startLine: '🌙 Nacht von Montag auf Dienstag',
+  },
+  tuesday: {
+    label: 'Dienstag',
+    channelId: process.env.TUESDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 3,
+    startLine: '🌙 Nacht von Dienstag auf Mittwoch',
+  },
+  wednesday: {
+    label: 'Mittwoch',
+    channelId: process.env.WEDNESDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 4,
+    startLine: '🌙 Nacht von Mittwoch auf Donnerstag',
+  },
+  thursday: {
+    label: 'Donnerstag',
+    channelId: process.env.THURSDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 5,
+    startLine: '🌙 Nacht von Donnerstag auf Freitag',
+  },
+  friday: {
+    label: 'Freitag',
+    channelId: process.env.FRIDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 6,
+    startLine: '🌙 Nacht von Freitag auf Samstag',
+  },
+  saturday: {
     label: 'Samstag',
     channelId: process.env.SATURDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 0,
+    startLine: '🌙 Nacht von Samstag auf Sonntag',
+  },
+  sunday: {
+    label: 'Sonntag',
+    channelId: process.env.SUNDAY_CHECKIN_CHANNEL_ID,
+    resetDay: 1,
+    startLine: '🌙 Nacht von Sonntag auf Montag',
+  },
+};
+
+function getCycleConfig(type) {
+  const dayConfig = CHECKIN_DAY_CONFIGS[type];
+
+  if (!dayConfig) {
+    throw new Error(`Unbekannter Check-in-Typ: ${type}`);
+  }
+
+  const resetAt = getNextBoundary(dayConfig.resetDay, 7);
+
+  const deadline = new Date(
+    resetAt.getTime() - (7 * 60 + 30) * 60 * 1000
+  );
+
+  const start = new Date(deadline.getTime() + 30 * 60 * 1000);
+  const drawAt = new Date(deadline.getTime() + 15 * 60 * 1000);
+
+  return {
+    key: `${type}-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
+    type,
+    label: dayConfig.label,
+    channelId: dayConfig.channelId,
     deadlineAt: deadline.getTime(),
     drawAt: drawAt.getTime(),
-lateDeadlineAt: drawAt.getTime(),
+    lateDeadlineAt: drawAt.getTime(),
     startAt: start.getTime(),
     resetAt: resetAt.getTime(),
     displayDate: formatDateGerman(deadline),
-    startLine: '🌙 Nacht von Samstag auf Sonntag',
+    startLine: dayConfig.startLine,
   };
 }
 
@@ -577,6 +632,11 @@ function buildBackupButtons(event) {
 // =========================
 
 async function fetchChannel(channelId) {
+  if (!channelId) {
+    console.error('❌ Kein Channel gesetzt. Prüfe die Railway Variable.');
+    return null;
+  }
+
   try {
     return await clientRef.channels.fetch(channelId);
   } catch (error) {
@@ -660,9 +720,7 @@ backupMessageId: null,
 }
 
 function findEventByType(data, type) {
-  if (type === 'friday') return data.friday;
-  if (type === 'saturday') return data.saturday;
-  return null;
+  return data[type] || null;
 }
 
 // =========================
@@ -892,8 +950,9 @@ async function reconcileAll() {
 
   const data = loadCheckins();
 
-  await reconcileEvent('friday', data);
-  await reconcileEvent('saturday', data);
+  for (const type of CHECKIN_TYPES) {
+    await reconcileEvent(type, data);
+  }
 
   saveCheckins(data);
 }
@@ -904,7 +963,7 @@ async function removeTeamFromOpenCheckinsById(teamId) {
   const data = loadCheckins();
   const removedFrom = [];
 
-  for (const type of ['friday', 'saturday']) {
+  for (const type of CHECKIN_TYPES) {
     const event = data[type];
 
     if (!event || !Array.isArray(event.teams)) continue;
