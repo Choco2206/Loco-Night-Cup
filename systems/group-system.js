@@ -605,25 +605,41 @@ module.exports = {
   },
 
   async handleMessage(message) {
-    if (!message.guild) return false;
-    if (message.author.bot) return false;
+  if (!message.guild) return false;
+  if (message.author.bot) return false;
 
-    const groupChannelIds = [
-      process.env.GROUP_A_CHANNEL_ID,
-      process.env.GROUP_B_CHANNEL_ID,
-      process.env.GROUP_C_CHANNEL_ID,
-      process.env.GROUP_D_CHANNEL_ID,
-      process.env.GROUP_E_CHANNEL_ID,
-      process.env.GROUP_F_CHANNEL_ID,
-      process.env.GROUP_G_CHANNEL_ID,
-      process.env.GROUP_H_CHANNEL_ID,
-    ].filter(Boolean);
+  const groupChannelIds = [
+    process.env.GROUP_A_CHANNEL_ID,
+    process.env.GROUP_B_CHANNEL_ID,
+    process.env.GROUP_C_CHANNEL_ID,
+    process.env.GROUP_D_CHANNEL_ID,
+    process.env.GROUP_E_CHANNEL_ID,
+    process.env.GROUP_F_CHANNEL_ID,
+    process.env.GROUP_G_CHANNEL_ID,
+    process.env.GROUP_H_CHANNEL_ID,
+  ].filter(Boolean);
 
-    if (!groupChannelIds.includes(message.channel.id)) {
-      return false;
-    }
-
-    
+  if (!groupChannelIds.includes(message.channel.id)) {
     return false;
-  },
+  }
+
+  // Spieler-Nachrichten nach 10 Minuten löschen
+  setTimeout(async () => {
+    try {
+      const freshMessage = await message.channel.messages
+        .fetch(message.id)
+        .catch(() => null);
+
+      if (!freshMessage) return;
+      if (freshMessage.pinned) return;
+      if (freshMessage.author.bot) return;
+
+      await freshMessage.delete().catch(() => {});
+    } catch (error) {
+      console.warn('⚠️ Gruppen-Nachricht konnte nicht automatisch gelöscht werden.');
+    }
+  }, 10 * 60 * 1000);
+
+  return false;
+},
 };
