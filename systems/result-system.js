@@ -33,7 +33,7 @@ const GROUP_RELEASE_SLOTS = [
 const INVITE_WINDOW_MINUTES = 5;
 const GROUP_FIRST_REMINDER_AFTER_INVITE_MS = 20 * 60 * 1000;
 const GROUP_AUTO_SCORE_AFTER_INVITE_MS = 25 * 60 * 1000;
-const REMINDER_INTERVAL_MS = 5 * 60 * 1000;
+const GROUP_FIRST_RELEASE_TIME = '00:00';
 
 let clientRef = null;
 let intervalRef = null;
@@ -594,25 +594,29 @@ function getGlobalOpenMatchesForSlot(event, slot) {
 }
 
 function buildGlobalOpenMatchesText(event, slot) {
-  const groupsData = loadGroups();
   const openMatches = getGlobalOpenMatchesForSlot(event, slot);
 
   if (!openMatches.length) {
     return 'Keine offenen Spiele gefunden.';
   }
 
-  return openMatches
-    .map(({ groupLetter, match }) => {
-      const groupTeams = groupsData[event.eventKey]?.groups?.[groupLetter]?.teams || [];
-      const { home, away } = getTeamsOfMatch(match, groupTeams);
+  const grouped = {};
 
-      const homeMentions = buildTeamMentions(home) || '*Keine VM/Co-VM gefunden*';
-      const awayMentions = buildTeamMentions(away) || '*Keine VM/Co-VM gefunden*';
+  for (const { groupLetter, match } of openMatches) {
+    if (!grouped[groupLetter]) {
+      grouped[groupLetter] = [];
+    }
 
+    grouped[groupLetter].push(
+      `• ${match.homeClubName} vs ${match.awayClubName}`
+    );
+  }
+
+  return Object.entries(grouped)
+    .map(([groupLetter, matches]) => {
       return [
-        `**Gruppe ${groupLetter}: ${match.homeClubName} vs ${match.awayClubName}**`,
-        homeMentions,
-        awayMentions,
+        `📋 **Gruppe ${groupLetter}**`,
+        ...matches,
       ].join('\n');
     })
     .join('\n\n');
@@ -710,13 +714,6 @@ function areMatchesConfirmed(matches) {
 
 function getOpenMatches(matches) {
   return matches.filter(match => match.status !== 'confirmed' && !match.isByeMatch);
-}
-
-function canSendReminder(lastReminderAt) {
-  if (!lastReminderAt) return true;
-
-  const last = new Date(lastReminderAt).getTime();
-  return Date.now() - last >= REMINDER_INTERVAL_MS;
 }
 
 function buildTeamMentions(team) {
@@ -1092,10 +1089,16 @@ async function processGroupReleaseTimes(eventKey) {
         : GROUP_RELEASE_SLOTS.find(s => s.slot === slot.slot - 1);
 
     if (!globalSlot.released) {
-      if (!previousSlot) {
-        await releaseGlobalGroupSlot(eventKey, slot);
-        return;
-      }
+  if (!previousSlot) {
+    const firstReleaseAtMs = getPlannedTimestamp(event, GROUP_FIRST_RELEASE_TIME);
+
+    if (Date.now() < firstReleaseAtMs) {
+      return;
+    }
+
+    await releaseGlobalGroupSlot(eventKey, slot);
+    return;
+  }
 
       if (areAllGroupsConfirmedForSlot(event, previousSlot)) {
         await releaseGlobalGroupSlot(eventKey, slot);
