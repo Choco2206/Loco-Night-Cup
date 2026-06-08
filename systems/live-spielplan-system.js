@@ -195,6 +195,13 @@ async function upsertMessage(channel, messageId, payload) {
   return created.id;
 }
 
+async function deleteLiveMessage(channel, messageId) {
+  const message = await fetchMessage(channel, messageId);
+  if (!message) return;
+
+  await message.delete().catch(() => {});
+}
+
 async function clearLiveChannel() {
   const channel = await fetchLiveChannel();
   if (!channel) return;
@@ -377,7 +384,15 @@ async function syncKo(eventKey, koEvent) {
 
   const visibleRounds = getVisibleKoRounds(koEvent.rounds || {});
 
-  for (const roundKey of visibleRounds) {
+// alte K.O.-Runden aus dem Live-Spielplan löschen
+for (const oldRoundKey of Object.keys(state.koMessageIds || {})) {
+  if (!visibleRounds.includes(oldRoundKey)) {
+    await deleteLiveMessage(channel, state.koMessageIds[oldRoundKey]);
+    delete state.koMessageIds[oldRoundKey];
+  }
+}
+
+for (const roundKey of visibleRounds) {
     state.koMessageIds[roundKey] = await upsertMessage(
       channel,
       state.koMessageIds[roundKey],
