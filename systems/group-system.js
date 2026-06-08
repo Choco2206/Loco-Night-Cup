@@ -9,6 +9,15 @@ const GROUP_CLEANUP_GRACE_MS = 0;
 
 let clientRef = null;
 let intervalRef = null;
+const EVENT_TYPES = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
 
 // =========================
 // FILE HELPERS
@@ -26,9 +35,14 @@ function ensureGroupsFile() {
       GROUPS_FILE,
       JSON.stringify(
         {
-          friday: null,
-          saturday: null,
-        },
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+},
         null,
         2
       ),
@@ -43,13 +57,26 @@ function loadGroups() {
   try {
     const raw = fs.readFileSync(GROUPS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
-    return {
-      friday: parsed.friday || null,
-      saturday: parsed.saturday || null,
-    };
+   return {
+  monday: parsed.monday || null,
+  tuesday: parsed.tuesday || null,
+  wednesday: parsed.wednesday || null,
+  thursday: parsed.thursday || null,
+  friday: parsed.friday || null,
+  saturday: parsed.saturday || null,
+  sunday: parsed.sunday || null,
+};
   } catch (error) {
     console.error('❌ Fehler beim Lesen von groups.json:', error);
-    return { friday: null, saturday: null };
+    return {
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+};
   }
 }
 
@@ -64,18 +91,39 @@ function saveGroups(data) {
 function loadCheckins() {
   try {
     if (!fs.existsSync(CHECKINS_FILE)) {
-      return { friday: null, saturday: null };
+      return {
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+};
     }
 
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
     return {
-      friday: parsed.friday || null,
-      saturday: parsed.saturday || null,
-    };
+  monday: parsed.monday || null,
+  tuesday: parsed.tuesday || null,
+  wednesday: parsed.wednesday || null,
+  thursday: parsed.thursday || null,
+  friday: parsed.friday || null,
+  saturday: parsed.saturday || null,
+  sunday: parsed.sunday || null,
+};
   } catch (error) {
     console.error('❌ Fehler beim Lesen von checkins.json:', error);
-    return { friday: null, saturday: null };
+    return {
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+};
   }
 }
 
@@ -418,7 +466,7 @@ async function cleanupGroupsAfterReset() {
   const groupsData = loadGroups();
   let changed = false;
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const storedEvent = groupsData[eventKey];
     if (!storedEvent || !storedEvent.groups) continue;
 
@@ -557,23 +605,18 @@ if (event.status !== 'confirmed') return;
 async function reconcileAutoDraw() {
   const checkins = loadCheckins();
 
-  if (
-  checkins.friday &&
-  !isEventInactive(checkins.friday) &&
-  checkins.friday.finalized &&
-  shouldDrawNow(checkins.friday)
-) {
-  await drawGroupsForEvent('friday');
-}
+  for (const eventKey of EVENT_TYPES) {
+    const event = checkins[eventKey];
 
-  if (
-  checkins.saturday &&
-  !isEventInactive(checkins.saturday) &&
-  checkins.saturday.finalized &&
-  shouldDrawNow(checkins.saturday)
-) {
-  await drawGroupsForEvent('saturday');
-}
+    if (
+      event &&
+      !isEventInactive(event) &&
+      event.finalized &&
+      shouldDrawNow(event)
+    ) {
+      await drawGroupsForEvent(eventKey);
+    }
+  }
 
   await cleanupGroupsAfterReset();
 }
