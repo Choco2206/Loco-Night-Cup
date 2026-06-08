@@ -27,6 +27,15 @@ const KO_NEXT_ROUND_BUFFER_MS = 0;
 let clientRef = null;
 let intervalRef = null;
 let koProcessing = false;
+const EVENT_TYPES = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
 
 // =========================
 // FILE HELPERS
@@ -44,8 +53,13 @@ function ensureKoFile() {
       KO_FILE,
       JSON.stringify(
         {
+          monday: null,
+          tuesday: null,
+          wednesday: null,
+          thursday: null,
           friday: null,
           saturday: null,
+          sunday: null,
         },
         null,
         2
@@ -57,46 +71,124 @@ function ensureKoFile() {
 
 function loadGroups() {
   try {
-    if (!fs.existsSync(GROUPS_FILE)) return { friday: null, saturday: null };
+    if (!fs.existsSync(GROUPS_FILE)) {
+      return {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null,
+      };
+    }
+
     const raw = fs.readFileSync(GROUPS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von groups.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
 function loadResults() {
   try {
-    if (!fs.existsSync(RESULTS_FILE)) return { friday: null, saturday: null };
+    if (!fs.existsSync(RESULTS_FILE)) {
+      return {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null,
+      };
+    }
+
     const raw = fs.readFileSync(RESULTS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von results.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
 function loadCheckins() {
   try {
-    if (!fs.existsSync(CHECKINS_FILE)) return { friday: null, saturday: null };
+    if (!fs.existsSync(CHECKINS_FILE)) {
+      return {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null,
+      };
+    }
+
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von checkins.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
@@ -106,13 +198,28 @@ function loadKo() {
   try {
     const raw = fs.readFileSync(KO_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von ko.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
@@ -604,7 +711,7 @@ async function cleanupKoAfterReset() {
 const checkinsData = loadCheckins();
   let changed = false;
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = koData[eventKey];
     if (!event || !event.rounds) continue;
 
@@ -1218,18 +1325,13 @@ async function reconcileKoAuto() {
   koProcessing = true;
 
   try {
-    await createInitialKoRound('friday');
-    await createInitialKoRound('saturday');
+    for (const eventKey of EVENT_TYPES) {
+      await createInitialKoRound(eventKey);
+      await advanceKoIfReady(eventKey);
+      await releasePendingKoRounds(eventKey);
+      await processKoReminders(eventKey);
+    }
 
-    await advanceKoIfReady('friday');
-    await advanceKoIfReady('saturday');
-    
-    await releasePendingKoRounds('friday');
-await releasePendingKoRounds('saturday');
-
-await processKoReminders('friday');
-await processKoReminders('saturday');
-    
     await cleanupKoAfterReset();
   } finally {
     koProcessing = false;
