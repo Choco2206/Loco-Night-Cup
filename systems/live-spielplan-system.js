@@ -11,6 +11,15 @@ const LIVE_CHANNEL_ID = process.env.LIVE_SPIELPLAN_CHANNEL_ID;
 
 let clientRef = null;
 let intervalRef = null;
+const EVENT_TYPES = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
 
 // =========================
 // FILE HELPERS
@@ -24,9 +33,15 @@ function ensureLiveFile() {
   }
 
   if (!fs.existsSync(LIVE_FILE)) {
+    const initial = {};
+
+    for (const eventKey of EVENT_TYPES) {
+      initial[eventKey] = null;
+    }
+
     fs.writeFileSync(
       LIVE_FILE,
-      JSON.stringify({ friday: null, saturday: null }, null, 2),
+      JSON.stringify(initial, null, 2),
       'utf8'
     );
   }
@@ -46,10 +61,13 @@ function readJson(file, fallback) {
 function loadLive() {
   ensureLiveFile();
   const parsed = readJson(LIVE_FILE, {});
-  return {
-    friday: parsed.friday || null,
-    saturday: parsed.saturday || null,
-  };
+  const data = {};
+
+  for (const eventKey of EVENT_TYPES) {
+    data[eventKey] = parsed[eventKey] || null;
+  }
+
+  return data;
 }
 
 function saveLive(data) {
@@ -59,26 +77,35 @@ function saveLive(data) {
 
 function loadGroups() {
   const parsed = readJson(GROUPS_FILE, {});
-  return {
-    friday: parsed.friday || null,
-    saturday: parsed.saturday || null,
-  };
+  const data = {};
+
+  for (const eventKey of EVENT_TYPES) {
+    data[eventKey] = parsed[eventKey] || null;
+  }
+
+  return data;
 }
 
 function loadResults() {
   const parsed = readJson(RESULTS_FILE, {});
-  return {
-    friday: parsed.friday || null,
-    saturday: parsed.saturday || null,
-  };
+  const data = {};
+
+  for (const eventKey of EVENT_TYPES) {
+    data[eventKey] = parsed[eventKey] || null;
+  }
+
+  return data;
 }
 
 function loadKo() {
   const parsed = readJson(KO_FILE, {});
-  return {
-    friday: parsed.friday || null,
-    saturday: parsed.saturday || null,
-  };
+  const data = {};
+
+  for (const eventKey of EVENT_TYPES) {
+    data[eventKey] = parsed[eventKey] || null;
+  }
+
+  return data;
 }
 
 // =========================
@@ -443,11 +470,13 @@ async function sync(eventKey) {
 }
 
 async function syncAll() {
-  await sync('friday');
-  await sync('saturday');
+  for (const eventKey of EVENT_TYPES) {
+    await sync(eventKey);
+  }
 
-  await cleanupIfExpired('friday');
-  await cleanupIfExpired('saturday');
+  for (const eventKey of EVENT_TYPES) {
+    await cleanupIfExpired(eventKey);
+  }
 }
 
 // =========================
