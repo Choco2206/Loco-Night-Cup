@@ -363,6 +363,11 @@ async function promoteUserToManagerRole(guild, userId) {
       await member.roles.remove(playerRole);
     }
   } catch (error) {
+    if (error.code === 10007) {
+      console.warn(`⚠️ User ${userId} ist nicht mehr auf dem Server. Managerrolle übersprungen.`);
+      return;
+    }
+
     console.error('❌ Managerrolle konnte nicht vergeben werden:', error);
   }
 }
