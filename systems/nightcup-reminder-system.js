@@ -101,10 +101,10 @@ function isFridayReminderTime() {
   const time = getGermanTimeParts();
 
   return (
-    time.weekday === 'Fr.' &&
-    time.hour === '11' &&
-    time.minute === '45'
-  );
+  time.weekday === 'Fr.' &&
+  time.hour === '18' &&
+  time.minute === '00'
+);
 }
 
 function getReminderKey() {
@@ -130,27 +130,31 @@ function getTeamUserIds(team) {
 }
 
 function buildReminderMessage() {
-  return [
-    '🌙 **Loco NightCup Reminder**',
-    '',
-    'Moin Manager,',
-    '',
-    'heute Abend geht’s wieder rund. Die NightCup Check-ins sind offen. 🏆',
-    '',
-    'Wenn ihr mit eurem Team dabei sein wollt, meldet euch gerne noch an:',
-    '',
-    `🔥 **Freitag Check-in:** ${FRIDAY_CHECKIN_LINK}`,
-    `🔥 **Samstag Check-in:** ${SATURDAY_CHECKIN_LINK}`,
-    '',
-    '⏰ **Anmeldeschluss:** 23:15 Uhr',
-    '🎲 **Gruppenauslosung:** 23:30 Uhr',
-    '🌙 **Turnierstart:** 00:00 Uhr',
-    '',
-    'Je mehr Teams sich anmelden, desto größer wird das Turnierformat.',
-    '',
-    'Also Jungs zusammentrommeln, anmelden und heute Nacht abreißen. 💪⚽',
-  ].join('\n');
+return [
+'🌙 **LOCO NIGHT CUP REMINDER**',
+'',
+'🕺 **It’s Friday then... Saturday, Sunday, what?**',
+'',
+'Ihr kennt den Ablauf.',
+'',
+'Die Check-ins sind offen und heute Nacht wird wieder um den heiligen Loco Night Cup gespielt. 🏆',
+'',
+`🔥 **Freitag Check-in:** ${FRIDAY_CHECKIN_LINK}`,
+`🔥 **Samstag Check-in:** ${SATURDAY_CHECKIN_LINK}`,
+'',
+'⏰ **Anmeldeschluss:** 23:30 Uhr',
+'⌛ **Nachjoin möglich bis:** 23:45 Uhr',
+'🎲 **Gruppenauslosung:** 23:50 Uhr',
+'🌙 **Turnierstart:** 00:00 Uhr',
+'',
+'Je mehr Teams am Start sind, desto größer wird das Turnier.',
+'',
+'Also Teamchat aktivieren, Controller laden und die Jungs einsammeln. 🎮🔥',
+'',
+'**Heute Nacht gibt’s keine Ausreden.** 😎',
+].join('\n');
 }
+
 
 async function sendNightCupReminder() {
   if (!MANAGER_ROLE_ID) {
