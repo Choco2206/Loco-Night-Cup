@@ -38,6 +38,15 @@ const GROUP_FIRST_RELEASE_TIME = '00:00';
 
 let clientRef = null;
 let intervalRef = null;
+const EVENT_TYPES = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
 
 // =========================
 // FILE HELPERS
@@ -55,9 +64,14 @@ function ensureResultsFile() {
       RESULTS_FILE,
       JSON.stringify(
         {
-          friday: null,
-          saturday: null,
-        },
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+},
         null,
         2
       ),
@@ -69,36 +83,82 @@ function ensureResultsFile() {
 function loadGroups() {
   try {
     if (!fs.existsSync(GROUPS_FILE)) {
-      return { friday: null, saturday: null };
+      return {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null,
+      };
     }
 
     const raw = fs.readFileSync(GROUPS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von groups.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
 function loadCheckins() {
   try {
     if (!fs.existsSync(CHECKINS_FILE)) {
-      return { friday: null, saturday: null };
+      return {
+        monday: null,
+        tuesday: null,
+        wednesday: null,
+        thursday: null,
+        friday: null,
+        saturday: null,
+        sunday: null,
+      };
     }
 
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von checkins.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
@@ -108,13 +168,28 @@ function loadResults() {
   try {
     const raw = fs.readFileSync(RESULTS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
       friday: parsed.friday || null,
       saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von results.json:', error);
-    return { friday: null, saturday: null };
+
+    return {
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
@@ -1330,12 +1405,16 @@ function shouldCreateSchedule(event) {
 async function reconcileSchedules() {
   const groupsData = loadGroups();
 
-  if (groupsData.friday && !isEventInactive(groupsData.friday) && shouldCreateSchedule(groupsData.friday)) {
-    await createScheduleForEvent('friday');
-  }
+  for (const eventKey of EVENT_TYPES) {
+    const event = groupsData[eventKey];
 
-  if (groupsData.saturday && !isEventInactive(groupsData.saturday) && shouldCreateSchedule(groupsData.saturday)) {
-    await createScheduleForEvent('saturday');
+    if (
+      event &&
+      !isEventInactive(event) &&
+      shouldCreateSchedule(event)
+    ) {
+      await createScheduleForEvent(eventKey);
+    }
   }
 }
 
@@ -1962,26 +2041,29 @@ module.exports = {
   processGroupReleaseTimes,
 
   async init(client) {
-    clientRef = client;
-    ensureResultsFile();
+  clientRef = client;
+  ensureResultsFile();
 
-    await reconcileSchedules();
-    await processGroupReleaseTimes('friday');
-await processGroupReleaseTimes('saturday');
+  await reconcileSchedules();
 
-    if (!intervalRef) {
-      intervalRef = setInterval(async () => {
-        try {
-          await reconcileSchedules();
-          
-          await processGroupReleaseTimes('friday');
-await processGroupReleaseTimes('saturday');
-        } catch (error) {
-          console.error('❌ Fehler im Result-Intervall:', error);
+  for (const eventKey of EVENT_TYPES) {
+    await processGroupReleaseTimes(eventKey);
+  }
+
+  if (!intervalRef) {
+    intervalRef = setInterval(async () => {
+      try {
+        await reconcileSchedules();
+
+        for (const eventKey of EVENT_TYPES) {
+          await processGroupReleaseTimes(eventKey);
         }
-      }, 60000);
-    }
-  },
+      } catch (error) {
+        console.error('❌ Fehler im Result-Intervall:', error);
+      }
+    }, 60000);
+  }
+},
 
   async handleInteraction(interaction) {
   if (interaction.isButton()) {
