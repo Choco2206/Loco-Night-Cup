@@ -33,6 +33,7 @@ const GROUP_RELEASE_SLOTS = [
 const INVITE_WINDOW_MINUTES = 5;
 const GROUP_FIRST_REMINDER_AFTER_INVITE_MS = 20 * 60 * 1000;
 const GROUP_AUTO_SCORE_AFTER_INVITE_MS = 25 * 60 * 1000;
+const ADMIN_DISPUTE_EXTRA_TIME_MS = 5 * 60 * 1000;
 const GROUP_FIRST_RELEASE_TIME = '00:00';
 
 let clientRef = null;
@@ -998,23 +999,50 @@ async function autoScoreOpenMatchesForSlot(eventKey, slot) {
   if (globalSlot.autoScoredAt) return;
 
   let changed = false;
+  let hasDisputedMatches = false;
 
   for (const [groupLetter, group] of Object.entries(event.groups)) {
     let groupChanged = false;
+    let groupHasDispute = false;
 
     const matches = getMatchesForSlot(group, slot);
 
     for (const match of matches) {
       if (match.status === 'confirmed' || match.isByeMatch) continue;
 
+      if (match.status === 'disputed') {
+        hasDisputedMatches = true;
+        groupHasDispute = true;
+        continue;
+      }
+
+      const reports = match.teamReports || {};
+      const reportValues = Object.values(reports);
+
+      if (reportValues.length === 1) {
+        const singleReport = reportValues[0];
+
+        match.status = 'confirmed';
+        match.reportedByTeamId = null;
+        match.reportedScore = {
+          home: Number(singleReport.home),
+          away: Number(singleReport.away),
+        };
+        match.confirmed = true;
+        match.teamReports = {};
+        match.waitingForTeamId = null;
+        match.waitingForClubName = null;
+        match.autoConfirmedBySingleReport = true;
+        match.autoConfirmedAt = nowIso();
+
+        changed = true;
+        groupChanged = true;
+        continue;
+      }
+
       if (match.confirmationMessageId) {
         await deleteMessageIfExists(group.channelId, match.confirmationMessageId);
         match.confirmationMessageId = null;
-      }
-
-      if (match.disputeMessageId) {
-        await deleteMessageIfExists(group.channelId, match.disputeMessageId);
-        match.disputeMessageId = null;
       }
 
       match.status = 'confirmed';
@@ -1034,7 +1062,7 @@ async function autoScoreOpenMatchesForSlot(eventKey, slot) {
       groupChanged = true;
     }
 
-    if (groupChanged) {
+    if (groupChanged || groupHasDispute) {
       const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
 
       if (groupMeta) {
@@ -1043,21 +1071,37 @@ async function autoScoreOpenMatchesForSlot(eventKey, slot) {
         if (channel) {
           await channel.send({
             content: [
-  `⏱️ **Spieltag ${slot.slot}: offene Spiele wurden gewertet**`,
-  '',
-  `Nicht eingetragene Spiele wurden automatisch mit **0:0** gewertet.`,
-  slot.slot === 3
-    ? [
-        '',
-        `⚠️ Die Gruppenphase ist damit beendet. Die K.O.-Phase wird jetzt automatisch eingeleitet.`,
-        `Bitte bleibt im Turnier und achtet auf den K.O.-Plan.`,
-      ].join('\n')
-    : null,
-].filter(Boolean).join('\n'),
+              groupHasDispute
+                ? `🚨 **Spieltag ${slot.slot}: Spiele sind noch in Admin-Klärung**`
+                : `⏱️ **Spieltag ${slot.slot}: offene Spiele wurden gewertet**`,
+              '',
+              groupHasDispute
+                ? `Ein oder mehrere Spiele haben unterschiedliche Ergebnismeldungen. Die nächste Freigabe startet automatisch, sobald der Admin die offenen Spiele entschieden hat.`
+                : `Nicht gemeldete Spiele wurden mit **0:0** gewertet. Wenn nur ein Team ein Ergebnis gemeldet hat, wurde dieses Ergebnis übernommen.`,
+              slot.slot === 3 && !groupHasDispute
+                ? [
+                    '',
+                    `⚠️ Die Gruppenphase ist damit beendet. Die K.O.-Phase wird jetzt automatisch eingeleitet.`,
+                    `Bitte bleibt im Turnier und achtet auf den K.O.-Plan.`,
+                  ].join('\n')
+                : null,
+            ].filter(Boolean).join('\n'),
           });
         }
       }
     }
+  }
+
+  if (hasDisputedMatches) {
+    saveResults(resultsData);
+
+    if (changed) {
+      for (const groupLetter of Object.keys(event.groups)) {
+        await updateGroupMessages(eventKey, groupLetter);
+      }
+    }
+
+    return;
   }
 
   globalSlot.autoScoredAt = nowIso();
