@@ -34,7 +34,7 @@ const INVITE_WINDOW_MINUTES = 5;
 const GROUP_FIRST_REMINDER_AFTER_INVITE_MS = 20 * 60 * 1000;
 const GROUP_AUTO_SCORE_AFTER_INVITE_MS = 25 * 60 * 1000;
 const ADMIN_DISPUTE_EXTRA_TIME_MS = 5 * 60 * 1000;
-const GROUP_FIRST_RELEASE_TIME = '00:00';
+const DEFAULT_GROUP_FIRST_RELEASE_TIME = '00:00';
 
 let clientRef = null;
 let intervalRef = null;
@@ -584,6 +584,21 @@ function getPlannedTimestamp(event, time) {
   }
 
   return planned.getTime();
+}
+
+function getFirstReleaseTimestamp(eventKey, event) {
+  if (event?.firstReleaseAt) {
+    return Number(event.firstReleaseAt);
+  }
+
+  const checkins = loadCheckins();
+  const checkinEvent = checkins[eventKey];
+
+  if (checkinEvent?.startAt) {
+    return Number(checkinEvent.startAt);
+  }
+
+  return getPlannedTimestamp(event, DEFAULT_GROUP_FIRST_RELEASE_TIME);
 }
 
 function formatMinutes(minutes) {
@@ -1209,7 +1224,7 @@ async function processGroupReleaseTimes(eventKey) {
 
     if (!globalSlot.released) {
   if (!previousSlot) {
-    const firstReleaseAtMs = getPlannedTimestamp(event, GROUP_FIRST_RELEASE_TIME);
+    const firstReleaseAtMs = getFirstReleaseTimestamp(eventKey, event);
 
     if (Date.now() < firstReleaseAtMs) {
       return;
@@ -1219,13 +1234,13 @@ async function processGroupReleaseTimes(eventKey) {
     return;
   }
 
-      if (areAllGroupsConfirmedForSlot(event, previousSlot)) {
-        await releaseGlobalGroupSlot(eventKey, slot);
-        return;
-      }
+  if (areAllGroupsConfirmedForSlot(event, previousSlot)) {
+    await releaseGlobalGroupSlot(eventKey, slot);
+    return;
+  }
 
-      continue;
-    }
+  continue;
+}
 
     if (areAllGroupsConfirmedForSlot(event, slot)) {
       continue;
@@ -1264,6 +1279,8 @@ async function processGroupReleaseTimes(eventKey) {
 async function createScheduleForEvent(eventKey) {
   const groupsData = loadGroups();
   const resultsData = loadResults();
+  const checkinsData = loadCheckins();
+const checkinEvent = checkinsData[eventKey];
 
   const event = groupsData[eventKey];
   if (!event || !event.groups) return;
@@ -1305,6 +1322,8 @@ if (existing && existing.cycleKey === event.cycleKey) {
   format: event.format,
   createdAt: new Date().toISOString(),
   resetAt: event.resetAt || null,
+  firstReleaseAt: checkinEvent?.startAt || null,
+  firstReleaseText: checkinEvent?.startText || null,
   completed: false,
   archived: false,
   globalRelease: {
