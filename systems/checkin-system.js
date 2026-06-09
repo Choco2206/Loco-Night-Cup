@@ -293,6 +293,36 @@ const CHECKIN_DAY_CONFIGS = {
   },
 };
 
+function getDaySchedule(type) {
+  const earlyDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'sunday'];
+  const isEarlyDay = earlyDays.includes(type);
+
+  return {
+    deadlineHour: isEarlyDay ? 22 : 23,
+    deadlineMinute: isEarlyDay ? 0 : 30,
+
+    lateDeadlineHour: isEarlyDay ? 22 : 23,
+    lateDeadlineMinute: isEarlyDay ? 15 : 45,
+
+    drawHour: isEarlyDay ? 22 : 23,
+    drawMinute: isEarlyDay ? 20 : 50,
+
+    startHour: isEarlyDay ? 22 : 0,
+    startMinute: isEarlyDay ? 30 : 0,
+
+    deadlineText: isEarlyDay ? '22:00' : '23:30',
+    lateDeadlineText: isEarlyDay ? '22:15' : '23:45',
+    drawText: isEarlyDay ? '22:20' : '23:50',
+    startText: isEarlyDay ? '22:30' : '00:00',
+  };
+}
+
+function setTimeOnDate(date, hour, minute) {
+  const result = new Date(date);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
 function getCycleConfig(type) {
   const dayConfig = CHECKIN_DAY_CONFIGS[type];
 
@@ -300,14 +330,39 @@ function getCycleConfig(type) {
     throw new Error(`Unbekannter Check-in-Typ: ${type}`);
   }
 
+  const schedule = getDaySchedule(type);
   const resetAt = getNextBoundary(dayConfig.resetDay, 7);
 
-  const deadline = new Date(
-    resetAt.getTime() - (7 * 60 + 30) * 60 * 1000
+  const eventDate = new Date(resetAt);
+  eventDate.setDate(eventDate.getDate() - 1);
+
+  const deadline = setTimeOnDate(
+    eventDate,
+    schedule.deadlineHour,
+    schedule.deadlineMinute
   );
 
-  const start = new Date(deadline.getTime() + 30 * 60 * 1000);
-  const drawAt = new Date(deadline.getTime() + 15 * 60 * 1000);
+  const lateDeadline = setTimeOnDate(
+    eventDate,
+    schedule.lateDeadlineHour,
+    schedule.lateDeadlineMinute
+  );
+
+  const drawAt = setTimeOnDate(
+    eventDate,
+    schedule.drawHour,
+    schedule.drawMinute
+  );
+
+  const start = setTimeOnDate(
+    eventDate,
+    schedule.startHour,
+    schedule.startMinute
+  );
+
+  if (type === 'friday' || type === 'saturday') {
+    start.setDate(start.getDate() + 1);
+  }
 
   return {
     key: `${type}-${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`,
@@ -316,11 +371,16 @@ function getCycleConfig(type) {
     channelId: dayConfig.channelId,
     deadlineAt: deadline.getTime(),
     drawAt: drawAt.getTime(),
-    lateDeadlineAt: drawAt.getTime(),
+    lateDeadlineAt: lateDeadline.getTime(),
     startAt: start.getTime(),
     resetAt: resetAt.getTime(),
     displayDate: formatDateGerman(deadline),
     startLine: dayConfig.startLine,
+
+    deadlineText: schedule.deadlineText,
+    lateDeadlineText: schedule.lateDeadlineText,
+    drawText: schedule.drawText,
+    startText: schedule.startText,
   };
 }
 
@@ -445,10 +505,10 @@ function buildPreDrawContent(event) {
       'Aktuell sind noch nicht genug Teams für den NightCup angemeldet.',
       'Minimum sind **8 Teams**.',
       '',
-      'Teams können sich noch bis **23:45 Uhr** anmelden oder abmelden.',
-      'Um **23:45 Uhr** wird final geprüft, ob ein gültiges Format zustande kommt.',
+      `Teams können sich noch bis **${event.lateDeadlineText} Uhr** anmelden oder abmelden.`,
+      `Um **${event.lateDeadlineText} Uhr** wird final geprüft, ob ein gültiges Format zustande kommt.`,
       '',
-      '⚠️ Abmeldungen nach 23:30 Uhr führen automatisch zu einer **7-Tage-Sperre**.',
+      `⚠️ Abmeldungen nach ${event.deadlineText} Uhr führen automatisch zu einer **7-Tage-Sperre**.`,
     ].join('\n');
   }
 
@@ -457,12 +517,12 @@ function buildPreDrawContent(event) {
     '',
     `Aktuelles Format: **${actualFormat}er Turnier**`,
     '',
-    'Teams können sich noch bis **23:45 Uhr** anmelden oder abmelden.',
-    'Um **23:45 Uhr** wird final geprüft, welches Format zustande kommt.',
+    `Teams können sich noch bis **${event.lateDeadlineText} Uhr** anmelden oder abmelden.`,
+    `Um **${event.lateDeadlineText} Uhr** wird final geprüft, welches Format zustande kommt.`,
     '',
-    '🎲 Die Gruppenauslosung findet um **23:50 Uhr** statt.',
+    `🎲 Die Gruppenauslosung findet um **${event.drawText} Uhr** statt.`,
     '',
-    '⚠️ Abmeldungen nach 23:30 Uhr führen automatisch zu einer **7-Tage-Sperre**.',
+    `⚠️ Abmeldungen nach ${event.deadlineText} Uhr führen automatisch zu einer **7-Tage-Sperre**.`,
   ].join('\n');
 }
 
@@ -482,7 +542,7 @@ function buildSummaryContent(event) {
     '✅ **NightCup findet statt**',
     '',
     `Format: **${actualFormat}er Turnier**`,
-    'Gruppenauslosung findet um **23:50 Uhr** statt.',
+    `Gruppenauslosung findet um **${event.drawText} Uhr** statt.`,
     'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
   ].join('\n');
 }
@@ -548,11 +608,11 @@ function buildMainEmbed(event) {
     `**${statusLine}**`,
     `📅 **Datum:** ${event.displayDate}`,
     '',
-`⏰ **Offizieller Anmeldeschluss:** 23:30 Uhr`,
-`🎲 **Gruppenauslosung:** 23:50 Uhr`,
-`⌛ **Anmeldung offen bis:** ${formatCountdown(event.drawAt || event.lateDeadlineAt || event.deadlineAt)}`,
+`⏰ **Offizieller Anmeldeschluss:** ${event.deadlineText} Uhr`,
+`🎲 **Gruppenauslosung:** ${event.drawText} Uhr`,
+`⌛ **Anmeldung offen bis:** ${formatCountdown(event.lateDeadlineAt || event.deadlineAt)}`,
     '',
-    `🚀 **Turnierstart:** 00:00 Uhr`,
+    `🚀 **Turnierstart:** ${event.startText} Uhr`,
     `${event.startLine}`,
     `🕛 **Start in:** ${formatCountdown(event.startAt)}`,
     '',
@@ -597,7 +657,7 @@ function buildMainEmbed(event) {
 }
 
 function buildMainButtons(event) {
-  const closeAt = event.drawAt || event.lateDeadlineAt || event.deadlineAt;
+  const closeAt = event.lateDeadlineAt || event.deadlineAt;
 const disabled = Date.now() >= closeAt;
 
   return new ActionRowBuilder().addComponents(
@@ -704,6 +764,10 @@ startAt: cfg.startAt,
     resetAt: cfg.resetAt,
     displayDate: cfg.displayDate,
     startLine: cfg.startLine,
+    deadlineText: cfg.deadlineText,
+lateDeadlineText: cfg.lateDeadlineText,
+drawText: cfg.drawText,
+startText: cfg.startText,
 
     messageId: previousState?.messageId || null,
 warningMessageId: previousState?.warningMessageId || null,
@@ -768,7 +832,7 @@ async function ensureWarningMessage(event) {
 
   const content = [
     '⚠️ **Wichtiger Hinweis zur Abmeldung**',
-    'Nach dem offiziellen Anmeldeschluss um **23:30 Uhr** führt eine Abmeldung automatisch zu einer **7-Tage-Sperre**.',
+    `Nach dem offiziellen Anmeldeschluss um **${event.deadlineText} Uhr** führt eine Abmeldung automatisch zu einer **7-Tage-Sperre**.`,
   ].join('\n');
 
   let message = null;
@@ -919,6 +983,10 @@ current.startAt = cfg.startAt;
   current.resetAt = cfg.resetAt;
   current.displayDate = cfg.displayDate;
   current.startLine = cfg.startLine;
+  current.deadlineText = cfg.deadlineText;
+current.lateDeadlineText = cfg.lateDeadlineText;
+current.drawText = cfg.drawText;
+current.startText = cfg.startText;
   current.channelId = cfg.channelId;
 
 if (!current.finalized && Date.now() >= current.deadlineAt) {
@@ -1031,7 +1099,7 @@ async function handleJoin(interaction, type) {
     return true;
   }
 
-  const closeAt = event.drawAt || event.lateDeadlineAt || event.deadlineAt;
+  const closeAt = event.lateDeadlineAt || event.deadlineAt;
 
 if (Date.now() >= closeAt) {
     await interaction.reply({
@@ -1096,7 +1164,7 @@ async function handleLeave(interaction, type) {
     return true;
   }
 
-  const closeAt = event.drawAt || event.lateDeadlineAt || event.deadlineAt;
+  const closeAt = event.lateDeadlineAt || event.deadlineAt;
 
 if (Date.now() >= closeAt) {
     await interaction.reply({
@@ -1142,7 +1210,7 @@ if (Date.now() >= event.deadlineAt) {
 
   await removeTeamFromOpenCheckinsById(team.id);
 
-  extraText = '\n\n🚫 Da die Abmeldung nach 23:30 Uhr erfolgt ist, wurde dein Team automatisch für **7 Tage** gesperrt.';
+    extraText = `\n\n🚫 Da die Abmeldung nach ${event.deadlineText} Uhr erfolgt ist, wurde dein Team automatisch für **7 Tage** gesperrt.`;
 }
 
 await interaction.reply({
