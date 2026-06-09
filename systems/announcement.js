@@ -48,22 +48,103 @@ function loadTeams() {
 }
 
 function loadKo() {
-  return readJson(KO_FILE, { friday: null, saturday: null });
+  return readJson(KO_FILE, {
+    monday: null,
+    tuesday: null,
+    wednesday: null,
+    thursday: null,
+    friday: null,
+    saturday: null,
+    sunday: null,
+  });
 }
 
 function loadAnnouncementState() {
-  return readJson(ANNOUNCEMENT_STATE_FILE, {
+
+  const fallback = {
+
+    monday: {
+
+      ceremonyPosted: false,
+
+      cycleKey: null,
+
+      postedAt: null,
+
+    },
+
+    tuesday: {
+
+      ceremonyPosted: false,
+
+      cycleKey: null,
+
+      postedAt: null,
+
+    },
+
+    wednesday: {
+
+      ceremonyPosted: false,
+
+      cycleKey: null,
+
+      postedAt: null,
+
+    },
+
+    thursday: {
+
+      ceremonyPosted: false,
+
+      cycleKey: null,
+
+      postedAt: null,
+
+    },
+
     friday: {
+
       ceremonyPosted: false,
+
       cycleKey: null,
+
       postedAt: null,
+
     },
+
     saturday: {
+
       ceremonyPosted: false,
+
       cycleKey: null,
+
       postedAt: null,
+
     },
-  });
+
+    sunday: {
+
+      ceremonyPosted: false,
+
+      cycleKey: null,
+
+      postedAt: null,
+
+    },
+
+  };
+
+  const data = readJson(ANNOUNCEMENT_STATE_FILE, fallback);
+
+  return {
+
+    ...fallback,
+
+    ...data,
+
+  };
+
 }
 
 function saveAnnouncementState(data) {
