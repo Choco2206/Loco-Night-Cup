@@ -184,6 +184,10 @@ function shuffleArray(array) {
 }
 
 function getDrawTimestamp(event) {
+  if (event?.drawAt) {
+    return Number(event.drawAt);
+  }
+
   const deadlineMs =
     typeof event.deadlineAt === 'number'
       ? event.deadlineAt
