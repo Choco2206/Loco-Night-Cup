@@ -492,6 +492,59 @@ async function deleteMessageIfExists(channelId, messageId) {
   }
 }
 
+function ensureSlotMessageStore(resultGroup) {
+  if (!resultGroup.slotMessages) {
+    resultGroup.slotMessages = {};
+  }
+
+  for (const slot of GROUP_RELEASE_SLOTS) {
+    if (!Array.isArray(resultGroup.slotMessages[slot.slot])) {
+      resultGroup.slotMessages[slot.slot] = [];
+    }
+  }
+}
+
+async function rememberSlotMessage(eventKey, groupLetter, slotNumber, messageId) {
+  if (!messageId) return;
+
+  const resultsData = loadResults();
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+
+  if (!resultGroup) return;
+
+  ensureSlotMessageStore(resultGroup);
+
+  if (!resultGroup.slotMessages[slotNumber].includes(messageId)) {
+    resultGroup.slotMessages[slotNumber].push(messageId);
+  }
+
+  saveResults(resultsData);
+}
+
+async function cleanupOldSlotMessages(eventKey, groupLetter, beforeSlotNumber) {
+  const resultsData = loadResults();
+  const groupsData = loadGroups();
+
+  const resultGroup = resultsData[eventKey]?.groups?.[groupLetter];
+  const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
+
+  if (!resultGroup || !groupMeta) return;
+
+  ensureSlotMessageStore(resultGroup);
+
+  for (const [slotNumber, messageIds] of Object.entries(resultGroup.slotMessages)) {
+    if (Number(slotNumber) >= Number(beforeSlotNumber)) continue;
+
+    for (const messageId of messageIds) {
+      await deleteMessageIfExists(groupMeta.channelId, messageId);
+    }
+
+    resultGroup.slotMessages[slotNumber] = [];
+  }
+
+  saveResults(resultsData);
+}
+
 async function sendGroupSlotReleaseMessage(eventKey, groupLetter, slot, startText, endText) {
   const groupsData = loadGroups();
   const groupMeta = groupsData[eventKey]?.groups?.[groupLetter];
@@ -500,23 +553,25 @@ async function sendGroupSlotReleaseMessage(eventKey, groupLetter, slot, startTex
   const channel = await fetchChannel(groupMeta.channelId);
   if (!channel) return;
 
-  await channel.send({
+  const message = await channel.send({
     content: [
-  `✅ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist freigegeben**`,
-  '',
-  `Die Spiele dürfen jetzt gestartet werden.`,
-  `**Einladezeit: ${startText} – ${endText} Uhr**`,
-  '',
-  `Bitte meldet euer Ergebnis direkt nach dem Spiel über den Button im Spielplan.`,
-  slot.slot === 3
-    ? [
-        '',
-        `⚠️ **Wichtig:** Nach diesem Spieltag wird die K.O.-Phase automatisch eingeleitet, sobald alle Gruppenergebnisse bestätigt sind.`,
-        `Bleibt also bitte im Turnier und wartet ab, ob ihr weiterkommt.`,
-      ].join('\n')
-    : null,
-].filter(Boolean).join('\n'),
+      `✅ **Gruppe ${groupLetter} • Spieltag ${slot.slot} ist freigegeben**`,
+      '',
+      `Die Spiele dürfen jetzt gestartet werden.`,
+      `**Einladezeit: ${startText} – ${endText} Uhr**`,
+      '',
+      `Beide Teams melden ihr Ergebnis direkt nach dem Spiel über den Button im Spielplan.`,
+      slot.slot === 3
+        ? [
+            '',
+            `⚠️ **Wichtig:** Nach diesem Spieltag wird die K.O.-Phase automatisch eingeleitet, sobald alle Gruppenergebnisse bestätigt sind.`,
+            `Bleibt also bitte im Turnier und wartet ab, ob ihr weiterkommt.`,
+          ].join('\n')
+        : null,
+    ].filter(Boolean).join('\n'),
   });
+
+  await rememberSlotMessage(eventKey, groupLetter, slot.slot, message.id);
 }
 
 async function sendGlobalMissingResultReminder(eventKey, slot) {
@@ -535,25 +590,27 @@ async function sendGlobalMissingResultReminder(eventKey, slot) {
     const channel = await fetchChannel(groupMeta.channelId);
     if (!channel) continue;
 
-    await channel.send({
+        const message = await channel.send({
       content: [
-  `⚠️ **Spieltag ${slot.slot} ist noch nicht vollständig eingetragen**`,
-  '',
-  `Aktuell sind noch folgende Spiele offen:`,
-  '',
-  text,
-  '',
-  `Wenn die Ergebnisse nicht innerhalb von **5 Minuten** eingetragen werden, werden die offenen Spiele mit **0:0** gewertet.`,
-  `Wir wollen den Turnierlauf flüssig halten, daher ohne Diskussion.`,
-  slot.slot === 3
-    ? [
+        `⚠️ **Spieltag ${slot.slot} ist noch nicht vollständig eingetragen**`,
         '',
-        `⚠️ **Hinweis:** Nach der Wertung dieses Spieltags ist die Gruppenphase beendet und die K.O.-Phase wird automatisch eingeleitet.`,
-        `Bleibt bitte im Turnier, bis klar ist, wer weiterkommt.`,
-      ].join('\n')
-    : null,
-].filter(Boolean).join('\n'),
+        `Aktuell sind noch folgende Spiele offen:`,
+        '',
+        text,
+        '',
+        `Wenn die Ergebnisse nicht innerhalb von **5 Minuten** eingetragen werden, werden die offenen Spiele mit **0:0** gewertet.`,
+        `Wir wollen den Turnierlauf flüssig halten, daher ohne Diskussion.`,
+        slot.slot === 3
+          ? [
+              '',
+              `⚠️ **Hinweis:** Nach der Wertung dieses Spieltags ist die Gruppenphase beendet und die K.O.-Phase wird automatisch eingeleitet.`,
+              `Bleibt bitte im Turnier, bis klar ist, wer weiterkommt.`,
+            ].join('\n')
+          : null,
+      ].filter(Boolean).join('\n'),
     });
+
+    await rememberSlotMessage(eventKey, groupLetter, slot.slot, message.id);
   }
 }
 
@@ -1037,6 +1094,8 @@ async function releaseGroupSlot(eventKey, groupLetter, slot, window) {
   const releaseState = resultGroup.release.slots[slot.slot];
   if (releaseState.released) return;
 
+  await cleanupOldSlotMessages(eventKey, groupLetter, slot.slot);
+
   const slotMatches = getMatchesForSlot(resultGroup, slot);
 
   for (const match of slotMatches) {
@@ -1173,8 +1232,8 @@ async function autoScoreOpenMatchesForSlot(eventKey, slot) {
         const channel = await fetchChannel(groupMeta.channelId);
 
         if (channel) {
-          await channel.send({
-            content: [
+         const message = await channel.send({
+  content: [
               groupHasDispute
                 ? `🚨 **Spieltag ${slot.slot}: Spiele sind noch in Admin-Klärung**`
                 : `⏱️ **Spieltag ${slot.slot}: offene Spiele wurden gewertet**`,
@@ -1191,6 +1250,7 @@ async function autoScoreOpenMatchesForSlot(eventKey, slot) {
                 : null,
             ].filter(Boolean).join('\n'),
           });
+          await rememberSlotMessage(eventKey, groupLetter, slot.slot, message.id);
         }
       }
     }
