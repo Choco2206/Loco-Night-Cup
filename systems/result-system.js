@@ -862,10 +862,24 @@ function getTeamsOfMatch(match, groupTeams) {
   return { home, away };
 }
 
+function getFreshTeamFromCheckins(eventKey, teamId) {
+  const checkins = loadCheckins();
+  const event = checkins[eventKey];
+
+  if (!event || !Array.isArray(event.teams)) return null;
+
+  return event.teams.find(team => String(team.teamId) === String(teamId)) || null;
+}
+
 function isTeamAuthorized(userId, team) {
   if (!team) return false;
-  if (team.managerId === userId) return true;
-  return Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+
+  const userIdString = String(userId);
+
+  if (String(team.managerId) === userIdString) return true;
+
+  return Array.isArray(team.coManagerIds) &&
+    team.coManagerIds.map(String).includes(userIdString);
 }
 
 function recalculateRows(rows, matches) {
@@ -1463,18 +1477,27 @@ async function handleOpenResult(interaction, eventKey, groupLetter) {
     return true;
   }
 
-  const allowedMatches = data.group.matches.filter(match => {
+ const allowedMatches = data.group.matches.filter(match => {
   if (match.isByeMatch) return false;
   if (match.status === 'confirmed') return false;
-if (match.status === 'disputed') return false;
+  if (match.status === 'disputed') return false;
   if (!isMatchReleased(data.group, match.matchNumber)) return false;
 
-  const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
-  const ownTeam = isTeamAuthorized(interaction.user.id, home) ? home : away;
-if (!ownTeam) return false;
+  const { home: storedHome, away: storedAway } = getTeamsOfMatch(match, groupMeta.teams);
 
-if (match.teamReports && match.teamReports[ownTeam.teamId]) return false;
-  return isTeamAuthorized(interaction.user.id, home) || isTeamAuthorized(interaction.user.id, away);
+  const home = getFreshTeamFromCheckins(eventKey, match.homeTeamId) || storedHome;
+  const away = getFreshTeamFromCheckins(eventKey, match.awayTeamId) || storedAway;
+
+  const canReportHome = isTeamAuthorized(interaction.user.id, home);
+  const canReportAway = isTeamAuthorized(interaction.user.id, away);
+
+  if (!canReportHome && !canReportAway) return false;
+
+  const ownTeam = canReportHome ? home : away;
+
+  if (match.teamReports && match.teamReports[ownTeam.teamId]) return false;
+
+  return true;
 });
 
   if (allowedMatches.length === 0) {
@@ -1945,7 +1968,10 @@ async function handleResultModal(interaction, eventKey, groupLetter, matchNumber
   return true;
 }
 
-  const { home, away } = getTeamsOfMatch(match, groupMeta.teams);
+  const { home: storedHome, away: storedAway } = getTeamsOfMatch(match, groupMeta.teams);
+
+const home = getFreshTeamFromCheckins(eventKey, match.homeTeamId) || storedHome;
+const away = getFreshTeamFromCheckins(eventKey, match.awayTeamId) || storedAway;
 
   const canReport =
     isTeamAuthorized(interaction.user.id, home) ||
