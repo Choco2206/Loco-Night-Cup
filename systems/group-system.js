@@ -438,7 +438,7 @@ async function syncGroupRolesForEvent(eventKey) {
     if (!group || !Array.isArray(group.teams)) continue;
 
     const updatedTeams = group.teams.map(groupTeam => {
-      const freshTeam = event.teams.find(t => t.teamId === groupTeam.teamId);
+      const freshTeam = event.teams.find(t => String(t.teamId) === String(groupTeam.teamId));
 
       if (!freshTeam) return groupTeam;
 
@@ -455,7 +455,7 @@ async function syncGroupRolesForEvent(eventKey) {
 
     if (Array.isArray(group.rows)) {
       group.rows = group.rows.map(row => {
-        const freshTeam = event.teams.find(t => t.teamId === row.teamId);
+        const freshTeam = event.teams.find(t => String(t.teamId) === String(row.teamId));
 
         if (!freshTeam) return row;
 
