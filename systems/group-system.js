@@ -422,6 +422,61 @@ async function assignGroupRoleToTeams(letter, teams) {
   }
 }
 
+async function syncGroupRolesForEvent(eventKey) {
+  const checkins = loadCheckins();
+  const groupsData = loadGroups();
+
+  const event = checkins[eventKey];
+  const storedEvent = groupsData[eventKey];
+
+  if (!event || !storedEvent || !storedEvent.groups) return;
+  if (isEventInactive(event)) return;
+
+  let changed = false;
+
+  for (const [letter, group] of Object.entries(storedEvent.groups)) {
+    if (!group || !Array.isArray(group.teams)) continue;
+
+    const updatedTeams = group.teams.map(groupTeam => {
+      const freshTeam = event.teams.find(t => t.teamId === groupTeam.teamId);
+
+      if (!freshTeam) return groupTeam;
+
+      return {
+        ...groupTeam,
+        managerId: freshTeam.managerId || groupTeam.managerId || null,
+        coManagerIds: Array.isArray(freshTeam.coManagerIds)
+          ? freshTeam.coManagerIds
+          : [],
+      };
+    });
+
+    group.teams = updatedTeams;
+
+    if (Array.isArray(group.rows)) {
+      group.rows = group.rows.map(row => {
+        const freshTeam = event.teams.find(t => t.teamId === row.teamId);
+
+        if (!freshTeam) return row;
+
+        return {
+          ...row,
+          managerId: freshTeam.managerId || row.managerId || null,
+          coManagerIds: Array.isArray(freshTeam.coManagerIds)
+            ? freshTeam.coManagerIds
+            : [],
+        };
+      });
+    }
+
+    await assignGroupRoleToTeams(letter, updatedTeams);
+    changed = true;
+  }
+
+  if (changed) {
+    saveGroups(groupsData);
+  }
+}
 
 
 // =========================
@@ -622,8 +677,13 @@ async function reconcileAutoDraw() {
     }
   }
 
+  for (const eventKey of EVENT_TYPES) {
+    await syncGroupRolesForEvent(eventKey);
+  }
+
   await cleanupGroupsAfterReset();
 }
+
 
 // =========================
 // EXPORTS
