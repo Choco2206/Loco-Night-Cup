@@ -30,6 +30,7 @@ const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
+const LOGOS_DIR = path.join(process.cwd(), 'data', 'logos');
 
 const MANAGERS_WITHOUT_TEAM_CHANNEL_ID = '1487537056245616802';
 const TEAM_REGISTER_CHANNEL_ID = '1487537568751816764';
@@ -685,23 +686,62 @@ function buildTeamsOverviewEmbeds() {
 
 function buildTeamDetailsEmbed(team) {
   const coManagers =
-    Array.isArray(team.coManagerIds) && team.coManagerIds.length
-      ? team.coManagerIds.map(formatUserMention).join(', ')
-      : '—';
+    Array.isArray(team.coManagerIds) && team.coManagerIds.length > 0
+      ? team.coManagerIds.map(id => `• ${formatUserMention(id)}`).join('\n')
+      : 'Keine Co-VM eingetragen';
+
+  const createdText = team.createdAt
+    ? `<t:${Math.floor(new Date(team.createdAt).getTime() / 1000)}:R>`
+    : '—';
+
+  const updatedText = team.updatedAt
+    ? `<t:${Math.floor(new Date(team.updatedAt).getTime() / 1000)}:R>`
+    : '—';
 
   return new EmbedBuilder()
-    .setTitle(`🔎 ${safeText(team.clubName)}`)
+    .setTitle(`🏟️ ${safeText(team.clubName)}`)
     .setDescription(
       [
-        `**Team-ID:** \`${safeText(team.id)}\``,
-        `**Manager:** ${formatUserMention(team.managerId)}`,
-        `**Co-Manager:** ${coManagers}`,
-        `**Logo:** ${safeText(team.logoFile)}`,
-        `**Erstellt:** ${safeText(team.createdAt)}`,
-        `**Aktualisiert:** ${safeText(team.updatedAt)}`,
+        `👑 **Vereinsmanager**`,
+        formatUserMention(team.managerId),
+        '',
+        `🤝 **Co-VMs (${Array.isArray(team.coManagerIds) ? team.coManagerIds.length : 0}/5)**`,
+        coManagers,
+        '',
+        `🆔 **Team-ID:** \`${safeText(team.id)}\``,
+        '',
+        `📅 **Erstellt:** ${createdText}`,
+        `🛠️ **Zuletzt aktualisiert:** ${updatedText}`,
       ].join('\n')
     )
-    .setColor(0xff0000);
+    .setColor(0xff0000)
+    .setFooter({ text: 'Loco Night Bot • Admin-Teamdetails' });
+}
+
+function buildTeamDetailsPayload(team, extra = {}) {
+  const embed = buildTeamDetailsEmbed(team);
+  const files = [];
+
+  if (team.logoFile) {
+    const logoPath = path.join(LOGOS_DIR, team.logoFile);
+
+    if (fs.existsSync(logoPath)) {
+      files.push(
+        new AttachmentBuilder(logoPath, {
+          name: team.logoFile,
+        })
+      );
+
+      embed.setImage(`attachment://${team.logoFile}`);
+    }
+  }
+
+  return {
+    ...extra,
+    embeds: [embed],
+    files,
+    allowedMentions: { parse: ['users'] },
+  };
 }
 
 function buildTeamSelectRows(customIdBase, placeholder = 'Team auswählen') {
@@ -2263,12 +2303,12 @@ const removedFrom = checkinSystem.removeTeamFromOpenCheckinsById
           return true;
         }
 
-        await interaction.update({
-          content: '🔎 Teamdetails:',
-          embeds: [buildTeamDetailsEmbed(team)],
-          components: [],
-          allowedMentions: { parse: ['users'] },
-        });
+        await interaction.update(
+  buildTeamDetailsPayload(team, {
+    content: '🔎 Teamdetails:',
+    components: [],
+  })
+);
 
         return true;
       }
@@ -2306,12 +2346,12 @@ const removedFrom = checkinSystem.removeTeamFromOpenCheckinsById
           return true;
         }
 
-        await interaction.update({
-          content: `✏️ Was möchtest du bei **${team.clubName}** bearbeiten?`,
-          embeds: [buildTeamDetailsEmbed(team)],
-          components: buildEditTeamActionRows(teamId, team),
-          allowedMentions: { parse: ['users'] },
-        });
+        await interaction.update(
+  buildTeamDetailsPayload(team, {
+    content: `✏️ Was möchtest du bei **${team.clubName}** bearbeiten?`,
+    components: buildEditTeamActionRows(teamId, team),
+  })
+);
 
         return true;
       }
