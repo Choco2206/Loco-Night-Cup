@@ -503,7 +503,17 @@ async function syncGroupRolesForEvent(eventKey) {
   const storedEvent = groupsData[eventKey];
 
   if (!event || !storedEvent || !storedEvent.groups) return;
+
+  // WICHTIG: Niemals alte Gruppenzyklen erneut synchronisieren
+  if (storedEvent.cycleKey !== event.cycleKey) return;
+
+  // WICHTIG: Nach Cleanup keine Rollen mehr anfassen
+  if (storedEvent.groupRolesCleanedAt || storedEvent.groupChannelsCleanedAt) return;
+
+  // WICHTIG: Nur aktive/finalisierte Events dürfen Rollen syncen
   if (isEventInactive(event)) return;
+  if (!event.finalized) return;
+  if (event.status !== 'confirmed') return;
 
   let changed = false;
 
@@ -738,6 +748,8 @@ async function drawGroupsForEvent(eventKey) {
 // =========================
 
 async function reconcileAutoDraw() {
+  await cleanupGroupsAfterReset();
+
   const checkins = loadCheckins();
 
   for (const eventKey of EVENT_TYPES) {
@@ -747,6 +759,7 @@ async function reconcileAutoDraw() {
       event &&
       !isEventInactive(event) &&
       event.finalized &&
+      event.status === 'confirmed' &&
       shouldDrawNow(event)
     ) {
       await drawGroupsForEvent(eventKey);
@@ -756,8 +769,6 @@ async function reconcileAutoDraw() {
   for (const eventKey of EVENT_TYPES) {
     await syncGroupRolesForEvent(eventKey);
   }
-
-  await cleanupGroupsAfterReset();
 }
 
 // =========================
