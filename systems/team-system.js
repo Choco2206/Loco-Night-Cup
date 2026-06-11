@@ -16,6 +16,7 @@ const {
 
 const nicknameSystem = require('./nickname-system');
 const banlistSystem = require('./banlist-system');
+const adminSystem = require('./admin-system');
 
 const setupFile = path.join(process.cwd(), 'data', 'setup-messages.json');
 const teamsFile = path.join(process.cwd(), 'data', 'teams.json');
@@ -1278,6 +1279,10 @@ try {
 
   await refreshRegisteredTeams(message.guild);
 
+  if (adminSystem.refreshActiveLogoControlMessage) {
+  await adminSystem.refreshActiveLogoControlMessage(message);
+}
+  
   try {
     await message.delete();
   } catch (error) {
