@@ -451,7 +451,7 @@ async function syncCoManagerRoles(guild) {
   }
 }
 
-async function handleGuildMemberRemove(member) {
+async function handleGuildMemberRemoveEvent(member) {
   if (!member?.guild || !member?.id) return false;
 
   const guild = member.guild;
@@ -482,14 +482,28 @@ async function handleGuildMemberRemove(member) {
         affectedTeam = team;
         actionText = `👑 VM ${userId} hat den Server verlassen. ${nextManagerId} wurde neuer VM von ${team.clubName}.`;
       } else {
-        team.managerId = null;
-        team.coManagerIds = [];
-        team.updatedAt = new Date().toISOString();
+  const teamName = team.clubName;
 
-        changed = true;
-        affectedTeam = team;
-        actionText = `⚠️ VM ${userId} hat den Server verlassen. ${team.clubName} hat aktuell keinen VM mehr.`;
+  const updatedTeams = teams.filter(t => String(t.id) !== String(team.id));
+  writeTeams(updatedTeams);
+
+  if (team.logoFile) {
+    const logoPath = path.join(logosDir, team.logoFile);
+
+    if (fs.existsSync(logoPath)) {
+      try {
+        fs.unlinkSync(logoPath);
+      } catch (error) {
+        console.warn('⚠️ Logo konnte nicht gelöscht werden.');
       }
+    }
+  }
+
+  changed = true;
+  actionText = `🗑️ VM ${userId} hat den Server verlassen. ${teamName} hatte keinen Co-VM und wurde gelöscht.`;
+
+  break;
+}
 
       continue;
     }
@@ -511,7 +525,7 @@ async function handleGuildMemberRemove(member) {
 
   writeTeams(teams);
 
-  try {
+    try {
     await refreshRegisteredTeams(guild);
   } catch (error) {
     console.error('❌ Teamliste konnte nach Server-Leave nicht refreshed werden:', error);
@@ -521,6 +535,12 @@ async function handleGuildMemberRemove(member) {
     await refreshManagerControlSafe(member);
   } catch (error) {
     console.error('❌ Manager-Kontrolle konnte nach Server-Leave nicht refreshed werden:', error);
+  }
+
+  try {
+    await syncNicknamesSafe(guild);
+  } catch (error) {
+    console.error('❌ Nicknames konnten nach Server-Leave nicht refreshed werden:', error);
   }
 
   console.log(actionText || `🧹 User ${userId} wurde aus Teams bereinigt.`);
@@ -1488,8 +1508,8 @@ module.exports = {
   },
 
   async handleGuildMemberRemove(member) {
-    return handleGuildMemberRemove(member);
-  },
+  return handleGuildMemberRemoveEvent(member);
+},
 
   refreshRegisteredTeams,
 };
