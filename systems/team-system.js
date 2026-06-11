@@ -424,6 +424,17 @@ async function syncCoManagerRoles(guild) {
   }
 }
 
+function runDelayedTeamRefresh(source, guild) {
+  setTimeout(async () => {
+    try {
+      await refreshRegisteredTeams(guild);
+      await refreshManagerControlSafe(source);
+    } catch (error) {
+      console.error('❌ Verzögerter Team-Refresh fehlgeschlagen:', error);
+    }
+  }, 1500);
+}
+
 // =========================
 // MY TEAM EMBED
 // =========================
@@ -889,14 +900,12 @@ async function handleTeamButtons(interaction) {
 
     pendingLogoUploads.delete(interaction.user.id);
 
-    await refreshRegisteredTeams(guild);
-    await syncNicknamesSafe(guild);
-    await refreshManagerControlSafe(interaction);
-
     await interaction.reply({
-      content: `✅ Dein Team **${team.clubName}** wurde abgemeldet.`,
-      flags: MessageFlags.Ephemeral,
-    });
+  content: `✅ Dein Team **${team.clubName}** wurde abgemeldet.`,
+  flags: MessageFlags.Ephemeral,
+});
+
+runDelayedTeamRefresh(interaction, guild);
 
     return true;
   }
@@ -911,15 +920,15 @@ async function handleTeamButtons(interaction) {
 async function handleTeamUserSelect(interaction) {
   if (interaction.customId !== 'team_add_covm_select') return false;
 
-  await interaction.deferUpdate();
+  await interaction.deferReply({
+    flags: MessageFlags.Ephemeral,
+  });
 
   const guild = interaction.guild;
 
   if (!guild) {
     await interaction.editReply({
       content: '❌ Diese Aktion funktioniert nur auf einem Server.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -930,8 +939,6 @@ async function handleTeamUserSelect(interaction) {
   if (!playerRole || !managerRole) {
     await interaction.editReply({
       content: '❌ Spieler- oder Manager-Rolle wurde nicht gefunden. Prüfe PLAYER_ROLE_ID und MANAGER_ROLE_ID.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -942,8 +949,6 @@ async function handleTeamUserSelect(interaction) {
   if (!team) {
     await interaction.editReply({
       content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs hinzufügen.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -953,8 +958,6 @@ async function handleTeamUserSelect(interaction) {
   if (!realTeam) {
     await interaction.editReply({
       content: '❌ Team wurde nicht gefunden.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -966,8 +969,6 @@ async function handleTeamUserSelect(interaction) {
   if (realTeam.coManagerIds.length >= MAX_CO_MANAGERS) {
     await interaction.editReply({
       content: `❌ Dein Team hat bereits ${MAX_CO_MANAGERS} Co-VMs. Mehr sind nicht erlaubt.`,
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -977,8 +978,6 @@ async function handleTeamUserSelect(interaction) {
   if (!userId) {
     await interaction.editReply({
       content: '❌ Kein User ausgewählt.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -994,8 +993,6 @@ async function handleTeamUserSelect(interaction) {
         `**Grund:** ${selectedUserBan.reason}`,
         `**Sperre bis:** ${formatBanDateDE(selectedUserBan.bannedUntilDate)}`,
       ].join('\n'),
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -1003,8 +1000,6 @@ async function handleTeamUserSelect(interaction) {
   if (String(userId) === String(realTeam.managerId)) {
     await interaction.editReply({
       content: '❌ Der Vereinsmanager kann nicht zusätzlich Co-VM im eigenen Team sein.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -1018,8 +1013,6 @@ async function handleTeamUserSelect(interaction) {
       content:
         `❌ Dieser User ist bereits als **${type}** bei **${existingMembership.clubName}** eingetragen.\n\n` +
         `Ein User darf nur in **einem Team** vertreten sein, egal ob VM oder Co-VM.`,
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -1031,8 +1024,6 @@ async function handleTeamUserSelect(interaction) {
   } catch (error) {
     await interaction.editReply({
       content: '❌ Dieser User ist nicht auf dem Server.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -1043,8 +1034,6 @@ async function handleTeamUserSelect(interaction) {
   if (!hasPlayerRole && !hasManagerRole) {
     await interaction.editReply({
       content: '❌ Dieser User hat weder die Spieler-Rolle noch die Manager-Rolle und kann deshalb kein Co-VM werden.',
-      embeds: [],
-      components: [],
     });
     return true;
   }
@@ -1054,17 +1043,14 @@ async function handleTeamUserSelect(interaction) {
 
   writeTeams(teams);
 
-  await promoteUserToManagerRole(guild, userId);
-  await refreshRegisteredTeams(guild);
-  await syncNicknamesSafe(guild);
-  await refreshManagerControlSafe(interaction);
-
   await interaction.editReply({
-    content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${realTeam.coManagerIds.length}/${MAX_CO_MANAGERS}**`,
-    embeds: [],
-    components: [],
+    content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${realTeam.clubName}** hinzugefügt. Jetzt belegt: **${realTeam.coManagerIds.length}/${MAX_CO_MANAGERS}**`,
     allowedMentions: { parse: ['users'] },
   });
+
+  await promoteUserToManagerRole(guild, userId);
+
+  runDelayedTeamRefresh(interaction, guild);
 
   return true;
 }
@@ -1124,16 +1110,14 @@ async function handleTeamStringSelect(interaction) {
 
   writeTeams(teams);
 
-  await refreshRegisteredTeams(guild);
-  await syncNicknamesSafe(guild);
-  await refreshManagerControlSafe(interaction);
+await interaction.update({
+  content: `✅ ${formatUserMention(userId)} wurde als Co-VM entfernt.`,
+  embeds: [],
+  components: [],
+  allowedMentions: { parse: ['users'] },
+});
 
-  await interaction.update({
-    content: `✅ ${formatUserMention(userId)} wurde als Co-VM entfernt.`,
-    embeds: [],
-    components: [],
-    allowedMentions: { parse: ['users'] },
-  });
+runDelayedTeamRefresh(interaction, guild);
 
   return true;
 }
@@ -1230,16 +1214,14 @@ let team = teams.find(t => String(t.managerId) === String(interaction.user.id));
     expiresAt: Date.now() + 10 * 60 * 1000,
   });
 
-  await refreshRegisteredTeams(guild);
-  await syncNicknamesSafe(guild);
-  await refreshManagerControlSafe(interaction);
+ await interaction.editReply({
+  content:
+    `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
+    `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
+    `Du hast dafür 10 Minuten Zeit.`,
+});
 
-  await interaction.editReply({
-    content:
-      `✅ Dein Team **${clubName}** wurde gespeichert.\n\n` +
-      `Bitte lade jetzt dein Teamlogo als Bild in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
-      `Du hast dafür 10 Minuten Zeit.`,
-  });
+runDelayedTeamRefresh(interaction, guild);
 
   return true;
 }
