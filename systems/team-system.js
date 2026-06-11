@@ -451,6 +451,83 @@ async function syncCoManagerRoles(guild) {
   }
 }
 
+async function handleGuildMemberRemove(member) {
+  if (!member?.guild || !member?.id) return false;
+
+  const guild = member.guild;
+  const userId = String(member.id);
+  const teams = readTeams();
+
+  let changed = false;
+  let affectedTeam = null;
+  let actionText = null;
+
+  for (const team of teams) {
+    const coManagerIds = Array.isArray(team.coManagerIds)
+      ? team.coManagerIds.map(String)
+      : [];
+
+    // =========================
+    // USER WAR VM
+    // =========================
+    if (String(team.managerId) === userId) {
+      const nextManagerId = coManagerIds[0];
+
+      if (nextManagerId) {
+        team.managerId = String(nextManagerId);
+        team.coManagerIds = coManagerIds.filter(id => id !== String(nextManagerId));
+        team.updatedAt = new Date().toISOString();
+
+        changed = true;
+        affectedTeam = team;
+        actionText = `👑 VM ${userId} hat den Server verlassen. ${nextManagerId} wurde neuer VM von ${team.clubName}.`;
+      } else {
+        team.managerId = null;
+        team.coManagerIds = [];
+        team.updatedAt = new Date().toISOString();
+
+        changed = true;
+        affectedTeam = team;
+        actionText = `⚠️ VM ${userId} hat den Server verlassen. ${team.clubName} hat aktuell keinen VM mehr.`;
+      }
+
+      continue;
+    }
+
+    // =========================
+    // USER WAR CO-VM
+    // =========================
+    if (coManagerIds.includes(userId)) {
+      team.coManagerIds = coManagerIds.filter(id => id !== userId);
+      team.updatedAt = new Date().toISOString();
+
+      changed = true;
+      affectedTeam = team;
+      actionText = `🧹 Co-VM ${userId} wurde aus ${team.clubName} entfernt, da er den Server verlassen hat.`;
+    }
+  }
+
+  if (!changed) return false;
+
+  writeTeams(teams);
+
+  try {
+    await refreshRegisteredTeams(guild);
+  } catch (error) {
+    console.error('❌ Teamliste konnte nach Server-Leave nicht refreshed werden:', error);
+  }
+
+  try {
+    await refreshManagerControlSafe(member);
+  } catch (error) {
+    console.error('❌ Manager-Kontrolle konnte nach Server-Leave nicht refreshed werden:', error);
+  }
+
+  console.log(actionText || `🧹 User ${userId} wurde aus Teams bereinigt.`);
+
+  return true;
+}
+
 function runDelayedTeamRefresh(source, guild) {
   setTimeout(async () => {
     try {
@@ -1408,6 +1485,10 @@ module.exports = {
 
   async handleMessage(message) {
     return handleLogoUpload(message);
+  },
+
+  async handleGuildMemberRemove(member) {
+    return handleGuildMemberRemove(member);
   },
 
   refreshRegisteredTeams,
