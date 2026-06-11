@@ -453,20 +453,27 @@ function buildLiveControlRows() {
     .setStyle(ButtonStyle.Danger)
 );
 
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('live_manual_group_result')
-      .setLabel('🏆 Gruppenergebnis')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('live_manual_ko_result')
-      .setLabel('🏁 K.O.-Ergebnis')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('live_managers_without_team')
-      .setLabel('👥 Manager ohne Team')
-      .setStyle(ButtonStyle.Secondary)
-  );
+ const row3 = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId('live_manual_group_result')
+    .setLabel('🏆 Gruppenergebnis')
+    .setStyle(ButtonStyle.Secondary),
+
+  new ButtonBuilder()
+    .setCustomId('live_manual_ko_result')
+    .setLabel('🏁 K.O.-Ergebnis')
+    .setStyle(ButtonStyle.Secondary),
+
+  new ButtonBuilder()
+    .setCustomId('live_managers_without_team')
+    .setLabel('👥 Manager ohne Team')
+    .setStyle(ButtonStyle.Secondary),
+
+  new ButtonBuilder()
+    .setCustomId('live_teams_without_logo')
+    .setLabel('🖼️ Teams ohne Logo')
+    .setStyle(ButtonStyle.Secondary)
+);
 
 const row4 = new ActionRowBuilder().addComponents(
   new ButtonBuilder()
@@ -490,14 +497,7 @@ const row4 = new ActionRowBuilder().addComponents(
     .setStyle(ButtonStyle.Secondary)
 );
 
-const row5 = new ActionRowBuilder().addComponents(
-  new ButtonBuilder()
-    .setCustomId('live_teams_without_logo')
-    .setLabel('🖼️ Teams ohne Logo')
-    .setStyle(ButtonStyle.Secondary)
-);
-
-return [row1, row2, row3, row4, row5];
+return [row1, row2, row3, row4];
 }
 
 async function ensureLiveControlPanel() {
