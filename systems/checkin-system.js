@@ -1075,6 +1075,9 @@ async function removeTeamFromOpenCheckinsById(teamId) {
 
     if (!event || !Array.isArray(event.teams)) continue;
 
+    if (event.finalized) continue;
+    if (event.status !== 'open') continue;
+
     const before = event.teams.length;
 
     event.teams = event.teams.filter(team => {
@@ -1089,11 +1092,7 @@ async function removeTeamFromOpenCheckinsById(teamId) {
       removedFrom.push(event.label || type);
 
       data[type] = await ensureMainMessage(event);
-
-      if (data[type].finalized) {
-        data[type] = await ensureSummaryMessage(data[type]);
-        data[type] = await ensureBackupMessage(data[type]);
-      }
+      data[type] = await ensureWarningMessage(data[type]);
     }
   }
 
