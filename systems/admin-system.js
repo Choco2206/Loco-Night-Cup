@@ -943,8 +943,6 @@ async function getManagersWithoutTeam(guild) {
     throw new Error('Manager Rolle nicht gefunden.');
   }
 
-  await guild.members.fetch();
-
   const teams = loadTeams();
   const assignedUsers = new Set();
 
@@ -958,11 +956,15 @@ async function getManagersWithoutTeam(guild) {
     }
   }
 
-  const managersWithoutTeam = managerRole.members.filter(member => {
-    return !assignedUsers.has(String(member.id));
-  });
+  const managersWithoutTeam = [];
 
-  return [...managersWithoutTeam.values()].sort((a, b) =>
+  for (const [userId, member] of managerRole.members) {
+    if (!assignedUsers.has(String(userId))) {
+      managersWithoutTeam.push(member);
+    }
+  }
+
+  return managersWithoutTeam.sort((a, b) =>
     a.displayName.localeCompare(b.displayName, 'de')
   );
 }
@@ -2378,7 +2380,7 @@ if (interaction.customId === 'live_teams_without_logo') {
 
         if (team.coManagerIds.length >= 3) {
           await replyTemp(interaction, {
-            content: '❌ Dieses Team hat bereits 3 Co-VMs.',
+            content: '❌ Dieses Team hat bereits 5 Co-VMs.',
           });
           return true;
         }
@@ -2558,75 +2560,84 @@ if (interaction.customId === 'live_remove_bye_team') {
 
     
     // =========================
-    // USER SELECT MENUS
-    // =========================
-    if (interaction.isUserSelectMenu()) {
-      const denied = requireAdmin(interaction);
-      if (denied) {
-        await denied;
-        return true;
+// USER SELECT MENUS
+// =========================
+if (interaction.isUserSelectMenu()) {
+  const denied = requireAdmin(interaction);
+  if (denied) {
+    await denied;
+    return true;
+  }
+
+  if (interaction.customId.startsWith('live_edit_add_covm_select:')) {
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.values?.[0];
+    const teams = loadTeams();
+    const team = teams.find(t => String(t.id) === String(teamId));
+
+    if (!team || !userId) {
+      await interaction.editReply({
+        content: '❌ Team oder User nicht gefunden.',
+        components: [],
+      });
+      return true;
+    }
+
+    if (!Array.isArray(team.coManagerIds)) {
+      team.coManagerIds = [];
+    }
+
+    if (String(userId) === String(team.managerId)) {
+      await interaction.editReply({
+        content: '❌ Der Manager kann nicht zusätzlich Co-VM sein.',
+        components: [],
+      });
+      return true;
+    }
+
+    if (team.coManagerIds.map(String).includes(String(userId))) {
+      await interaction.editReply({
+        content: '❌ Dieser User ist bereits Co-VM.',
+        components: [],
+      });
+      return true;
+    }
+
+    if (team.coManagerIds.length >= 3) {
+      await interaction.editReply({
+        content: '❌ Dieses Team hat bereits 5 Co-VMs.',
+        components: [],
+      });
+      return true;
+    }
+
+    team.coManagerIds.push(String(userId));
+    team.updatedAt = new Date().toISOString();
+    saveTeams(teams);
+
+    await interaction.editReply({
+      content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
+      components: [],
+      allowedMentions: { parse: ['users'] },
+    });
+
+    setTimeout(async () => {
+      try {
+        await refreshRegisteredTeamsSafe(interaction.guild);
+        await logToLive(`➕ Co-VM hinzugefügt: ${formatUserMention(userId)} zu ${team.clubName}`);
+      } catch (error) {
+        console.error('❌ Verzögerter Admin-Co-VM-Refresh fehlgeschlagen:', error);
       }
+    }, 1500);
 
-      if (interaction.customId.startsWith('live_edit_add_covm_select:')) {
-  await interaction.deferUpdate();
-
-  const [, teamId] = interaction.customId.split(':');
-  const userId = interaction.values?.[0];
-  const teams = loadTeams();
-  const team = teams.find(t => String(t.id) === String(teamId));
-
-  if (!team || !userId) {
-    await interaction.editReply({
-      content: '❌ Team oder User nicht gefunden.',
-      components: [],
-    });
     return true;
   }
 
-  if (!Array.isArray(team.coManagerIds)) {
-    team.coManagerIds = [];
-  }
-
-  if (String(userId) === String(team.managerId)) {
-    await interaction.editReply({
-      content: '❌ Der Manager kann nicht zusätzlich Co-VM sein.',
-      components: [],
-    });
-    return true;
-  }
-
-  if (team.coManagerIds.map(String).includes(String(userId))) {
-    await interaction.editReply({
-      content: '❌ Dieser User ist bereits Co-VM.',
-      components: [],
-    });
-    return true;
-  }
-
-  if (team.coManagerIds.length >= 3) {
-    await interaction.editReply({
-      content: '❌ Dieses Team hat bereits 3 Co-VMs.',
-      components: [],
-    });
-    return true;
-  }
-  
-  team.coManagerIds.push(String(userId));
-team.updatedAt = new Date().toISOString();
-saveTeams(teams);
-
-await refreshRegisteredTeamsSafe(interaction.guild);
-await logToLive(`➕ Co-VM hinzugefügt: ${formatUserMention(userId)} zu ${team.clubName}`);
-
-await interaction.editReply({
-  content: `✅ ${formatUserMention(userId)} wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
-  components: [],
-  allowedMentions: { parse: ['users'] },
-});
-
-return true;
-}
-
+  return false;
 }
 
     // =========================
