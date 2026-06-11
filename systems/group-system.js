@@ -9,6 +9,7 @@ const GROUP_CLEANUP_GRACE_MS = 0;
 
 let clientRef = null;
 let intervalRef = null;
+
 const EVENT_TYPES = [
   'monday',
   'tuesday',
@@ -23,6 +24,18 @@ const EVENT_TYPES = [
 // FILE HELPERS
 // =========================
 
+function createEmptyEventData() {
+  return {
+    monday: null,
+    tuesday: null,
+    wednesday: null,
+    thursday: null,
+    friday: null,
+    saturday: null,
+    sunday: null,
+  };
+}
+
 function ensureGroupsFile() {
   const dir = path.dirname(GROUPS_FILE);
 
@@ -33,19 +46,7 @@ function ensureGroupsFile() {
   if (!fs.existsSync(GROUPS_FILE)) {
     fs.writeFileSync(
       GROUPS_FILE,
-      JSON.stringify(
-        {
-  monday: null,
-  tuesday: null,
-  wednesday: null,
-  thursday: null,
-  friday: null,
-  saturday: null,
-  sunday: null,
-},
-        null,
-        2
-      ),
+      JSON.stringify(createEmptyEventData(), null, 2),
       'utf8'
     );
   }
@@ -57,26 +58,19 @@ function loadGroups() {
   try {
     const raw = fs.readFileSync(GROUPS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
-   return {
-  monday: parsed.monday || null,
-  tuesday: parsed.tuesday || null,
-  wednesday: parsed.wednesday || null,
-  thursday: parsed.thursday || null,
-  friday: parsed.friday || null,
-  saturday: parsed.saturday || null,
-  sunday: parsed.sunday || null,
-};
+
+    return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
+    };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von groups.json:', error);
-    return {
-  monday: null,
-  tuesday: null,
-  wednesday: null,
-  thursday: null,
-  friday: null,
-  saturday: null,
-  sunday: null,
-};
+    return createEmptyEventData();
   }
 }
 
@@ -91,39 +85,32 @@ function saveGroups(data) {
 function loadCheckins() {
   try {
     if (!fs.existsSync(CHECKINS_FILE)) {
-      return {
-  monday: null,
-  tuesday: null,
-  wednesday: null,
-  thursday: null,
-  friday: null,
-  saturday: null,
-  sunday: null,
-};
+      return createEmptyEventData();
     }
 
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
+
     return {
-  monday: parsed.monday || null,
-  tuesday: parsed.tuesday || null,
-  wednesday: parsed.wednesday || null,
-  thursday: parsed.thursday || null,
-  friday: parsed.friday || null,
-  saturday: parsed.saturday || null,
-  sunday: parsed.sunday || null,
-};
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
+    };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von checkins.json:', error);
-    return {
-  monday: null,
-  tuesday: null,
-  wednesday: null,
-  thursday: null,
-  friday: null,
-  saturday: null,
-  sunday: null,
-};
+    return createEmptyEventData();
+  }
+}
+
+function saveCheckins(data) {
+  try {
+    fs.writeFileSync(CHECKINS_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.error('❌ Fehler beim Schreiben von checkins.json:', error);
   }
 }
 
@@ -170,6 +157,78 @@ function getTeamUserIds(team) {
     team.managerId,
     ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
   ].filter(Boolean);
+}
+
+function removeUserIdFromTeam(team, userId) {
+  let changed = false;
+
+  if (String(team.managerId) === String(userId)) {
+    team.managerId = null;
+    changed = true;
+  }
+
+  if (Array.isArray(team.coManagerIds)) {
+    const before = team.coManagerIds.length;
+
+    team.coManagerIds = team.coManagerIds.filter(
+      id => String(id) !== String(userId)
+    );
+
+    if (team.coManagerIds.length !== before) {
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function removeUserIdFromStorage(userId) {
+  const checkins = loadCheckins();
+  const groupsData = loadGroups();
+
+  let checkinsChanged = false;
+  let groupsChanged = false;
+
+  for (const eventKey of EVENT_TYPES) {
+    const event = checkins[eventKey];
+
+    if (event && Array.isArray(event.teams)) {
+      for (const team of event.teams) {
+        if (removeUserIdFromTeam(team, userId)) {
+          checkinsChanged = true;
+        }
+      }
+    }
+
+    const storedEvent = groupsData[eventKey];
+
+    if (storedEvent?.groups) {
+      for (const group of Object.values(storedEvent.groups)) {
+        if (Array.isArray(group.teams)) {
+          for (const team of group.teams) {
+            if (removeUserIdFromTeam(team, userId)) {
+              groupsChanged = true;
+            }
+          }
+        }
+
+        if (Array.isArray(group.rows)) {
+          for (const row of group.rows) {
+            if (removeUserIdFromTeam(row, userId)) {
+              groupsChanged = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (checkinsChanged) saveCheckins(checkins);
+  if (groupsChanged) saveGroups(groupsData);
+
+  if (checkinsChanged || groupsChanged) {
+    console.log(`🧹 User ${userId} aus checkins.json/groups.json entfernt.`);
+  }
 }
 
 function shuffleArray(array) {
@@ -372,6 +431,7 @@ async function removeAllGroupRolesFromStoredEvent(storedEvent) {
       await removeAllGroupRolesFromMember(member);
     } catch (error) {
       console.warn(`⚠️ Member konnte beim Rollen-Cleanup nicht geladen werden: ${userId}`);
+      removeUserIdFromStorage(userId);
     }
   }
 }
@@ -407,10 +467,23 @@ async function assignGroupRoleToTeams(letter, teams) {
   }
 
   for (const userId of userIds) {
-    try {
-      const member = await guild.members.fetch(userId);
-      if (!member) continue;
+    let member = null;
 
+    try {
+      member = await guild.members.fetch(userId);
+    } catch (error) {
+      console.warn(`⚠️ User ${userId} ist nicht mehr auf dem Server.`);
+      removeUserIdFromStorage(userId);
+      continue;
+    }
+
+    if (!member) {
+      console.warn(`⚠️ User ${userId} nicht gefunden.`);
+      removeUserIdFromStorage(userId);
+      continue;
+    }
+
+    try {
       await removeAllGroupRolesFromMember(member);
 
       if (!member.roles.cache.has(role.id)) {
@@ -438,7 +511,9 @@ async function syncGroupRolesForEvent(eventKey) {
     if (!group || !Array.isArray(group.teams)) continue;
 
     const updatedTeams = group.teams.map(groupTeam => {
-      const freshTeam = event.teams.find(t => String(t.teamId) === String(groupTeam.teamId));
+      const freshTeam = event.teams.find(
+        t => String(t.teamId) === String(groupTeam.teamId)
+      );
 
       if (!freshTeam) return groupTeam;
 
@@ -455,7 +530,9 @@ async function syncGroupRolesForEvent(eventKey) {
 
     if (Array.isArray(group.rows)) {
       group.rows = group.rows.map(row => {
-        const freshTeam = event.teams.find(t => String(t.teamId) === String(row.teamId));
+        const freshTeam = event.teams.find(
+          t => String(t.teamId) === String(row.teamId)
+        );
 
         if (!freshTeam) return row;
 
@@ -477,7 +554,6 @@ async function syncGroupRolesForEvent(eventKey) {
     saveGroups(groupsData);
   }
 }
-
 
 // =========================
 // GROUP DRAW
@@ -533,7 +609,6 @@ async function cleanupGroupsAfterReset() {
 
     let cleanupAt = Number(storedEvent.resetAt);
 
-    // Fallback für alte Gruppen, die noch kein resetAt gespeichert haben
     if (!cleanupAt || Number.isNaN(cleanupAt)) {
       const createdAtMs = new Date(storedEvent.createdAt).getTime();
       if (!createdAtMs || Number.isNaN(createdAtMs)) continue;
@@ -569,11 +644,11 @@ async function drawGroupsForEvent(eventKey) {
   const groupsData = loadGroups();
 
   const event = checkins[eventKey];
-if (!event) return;
-if (isEventInactive(event)) return;
 
-if (!event.finalized) return;
-if (event.status !== 'confirmed') return;
+  if (!event) return;
+  if (isEventInactive(event)) return;
+  if (!event.finalized) return;
+  if (event.status !== 'confirmed') return;
 
   const format = getActualFormat(event.teams.length);
   if (!format) return;
@@ -594,6 +669,7 @@ if (event.status !== 'confirmed') return;
   const shuffled = shuffleArray(finalTeams);
 
   const grouped = {};
+
   groupLetters.forEach(letter => {
     grouped[letter] = [];
   });
@@ -604,17 +680,17 @@ if (event.status !== 'confirmed') return;
   });
 
   const storedEvent = {
-  eventKey,
-  cycleKey: event.cycleKey,
-  label: event.label,
-  format,
-  createdAt: new Date().toISOString(),
-  resetAt: event.resetAt,
-  groupRolesAssignedAt: null,
-  groupRolesCleanedAt: null,
-  groupChannelsCleanedAt: null,
-  groups: {},
-};
+    eventKey,
+    cycleKey: event.cycleKey,
+    label: event.label,
+    format,
+    createdAt: new Date().toISOString(),
+    resetAt: event.resetAt,
+    groupRolesAssignedAt: null,
+    groupRolesCleanedAt: null,
+    groupChannelsCleanedAt: null,
+    groups: {},
+  };
 
   for (const letter of groupLetters) {
     const channelId = getChannelIdForLetter(letter);
@@ -632,8 +708,8 @@ if (event.status !== 'confirmed') return;
     const rows = createInitialRows(grouped[letter]);
 
     const tableMessage = await channel.send({
-  embeds: [buildTableEmbed(event.label, letter, rows)],
-});
+      embeds: [buildTableEmbed(event.label, letter, rows)],
+    });
 
     const pingMessage = await channel.send({
       content: buildPingMessage(letter, grouped[letter]),
@@ -684,7 +760,6 @@ async function reconcileAutoDraw() {
   await cleanupGroupsAfterReset();
 }
 
-
 // =========================
 // EXPORTS
 // =========================
@@ -712,41 +787,40 @@ module.exports = {
   },
 
   async handleMessage(message) {
-  if (!message.guild) return false;
-  if (message.author.bot) return false;
+    if (!message.guild) return false;
+    if (message.author.bot) return false;
 
-  const groupChannelIds = [
-    process.env.GROUP_A_CHANNEL_ID,
-    process.env.GROUP_B_CHANNEL_ID,
-    process.env.GROUP_C_CHANNEL_ID,
-    process.env.GROUP_D_CHANNEL_ID,
-    process.env.GROUP_E_CHANNEL_ID,
-    process.env.GROUP_F_CHANNEL_ID,
-    process.env.GROUP_G_CHANNEL_ID,
-    process.env.GROUP_H_CHANNEL_ID,
-  ].filter(Boolean);
+    const groupChannelIds = [
+      process.env.GROUP_A_CHANNEL_ID,
+      process.env.GROUP_B_CHANNEL_ID,
+      process.env.GROUP_C_CHANNEL_ID,
+      process.env.GROUP_D_CHANNEL_ID,
+      process.env.GROUP_E_CHANNEL_ID,
+      process.env.GROUP_F_CHANNEL_ID,
+      process.env.GROUP_G_CHANNEL_ID,
+      process.env.GROUP_H_CHANNEL_ID,
+    ].filter(Boolean);
 
-  if (!groupChannelIds.includes(message.channel.id)) {
-    return false;
-  }
-
-  // Spieler-Nachrichten nach 10 Minuten löschen
-  setTimeout(async () => {
-    try {
-      const freshMessage = await message.channel.messages
-        .fetch(message.id)
-        .catch(() => null);
-
-      if (!freshMessage) return;
-      if (freshMessage.pinned) return;
-      if (freshMessage.author.bot) return;
-
-      await freshMessage.delete().catch(() => {});
-    } catch (error) {
-      console.warn('⚠️ Gruppen-Nachricht konnte nicht automatisch gelöscht werden.');
+    if (!groupChannelIds.includes(message.channel.id)) {
+      return false;
     }
-  }, 10 * 60 * 1000);
 
-  return false;
-},
+    setTimeout(async () => {
+      try {
+        const freshMessage = await message.channel.messages
+          .fetch(message.id)
+          .catch(() => null);
+
+        if (!freshMessage) return;
+        if (freshMessage.pinned) return;
+        if (freshMessage.author.bot) return;
+
+        await freshMessage.delete().catch(() => {});
+      } catch (error) {
+        console.warn('⚠️ Gruppen-Nachricht konnte nicht automatisch gelöscht werden.');
+      }
+    }, 10 * 60 * 1000);
+
+    return false;
+  },
 };
