@@ -134,9 +134,16 @@ function isAdminMember(member) {
   return member?.roles?.cache?.has(adminRoleId) || false;
 }
 
-async function fetchChannel(channelId) {
+async function fetchChannel(channelId, interaction = null) {
   try {
-    return await clientRef.channels.fetch(channelId);
+    const client = clientRef || interaction?.client;
+
+    if (!client) {
+      console.error('❌ Discord Client ist noch nicht bereit.');
+      return null;
+    }
+
+    return await client.channels.fetch(channelId);
   } catch (error) {
     console.error(`❌ Kanal konnte nicht geladen werden: ${channelId}`, error);
     return null;
@@ -1928,7 +1935,7 @@ module.exports = {
 if (interaction.customId === 'live_teams_without_logo') {
   try {
     const teams = getTeamsWithoutLogo();
-    const channel = await fetchChannel(TEAM_REGISTER_CHANNEL_ID);
+    const channel = await fetchChannel(TEAM_REGISTER_CHANNEL_ID, interaction);
 
     if (!channel) {
       await interaction.reply({
