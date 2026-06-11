@@ -86,6 +86,7 @@ function saveTeams(data) {
 function loadAdminState() {
   return readJson(ADMIN_FILE, {
     liveControlPanelMessageId: null,
+    activeLogoControl: null,
   });
 }
 
@@ -1038,6 +1039,176 @@ function buildTeamsWithoutLogoTextChunks(teams) {
   return chunks;
 }
 
+async function createNewLogoControlMessage(interaction) {
+  const teams = getTeamsWithoutLogo();
+  const channel = await fetchChannel(LOGO_CONTROL_CHANNEL_ID, interaction);
+
+  if (!channel) {
+    throw new Error('Logo-Kontroll-Kanal nicht gefunden.');
+  }
+
+  const adminState = loadAdminState();
+
+  const activeLogoControl = {
+    channelId: LOGO_CONTROL_CHANNEL_ID,
+    messageIds: [],
+    teamIds: teams.map(team => team.id),
+    createdAt: new Date().toISOString(),
+  };
+
+  const content = buildLogoControlMessage(activeLogoControl);
+
+  const chunks = chunkText(content);
+const messageIds = [];
+
+for (const chunk of chunks) {
+  const message = await channel.send({
+    content: chunk,
+    allowedMentions: { parse: ['users'] },
+  });
+
+  messageIds.push(message.id);
+}
+
+activeLogoControl.messageIds = messageIds;
+
+  activeLogoControl.messageId = message.id;
+  adminState.activeLogoControl = activeLogoControl;
+  saveAdminState(adminState);
+
+  return {
+    count: teams.length,
+    channelId: LOGO_CONTROL_CHANNEL_ID,
+  };
+}
+
+function chunkText(text, maxLength = 1900) {
+  const lines = text.split('\n');
+  const chunks = [];
+  let current = '';
+
+  for (const line of lines) {
+    const next = current ? `${current}\n${line}` : line;
+
+    if (next.length > maxLength) {
+      if (current) chunks.push(current);
+      current = line;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function buildLogoControlMessage(activeLogoControl) {
+  const teams = loadTeams();
+  const affectedTeams = activeLogoControl.teamIds
+    .map(teamId => teams.find(team => String(team.id) === String(teamId)))
+    .filter(Boolean);
+
+  const openTeams = affectedTeams.filter(team => !teamHasLogo(team));
+  const doneTeams = affectedTeams.filter(team => teamHasLogo(team));
+
+  const lines = affectedTeams.map((team, index) => {
+    const mentions = [
+      team.managerId,
+      ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+    ]
+      .filter(Boolean)
+      .map(id => `<@${id}>`)
+      .join(' ');
+
+    const status = teamHasLogo(team)
+      ? '✅ Logo erfolgreich hinterlegt'
+      : '⏳ Logo fehlt noch';
+
+    return `**${index + 1}. ${team.clubName}** ${mentions}\n${status}`;
+  });
+
+  return [
+    '🖼️ **Logo-Kontrolle**',
+    '',
+    `📊 **Aktuell offen:** ${openTeams.length} / ${affectedTeams.length}`,
+    `✅ **Erledigt:** ${doneTeams.length}`,
+    '',
+    `➡️ Bitte geht in <#${TEAM_REGISTER_CHANNEL_ID}> auf **Mein Team** und klickt dort auf **Logo hochladen/ändern**.`,
+    'Danach einfach euer Logo als Bild direkt in den Kanal posten.',
+    '',
+    `Falls ihr noch kein richtiges Logo habt, meldet euch bei <@${LOGO_HELP_USER_ID}>.`,
+    '',
+    lines.join('\n\n') || '✅ Alle Teams aus dieser Kontrolle haben ein Logo hinterlegt.',
+  ].join('\n');
+}
+
+async function refreshActiveLogoControlMessage(clientOrInteraction = null) {
+  const adminState = loadAdminState();
+  const activeLogoControl = adminState.activeLogoControl;
+
+  if (!activeLogoControl?.channelId) {
+    return false;
+  }
+
+  const channel = await fetchChannel(activeLogoControl.channelId, clientOrInteraction);
+
+  if (!channel) {
+    return false;
+  }
+
+  const content = buildLogoControlMessage(activeLogoControl);
+  const chunks = chunkText(content);
+
+  const oldMessageIds = Array.isArray(activeLogoControl.messageIds)
+    ? activeLogoControl.messageIds
+    : activeLogoControl.messageId
+      ? [activeLogoControl.messageId]
+      : [];
+
+  const nextMessageIds = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const oldMessageId = oldMessageIds[i];
+
+    if (oldMessageId) {
+      const oldMessage = await fetchMessage(channel, oldMessageId);
+
+      if (oldMessage) {
+        await oldMessage.edit({
+          content: chunks[i],
+          allowedMentions: { parse: ['users'] },
+        });
+
+        nextMessageIds.push(oldMessage.id);
+        continue;
+      }
+    }
+
+    const newMessage = await channel.send({
+      content: chunks[i],
+      allowedMentions: { parse: ['users'] },
+    });
+
+    nextMessageIds.push(newMessage.id);
+  }
+
+  for (let i = chunks.length; i < oldMessageIds.length; i++) {
+    const oldMessage = await fetchMessage(channel, oldMessageIds[i]);
+
+    if (oldMessage) {
+      await oldMessage.delete().catch(() => {});
+    }
+  }
+
+  activeLogoControl.messageIds = nextMessageIds;
+  delete activeLogoControl.messageId;
+
+  adminState.activeLogoControl = activeLogoControl;
+  saveAdminState(adminState);
+
+  return true;
+}
+
 function buildManagersWithoutTeamTextChunks(members) {
   if (!members.length) {
     return [
@@ -1840,12 +2011,15 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
 // =========================
 
 module.exports = {
+  refreshActiveLogoControlMessage,
+
   async init(client) {
     clientRef = client;
 
     ensureFile(ADMIN_FILE, {
-      liveControlPanelMessageId: null,
-    });
+  liveControlPanelMessageId: null,
+  activeLogoControl: null,
+});
 
     await ensureLiveControlPanel();
     await banlistSystem.init(client);
@@ -1935,28 +2109,10 @@ module.exports = {
 
 if (interaction.customId === 'live_teams_without_logo') {
   try {
-    const teams = getTeamsWithoutLogo();
-    const channel = await fetchChannel(TEAM_REGISTER_CHANNEL_ID, interaction);
-
-    if (!channel) {
-      await interaction.reply({
-        content: '❌ Team-Registrieren-Kanal nicht gefunden.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
-    }
-
-    const chunks = buildTeamsWithoutLogoTextChunks(teams);
-
-    for (const chunk of chunks) {
-      await channel.send({
-        content: chunk,
-        allowedMentions: { parse: ['users'] },
-      });
-    }
+    const result = await createNewLogoControlMessage(interaction);
 
     await interaction.reply({
-      content: `✅ Logo-Erinnerung wurde in <#${TEAM_REGISTER_CHANNEL_ID}> gepostet.`,
+      content: `✅ Neue Logo-Kontrolle wurde in <#${result.channelId}> gepostet. Aktuell betroffen: **${result.count}** Teams.`,
       flags: MessageFlags.Ephemeral,
     });
   } catch (error) {
