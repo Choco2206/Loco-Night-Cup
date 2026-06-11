@@ -414,13 +414,40 @@ async function promoteUserToManagerRole(guild, userId) {
 
 async function syncCoManagerRoles(guild) {
   const teams = readTeams();
+  let changed = false;
 
   for (const team of teams) {
     const coManagerIds = Array.isArray(team.coManagerIds) ? team.coManagerIds : [];
+    const validCoManagerIds = [];
 
     for (const userId of coManagerIds) {
-      await promoteUserToManagerRole(guild, userId);
+      try {
+        await guild.members.fetch(userId);
+
+        validCoManagerIds.push(String(userId));
+        await promoteUserToManagerRole(guild, userId);
+      } catch (error) {
+        if (error.code === 10007) {
+          console.warn(`🧹 Co-VM ${userId} aus ${team.clubName} entfernt, da nicht mehr auf dem Server.`);
+          changed = true;
+          continue;
+        }
+
+        console.warn(`⚠️ Co-VM ${userId} konnte nicht geprüft werden.`);
+        validCoManagerIds.push(String(userId));
+      }
     }
+
+    if (validCoManagerIds.length !== coManagerIds.length) {
+      team.coManagerIds = validCoManagerIds;
+      team.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    writeTeams(teams);
+    await refreshRegisteredTeams(guild);
   }
 }
 
