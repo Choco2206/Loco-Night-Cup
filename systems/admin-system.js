@@ -87,6 +87,7 @@ function loadAdminState() {
   return readJson(ADMIN_FILE, {
     liveControlPanelMessageId: null,
     activeLogoControl: null,
+    activeManagersWithoutTeamControl: null,
   });
 }
 
@@ -1258,6 +1259,154 @@ function buildManagersWithoutTeamTextChunks(members) {
   return chunks;
 }
 
+function buildManagersWithoutTeamControlMessage(activeControl) {
+  const managers = activeControl.managers || [];
+
+  if (!managers.length) {
+    return [
+      '👥 **Manager ohne registriertes Team**',
+      '',
+      '✅ Aktuell haben alle Manager ein registriertes Team.',
+    ].join('\n');
+  }
+
+  const lines = managers.map((manager, index) => {
+    return `**${index + 1}.** <@${manager.userId}>`;
+  });
+
+  return [
+    '⚠️ **Manager-Rollen Kontrolle**',
+    '',
+    'Die folgenden Nutzer besitzen aktuell die Manager-Rolle, sind aber keinem registrierten Team zugeordnet.',
+    '',
+    `📊 **Aktuell betroffen:** ${managers.length}`,
+    '',
+    `➡️ **Teamregistrierung:** <#${TEAM_REGISTER_CHANNEL_ID}>`,
+    '',
+    'Wer als VM oder Co-VM bei einem registrierten Team eingetragen ist, fällt automatisch aus dieser Liste raus.',
+    '',
+    lines.join('\n'),
+  ].join('\n');
+}
+
+async function createNewManagersWithoutTeamControlMessage(interaction) {
+  const members = await getManagersWithoutTeam(interaction.guild);
+  const channel = await fetchChannel(MANAGERS_WITHOUT_TEAM_CHANNEL_ID, interaction);
+
+  if (!channel) {
+    throw new Error('Manager-Kontroll-Kanal nicht gefunden.');
+  }
+
+  const adminState = loadAdminState();
+
+  const activeControl = {
+    channelId: MANAGERS_WITHOUT_TEAM_CHANNEL_ID,
+    messageIds: [],
+    managers: members.map(member => ({
+      userId: member.id,
+    })),
+    createdAt: new Date().toISOString(),
+  };
+
+  const content = buildManagersWithoutTeamControlMessage(activeControl);
+  const chunks = chunkText(content);
+  const messageIds = [];
+
+  for (const chunk of chunks) {
+    const message = await channel.send({
+      content: chunk,
+      allowedMentions: { parse: ['users'] },
+    });
+
+    messageIds.push(message.id);
+  }
+
+  activeControl.messageIds = messageIds;
+  adminState.activeManagersWithoutTeamControl = activeControl;
+  saveAdminState(adminState);
+
+  return {
+    count: members.length,
+    channelId: MANAGERS_WITHOUT_TEAM_CHANNEL_ID,
+  };
+}
+
+async function refreshActiveManagersWithoutTeamControlMessage(clientOrInteraction = null) {
+  const adminState = loadAdminState();
+  const activeControl = adminState.activeManagersWithoutTeamControl;
+
+  if (!activeControl?.channelId) {
+    return false;
+  }
+
+  const guild = await getMainGuild();
+
+  if (!guild) {
+    return false;
+  }
+
+  const currentMembers = await getManagersWithoutTeam(guild);
+  const currentIds = new Set(currentMembers.map(member => String(member.id)));
+
+  activeControl.managers = (activeControl.managers || []).filter(manager =>
+    currentIds.has(String(manager.userId))
+  );
+
+  const channel = await fetchChannel(activeControl.channelId, clientOrInteraction);
+
+  if (!channel) {
+    return false;
+  }
+
+  const content = buildManagersWithoutTeamControlMessage(activeControl);
+  const chunks = chunkText(content);
+
+  const oldMessageIds = Array.isArray(activeControl.messageIds)
+    ? activeControl.messageIds
+    : [];
+
+  const nextMessageIds = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const oldMessageId = oldMessageIds[i];
+
+    if (oldMessageId) {
+      const oldMessage = await fetchMessage(channel, oldMessageId);
+
+      if (oldMessage) {
+        await oldMessage.edit({
+          content: chunks[i],
+          allowedMentions: { parse: ['users'] },
+        });
+
+        nextMessageIds.push(oldMessage.id);
+        continue;
+      }
+    }
+
+    const newMessage = await channel.send({
+      content: chunks[i],
+      allowedMentions: { parse: ['users'] },
+    });
+
+    nextMessageIds.push(newMessage.id);
+  }
+
+  for (let i = chunks.length; i < oldMessageIds.length; i++) {
+    const oldMessage = await fetchMessage(channel, oldMessageIds[i]);
+
+    if (oldMessage) {
+      await oldMessage.delete().catch(() => {});
+    }
+  }
+
+  activeControl.messageIds = nextMessageIds;
+  adminState.activeManagersWithoutTeamControl = activeControl;
+  saveAdminState(adminState);
+
+  return true;
+}
+
 // =========================
 // LIVE DATA OPERATIONS
 // =========================
@@ -2012,6 +2161,7 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
 
 module.exports = {
   refreshActiveLogoControlMessage,
+  refreshActiveManagersWithoutTeamControlMessage,
 
   async init(client) {
     clientRef = client;
@@ -2019,6 +2169,7 @@ module.exports = {
     ensureFile(ADMIN_FILE, {
   liveControlPanelMessageId: null,
   activeLogoControl: null,
+  activeManagersWithoutTeamControl: null,
 });
 
     await ensureLiveControlPanel();
@@ -2072,40 +2223,22 @@ module.exports = {
       }
 
       if (interaction.customId === 'live_managers_without_team') {
-        try {
-          const members = await getManagersWithoutTeam(interaction.guild);
-          const channel = await fetchChannel(MANAGERS_WITHOUT_TEAM_CHANNEL_ID);
+  try {
+    const result = await createNewManagersWithoutTeamControlMessage(interaction);
 
-          if (!channel) {
-            await interaction.reply({
-              content: '❌ Zielkanal nicht gefunden.',
-              flags: MessageFlags.Ephemeral,
-            });
-            return true;
-          }
+    await interaction.reply({
+      content: `✅ Neue Manager-Kontrolle wurde in <#${result.channelId}> gepostet. Aktuell betroffen: **${result.count}** Manager.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error) {
+    await interaction.reply({
+      content: `❌ ${error.message}`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 
-          const chunks = buildManagersWithoutTeamTextChunks(members);
-
-          for (const chunk of chunks) {
-            await channel.send({
-              content: chunk,
-              allowedMentions: { parse: ['users'] },
-            });
-          }
-
-          await interaction.reply({
-            content: `✅ Liste wurde in <#${MANAGERS_WITHOUT_TEAM_CHANNEL_ID}> gepostet.`,
-            flags: MessageFlags.Ephemeral,
-          });
-        } catch (error) {
-          await interaction.reply({
-            content: `❌ ${error.message}`,
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
-        return true;
-      }
+  return true;
+}
 
 if (interaction.customId === 'live_teams_without_logo') {
   try {
