@@ -53,6 +53,16 @@ if (nightcupReminderSystem.init) await nightcupReminderSystem.init(client);
   }
 });
 
+client.on(Events.GuildMemberRemove, async member => {
+  try {
+    if (teamSystem.handleGuildMemberRemove) {
+      await teamSystem.handleGuildMemberRemove(member);
+    }
+  } catch (error) {
+    console.error('❌ Fehler bei GuildMemberRemove:', error);
+  }
+});
+
 client.on(Events.InteractionCreate, async interaction => {
   try {
     if (roleSystem.handleInteraction) {
