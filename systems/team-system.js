@@ -185,6 +185,38 @@ function findTeamByManagerOrCoManager(userId) {
   });
 }
 
+function findUserTeamMembership(teams, userId, ignoreTeamId = null) {
+  const id = String(userId);
+
+  return teams.find(team => {
+    if (ignoreTeamId && String(team.id) === String(ignoreTeamId)) return false;
+
+    const isManager = String(team.managerId) === id;
+    const isCoManager =
+      Array.isArray(team.coManagerIds) &&
+      team.coManagerIds.map(String).includes(id);
+
+    return isManager || isCoManager;
+  });
+}
+
+function getMembershipType(team, userId) {
+  if (!team) return null;
+
+  if (String(team.managerId) === String(userId)) {
+    return 'VM';
+  }
+
+  if (
+    Array.isArray(team.coManagerIds) &&
+    team.coManagerIds.map(String).includes(String(userId))
+  ) {
+    return 'Co-VM';
+  }
+
+  return null;
+}
+
 function sortTeamsAlphabetically(teams) {
   return [...teams].sort((a, b) => {
     return String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de', {
@@ -879,22 +911,27 @@ async function handleTeamButtons(interaction) {
 async function handleTeamUserSelect(interaction) {
   if (interaction.customId !== 'team_add_covm_select') return false;
 
+  await interaction.deferUpdate();
+
   const guild = interaction.guild;
 
   if (!guild) {
-    await interaction.reply({
+    await interaction.editReply({
       content: '❌ Diese Aktion funktioniert nur auf einem Server.',
-      flags: MessageFlags.Ephemeral,
+      embeds: [],
+      components: [],
     });
     return true;
   }
 
   const playerRole = guild.roles.cache.get(process.env.PLAYER_ROLE_ID);
+  const managerRole = guild.roles.cache.get(process.env.MANAGER_ROLE_ID);
 
-  if (!playerRole) {
-    await interaction.reply({
-      content: '❌ Spieler-Rolle wurde nicht gefunden. Prüfe PLAYER_ROLE_ID.',
-      flags: MessageFlags.Ephemeral,
+  if (!playerRole || !managerRole) {
+    await interaction.editReply({
+      content: '❌ Spieler- oder Manager-Rolle wurde nicht gefunden. Prüfe PLAYER_ROLE_ID und MANAGER_ROLE_ID.',
+      embeds: [],
+      components: [],
     });
     return true;
   }
@@ -903,21 +940,34 @@ async function handleTeamUserSelect(interaction) {
   const team = findTeamByManagerOrCoManager(interaction.user.id);
 
   if (!team) {
-    await interaction.reply({
+    await interaction.editReply({
       content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs hinzufügen.',
-      flags: MessageFlags.Ephemeral,
+      embeds: [],
+      components: [],
     });
     return true;
   }
 
-  if (!Array.isArray(team.coManagerIds)) {
-    team.coManagerIds = [];
+  const realTeam = teams.find(t => String(t.id) === String(team.id));
+
+  if (!realTeam) {
+    await interaction.editReply({
+      content: '❌ Team wurde nicht gefunden.',
+      embeds: [],
+      components: [],
+    });
+    return true;
   }
 
-  if (team.coManagerIds.length >= MAX_CO_MANAGERS) {
-    await interaction.reply({
+  if (!Array.isArray(realTeam.coManagerIds)) {
+    realTeam.coManagerIds = [];
+  }
+
+  if (realTeam.coManagerIds.length >= MAX_CO_MANAGERS) {
+    await interaction.editReply({
       content: `❌ Dein Team hat bereits ${MAX_CO_MANAGERS} Co-VMs. Mehr sind nicht erlaubt.`,
-      flags: MessageFlags.Ephemeral,
+      embeds: [],
+      components: [],
     });
     return true;
   }
@@ -925,19 +975,18 @@ async function handleTeamUserSelect(interaction) {
   const userId = interaction.values?.[0];
 
   if (!userId) {
-    await interaction.reply({
+    await interaction.editReply({
       content: '❌ Kein User ausgewählt.',
-      flags: MessageFlags.Ephemeral,
+      embeds: [],
+      components: [],
     });
     return true;
   }
 
-  const selectedUserBan = banlistSystem.isTeamOrUserBanned({
-    userId,
-  });
+  const selectedUserBan = banlistSystem.isTeamOrUserBanned({ userId });
 
   if (selectedUserBan) {
-    await interaction.reply({
+    await interaction.editReply({
       content: [
         '🚫 **Dieser User ist aktuell gesperrt und kann nicht als Co-VM eingetragen werden.**',
         '',
@@ -945,15 +994,32 @@ async function handleTeamUserSelect(interaction) {
         `**Grund:** ${selectedUserBan.reason}`,
         `**Sperre bis:** ${formatBanDateDE(selectedUserBan.bannedUntilDate)}`,
       ].join('\n'),
-      flags: MessageFlags.Ephemeral,
+      embeds: [],
+      components: [],
     });
     return true;
   }
 
-  if (String(userId) === String(team.managerId)) {
-    await interaction.reply({
-      content: '❌ Der Vereinsmanager kann nicht zusätzlich Co-VM sein.',
-      flags: MessageFlags.Ephemeral,
+  if (String(userId) === String(realTeam.managerId)) {
+    await interaction.editReply({
+      content: '❌ Der Vereinsmanager kann nicht zusätzlich Co-VM im eigenen Team sein.',
+      embeds: [],
+      components: [],
+    });
+    return true;
+  }
+
+  const existingMembership = findUserTeamMembership(teams, userId);
+
+  if (existingMembership) {
+    const type = getMembershipType(existingMembership, userId);
+
+    await interaction.editReply({
+      content:
+        `❌ Dieser User ist bereits als **${type}** bei **${existingMembership.clubName}** eingetragen.\n\n` +
+        `Ein User darf nur in **einem Team** vertreten sein, egal ob VM oder Co-VM.`,
+      embeds: [],
+      components: [],
     });
     return true;
   }
@@ -963,42 +1029,38 @@ async function handleTeamUserSelect(interaction) {
   try {
     selectedMember = await guild.members.fetch(userId);
   } catch (error) {
-    await interaction.reply({
+    await interaction.editReply({
       content: '❌ Dieser User ist nicht auf dem Server.',
-      flags: MessageFlags.Ephemeral,
+      embeds: [],
+      components: [],
     });
     return true;
   }
 
-  if (!selectedMember.roles.cache.has(playerRole.id)) {
-    await interaction.reply({
-      content: '❌ Dieser User hat nicht die Spieler-Rolle und kann deshalb kein Co-VM werden.',
-      flags: MessageFlags.Ephemeral,
+  const hasPlayerRole = selectedMember.roles.cache.has(playerRole.id);
+  const hasManagerRole = selectedMember.roles.cache.has(managerRole.id);
+
+  if (!hasPlayerRole && !hasManagerRole) {
+    await interaction.editReply({
+      content: '❌ Dieser User hat weder die Spieler-Rolle noch die Manager-Rolle und kann deshalb kein Co-VM werden.',
+      embeds: [],
+      components: [],
     });
     return true;
   }
 
-  if (team.coManagerIds.map(String).includes(String(userId))) {
-    await interaction.reply({
-      content: '❌ Dieser User ist bereits Co-VM.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  team.coManagerIds.push(String(userId));
-  team.updatedAt = new Date().toISOString();
-
-  await promoteUserToManagerRole(guild, userId);
+  realTeam.coManagerIds.push(String(userId));
+  realTeam.updatedAt = new Date().toISOString();
 
   writeTeams(teams);
 
+  await promoteUserToManagerRole(guild, userId);
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
   await refreshManagerControlSafe(interaction);
 
-  await interaction.update({
-    content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${team.coManagerIds.length}/${MAX_CO_MANAGERS}**`,
+  await interaction.editReply({
+    content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${realTeam.coManagerIds.length}/${MAX_CO_MANAGERS}**`,
     embeds: [],
     components: [],
     allowedMentions: { parse: ['users'] },
@@ -1119,9 +1181,22 @@ async function handleTeamModals(interaction) {
   }
 
   const clubName = interaction.fields.getTextInputValue('club_name').trim();
-  const teams = readTeams();
+const teams = readTeams();
 
-  let team = teams.find(t => String(t.managerId) === String(interaction.user.id));
+const existingMembership = findUserTeamMembership(teams, interaction.user.id);
+
+if (existingMembership && String(existingMembership.managerId) !== String(interaction.user.id)) {
+  const type = getMembershipType(existingMembership, interaction.user.id);
+
+  await interaction.editReply({
+    content:
+      `❌ Du bist bereits als **${type}** bei **${existingMembership.clubName}** eingetragen.\n\n` +
+      `Du kannst deshalb kein eigenes Team anmelden.`,
+  });
+  return true;
+}
+
+let team = teams.find(t => String(t.managerId) === String(interaction.user.id));
 
   if (isDuplicateClubName(teams, clubName, team?.id || null)) {
     await interaction.editReply({
