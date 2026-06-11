@@ -94,9 +94,7 @@ function getFileExtension(attachment) {
 }
 
 function normalizeClubName(name) {
-  return String(name || '')
-    .trim()
-    .toLowerCase();
+  return String(name || '').trim().toLowerCase();
 }
 
 function isDuplicateClubName(teams, clubName, ignoreTeamId = null) {
@@ -120,6 +118,26 @@ async function syncNicknamesSafe(guild) {
     }
   } catch (error) {
     console.error('❌ Nicknames konnten nicht synchronisiert werden:', error);
+  }
+}
+
+async function refreshManagerControlSafe(source) {
+  try {
+    if (adminSystem.refreshActiveManagersWithoutTeamControlMessage) {
+      await adminSystem.refreshActiveManagersWithoutTeamControlMessage(source);
+    }
+  } catch (error) {
+    console.error('❌ Manager-ohne-Team-Kontrolle konnte nicht refreshed werden:', error);
+  }
+}
+
+async function refreshLogoControlSafe(source) {
+  try {
+    if (adminSystem.refreshActiveLogoControlMessage) {
+      await adminSystem.refreshActiveLogoControlMessage(source);
+    }
+  } catch (error) {
+    console.error('❌ Logo-Kontrolle konnte nicht refreshed werden:', error);
   }
 }
 
@@ -152,14 +170,6 @@ function buildBanMessage(ban) {
     '',
     'Während dieser Sperre kannst du kein Team anmelden und nicht als Co-VM eingetragen werden.',
   ].join('\n');
-}
-
-function findManageableTeam(userId) {
-  return findTeamByManagerOrCoManager(userId);
-}
-
-function isTeamOwner(userId, team) {
-  return String(team?.managerId) === String(userId);
 }
 
 function findTeamByManagerOrCoManager(userId) {
@@ -273,7 +283,6 @@ async function refreshRegisteredTeams(guild) {
   const headerEmbed = buildRegisteredTeamsHeaderEmbed(teams);
   const chunks = await buildRegisteredTeamsContentChunks(guild, teams);
 
-  // Header-Nachricht separat bearbeiten oder neu posten
   let headerMessage = null;
 
   if (setupData.registeredTeamsHeaderMessageId) {
@@ -307,7 +316,6 @@ async function refreshRegisteredTeams(guild) {
 
   const nextMessageIds = [];
 
-  // Teamlisten-Nachrichten darunter bearbeiten oder neu posten
   for (let i = 0; i < chunks.length; i++) {
     const payload = {
       content: chunks[i],
@@ -332,7 +340,6 @@ async function refreshRegisteredTeams(guild) {
     nextMessageIds.push(newMessage.id);
   }
 
-  // Überschüssige alte Teamlisten löschen
   for (let i = chunks.length; i < existingIds.length; i++) {
     try {
       const oldMessage = await registeredTeamsChannel.messages.fetch(existingIds[i]);
@@ -529,7 +536,7 @@ async function handleTeamSetupCommand(interaction) {
         '',
         '• **Team anmelden** → Clubname eingeben und danach Logo hochladen',
         '• **Co-VM hinzufügen** → VM und Co-VM, maximal 5',
-'• **Co-VM entfernen** → VM und Co-VM',
+        '• **Co-VM entfernen** → VM und Co-VM',
         '• **Mein Team** → private Team-Übersicht',
         '• **Team abmelden** → nur Vereinsmanager',
       ].join('\n')
@@ -569,6 +576,7 @@ async function handleTeamSetupCommand(interaction) {
 
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
+  await refreshManagerControlSafe(interaction);
 
   await interaction.reply({
     content: '✅ Team-Setup erfolgreich erstellt.',
@@ -606,16 +614,17 @@ async function handleTeamButtons(interaction) {
 
   if (interaction.customId === 'team_register_open') {
     const ban = banlistSystem.isTeamOrUserBanned({
-  userId: interaction.user.id,
-});
+      userId: interaction.user.id,
+    });
 
-if (ban) {
-  await interaction.reply({
-    content: buildBanMessage(ban),
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
+    if (ban) {
+      await interaction.reply({
+        content: buildBanMessage(ban),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
     if (!member.roles.cache.has(managerRole.id)) {
       await interaction.reply({
         content: '❌ Nur Manager dürfen ein Team anmelden.',
@@ -658,15 +667,7 @@ if (ban) {
   }
 
   if (interaction.customId === 'team_add_covm_open') {
-    const teams = readTeams();
-const team = teams.find(t => {
-  const isManager = String(t.managerId) === String(interaction.user.id);
-  const isCoManager =
-    Array.isArray(t.coManagerIds) &&
-    t.coManagerIds.map(String).includes(String(interaction.user.id));
-
-  return isManager || isCoManager;
-});
+    const team = findTeamByManagerOrCoManager(interaction.user.id);
 
     if (!team) {
       await interaction.reply({
@@ -715,15 +716,7 @@ const team = teams.find(t => {
   }
 
   if (interaction.customId === 'team_remove_covm_open') {
-    const teams = readTeams();
-const team = teams.find(t => {
-  const isManager = String(t.managerId) === String(interaction.user.id);
-  const isCoManager =
-    Array.isArray(t.coManagerIds) &&
-    t.coManagerIds.map(String).includes(String(interaction.user.id));
-
-  return isManager || isCoManager;
-});
+    const team = findTeamByManagerOrCoManager(interaction.user.id);
 
     if (!team) {
       await interaction.reply({
@@ -768,40 +761,32 @@ const team = teams.find(t => {
     return true;
   }
 
-if (interaction.customId === 'team_logo_update_open') {
-  const teams = readTeams();
-const team = teams.find(t => {
-  const isManager = String(t.managerId) === String(interaction.user.id);
-  const isCoManager =
-    Array.isArray(t.coManagerIds) &&
-    t.coManagerIds.map(String).includes(String(interaction.user.id));
+  if (interaction.customId === 'team_logo_update_open') {
+    const team = findTeamByManagerOrCoManager(interaction.user.id);
 
-  return isManager || isCoManager;
-});
+    if (!team) {
+      await interaction.reply({
+        content: '❌ Nur VM oder Co-VM dieses Teams können das Teamlogo ändern.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
 
-  if (!team) {
+    pendingLogoUploads.set(interaction.user.id, {
+      teamId: team.id,
+      channelId: process.env.TEAM_REGISTER_CHANNEL_ID,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
     await interaction.reply({
-      content: '❌ Nur VM oder Co-VM dieses Teams können das Teamlogo ändern.',
+      content:
+        `🖼️ Lade jetzt dein neues Teamlogo für **${team.clubName}** in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
+        `Du hast dafür 10 Minuten Zeit.`,
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
-
-  pendingLogoUploads.set(interaction.user.id, {
-    teamId: team.id,
-    channelId: process.env.TEAM_REGISTER_CHANNEL_ID,
-    expiresAt: Date.now() + 10 * 60 * 1000,
-  });
-
-  await interaction.reply({
-    content:
-      `🖼️ Lade jetzt dein neues Teamlogo für **${team.clubName}** in <#${process.env.TEAM_REGISTER_CHANNEL_ID}> hoch.\n` +
-      `Du hast dafür 10 Minuten Zeit.`,
-    flags: MessageFlags.Ephemeral,
-  });
-
-  return true;
-}
 
   if (interaction.customId === 'team_delete_open') {
     const teams = readTeams();
@@ -871,8 +856,10 @@ const team = teams.find(t => {
     }
 
     pendingLogoUploads.delete(interaction.user.id);
+
     await refreshRegisteredTeams(guild);
     await syncNicknamesSafe(guild);
+    await refreshManagerControlSafe(interaction);
 
     await interaction.reply({
       content: `✅ Dein Team **${team.clubName}** wurde abgemeldet.`,
@@ -913,14 +900,7 @@ async function handleTeamUserSelect(interaction) {
   }
 
   const teams = readTeams();
-const team = teams.find(t => {
-  const isManager = String(t.managerId) === String(interaction.user.id);
-  const isCoManager =
-    Array.isArray(t.coManagerIds) &&
-    t.coManagerIds.map(String).includes(String(interaction.user.id));
-
-  return isManager || isCoManager;
-});
+  const team = findTeamByManagerOrCoManager(interaction.user.id);
 
   if (!team) {
     await interaction.reply({
@@ -952,23 +932,23 @@ const team = teams.find(t => {
     return true;
   }
 
-const selectedUserBan = banlistSystem.isTeamOrUserBanned({
-  userId,
-});
-
-if (selectedUserBan) {
-  await interaction.reply({
-    content: [
-      '🚫 **Dieser User ist aktuell gesperrt und kann nicht als Co-VM eingetragen werden.**',
-      '',
-      `**Team:** ${selectedUserBan.clubName}`,
-      `**Grund:** ${selectedUserBan.reason}`,
-      `**Sperre bis:** ${formatBanDateDE(selectedUserBan.bannedUntilDate)}`,
-    ].join('\n'),
-    flags: MessageFlags.Ephemeral,
+  const selectedUserBan = banlistSystem.isTeamOrUserBanned({
+    userId,
   });
-  return true;
-}
+
+  if (selectedUserBan) {
+    await interaction.reply({
+      content: [
+        '🚫 **Dieser User ist aktuell gesperrt und kann nicht als Co-VM eingetragen werden.**',
+        '',
+        `**Team:** ${selectedUserBan.clubName}`,
+        `**Grund:** ${selectedUserBan.reason}`,
+        `**Sperre bis:** ${formatBanDateDE(selectedUserBan.bannedUntilDate)}`,
+      ].join('\n'),
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
 
   if (String(userId) === String(team.managerId)) {
     await interaction.reply({
@@ -1007,13 +987,15 @@ if (selectedUserBan) {
   }
 
   team.coManagerIds.push(String(userId));
-team.updatedAt = new Date().toISOString();
+  team.updatedAt = new Date().toISOString();
 
-await promoteUserToManagerRole(guild, userId);
+  await promoteUserToManagerRole(guild, userId);
 
-writeTeams(teams);
+  writeTeams(teams);
+
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
+  await refreshManagerControlSafe(interaction);
 
   await interaction.update({
     content: `✅ ${formatUserMention(userId)} wurde als Co-VM hinzugefügt. Jetzt belegt: **${team.coManagerIds.length}/${MAX_CO_MANAGERS}**`,
@@ -1039,14 +1021,8 @@ async function handleTeamStringSelect(interaction) {
   }
 
   const teams = readTeams();
-const team = teams.find(t => {
-  const isManager = String(t.managerId) === String(interaction.user.id);
-  const isCoManager =
-    Array.isArray(t.coManagerIds) &&
-    t.coManagerIds.map(String).includes(String(interaction.user.id));
+  const team = findTeamByManagerOrCoManager(interaction.user.id);
 
-  return isManager || isCoManager;
-});
   if (!team) {
     await interaction.reply({
       content: '❌ Nur VM oder Co-VM dieses Teams können Co-VMs entfernen.',
@@ -1085,8 +1061,10 @@ const team = teams.find(t => {
   team.updatedAt = new Date().toISOString();
 
   writeTeams(teams);
+
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
+  await refreshManagerControlSafe(interaction);
 
   await interaction.update({
     content: `✅ ${formatUserMention(userId)} wurde als Co-VM entfernt.`,
@@ -1129,28 +1107,28 @@ async function handleTeamModals(interaction) {
     return true;
   }
 
-const ban = banlistSystem.isTeamOrUserBanned({
-  userId: interaction.user.id,
-});
-
-if (ban) {
-  await interaction.editReply({
-    content: buildBanMessage(ban),
+  const ban = banlistSystem.isTeamOrUserBanned({
+    userId: interaction.user.id,
   });
-  return true;
-}
+
+  if (ban) {
+    await interaction.editReply({
+      content: buildBanMessage(ban),
+    });
+    return true;
+  }
 
   const clubName = interaction.fields.getTextInputValue('club_name').trim();
   const teams = readTeams();
 
   let team = teams.find(t => String(t.managerId) === String(interaction.user.id));
 
-if (isDuplicateClubName(teams, clubName, team?.id || null)) {
-  await interaction.editReply({
-    content: `❌ Der Teamname **${clubName}** ist bereits vergeben. Bitte wähle einen anderen Namen.`,
-  });
-  return true;
-}
+  if (isDuplicateClubName(teams, clubName, team?.id || null)) {
+    await interaction.editReply({
+      content: `❌ Der Teamname **${clubName}** ist bereits vergeben. Bitte wähle einen anderen Namen.`,
+    });
+    return true;
+  }
 
   if (team) {
     team.clubName = clubName;
@@ -1179,6 +1157,7 @@ if (isDuplicateClubName(teams, clubName, team?.id || null)) {
 
   await refreshRegisteredTeams(guild);
   await syncNicknamesSafe(guild);
+  await refreshManagerControlSafe(interaction);
 
   await interaction.editReply({
     content:
@@ -1202,74 +1181,73 @@ async function handleLogoUpload(message) {
 
   const teams = readTeams();
 
-const pending = pendingLogoUploads.get(message.author.id);
+  const pending = pendingLogoUploads.get(message.author.id);
 
-let team = null;
+  let team = null;
 
-if (pending) {
-  if (pending.channelId !== message.channel.id) return false;
+  if (pending) {
+    if (pending.channelId !== message.channel.id) return false;
 
-  if (Date.now() <= pending.expiresAt) {
-    team = teams.find(
-  t =>
-    t.id === pending.teamId &&
-    (
-      String(t.managerId) === String(message.author.id) ||
-      (Array.isArray(t.coManagerIds) && t.coManagerIds.map(String).includes(String(message.author.id)))
-    )
-);
+    if (Date.now() <= pending.expiresAt) {
+      team = teams.find(
+        t =>
+          t.id === pending.teamId &&
+          (
+            String(t.managerId) === String(message.author.id) ||
+            (Array.isArray(t.coManagerIds) && t.coManagerIds.map(String).includes(String(message.author.id)))
+          )
+      );
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      pendingLogoUploads.delete(message.author.id);
+    }
   }
 
-  if (Date.now() > pending.expiresAt) {
-    pendingLogoUploads.delete(message.author.id);
+  if (!team) {
+    team = teams.find(t => {
+      const isManager = String(t.managerId) === String(message.author.id);
+      const isCoManager =
+        Array.isArray(t.coManagerIds) &&
+        t.coManagerIds.map(String).includes(String(message.author.id));
+
+      return isManager || isCoManager;
+    });
   }
-}
 
-// Fallback: Falls der Bot neu gestartet wurde und pendingLogoUploads leer ist
-if (!team) {
-  team = teams.find(t => {
-    const isManager = String(t.managerId) === String(message.author.id);
-    const isCoManager =
-      Array.isArray(t.coManagerIds) &&
-      t.coManagerIds.map(String).includes(String(message.author.id));
-
-    return isManager || isCoManager;
-  });
-}
-
-if (!team) {
-  return false;
-}
+  if (!team) {
+    return false;
+  }
 
   const attachment = message.attachments.first();
   if (!attachment) return false;
 
   const ext = getFileExtension(attachment);
-const fileName = `${team.id}.${ext}`;
-const filePath = path.join(logosDir, fileName);
+  const fileName = `${team.id}.${ext}`;
+  const filePath = path.join(logosDir, fileName);
 
-if (!fs.existsSync(logosDir)) {
-  fs.mkdirSync(logosDir, { recursive: true });
-}
-
-try {
-  const response = await fetch(attachment.url);
-
-  if (!response.ok) {
-    throw new Error(`Download fehlgeschlagen: ${response.status}`);
+  if (!fs.existsSync(logosDir)) {
+    fs.mkdirSync(logosDir, { recursive: true });
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
-} catch (error) {
-  console.error('❌ Logo konnte nicht gespeichert werden:', error);
+  try {
+    const response = await fetch(attachment.url);
 
-  await message.reply({
-    content: `❌ Logo konnte nicht gespeichert werden. Bitte lade es nochmal als PNG, JPG oder WEBP hoch.`,
-  }).catch(() => {});
+    if (!response.ok) {
+      throw new Error(`Download fehlgeschlagen: ${response.status}`);
+    }
 
-  return true;
-}
+    const arrayBuffer = await response.arrayBuffer();
+    fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+  } catch (error) {
+    console.error('❌ Logo konnte nicht gespeichert werden:', error);
+
+    await message.reply({
+      content: `❌ Logo konnte nicht gespeichert werden. Bitte lade es nochmal als PNG, JPG oder WEBP hoch.`,
+    }).catch(() => {});
+
+    return true;
+  }
 
   team.logoFile = fileName;
   team.updatedAt = new Date().toISOString();
@@ -1278,11 +1256,8 @@ try {
   pendingLogoUploads.delete(message.author.id);
 
   await refreshRegisteredTeams(message.guild);
+  await refreshLogoControlSafe(message);
 
-  if (adminSystem.refreshActiveLogoControlMessage) {
-  await adminSystem.refreshActiveLogoControlMessage(message);
-}
-  
   try {
     await message.delete();
   } catch (error) {
@@ -1309,19 +1284,19 @@ try {
 
 module.exports = {
   async init(client) {
-  if (!fs.existsSync(logosDir)) {
-    fs.mkdirSync(logosDir, { recursive: true });
-  }
+    if (!fs.existsSync(logosDir)) {
+      fs.mkdirSync(logosDir, { recursive: true });
+    }
 
-  const guildId = process.env.GUILD_ID;
-  const guild = guildId
-    ? client.guilds.cache.get(guildId)
-    : client.guilds.cache.first();
+    const guildId = process.env.GUILD_ID;
+    const guild = guildId
+      ? client.guilds.cache.get(guildId)
+      : client.guilds.cache.first();
 
-  if (guild) {
-    await syncCoManagerRoles(guild);
-  }
-},
+    if (guild) {
+      await syncCoManagerRoles(guild);
+    }
+  },
 
   async handleInteraction(interaction) {
     if (interaction.isChatInputCommand() && interaction.commandName === 'teamsetup') {
