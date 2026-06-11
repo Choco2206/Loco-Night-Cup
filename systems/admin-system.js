@@ -488,15 +488,16 @@ const row4 = new ActionRowBuilder().addComponents(
     .setCustomId('live_test_ceremony')
     .setLabel('🧪 Ceremony Test')
     .setStyle(ButtonStyle.Secondary)
+);
 
- const row5 = new ActionRowBuilder().addComponents(
+const row5 = new ActionRowBuilder().addComponents(
   new ButtonBuilder()
     .setCustomId('live_teams_without_logo')
     .setLabel('🖼️ Teams ohne Logo')
     .setStyle(ButtonStyle.Secondary)
 );
 
-  return [row1, row2, row3, row4, row5];
+return [row1, row2, row3, row4, row5];
 }
 
 async function ensureLiveControlPanel() {
