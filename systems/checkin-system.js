@@ -6,6 +6,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  AttachmentBuilder,
 } = require('discord.js');
 
 const banlistSystem = require('./banlist-system');
@@ -13,8 +14,18 @@ const banlistSystem = require('./banlist-system');
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
 const TEAMS_FILE = path.join(process.cwd(), 'data', 'teams.json');
 
+const CHECKIN_BANNER_FILE = path.join(
+  process.cwd(),
+  'assets',
+  'banners',
+  'check-in.png'
+);
+
+const CHECKIN_BANNER_NAME = 'check-in.png';
+
 let clientRef = null;
 let intervalRef = null;
+
 const CHECKIN_TYPES = [
   'monday',
   'tuesday',
@@ -63,26 +74,28 @@ function loadCheckins() {
   try {
     const raw = fs.readFileSync(CHECKINS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
-   return {
-  monday: parsed.monday || null,
-  tuesday: parsed.tuesday || null,
-  wednesday: parsed.wednesday || null,
-  thursday: parsed.thursday || null,
-  friday: parsed.friday || null,
-  saturday: parsed.saturday || null,
-  sunday: parsed.sunday || null,
-};
+
+    return {
+      monday: parsed.monday || null,
+      tuesday: parsed.tuesday || null,
+      wednesday: parsed.wednesday || null,
+      thursday: parsed.thursday || null,
+      friday: parsed.friday || null,
+      saturday: parsed.saturday || null,
+      sunday: parsed.sunday || null,
+    };
   } catch (error) {
     console.error('❌ Fehler beim Lesen von checkins.json:', error);
+
     return {
-  monday: null,
-  tuesday: null,
-  wednesday: null,
-  thursday: null,
-  friday: null,
-  saturday: null,
-  sunday: null,
-};
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+      sunday: null,
+    };
   }
 }
 
@@ -97,8 +110,10 @@ function saveCheckins(data) {
 function loadTeams() {
   try {
     if (!fs.existsSync(TEAMS_FILE)) return [];
+
     const raw = fs.readFileSync(TEAMS_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : [];
+
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error('❌ Fehler beim Lesen von teams.json:', error);
@@ -117,6 +132,7 @@ function getUserTeam(userId) {
     const isManager = team.managerId === userId;
     const isCoManager =
       Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
+
     return isManager || isCoManager;
   });
 }
@@ -191,6 +207,7 @@ function getTeamBan(team, userId = null) {
 function isUserAllowedForTeam(userId, team) {
   if (!team) return false;
   if (team.managerId === userId) return true;
+
   return Array.isArray(team.coManagerIds) && team.coManagerIds.includes(userId);
 }
 
@@ -207,13 +224,6 @@ function formatDateGerman(date) {
   }).format(date);
 }
 
-function formatTimeGerman(date) {
-  return new Intl.DateTimeFormat('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
 function formatCountdown(targetTimestamp) {
   const diff = targetTimestamp - Date.now();
 
@@ -226,6 +236,7 @@ function formatCountdown(targetTimestamp) {
 
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
+
   return `${minutes}m`;
 }
 
@@ -440,12 +451,6 @@ function getFormatExplanation(format) {
   return '• Minimum 8 Teams erforderlich';
 }
 
-function getParticipatingTeams(event) {
-  const actualFormat = getActualFormat(event.teams.length);
-  if (actualFormat === 0) return [];
-  return event.teams.slice(0, actualFormat);
-}
-
 function getBackupTeams(event) {
   const actualFormat = getActualFormat(event.teams.length);
   if (actualFormat === 0) return [];
@@ -585,21 +590,21 @@ function buildBackupContent(event) {
 // MESSAGE BUILDERS
 // =========================
 
+function buildBannerEmbed() {
+  return new EmbedBuilder()
+    .setColor(0xff0000)
+    .setImage(`attachment://${CHECKIN_BANNER_NAME}`);
+}
+
 function buildMainEmbed(event) {
   const actualFormat = getActualFormat(event.teams.length);
-  const displaySlots = getDisplaySlots(event.teams.length);
-
-  const guild = clientRef.guilds.cache.get(process.env.GUILD_ID);
-
-  const serverLogo = guild?.iconURL({
-    extension: 'png',
-    size: 1024,
-  });
 
   let statusLine = '🟢 Check-in geöffnet';
+
   if (event.finalized && event.status === 'confirmed') {
     statusLine = '✅ NightCup findet statt';
   }
+
   if (event.finalized && event.status === 'cancelled') {
     statusLine = '❌ NightCup findet nicht statt';
   }
@@ -608,9 +613,9 @@ function buildMainEmbed(event) {
     `**${statusLine}**`,
     `📅 **Datum:** ${event.displayDate}`,
     '',
-`⏰ **Offizieller Anmeldeschluss:** ${event.deadlineText} Uhr`,
-`🎲 **Gruppenauslosung:** ${event.drawText} Uhr`,
-`⌛ **Anmeldung offen bis:** ${formatCountdown(event.lateDeadlineAt || event.deadlineAt)}`,
+    `⏰ **Offizieller Anmeldeschluss:** ${event.deadlineText} Uhr`,
+    `🎲 **Gruppenauslosung:** ${event.drawText} Uhr`,
+    `⌛ **Anmeldung offen bis:** ${formatCountdown(event.lateDeadlineAt || event.deadlineAt)}`,
     '',
     `🚀 **Turnierstart:** ${event.startText} Uhr`,
     `${event.startLine}`,
@@ -630,6 +635,7 @@ function buildMainEmbed(event) {
   ];
 
   const backupSection = buildBackupShortSection(event);
+
   if (backupSection) {
     descriptionParts.push('', '━━━━━━━━━━━━━━', '', backupSection);
   }
@@ -644,21 +650,34 @@ function buildMainEmbed(event) {
     );
   }
 
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setTitle(`🌙 Loco NightCup ${event.label}`)
     .setDescription(descriptionParts.join('\n'))
     .setColor(0xff0000);
+}
 
-  if (serverLogo) {
-    embed.setThumbnail(serverLogo);
+function buildMainEmbeds(event) {
+  if (!fs.existsSync(CHECKIN_BANNER_FILE)) {
+    console.warn(`⚠️ Check-in Banner nicht gefunden: ${CHECKIN_BANNER_FILE}`);
+    return [buildMainEmbed(event)];
   }
 
-  return embed;
+  return [buildBannerEmbed(), buildMainEmbed(event)];
+}
+
+function buildMainFiles() {
+  if (!fs.existsSync(CHECKIN_BANNER_FILE)) return [];
+
+  return [
+    new AttachmentBuilder(CHECKIN_BANNER_FILE, {
+      name: CHECKIN_BANNER_NAME,
+    }),
+  ];
 }
 
 function buildMainButtons(event) {
   const closeAt = event.lateDeadlineAt || event.deadlineAt;
-const disabled = Date.now() >= closeAt;
+  const disabled = Date.now() >= closeAt;
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -666,6 +685,7 @@ const disabled = Date.now() >= closeAt;
       .setLabel('⬆️ Anmelden')
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
+
     new ButtonBuilder()
       .setCustomId(`checkin_leave:${event.type}`)
       .setLabel('⬇️ Abmelden')
@@ -680,6 +700,7 @@ function buildBackupButtons(event) {
       .setCustomId(`backup_yes:${event.type}`)
       .setLabel('✅ Backup bestätigen')
       .setStyle(ButtonStyle.Success),
+
     new ButtonBuilder()
       .setCustomId(`backup_no:${event.type}`)
       .setLabel('❌ Backup ablehnen')
@@ -732,11 +753,15 @@ async function deleteMessageIfExists(channelId, messageId) {
 async function findExistingMainMessage(channel, eventLabel) {
   try {
     const messages = await channel.messages.fetch({ limit: 30 });
+
     const ownMessage = messages.find(msg => {
       if (!msg.author || msg.author.id !== clientRef.user.id) return false;
       if (!msg.embeds || msg.embeds.length === 0) return false;
-      const title = msg.embeds[0]?.title || '';
-      return title.includes(`Loco NightCup ${eventLabel}`);
+
+      return msg.embeds.some(embed => {
+        const title = embed?.title || '';
+        return title.includes(`Loco NightCup ${eventLabel}`);
+      });
     });
 
     return ownMessage || null;
@@ -757,22 +782,25 @@ function createNewEventState(type, previousState = null) {
     type: cfg.type,
     label: cfg.label,
     channelId: cfg.channelId,
+
     deadlineAt: cfg.deadlineAt,
-drawAt: cfg.drawAt,
-lateDeadlineAt: cfg.lateDeadlineAt,
-startAt: cfg.startAt,
+    drawAt: cfg.drawAt,
+    lateDeadlineAt: cfg.lateDeadlineAt,
+    startAt: cfg.startAt,
     resetAt: cfg.resetAt,
+
     displayDate: cfg.displayDate,
     startLine: cfg.startLine,
+
     deadlineText: cfg.deadlineText,
-lateDeadlineText: cfg.lateDeadlineText,
-drawText: cfg.drawText,
-startText: cfg.startText,
+    lateDeadlineText: cfg.lateDeadlineText,
+    drawText: cfg.drawText,
+    startText: cfg.startText,
 
     messageId: previousState?.messageId || null,
-warningMessageId: previousState?.warningMessageId || null,
-summaryMessageId: null,
-backupMessageId: null,
+    warningMessageId: previousState?.warningMessageId || null,
+    summaryMessageId: null,
+    backupMessageId: null,
 
     teams: [],
     backupDecisions: {},
@@ -803,25 +831,25 @@ async function ensureMainMessage(event) {
 
   if (!message) {
     message = await findExistingMainMessage(channel, event.label);
+
     if (message) {
       event.messageId = message.id;
     }
   }
 
-  if (!message) {
-    const created = await channel.send({
-      embeds: [buildMainEmbed(event)],
-      components: [buildMainButtons(event)],
-    });
+  const payload = {
+    embeds: buildMainEmbeds(event),
+    components: [buildMainButtons(event)],
+    files: buildMainFiles(),
+  };
 
+  if (!message) {
+    const created = await channel.send(payload);
     event.messageId = created.id;
     return event;
   }
 
-  await message.edit({
-    embeds: [buildMainEmbed(event)],
-    components: [buildMainButtons(event)],
-  });
+  await message.edit(payload);
 
   return event;
 }
@@ -908,6 +936,7 @@ async function ensureBackupMessage(event) {
       await deleteMessageIfExists(event.channelId, event.backupMessageId);
       event.backupMessageId = null;
     }
+
     return event;
   }
 
@@ -922,6 +951,7 @@ async function ensureBackupMessage(event) {
       content: backupContent,
       components: [buildBackupButtons(event)],
     });
+
     event.backupMessageId = created.id;
     return event;
   }
@@ -965,11 +995,13 @@ async function reconcileEvent(type, data) {
   const cfg = getCycleConfig(type);
 
   if (!current) {
-  const created = createNewEventState(type, null);
-  data[type] = await ensureMainMessage(created);
-  data[type] = await ensureWarningMessage(data[type]);
-  return;
-}
+    const created = createNewEventState(type, null);
+
+    data[type] = await ensureMainMessage(created);
+    data[type] = await ensureWarningMessage(data[type]);
+
+    return;
+  }
 
   if (current.cycleKey !== cfg.key) {
     data[type] = await resetEvent(current, type);
@@ -977,23 +1009,29 @@ async function reconcileEvent(type, data) {
   }
 
   current.deadlineAt = cfg.deadlineAt;
-current.drawAt = cfg.drawAt;
-current.lateDeadlineAt = cfg.lateDeadlineAt;
-current.startAt = cfg.startAt;
+  current.drawAt = cfg.drawAt;
+  current.lateDeadlineAt = cfg.lateDeadlineAt;
+  current.startAt = cfg.startAt;
   current.resetAt = cfg.resetAt;
+
   current.displayDate = cfg.displayDate;
   current.startLine = cfg.startLine;
+
   current.deadlineText = cfg.deadlineText;
-current.lateDeadlineText = cfg.lateDeadlineText;
-current.drawText = cfg.drawText;
-current.startText = cfg.startText;
+  current.lateDeadlineText = cfg.lateDeadlineText;
+  current.drawText = cfg.drawText;
+  current.startText = cfg.startText;
+
   current.channelId = cfg.channelId;
 
-if (!current.finalized && Date.now() >= current.deadlineAt) {
-  data[type] = await ensurePreDrawMessage(current);
-}
+  if (!current.finalized && Date.now() >= current.deadlineAt) {
+    data[type] = await ensurePreDrawMessage(current);
+  }
 
-  if (!current.finalized && Date.now() >= (current.drawAt || current.lateDeadlineAt || current.deadlineAt)) {
+  if (
+    !current.finalized &&
+    Date.now() >= (current.drawAt || current.lateDeadlineAt || current.deadlineAt)
+  ) {
     data[type] = await finalizeEvent(current);
     return;
   }
@@ -1003,10 +1041,11 @@ if (!current.finalized && Date.now() >= current.deadlineAt) {
 
   if (current.lastRenderMinute !== renderMinute) {
     current.lastRenderMinute = renderMinute;
-    data[type] = await ensureMainMessage(current);
-data[type] = await ensureWarningMessage(data[type]);
 
-if (current.finalized) {
+    data[type] = await ensureMainMessage(current);
+    data[type] = await ensureWarningMessage(data[type]);
+
+    if (current.finalized) {
       data[type] = await ensureSummaryMessage(current);
       data[type] = await ensureBackupMessage(current);
     }
@@ -1072,14 +1111,15 @@ async function refreshEvent(type) {
   if (!event) return false;
 
   data[type] = await ensureMainMessage(event);
-data[type] = await ensureWarningMessage(data[type]);
+  data[type] = await ensureWarningMessage(data[type]);
 
-if (data[type].finalized) {
+  if (data[type].finalized) {
     data[type] = await ensureSummaryMessage(data[type]);
     data[type] = await ensureBackupMessage(data[type]);
   }
 
   saveCheckins(data);
+
   return true;
 }
 
@@ -1096,16 +1136,18 @@ async function handleJoin(interaction, type) {
       content: '❌ Check-in wurde nicht gefunden.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
   const closeAt = event.lateDeadlineAt || event.deadlineAt;
 
-if (Date.now() >= closeAt) {
+  if (Date.now() >= closeAt) {
     await interaction.reply({
       content: '❌ Die Anmeldung ist bereits geschlossen.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
@@ -1116,25 +1158,29 @@ if (Date.now() >= closeAt) {
       content: '❌ Du bist keinem registrierten Team als Vereinsmanager oder Co-VM zugeordnet.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
-const ban = getTeamBan(team, interaction.user.id);
+  const ban = getTeamBan(team, interaction.user.id);
 
-if (ban) {
-  await interaction.reply({
-    content: getBanReasonText(ban),
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
+  if (ban) {
+    await interaction.reply({
+      content: getBanReasonText(ban),
+      flags: MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
 
   const alreadyIn = event.teams.find(entry => entry.teamId === team.id);
+
   if (alreadyIn) {
     await interaction.reply({
       content: '⚠️ Dein Team ist bereits angemeldet.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
@@ -1161,16 +1207,18 @@ async function handleLeave(interaction, type) {
       content: '❌ Check-in wurde nicht gefunden.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
   const closeAt = event.lateDeadlineAt || event.deadlineAt;
 
-if (Date.now() >= closeAt) {
+  if (Date.now() >= closeAt) {
     await interaction.reply({
       content: '❌ Die Anmeldung ist bereits geschlossen.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
@@ -1181,10 +1229,12 @@ if (Date.now() >= closeAt) {
       content: '❌ Du bist keinem registrierten Team als Vereinsmanager oder Co-VM zugeordnet.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
   const before = event.teams.length;
+
   event.teams = event.teams.filter(entry => entry.teamId !== team.id);
 
   if (before === event.teams.length) {
@@ -1192,31 +1242,32 @@ if (Date.now() >= closeAt) {
       content: '⚠️ Dein Team war nicht angemeldet.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
   data[type] = await ensureMainMessage(event);
-saveCheckins(data);
+  saveCheckins(data);
 
-let extraText = '';
+  let extraText = '';
 
-if (Date.now() >= event.deadlineAt) {
-  await banlistSystem.addTeamBan(
-    team,
-    'Abmeldung nach offiziellem Anmeldeschluss',
-    interaction.user.id,
-    7
-  );
+  if (Date.now() >= event.deadlineAt) {
+    await banlistSystem.addTeamBan(
+      team,
+      'Abmeldung nach offiziellem Anmeldeschluss',
+      interaction.user.id,
+      7
+    );
 
-  await removeTeamFromOpenCheckinsById(team.id);
+    await removeTeamFromOpenCheckinsById(team.id);
 
     extraText = `\n\n🚫 Da die Abmeldung nach ${event.deadlineText} Uhr erfolgt ist, wurde dein Team automatisch für **7 Tage** gesperrt.`;
-}
+  }
 
-await interaction.reply({
-  content: `⬇️ **${team.clubName}** wurde abgemeldet.${extraText}`,
-  flags: MessageFlags.Ephemeral,
-});
+  await interaction.reply({
+    content: `⬇️ **${team.clubName}** wurde abgemeldet.${extraText}`,
+    flags: MessageFlags.Ephemeral,
+  });
 
   return true;
 }
@@ -1230,6 +1281,7 @@ async function handleBackupDecision(interaction, type, decision) {
       content: '❌ Es wurde kein passender Backup-Check gefunden.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
@@ -1240,18 +1292,20 @@ async function handleBackupDecision(interaction, type, decision) {
       content: '❌ Du bist keinem registrierten Team als Vereinsmanager oder Co-VM zugeordnet.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
-const ban = getTeamBan(userTeam, interaction.user.id);
+  const ban = getTeamBan(userTeam, interaction.user.id);
 
-if (ban) {
-  await interaction.reply({
-    content: getBanReasonText(ban),
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
+  if (ban) {
+    await interaction.reply({
+      content: getBanReasonText(ban),
+      flags: MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
 
   const backups = getBackupTeams(event);
   const backupTeam = backups.find(team => team.teamId === userTeam.id);
@@ -1261,6 +1315,7 @@ if (ban) {
       content: '❌ Nur Teams, die aktuell als Backup geführt werden, dürfen diese Buttons benutzen.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
@@ -1274,6 +1329,7 @@ if (ban) {
       content: '❌ Du darfst diese Backup-Aktion nicht ausführen.',
       flags: MessageFlags.Ephemeral,
     });
+
     return true;
   }
 
@@ -1345,10 +1401,10 @@ module.exports = {
     return false;
   },
 
-    async handleMessage() {
+  async handleMessage() {
     return false;
   },
 
   refreshEvent,
-removeTeamFromOpenCheckinsById,
+  removeTeamFromOpenCheckinsById,
 };
