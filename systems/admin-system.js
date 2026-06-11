@@ -34,6 +34,7 @@ const LOGOS_DIR = path.join(process.cwd(), 'data', 'logos');
 
 const MANAGERS_WITHOUT_TEAM_CHANNEL_ID = '1487537056245616802';
 const TEAM_REGISTER_CHANNEL_ID = '1487537568751816764';
+const LOGO_HELP_USER_ID = '1425580097661833443';
 
 let clientRef = null;
 
@@ -410,7 +411,8 @@ function buildLiveControlEmbed() {
 '• Gruppenergebnis manuell setzen',
         '• K.O.-Ergebnis manuell setzen',
         '• Manager ohne Team anzeigen',
-        '• Freilos-Team hinzufügen',
+'• Teams ohne Logo anpingen',
+'• Freilos-Team hinzufügen',
 '• Freilos-Team entfernen',
 '• Ceremony-Testbild posten',
       ].join('\n')
@@ -486,9 +488,15 @@ const row4 = new ActionRowBuilder().addComponents(
     .setCustomId('live_test_ceremony')
     .setLabel('🧪 Ceremony Test')
     .setStyle(ButtonStyle.Secondary)
+
+ const row5 = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId('live_teams_without_logo')
+    .setLabel('🖼️ Teams ohne Logo')
+    .setStyle(ButtonStyle.Secondary)
 );
 
-  return [row1, row2, row3, row4];
+  return [row1, row2, row3, row4, row5];
 }
 
 async function ensureLiveControlPanel() {
@@ -946,6 +954,79 @@ async function getManagersWithoutTeam(guild) {
   return [...managersWithoutTeam.values()].sort((a, b) =>
     a.displayName.localeCompare(b.displayName, 'de')
   );
+}
+
+function teamHasLogo(team) {
+  if (!team.logoFile) return false;
+
+  const logoPath = path.join(LOGOS_DIR, team.logoFile);
+  return fs.existsSync(logoPath);
+}
+
+function getTeamsWithoutLogo() {
+  return loadTeams()
+    .filter(team => !team.isTest && !team.isByeTeam)
+    .filter(team => team.managerId)
+    .filter(team => !teamHasLogo(team))
+    .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de'));
+}
+
+function buildTeamsWithoutLogoTextChunks(teams) {
+  if (!teams.length) {
+    return [
+      [
+        '🖼️ **Logo-Kontrolle**',
+        '',
+        '✅ Alle registrierten Teams haben aktuell ein Logo hinterlegt.',
+      ].join('\n'),
+    ];
+  }
+
+  const header = [
+    '🖼️ **Logo-Kontrolle**',
+    '',
+    'Die folgenden Teams haben aktuell noch **kein Teamlogo** hinterlegt.',
+    '',
+    `➡️ Bitte geht in <#${TEAM_REGISTER_CHANNEL_ID}> auf **Mein Team** und klickt dort auf **Logo hochladen/ändern**.`,
+    'Danach einfach euer Logo als Bild direkt in den Kanal posten.',
+    '',
+    'Ein richtiges Logo ist wichtig, weil wir für die Gewinner-Ehrung saubere Teamlogos verwenden. Das sieht später deutlich besser aus als ein Screenshot oder irgendein abgeschnittenes Bild.',
+    '',
+    `Falls ihr noch kein richtiges Logo habt, meldet euch bei <@${LOGO_HELP_USER_ID}>. Ich helfe euch gerne, eins zu erstellen.`,
+    '',
+    `📊 **Teams ohne Logo:** ${teams.length}`,
+    '',
+  ].join('\n');
+
+  const lines = teams.map((team, index) => {
+    const mentions = [
+      team.managerId,
+      ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+    ]
+      .filter(Boolean)
+      .map(id => `<@${id}>`)
+      .join(' ');
+
+    return `**${index + 1}. ${team.clubName}** ${mentions}`;
+  });
+
+  const chunks = [];
+  let current = header;
+
+  for (const line of lines) {
+    const next = `${current}\n${line}`;
+
+    if (next.length > 1900) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) chunks.push(current);
+
+  return chunks;
 }
 
 function buildManagersWithoutTeamTextChunks(members) {
@@ -1778,7 +1859,8 @@ module.exports = {
 'live_manual_group_result',
           'live_manual_ko_result',
           'live_managers_without_team',
-          'live_add_bye_team',
+'live_teams_without_logo',
+'live_add_bye_team',
           'live_remove_bye_team',
           'live_test_ceremony',
         ].includes(interaction.customId) ||
@@ -1842,6 +1924,42 @@ module.exports = {
         return true;
       }
 
+if (interaction.customId === 'live_teams_without_logo') {
+  try {
+    const teams = getTeamsWithoutLogo();
+    const channel = await fetchChannel(TEAM_REGISTER_CHANNEL_ID);
+
+    if (!channel) {
+      await interaction.reply({
+        content: '❌ Team-Registrieren-Kanal nicht gefunden.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const chunks = buildTeamsWithoutLogoTextChunks(teams);
+
+    for (const chunk of chunks) {
+      await channel.send({
+        content: chunk,
+        allowedMentions: { parse: ['users'] },
+      });
+    }
+
+    await interaction.reply({
+      content: `✅ Logo-Erinnerung wurde in <#${TEAM_REGISTER_CHANNEL_ID}> gepostet.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error) {
+    await interaction.reply({
+      content: `❌ ${error.message}`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  return true;
+}
+      
       if (interaction.customId === 'live_team_details') {
         const rows = buildTeamSelectRows('live_team_details_select', 'Team für Details auswählen');
 
