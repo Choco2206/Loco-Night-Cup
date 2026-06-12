@@ -344,6 +344,42 @@ function getCycleConfig(type) {
   const schedule = getDaySchedule(type);
   const resetAt = getNextBoundary(dayConfig.resetDay, 7);
 
+  // EINMALIGER NOTFALL-FIX FÜR FREITAG NACHT
+  // Check-in bis 01:20, Auslosung 01:25, Start 01:25
+  if (type === 'friday' && process.env.FRIDAY_EMERGENCY_0125 === 'true') {
+    const now = new Date();
+
+    const eventDate = new Date(now);
+    eventDate.setHours(0, 0, 0, 0);
+
+    const deadline = setTimeOnDate(eventDate, 1, 20);
+    const lateDeadline = setTimeOnDate(eventDate, 1, 20);
+    const drawAt = setTimeOnDate(eventDate, 1, 25);
+    const start = setTimeOnDate(eventDate, 1, 25);
+
+    const resetAtEmergency = new Date(eventDate);
+    resetAtEmergency.setHours(7, 0, 0, 0);
+
+    return {
+      key: `friday-emergency-${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`,
+      type,
+      label: dayConfig.label,
+      channelId: dayConfig.channelId,
+      deadlineAt: deadline.getTime(),
+      drawAt: drawAt.getTime(),
+      lateDeadlineAt: lateDeadline.getTime(),
+      startAt: start.getTime(),
+      resetAt: resetAtEmergency.getTime(),
+      displayDate: formatDateGerman(eventDate),
+      startLine: dayConfig.startLine,
+
+      deadlineText: '01:20',
+      lateDeadlineText: '01:20',
+      drawText: '01:25',
+      startText: '01:25',
+    };
+  }
+
   const eventDate = new Date(resetAt);
   eventDate.setDate(eventDate.getDate() - 1);
 
