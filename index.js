@@ -28,9 +28,9 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-async function emergencyResetFriday0035(message) {
+async function emergencyResetFriday0100(message) {
   if (message.author.bot) return false;
-  if (message.content !== '!fixfriday0035') return false;
+  if (message.content !== '!fixfriday0100') return false;
 
   const adminRoleId = process.env.ADMIN_ROLE_ID;
 
@@ -62,21 +62,38 @@ async function emergencyResetFriday0035(message) {
   const results = readJson(files.results, {});
   const ko = readJson(files.ko, {});
 
-  if (!checkins.friday) {
-    await message.reply('❌ Kein Friday-Check-in gefunden. Teams konnten nicht übernommen werden.');
-    return true;
-  }
-
   groups.friday = null;
   results.friday = null;
   ko.friday = null;
 
-  const start = new Date();
-  start.setHours(0, 35, 0, 0);
+  const checkinEnd = new Date();
+  checkinEnd.setHours(0, 55, 0, 0);
 
-  checkins.friday.startText = '00:35';
-  checkins.friday.startAt = start.getTime();
-  checkins.friday.cycleKey = `friday-emergency-${Date.now()}`;
+  const groupDraw = new Date();
+  groupDraw.setHours(1, 0, 0, 0);
+
+  checkins.friday = {
+    ...(checkins.friday || {}),
+    teams: [],
+    backups: [],
+    status: 'open',
+    closed: false,
+    locked: false,
+    started: false,
+    completed: false,
+    archived: false,
+    format: null,
+
+    deadlineText: '00:55',
+    deadlineAt: checkinEnd.getTime(),
+
+    startText: '01:00',
+    startAt: groupDraw.getTime(),
+
+    cycleKey: `friday-emergency-${Date.now()}`,
+    emergencyRestart: true,
+    emergencyRestartAt: new Date().toISOString(),
+  };
 
   writeJson(files.checkins, checkins);
   writeJson(files.groups, groups);
@@ -84,13 +101,13 @@ async function emergencyResetFriday0035(message) {
   writeJson(files.ko, ko);
 
   await message.reply([
-    '✅ **Freitag wurde zurückgesetzt.**',
+    '✅ **Freitag wurde komplett neu geöffnet.**',
     '',
-    'Teams und Check-ins wurden behalten.',
-    'Gruppen, Ergebnisse und K.O. wurden gelöscht.',
-    'Start wurde auf **00:35 Uhr** gesetzt.',
-    '',
-    'Jetzt Bot einmal neu starten oder kurz warten.'
+    'Alte Gruppen, Ergebnisse und K.O.-Phase wurden gelöscht.',
+    'Der Check-in ist wieder offen.',
+    'Alle Teams müssen sich neu anmelden.',
+    'Check-in offen bis **00:55 Uhr**.',
+    'Gruppenauslosung um **01:00 Uhr**.',
   ].join('\n'));
 
   return true;
@@ -193,7 +210,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 client.on(Events.MessageCreate, async message => {
   try {
-    if (await emergencyResetFriday0035(message)) return;
+    if (await emergencyResetFriday0100(message)) return;
 
     if (teamSystem.handleMessage) {
       const handled = await teamSystem.handleMessage(message);
