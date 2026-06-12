@@ -1,5 +1,8 @@
 require('dotenv').config();
 
+const fs = require('fs');
+const path = require('path');
+
 const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
 const { ensureDataFolders, ensureJsonFiles } = require('./utils/storage');
 
@@ -24,6 +27,74 @@ const client = new Client({
   ],
   partials: [Partials.Channel],
 });
+
+async function emergencyResetFriday0035(message) {
+  if (message.author.bot) return false;
+  if (message.content !== '!fixfriday0035') return false;
+
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+
+  if (adminRoleId && !message.member?.roles?.cache?.has(adminRoleId)) {
+    await message.reply('❌ Nur Admins dürfen diesen Notfall-Reset ausführen.');
+    return true;
+  }
+
+  const base = process.cwd();
+
+  const files = {
+    checkins: path.join(base, 'data', 'checkins.json'),
+    groups: path.join(base, 'data', 'groups.json'),
+    results: path.join(base, 'data', 'results.json'),
+    ko: path.join(base, 'data', 'ko.json'),
+  };
+
+  function readJson(file, fallback) {
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, 'utf8') || JSON.stringify(fallback));
+  }
+
+  function writeJson(file, data) {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+  }
+
+  const checkins = readJson(files.checkins, {});
+  const groups = readJson(files.groups, {});
+  const results = readJson(files.results, {});
+  const ko = readJson(files.ko, {});
+
+  if (!checkins.friday) {
+    await message.reply('❌ Kein Friday-Check-in gefunden. Teams konnten nicht übernommen werden.');
+    return true;
+  }
+
+  groups.friday = null;
+  results.friday = null;
+  ko.friday = null;
+
+  const start = new Date();
+  start.setHours(0, 35, 0, 0);
+
+  checkins.friday.startText = '00:35';
+  checkins.friday.startAt = start.getTime();
+  checkins.friday.cycleKey = `friday-emergency-${Date.now()}`;
+
+  writeJson(files.checkins, checkins);
+  writeJson(files.groups, groups);
+  writeJson(files.results, results);
+  writeJson(files.ko, ko);
+
+  await message.reply([
+    '✅ **Freitag wurde zurückgesetzt.**',
+    '',
+    'Teams und Check-ins wurden behalten.',
+    'Gruppen, Ergebnisse und K.O. wurden gelöscht.',
+    'Start wurde auf **00:35 Uhr** gesetzt.',
+    '',
+    'Jetzt Bot einmal neu starten oder kurz warten.'
+  ].join('\n'));
+
+  return true;
+}
 
 client.once(Events.ClientReady, async readyClient => {
   try {
@@ -122,6 +193,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
 client.on(Events.MessageCreate, async message => {
   try {
+    if (await emergencyResetFriday0035(message)) return;
+
     if (teamSystem.handleMessage) {
       const handled = await teamSystem.handleMessage(message);
       if (handled) return;
