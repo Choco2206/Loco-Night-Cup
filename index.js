@@ -67,10 +67,10 @@ async function emergencyResetFriday0100(message) {
   ko.friday = null;
 
   const checkinEnd = new Date();
-  checkinEnd.setHours(0, 55, 0, 0);
+checkinEnd.setHours(1, 20, 0, 0);
 
-  const groupDraw = new Date();
-  groupDraw.setHours(1, 0, 0, 0);
+const groupDraw = new Date();
+groupDraw.setHours(1, 25, 0, 0);
 
   checkins.friday = {
     ...(checkins.friday || {}),
@@ -94,11 +94,11 @@ scheduleCreated: false,
     archived: false,
     format: null,
 
-    deadlineText: '00:55',
-    deadlineAt: checkinEnd.getTime(),
+    deadlineTextdeadlineText: '01:20',
+deadlineAt: checkinEnd.getTime(),
 
-    startText: '01:00',
-    startAt: groupDraw.getTime(),
+startText: '01:25',
+startAt: groupDraw.getTime(),
 
     cycleKey: `friday-emergency-${Date.now()}`,
     emergencyRestart: true,
@@ -116,8 +116,8 @@ scheduleCreated: false,
     'Alte Gruppen, Ergebnisse und K.O.-Phase wurden gelöscht.',
     'Der Check-in ist wieder offen.',
     'Alle Teams müssen sich neu anmelden.',
-    'Check-in offen bis **00:55 Uhr**.',
-    'Gruppenauslosung um **01:00 Uhr**.',
+    'Check-in offen bis **01:20 Uhr**.',
+'Gruppenauslosung um **01:25 Uhr**.',
   ].join('\n'));
 
   return true;
