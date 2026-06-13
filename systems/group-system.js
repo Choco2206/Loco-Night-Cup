@@ -661,7 +661,21 @@ async function drawGroupsForEvent(eventKey) {
   if (event.status !== 'confirmed') return;
 
   const format = getActualFormat(event.teams.length);
-  if (!format) return;
+if (!format) return;
+
+// Aktives Turnierformat speichern
+event.format = format;
+event.activeTeamIds = event.teams
+  .slice(0, format)
+  .map(team => team.teamId);
+
+event.backupTeamIds = event.teams
+  .slice(format)
+  .map(team => team.teamId);
+
+saveCheckins(checkins);
+
+const existing = groupsData[eventKey];
 
   const existing = groupsData[eventKey];
 
