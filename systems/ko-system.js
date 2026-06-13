@@ -17,8 +17,9 @@ const { sendTournamentCeremonyIfReady } = require('./announcement');
 const GROUPS_FILE = path.join(process.cwd(), 'data', 'groups.json');
 const RESULTS_FILE = path.join(process.cwd(), 'data', 'results.json');
 const KO_FILE = path.join(process.cwd(), 'data', 'ko.json');
-const KO_CLEANUP_GRACE_MS = 0;
 const CHECKINS_FILE = path.join(process.cwd(), 'data', 'checkins.json');
+
+const KO_CLEANUP_GRACE_MS = 0;
 const INVITE_WINDOW_MINUTES = 5;
 const KO_FIRST_REMINDER_AFTER_INVITE_MS = 20 * 60 * 1000;
 const KO_REMINDER_INTERVAL_MS = 5 * 60 * 1000;
@@ -27,6 +28,7 @@ const KO_NEXT_ROUND_BUFFER_MS = 0;
 let clientRef = null;
 let intervalRef = null;
 let koProcessing = false;
+
 const EVENT_TYPES = [
   'monday',
   'tuesday',
@@ -324,37 +326,7 @@ function getAdminPing() {
 function isAdmin(interaction) {
   const adminRoleId = process.env.ADMIN_ROLE_ID;
   if (!adminRoleId) return false;
-
   return interaction.member?.roles?.cache?.has(adminRoleId);
-}
-
-async function sendKoDisputeNotice(eventKey, roundKey, match, round) {
-  const channel = await fetchChannel(round.channelId);
-  if (!channel) return null;
-
-  const message = await channel.send({
-    content: [
-      `🚨 ${getAdminPing()} **K.O.-Ergebnis stimmt nicht überein**`,
-      '',
-      `**${getRoundLabel(roundKey)}**`,
-      `**${match.homeClubName} vs ${match.awayClubName}**`,
-      '',
-      `Bitte prüfen und per **Admin-Ergebnis** final eintragen.`,
-    ].join('\n'),
-  });
-
-  return message.id;
-}
-
-function getDynamicWindowFromNow() {
-  const start = getCurrentMinutes();
-  const end = start + INVITE_WINDOW_MINUTES;
-
-  return {
-    startText: formatMinutes(start),
-    endText: formatMinutes(end),
-    windowText: `${formatMinutes(start)}–${formatMinutes(end)}`,
-  };
 }
 
 function isEventExpired(event) {
@@ -418,36 +390,6 @@ function getOpenKoMatches(matches) {
   return matches.filter(match => match.status !== 'confirmed');
 }
 
-function buildKoOpenMatchesText(matches) {
-  if (!matches.length) return 'Keine offenen Spiele gefunden.';
-
-  return matches
-    .map(match => {
-      const homeMentions = [
-        match.homeManagerId,
-        ...(match.homeCoManagerIds || []),
-      ]
-        .filter(Boolean)
-        .map(id => `<@${id}>`)
-        .join(' ');
-
-      const awayMentions = [
-        match.awayManagerId,
-        ...(match.awayCoManagerIds || []),
-      ]
-        .filter(Boolean)
-        .map(id => `<@${id}>`)
-        .join(' ');
-
-      return [
-        `**${match.homeClubName} vs ${match.awayClubName}**`,
-        homeMentions || '*Keine VM/Co-VM gefunden*',
-        awayMentions || '*Keine VM/Co-VM gefunden*',
-      ].join('\n');
-    })
-    .join('\n\n');
-}
-
 function cloneTeam(row) {
   return {
     teamId: row.teamId,
@@ -483,11 +425,93 @@ function getUserIdsFromMatches(matches) {
 
 function buildKoRoundMentions(matches) {
   const userIds = getUserIdsFromMatches(matches);
-
-  return userIds.length
-    ? userIds.map(id => `<@${id}>`).join(' ')
-    : '';
+  return userIds.length ? userIds.map(id => `<@${id}>`).join(' ') : '';
 }
+
+function buildKoOpenMatchesText(matches) {
+  if (!matches.length) return 'Keine offenen Spiele gefunden.';
+
+  return matches
+    .map(match => {
+      const homeMentions = [
+        match.homeManagerId,
+        ...(match.homeCoManagerIds || []),
+      ]
+        .filter(Boolean)
+        .map(id => `<@${id}>`)
+        .join(' ');
+
+      const awayMentions = [
+        match.awayManagerId,
+        ...(match.awayCoManagerIds || []),
+      ]
+        .filter(Boolean)
+        .map(id => `<@${id}>`)
+        .join(' ');
+
+      return [
+        `**${match.homeClubName} vs ${match.awayClubName}**`,
+        homeMentions || '*Keine VM/Co-VM gefunden*',
+        awayMentions || '*Keine VM/Co-VM gefunden*',
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
+// =========================
+// GROUP FINISH GUARD
+// =========================
+
+function allGroupMatchesConfirmed(eventKey) {
+  const groupsData = loadGroups();
+  const resultsData = loadResults();
+
+  const groupEvent = groupsData[eventKey];
+  const resultEvent = resultsData[eventKey];
+
+  if (!groupEvent || !groupEvent.groups) return false;
+  if (!resultEvent || !resultEvent.groups) return false;
+
+  if (
+    groupEvent.cycleKey &&
+    resultEvent.cycleKey &&
+    groupEvent.cycleKey !== resultEvent.cycleKey
+  ) {
+    return false;
+  }
+
+  const groupLetters = Object.keys(groupEvent.groups).sort();
+
+  if (groupLetters.length === 0) return false;
+
+  for (const letter of groupLetters) {
+    const drawnGroup = groupEvent.groups[letter];
+    const resultGroup = resultEvent.groups[letter];
+
+    if (!drawnGroup || !Array.isArray(drawnGroup.matches)) return false;
+    if (!resultGroup || !Array.isArray(resultGroup.matches)) return false;
+
+    if (drawnGroup.matches.length === 0) return false;
+
+    if (resultGroup.matches.length !== drawnGroup.matches.length) {
+      return false;
+    }
+
+    const confirmedMatches = resultGroup.matches.filter(match => {
+      return match.status === 'confirmed';
+    });
+
+    if (confirmedMatches.length !== drawnGroup.matches.length) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// =========================
+// QUALIFICATION
+// =========================
 
 function getQualifiedTeamsFromGroups(eventKey) {
   const groupsData = loadGroups();
@@ -498,6 +522,7 @@ function getQualifiedTeamsFromGroups(eventKey) {
   const groupLetters = Object.keys(event.groups).sort();
 
   const groupPlacements = {};
+
   for (const letter of groupLetters) {
     const rows = sortRows(event.groups[letter].rows || []);
     groupPlacements[letter] = rows;
@@ -526,31 +551,31 @@ function getQualifiedTeamsFromGroups(eventKey) {
   }
 
   if (format === 24) {
-  const winners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][0]));
-  const runners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][1]));
+    const winners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][0]));
+    const runners = groupLetters.map(letter => cloneTeam(groupPlacements[letter][1]));
 
-  const thirdRows = groupLetters
-    .map(letter => groupPlacements[letter][2])
-    .filter(Boolean);
+    const thirdRows = groupLetters
+      .map(letter => groupPlacements[letter][2])
+      .filter(Boolean);
 
-  const bestThirds = sortRows(thirdRows)
-    .slice(0, 4)
-    .map(cloneTeam);
+    const bestThirds = sortRows(thirdRows)
+      .slice(0, 4)
+      .map(cloneTeam);
 
-  return {
-    format,
-    roundOf16: [
-      [winners[0], bestThirds[3]],
-      [winners[1], bestThirds[2]],
-      [winners[2], bestThirds[1]],
-      [winners[3], bestThirds[0]],
-      [winners[4], runners[5]],
-      [winners[5], runners[4]],
-      [runners[0], runners[3]],
-      [runners[1], runners[2]],
-    ],
-  };
-}
+    return {
+      format,
+      roundOf16: [
+        [winners[0], bestThirds[3]],
+        [winners[1], bestThirds[2]],
+        [winners[2], bestThirds[1]],
+        [winners[3], bestThirds[0]],
+        [winners[4], runners[5]],
+        [winners[5], runners[4]],
+        [runners[0], runners[3]],
+        [runners[1], runners[2]],
+      ],
+    };
+  }
 
   if (format === 32) {
     return {
@@ -595,12 +620,12 @@ function createKoMatches(format, roundKey, pairs) {
       reportedScore: null,
       confirmed: false,
       confirmationMessageId: null,
-disputeMessageId: null,
-teamReports: {},
-waitingForTeamId: null,
-waitingForClubName: null,
-winnerTeamId: null,
-loserTeamId: null,
+      disputeMessageId: null,
+      teamReports: {},
+      waitingForTeamId: null,
+      waitingForClubName: null,
+      winnerTeamId: null,
+      loserTeamId: null,
     };
   });
 }
@@ -621,7 +646,7 @@ async function fetchChannel(channelId) {
 async function fetchMessage(channel, messageId) {
   try {
     return await channel.messages.fetch(messageId);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -637,9 +662,38 @@ async function deleteMessageIfExists(channelId, messageId) {
 
   try {
     await message.delete();
-  } catch (error) {
+  } catch {
     console.warn('⚠️ Nachricht konnte nicht gelöscht werden.');
   }
+}
+
+async function sendKoDisputeNotice(eventKey, roundKey, match, round) {
+  const channel = await fetchChannel(round.channelId);
+  if (!channel) return null;
+
+  const message = await channel.send({
+    content: [
+      `🚨 ${getAdminPing()} **K.O.-Ergebnis stimmt nicht überein**`,
+      '',
+      `**${getRoundLabel(roundKey)}**`,
+      `**${match.homeClubName} vs ${match.awayClubName}**`,
+      '',
+      `Bitte prüfen und per **Admin-Ergebnis** final eintragen.`,
+    ].join('\n'),
+  });
+
+  return message.id;
+}
+
+function getDynamicWindowFromNow() {
+  const start = getCurrentMinutes();
+  const end = start + INVITE_WINDOW_MINUTES;
+
+  return {
+    startText: formatMinutes(start),
+    endText: formatMinutes(end),
+    windowText: `${formatMinutes(start)}–${formatMinutes(end)}`,
+  };
 }
 
 async function sendKoReleaseMessage(eventKey, roundKey, round, startText, endText) {
@@ -693,7 +747,6 @@ async function purgeKoChannel(channelId) {
 
     do {
       messages = await channel.messages.fetch({ limit: 100 });
-
       const deletable = messages.filter(message => !message.pinned);
 
       if (deletable.size > 0) {
@@ -702,50 +755,6 @@ async function purgeKoChannel(channelId) {
     } while (messages.size === 100);
   } catch (error) {
     console.error(`❌ K.O.-Kanal konnte nicht geleert werden: ${channelId}`, error);
-  }
-}
-
-async function cleanupKoAfterReset() {
-  const koData = loadKo();
-  const groupsData = loadGroups();
-const checkinsData = loadCheckins();
-  let changed = false;
-
-  for (const eventKey of EVENT_TYPES) {
-    const event = koData[eventKey];
-    if (!event || !event.rounds) continue;
-
-    if (event.koChannelsCleanedAt) continue;
-
-    const resetAt =
-  event.resetAt ||
-  groupsData[eventKey]?.resetAt ||
-  checkinsData[eventKey]?.resetAt;
-    if (!resetAt) continue;
-
-    if (Date.now() < Number(resetAt) + KO_CLEANUP_GRACE_MS) continue;
-
-    for (const round of Object.values(event.rounds)) {
-      if (round?.matches) {
-        await removeKoRolesFromMatches(round.matches);
-      }
-
-      if (round?.channelId) {
-        await purgeKoChannel(round.channelId);
-      }
-    }
-
-    event.resetAt = resetAt;
-    event.koRolesCleanedAt = new Date().toISOString();
-    event.koChannelsCleanedAt = new Date().toISOString();
-
-    changed = true;
-
-    console.log(`✅ K.O.-Kanäle für ${event.label} um 07:00 Uhr bereinigt.`);
-  }
-
-  if (changed) {
-    saveKo(koData);
   }
 }
 
@@ -778,7 +787,7 @@ async function removeAllKoRolesFromMember(member) {
 
     try {
       await member.roles.remove(roleId);
-    } catch (error) {
+    } catch {
       console.warn(`⚠️ K.O.-Rolle konnte nicht entfernt werden: ${member.id} / ${roleId}`);
     }
   }
@@ -818,7 +827,7 @@ async function assignKoRoleToUserIds(roundKey, userIds) {
       if (!member.roles.cache.has(role.id)) {
         await member.roles.add(role);
       }
-    } catch (error) {
+    } catch {
       console.warn(`⚠️ K.O.-Rolle ${roundKey} konnte nicht vergeben werden an User ${userId}`);
     }
   }
@@ -836,7 +845,7 @@ async function removeKoRolesFromMatches(matches) {
       if (!member) continue;
 
       await removeAllKoRolesFromMember(member);
-    } catch (error) {
+    } catch {
       console.warn(`⚠️ K.O.-Rollen konnten nicht entfernt werden bei User ${userId}`);
     }
   }
@@ -856,39 +865,39 @@ function buildRoundEmbed(eventLabel, roundKey, matches) {
     let status = '⏳ Offen';
 
     if (match.status === 'awaiting' && match.waitingForClubName) {
-  status = `⏳ Wartet auf Eintragung von ${match.waitingForClubName}`;
-}
+      status = `⏳ Wartet auf Eintragung von ${match.waitingForClubName}`;
+    }
 
-if (match.status === 'disputed') {
-  status = '🚨 In Klärung mit Admin';
-}
+    if (match.status === 'disputed') {
+      status = '🚨 In Klärung mit Admin';
+    }
 
-if (match.status === 'confirmed' && match.reportedScore) {
-  status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
-}
+    if (match.status === 'confirmed' && match.reportedScore) {
+      status = `✅ Bestätigt: ${match.reportedScore.home}:${match.reportedScore.away}`;
+    }
 
     return [
       `**${match.matchNumber}. ${match.homeClubName} vs ${match.awayClubName}**`,
       `🕒 ${match.timeWindow}`,
-      `${status}`,
+      status,
     ].join('\n');
   });
 
   return new EmbedBuilder()
     .setTitle(`🏆 ${eventLabel} • ${getRoundLabel(roundKey)}`)
     .setDescription(
-  [
-    'Ergebnisse werden über den Button darunter eingetragen.',
-    '',
-    ...lines,
-    ...(roundKey === 'semiFinal'
-      ? [
-          '',
-          '⚠️ **Hinweis:** Die Verlierer aus dem Halbfinale spielen danach noch das **Spiel um Platz 3**.',
-        ]
-      : []),
-  ].join('\n\n')
-)
+      [
+        'Ergebnisse werden über den Button darunter eingetragen.',
+        '',
+        ...lines,
+        ...(roundKey === 'semiFinal'
+          ? [
+              '',
+              '⚠️ **Hinweis:** Die Verlierer aus dem Halbfinale spielen danach noch das **Spiel um Platz 3**.',
+            ]
+          : []),
+      ].join('\n\n')
+    )
     .setColor(0xff0000);
 }
 
@@ -898,6 +907,7 @@ function buildRoundButtons(eventKey, roundKey) {
       .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
       .setLabel('⚽ Ergebnis eintragen')
       .setStyle(ButtonStyle.Primary),
+
     new ButtonBuilder()
       .setCustomId(`ko_admin_result_open:${eventKey}:${roundKey}`)
       .setLabel('🛠️ Admin-Ergebnis')
@@ -909,7 +919,9 @@ async function sendOrEditRoundMessage(eventKey, roundKey, roundData, eventLabel)
   const channel = await fetchChannel(roundData.channelId);
   if (!channel) return roundData;
 
-  const existing = roundData.messageId ? await fetchMessage(channel, roundData.messageId) : null;
+  const existing = roundData.messageId
+    ? await fetchMessage(channel, roundData.messageId)
+    : null;
 
   if (!existing) {
     const created = await channel.send({
@@ -933,76 +945,30 @@ async function sendOrEditRoundMessage(eventKey, roundKey, roundData, eventLabel)
 // AUTO GENERATION
 // =========================
 
-function allGroupMatchesConfirmed(eventKey) {
-  const groupsData = loadGroups();
-  const resultsData = loadResults();
-
-  const groupEvent = groupsData[eventKey];
-  const resultEvent = resultsData[eventKey];
-
-  if (!groupEvent || !groupEvent.groups) return false;
-  if (!resultEvent || !resultEvent.groups) return false;
-
-  if (
-    groupEvent.cycleKey &&
-    resultEvent.cycleKey &&
-    groupEvent.cycleKey !== resultEvent.cycleKey
-  ) {
-    return false;
-  }
-
-  const groupLetters = Object.keys(groupEvent.groups).sort();
-
-  if (groupLetters.length === 0) return false;
-
-  for (const letter of groupLetters) {
-    const drawnGroup = groupEvent.groups[letter];
-    const resultGroup = resultEvent.groups[letter];
-
-    if (!drawnGroup || !Array.isArray(drawnGroup.matches)) return false;
-    if (!resultGroup || !Array.isArray(resultGroup.matches)) return false;
-
-    if (drawnGroup.matches.length === 0) return false;
-
-    if (resultGroup.matches.length !== drawnGroup.matches.length) {
-      return false;
-    }
-
-    const confirmedMatches = resultGroup.matches.filter(match => {
-      return match.status === 'confirmed';
-    });
-
-    if (confirmedMatches.length !== drawnGroup.matches.length) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 async function createInitialKoRound(eventKey) {
+  if (!allGroupMatchesConfirmed(eventKey)) return;
+
   const koData = loadKo();
   const groupsData = loadGroups();
   const groupEvent = groupsData[eventKey];
 
-if (!groupEvent) return;
-if (isEventInactive(groupEvent)) return;
-if (koData[eventKey] && koData[eventKey].cycleKey === groupEvent.cycleKey) return;
-if (!allGroupMatchesConfirmed(eventKey)) return;
+  if (!groupEvent) return;
+  if (isEventInactive(groupEvent)) return;
+  if (koData[eventKey] && koData[eventKey].cycleKey === groupEvent.cycleKey) return;
 
   const qualified = getQualifiedTeamsFromGroups(eventKey);
   if (!qualified) return;
 
   const eventStore = {
-  cycleKey: groupEvent.cycleKey,
-  label: groupEvent.label,
-  format: qualified.format,
-  createdAt: new Date().toISOString(),
-  resetAt: groupEvent.resetAt,
-  koChannelsCleanedAt: null,
-  koRolesCleanedAt: null,
-  rounds: {},
-};
+    cycleKey: groupEvent.cycleKey,
+    label: groupEvent.label,
+    format: qualified.format,
+    createdAt: new Date().toISOString(),
+    resetAt: groupEvent.resetAt,
+    koChannelsCleanedAt: null,
+    koRolesCleanedAt: null,
+    rounds: {},
+  };
 
   if (qualified.semiFinal) {
     eventStore.rounds.semiFinal = {
@@ -1011,59 +977,54 @@ if (!allGroupMatchesConfirmed(eventKey)) return;
       messageId: null,
       matches: createKoMatches(qualified.format, 'semiFinal', qualified.semiFinal),
       completed: false,
-release: {
-  released: false,
-  releasedAt: null,
-  inviteStart: null,
-  inviteEnd: null,
-  lastReminderAt: null,
-},
+      release: {
+        released: false,
+        releasedAt: null,
+        inviteStart: null,
+        inviteEnd: null,
+        lastReminderAt: null,
+      },
     };
 
     await assignKoRoleToMatches('semiFinal', eventStore.rounds.semiFinal.matches);
-
   }
 
   if (qualified.quarterFinal) {
     eventStore.rounds.quarterFinal = {
-  channelId: getRoundChannelId('quarterFinal'),
-  roleId: getRoundRoleId('quarterFinal'),
-  messageId: null,
-  matches: createKoMatches(qualified.format, 'quarterFinal', qualified.quarterFinal),
-  completed: false,
-  release: {
-    released: false,
-    releasedAt: null,
-    inviteStart: null,
-    inviteEnd: null,
-    lastReminderAt: null,
-  },
-};
+      channelId: getRoundChannelId('quarterFinal'),
+      roleId: getRoundRoleId('quarterFinal'),
+      messageId: null,
+      matches: createKoMatches(qualified.format, 'quarterFinal', qualified.quarterFinal),
+      completed: false,
+      release: {
+        released: false,
+        releasedAt: null,
+        inviteStart: null,
+        inviteEnd: null,
+        lastReminderAt: null,
+      },
+    };
 
     await assignKoRoleToMatches('quarterFinal', eventStore.rounds.quarterFinal.matches);
-
-    
   }
 
   if (qualified.roundOf16) {
     eventStore.rounds.roundOf16 = {
-  channelId: getRoundChannelId('roundOf16'),
-  roleId: getRoundRoleId('roundOf16'),
-  messageId: null,
-  matches: createKoMatches(qualified.format, 'roundOf16', qualified.roundOf16),
-  completed: false,
-  release: {
-    released: false,
-    releasedAt: null,
-    inviteStart: null,
-    inviteEnd: null,
-    lastReminderAt: null,
-  },
-};
+      channelId: getRoundChannelId('roundOf16'),
+      roleId: getRoundRoleId('roundOf16'),
+      messageId: null,
+      matches: createKoMatches(qualified.format, 'roundOf16', qualified.roundOf16),
+      completed: false,
+      release: {
+        released: false,
+        releasedAt: null,
+        inviteStart: null,
+        inviteEnd: null,
+        lastReminderAt: null,
+      },
+    };
 
     await assignKoRoleToMatches('roundOf16', eventStore.rounds.roundOf16.matches);
-
-    
   }
 
   koData[eventKey] = eventStore;
@@ -1073,7 +1034,11 @@ release: {
 }
 
 function roundIsComplete(roundData) {
-  return roundData.matches.every(match => match.status === 'confirmed');
+  return (
+    Array.isArray(roundData?.matches) &&
+    roundData.matches.length > 0 &&
+    roundData.matches.every(match => match.status === 'confirmed')
+  );
 }
 
 function getWinnerStub(match) {
@@ -1133,13 +1098,21 @@ function getUserIdsFromTeams(teams) {
 }
 
 async function advanceKoIfReady(eventKey) {
+  if (!allGroupMatchesConfirmed(eventKey)) return;
+
   const koData = loadKo();
   const event = koData[eventKey];
+
   if (!event || !event.rounds) return;
   if (isEventInactive(event)) return;
 
-  if (event.rounds.roundOf16 && roundIsComplete(event.rounds.roundOf16) && !event.rounds.quarterFinal) {
-        if (!canAdvanceAfterBuffer(event.rounds.roundOf16)) return;
+  if (
+    event.rounds.roundOf16 &&
+    roundIsComplete(event.rounds.roundOf16) &&
+    !event.rounds.quarterFinal
+  ) {
+    if (!canAdvanceAfterBuffer(event.rounds.roundOf16)) return;
+
     const winners = event.rounds.roundOf16.matches.map(getWinnerStub).filter(Boolean);
 
     if (winners.length === 8) {
@@ -1159,24 +1132,29 @@ async function advanceKoIfReady(eventKey) {
         matches: createKoMatches(event.format, 'quarterFinal', pairs),
         completed: false,
         release: {
-  released: false,
-  releasedAt: null,
-  inviteStart: null,
-  inviteEnd: null,
-  lastReminderAt: null,
-},
+          released: false,
+          releasedAt: null,
+          inviteStart: null,
+          inviteEnd: null,
+          lastReminderAt: null,
+        },
       };
 
       await assignKoRoleToMatches('quarterFinal', event.rounds.quarterFinal.matches);
 
-saveKo(koData);
-await releaseKoRound(eventKey, 'quarterFinal');
-return;
+      saveKo(koData);
+      await releaseKoRound(eventKey, 'quarterFinal');
+      return;
     }
   }
 
-  if (event.rounds.quarterFinal && roundIsComplete(event.rounds.quarterFinal) && !event.rounds.semiFinal) {
-        if (!canAdvanceAfterBuffer(event.rounds.quarterFinal)) return;
+  if (
+    event.rounds.quarterFinal &&
+    roundIsComplete(event.rounds.quarterFinal) &&
+    !event.rounds.semiFinal
+  ) {
+    if (!canAdvanceAfterBuffer(event.rounds.quarterFinal)) return;
+
     const winners = event.rounds.quarterFinal.matches.map(getWinnerStub).filter(Boolean);
 
     if (winners.length === 4) {
@@ -1194,24 +1172,25 @@ return;
         matches: createKoMatches(event.format, 'semiFinal', pairs),
         completed: false,
         release: {
-  released: false,
-  releasedAt: null,
-  inviteStart: null,
-  inviteEnd: null,
-  lastReminderAt: null,
-},
+          released: false,
+          releasedAt: null,
+          inviteStart: null,
+          inviteEnd: null,
+          lastReminderAt: null,
+        },
       };
 
       await assignKoRoleToMatches('semiFinal', event.rounds.semiFinal.matches);
 
-saveKo(koData);
-await releaseKoRound(eventKey, 'semiFinal');
-return;
+      saveKo(koData);
+      await releaseKoRound(eventKey, 'semiFinal');
+      return;
     }
   }
 
   if (event.rounds.semiFinal && roundIsComplete(event.rounds.semiFinal)) {
-        if (!canAdvanceAfterBuffer(event.rounds.semiFinal)) return;
+    if (!canAdvanceAfterBuffer(event.rounds.semiFinal)) return;
+
     if (!event.rounds.final || !event.rounds.thirdPlace) {
       const winners = event.rounds.semiFinal.matches.map(getWinnerStub).filter(Boolean);
       const losers = event.rounds.semiFinal.matches.map(getLoserStub).filter(Boolean);
@@ -1227,17 +1206,15 @@ return;
             matches: createKoMatches(event.format, 'final', [[winners[0], winners[1]]]),
             completed: false,
             release: {
-  released: false,
-  releasedAt: null,
-  inviteStart: null,
-  inviteEnd: null,
-  lastReminderAt: null,
-},
+              released: false,
+              releasedAt: null,
+              inviteStart: null,
+              inviteEnd: null,
+              lastReminderAt: null,
+            },
           };
 
           await assignKoRoleToUserIds('final', getUserIdsFromTeams(winners));
-
-          
         }
 
         if (!event.rounds.thirdPlace) {
@@ -1248,34 +1225,35 @@ return;
             matches: createKoMatches(event.format, 'thirdPlace', [[losers[0], losers[1]]]),
             completed: false,
             release: {
-  released: false,
-  releasedAt: null,
-  inviteStart: null,
-  inviteEnd: null,
-  lastReminderAt: null,
-},
+              released: false,
+              releasedAt: null,
+              inviteStart: null,
+              inviteEnd: null,
+              lastReminderAt: null,
+            },
           };
 
           await assignKoRoleToUserIds('thirdPlace', getUserIdsFromTeams(losers));
-
-          
         }
 
         saveKo(koData);
-await releaseKoRound(eventKey, 'final');
-await releaseKoRound(eventKey, 'thirdPlace');
-return;
+        await releaseKoRound(eventKey, 'final');
+        await releaseKoRound(eventKey, 'thirdPlace');
+        return;
       }
     }
   }
 }
 
 async function releaseKoRound(eventKey, roundKey) {
+  if (!allGroupMatchesConfirmed(eventKey)) return;
+
   const koData = loadKo();
   const event = koData[eventKey];
   const round = event?.rounds?.[roundKey];
 
   if (!event || !round) return;
+  if (isEventInactive(event)) return;
 
   ensureRoundReleaseState(round);
 
@@ -1291,22 +1269,28 @@ async function releaseKoRound(eventKey, roundKey) {
   round.release.releasedAt = nowIso();
   round.release.inviteStart = window.startText;
   round.release.inviteEnd = window.endText;
-round.release.lastReminderAt = new Date(
-  Date.now() +
-  INVITE_WINDOW_MINUTES * 60 * 1000 +
-  KO_FIRST_REMINDER_AFTER_INVITE_MS -
-  KO_REMINDER_INTERVAL_MS
-).toISOString();
+
+  round.release.lastReminderAt = new Date(
+    Date.now() +
+      INVITE_WINDOW_MINUTES * 60 * 1000 +
+      KO_FIRST_REMINDER_AFTER_INVITE_MS -
+      KO_REMINDER_INTERVAL_MS
+  ).toISOString();
 
   saveKo(koData);
 
-  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
-saveKo(koData);
+  round.messageId = (
+    await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)
+  ).messageId;
 
-await sendKoReleaseMessage(eventKey, roundKey, round, window.startText, window.endText);
+  saveKo(koData);
+
+  await sendKoReleaseMessage(eventKey, roundKey, round, window.startText, window.endText);
 }
 
 async function processKoReminders(eventKey) {
+  if (!allGroupMatchesConfirmed(eventKey)) return;
+
   const koData = loadKo();
   const event = koData[eventKey];
 
@@ -1321,7 +1305,6 @@ async function processKoReminders(eventKey) {
 
     if (!round.release.released) continue;
     if (roundIsComplete(round)) continue;
-
     if (!canSendKoReminder(round.release.lastReminderAt)) continue;
 
     round.release.lastReminderAt = nowIso();
@@ -1332,6 +1315,8 @@ async function processKoReminders(eventKey) {
 }
 
 async function releasePendingKoRounds(eventKey) {
+  if (!allGroupMatchesConfirmed(eventKey)) return;
+
   const koData = loadKo();
   const event = koData[eventKey];
 
@@ -1347,6 +1332,50 @@ async function releasePendingKoRounds(eventKey) {
     if (round.release.released) continue;
 
     await releaseKoRound(eventKey, roundKey);
+  }
+}
+
+async function cleanupKoAfterReset() {
+  const koData = loadKo();
+  const groupsData = loadGroups();
+  const checkinsData = loadCheckins();
+  let changed = false;
+
+  for (const eventKey of EVENT_TYPES) {
+    const event = koData[eventKey];
+    if (!event || !event.rounds) continue;
+
+    if (event.koChannelsCleanedAt) continue;
+
+    const resetAt =
+      event.resetAt ||
+      groupsData[eventKey]?.resetAt ||
+      checkinsData[eventKey]?.resetAt;
+
+    if (!resetAt) continue;
+    if (Date.now() < Number(resetAt) + KO_CLEANUP_GRACE_MS) continue;
+
+    for (const round of Object.values(event.rounds)) {
+      if (round?.matches) {
+        await removeKoRolesFromMatches(round.matches);
+      }
+
+      if (round?.channelId) {
+        await purgeKoChannel(round.channelId);
+      }
+    }
+
+    event.resetAt = resetAt;
+    event.koRolesCleanedAt = new Date().toISOString();
+    event.koChannelsCleanedAt = new Date().toISOString();
+
+    changed = true;
+
+    console.log(`✅ K.O.-Kanäle für ${event.label} um 07:00 Uhr bereinigt.`);
+  }
+
+  if (changed) {
+    saveKo(koData);
   }
 }
 
@@ -1391,6 +1420,7 @@ function isAuthorizedForMatch(userId, match) {
     managerId: match.homeManagerId,
     coManagerIds: match.homeCoManagerIds || [],
   };
+
   const awayTeam = {
     managerId: match.awayManagerId,
     coManagerIds: match.awayCoManagerIds || [],
@@ -1421,21 +1451,21 @@ async function handleOpenResult(interaction, eventKey, roundKey) {
   }
 
   const allowedMatches = round.matches.filter(match => {
-  if (match.status === 'confirmed') return false;
-  if (match.status === 'disputed') return false;
-  if (!isAuthorizedForMatch(interaction.user.id, match)) return false;
+    if (match.status === 'confirmed') return false;
+    if (match.status === 'disputed') return false;
+    if (!isAuthorizedForMatch(interaction.user.id, match)) return false;
 
-  const ownTeamId = isUserAllowedForTeam(interaction.user.id, {
-    managerId: match.homeManagerId,
-    coManagerIds: match.homeCoManagerIds || [],
-  })
-    ? match.homeTeamId
-    : match.awayTeamId;
+    const ownTeamId = isUserAllowedForTeam(interaction.user.id, {
+      managerId: match.homeManagerId,
+      coManagerIds: match.homeCoManagerIds || [],
+    })
+      ? match.homeTeamId
+      : match.awayTeamId;
 
-  if (match.teamReports && match.teamReports[ownTeamId]) return false;
+    if (match.teamReports && match.teamReports[ownTeamId]) return false;
 
-  return true;
-});
+    return true;
+  });
 
   if (allowedMatches.length === 0) {
     await interaction.reply({
@@ -1537,23 +1567,23 @@ async function handleAdminResultSelect(interaction, eventKey, roundKey) {
     .setCustomId(`ko_admin_result_modal:${eventKey}:${roundKey}:${matchNumber}`)
     .setTitle('Admin-Ergebnis eintragen');
 
-  const homeInput = new TextInputBuilder()
-    .setCustomId('home_goals')
-    .setLabel(`Tore ${match.homeClubName}`)
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('z. B. 3');
-
-  const awayInput = new TextInputBuilder()
-    .setCustomId('away_goals')
-    .setLabel(`Tore ${match.awayClubName}`)
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('z. B. 1');
-
   modal.addComponents(
-    new ActionRowBuilder().addComponents(homeInput),
-    new ActionRowBuilder().addComponents(awayInput)
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('home_goals')
+        .setLabel(`Tore ${match.homeClubName}`)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('z. B. 3')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('away_goals')
+        .setLabel(`Tore ${match.awayClubName}`)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('z. B. 1')
+    )
   );
 
   await interaction.showModal(modal);
@@ -1569,100 +1599,7 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchNumb
     return true;
   }
 
-  const koData = loadKo();
-  const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
-
-  if (!found) {
-    await interaction.reply({
-      content: '❌ K.O.-Spiel nicht gefunden.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const { event, round, match } = found;
-
-  const homeGoalsRaw = interaction.fields.getTextInputValue('home_goals').trim();
-  const awayGoalsRaw = interaction.fields.getTextInputValue('away_goals').trim();
-
-  if (!/^\d+$/.test(homeGoalsRaw) || !/^\d+$/.test(awayGoalsRaw)) {
-    await interaction.reply({
-      content: '❌ Bitte gib nur ganze Zahlen ein.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  const homeGoals = Number(homeGoalsRaw);
-  const awayGoals = Number(awayGoalsRaw);
-
-  if (homeGoals > 20 || awayGoals > 20) {
-    await interaction.reply({
-      content: '❌ Bitte gib ein Ergebnis zwischen 0 und 20 ein.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  if (homeGoals === awayGoals) {
-    await interaction.reply({
-      content: '❌ In der K.O.-Phase muss es einen Sieger geben.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
-  }
-
-  if (match.confirmationMessageId) {
-    await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
-    match.confirmationMessageId = null;
-  }
-
-  if (match.disputeMessageId) {
-    await deleteMessageIfExists(round.channelId, match.disputeMessageId);
-    match.disputeMessageId = null;
-  }
-
-  match.status = 'confirmed';
-  match.reportedByTeamId = null;
-  match.reportedScore = {
-    home: homeGoals,
-    away: awayGoals,
-  };
-  match.confirmed = true;
-  match.confirmedAt = nowIso();
-  match.teamReports = {};
-  match.waitingForTeamId = null;
-  match.waitingForClubName = null;
-
-  if (homeGoals > awayGoals) {
-    match.winnerTeamId = match.homeTeamId;
-    match.loserTeamId = match.awayTeamId;
-  } else {
-    match.winnerTeamId = match.awayTeamId;
-    match.loserTeamId = match.homeTeamId;
-  }
-
-  saveKo(koData);
-
-  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
-  saveKo(koData);
-
-  await interaction.reply({
-    content: `✅ Admin-Ergebnis eingetragen: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`,
-    flags: MessageFlags.Ephemeral,
-  });
-
-  await reconcileKoAuto();
-
-  try {
-    if (roundKey === 'final' || roundKey === 'thirdPlace') {
-      await sendTournamentCeremonyIfReady(clientRef, eventKey);
-    }
-  } catch (error) {
-    console.error('❌ Fehler bei der automatischen Siegerehrung:', error);
-  }
-
-  return true;
+  return saveKoResultFromModal(interaction, eventKey, roundKey, matchNumber, true);
 }
 
 async function handleSelectResult(interaction, eventKey, roundKey) {
@@ -1687,6 +1624,7 @@ async function handleSelectResult(interaction, eventKey, roundKey) {
   }
 
   const match = round.matches.find(m => m.matchNumber === matchNumber);
+
   if (!match) {
     await interaction.reply({
       content: '❌ Spiel nicht gefunden.',
@@ -1694,44 +1632,44 @@ async function handleSelectResult(interaction, eventKey, roundKey) {
     });
     return true;
   }
-  
-  if (match.status === 'disputed') {
-  await interaction.reply({
-    content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
 
-if (match.status === 'confirmed') {
-  await interaction.reply({
-    content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
-    flags: MessageFlags.Ephemeral,
-  });
-  return true;
-}
+  if (match.status === 'disputed') {
+    await interaction.reply({
+      content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  if (match.status === 'confirmed') {
+    await interaction.reply({
+      content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
 
   const modal = new ModalBuilder()
     .setCustomId(`ko_modal:${eventKey}:${roundKey}:${matchNumber}`)
     .setTitle('Ergebnis eintragen');
 
-  const homeInput = new TextInputBuilder()
-    .setCustomId('home_goals')
-    .setLabel(`Tore ${match.homeClubName}`)
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('z. B. 3');
-
-  const awayInput = new TextInputBuilder()
-    .setCustomId('away_goals')
-    .setLabel(`Tore ${match.awayClubName}`)
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('z. B. 1');
-
   modal.addComponents(
-    new ActionRowBuilder().addComponents(homeInput),
-    new ActionRowBuilder().addComponents(awayInput)
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('home_goals')
+        .setLabel(`Tore ${match.homeClubName}`)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('z. B. 3')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('away_goals')
+        .setLabel(`Tore ${match.awayClubName}`)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('z. B. 1')
+    )
   );
 
   await interaction.showModal(modal);
@@ -1739,6 +1677,10 @@ if (match.status === 'confirmed') {
 }
 
 async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
+  return saveKoResultFromModal(interaction, eventKey, roundKey, matchNumber, false);
+}
+
+async function saveKoResultFromModal(interaction, eventKey, roundKey, matchNumber, adminOverride) {
   const koData = loadKo();
   const found = findRoundAndMatch(koData, eventKey, roundKey, matchNumber);
 
@@ -1760,7 +1702,7 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
     return true;
   }
 
-  if (match.status === 'confirmed') {
+  if (!adminOverride && match.status === 'confirmed') {
     await interaction.reply({
       content: '❌ Dieses Spiel wurde bereits bestätigt und kann nicht erneut gemeldet werden.',
       flags: MessageFlags.Ephemeral,
@@ -1768,7 +1710,7 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
     return true;
   }
 
-  if (match.status === 'disputed') {
+  if (!adminOverride && match.status === 'disputed') {
     await interaction.reply({
       content: '❌ Dieses Spiel ist aktuell in Admin-Klärung.',
       flags: MessageFlags.Ephemeral,
@@ -1776,7 +1718,7 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
     return true;
   }
 
-  if (!isAuthorizedForMatch(interaction.user.id, match)) {
+  if (!adminOverride && !isAuthorizedForMatch(interaction.user.id, match)) {
     await interaction.reply({
       content: '❌ Du darfst für dieses Spiel kein Ergebnis eintragen.',
       flags: MessageFlags.Ephemeral,
@@ -1808,97 +1750,98 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
 
   if (homeGoals === awayGoals) {
     await interaction.reply({
-      content: '❌ In der K.O.-Phase muss es einen Sieger geben. Bitte trage kein Unentschieden ein.',
+      content: '❌ In der K.O.-Phase muss es einen Sieger geben.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
   }
 
-  const reportingHome = isUserAllowedForTeam(interaction.user.id, {
-    managerId: match.homeManagerId,
-    coManagerIds: match.homeCoManagerIds || [],
-  });
+  if (adminOverride) {
+    if (match.confirmationMessageId) {
+      await deleteMessageIfExists(round.channelId, match.confirmationMessageId);
+      match.confirmationMessageId = null;
+    }
 
-  const reportingTeamId = reportingHome ? match.homeTeamId : match.awayTeamId;
-  const opponentTeamId = reportingHome ? match.awayTeamId : match.homeTeamId;
-  const opponentClubName = reportingHome ? match.awayClubName : match.homeClubName;
+    if (match.disputeMessageId) {
+      await deleteMessageIfExists(round.channelId, match.disputeMessageId);
+      match.disputeMessageId = null;
+    }
 
-  if (!match.teamReports) {
-    match.teamReports = {};
-  }
-
-  if (match.teamReports[reportingTeamId]) {
-    await interaction.reply({
-      content: '❌ Dein Team hat für dieses Spiel bereits ein Ergebnis eingetragen.',
-      flags: MessageFlags.Ephemeral,
+    confirmKoMatch(match, homeGoals, awayGoals);
+  } else {
+    const reportingHome = isUserAllowedForTeam(interaction.user.id, {
+      managerId: match.homeManagerId,
+      coManagerIds: match.homeCoManagerIds || [],
     });
-    return true;
-  }
 
-  match.teamReports[reportingTeamId] = {
-    home: homeGoals,
-    away: awayGoals,
-    reportedByUserId: interaction.user.id,
-    reportedAt: nowIso(),
-  };
+    const reportingTeamId = reportingHome ? match.homeTeamId : match.awayTeamId;
+    const opponentTeamId = reportingHome ? match.awayTeamId : match.homeTeamId;
+    const opponentClubName = reportingHome ? match.awayClubName : match.homeClubName;
 
-  const homeReport = match.teamReports[match.homeTeamId];
-  const awayReport = match.teamReports[match.awayTeamId];
+    if (!match.teamReports) {
+      match.teamReports = {};
+    }
 
-  if (homeReport && awayReport) {
-    if (scoresMatch(homeReport, awayReport)) {
-      match.status = 'confirmed';
-      match.reportedScore = {
-        home: homeGoals,
-        away: awayGoals,
-      };
-      match.confirmed = true;
-      match.confirmedAt = nowIso();
-      match.reportedByTeamId = null;
-      match.waitingForTeamId = null;
-      match.waitingForClubName = null;
+    if (match.teamReports[reportingTeamId]) {
+      await interaction.reply({
+        content: '❌ Dein Team hat für dieses Spiel bereits ein Ergebnis eingetragen.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
 
-      if (homeGoals > awayGoals) {
-        match.winnerTeamId = match.homeTeamId;
-        match.loserTeamId = match.awayTeamId;
+    match.teamReports[reportingTeamId] = {
+      home: homeGoals,
+      away: awayGoals,
+      reportedByUserId: interaction.user.id,
+      reportedAt: nowIso(),
+    };
+
+    const homeReport = match.teamReports[match.homeTeamId];
+    const awayReport = match.teamReports[match.awayTeamId];
+
+    if (homeReport && awayReport) {
+      if (scoresMatch(homeReport, awayReport)) {
+        confirmKoMatch(match, homeGoals, awayGoals);
       } else {
-        match.winnerTeamId = match.awayTeamId;
-        match.loserTeamId = match.homeTeamId;
+        match.status = 'disputed';
+        match.confirmed = false;
+        match.reportedScore = null;
+        match.confirmedAt = null;
+        match.winnerTeamId = null;
+        match.loserTeamId = null;
+        match.waitingForTeamId = null;
+        match.waitingForClubName = null;
+
+        if (!match.disputeMessageId) {
+          match.disputeMessageId = await sendKoDisputeNotice(eventKey, roundKey, match, round);
+        }
       }
     } else {
-      match.status = 'disputed';
+      match.status = 'awaiting';
       match.confirmed = false;
       match.reportedScore = null;
-      match.confirmedAt = null;
-      match.winnerTeamId = null;
-      match.loserTeamId = null;
-      match.waitingForTeamId = null;
-      match.waitingForClubName = null;
-
-      if (!match.disputeMessageId) {
-        match.disputeMessageId = await sendKoDisputeNotice(eventKey, roundKey, match, round);
-      }
+      match.waitingForTeamId = opponentTeamId;
+      match.waitingForClubName = opponentClubName;
     }
-  } else {
-    match.status = 'awaiting';
-    match.confirmed = false;
-    match.reportedScore = null;
-    match.waitingForTeamId = opponentTeamId;
-    match.waitingForClubName = opponentClubName;
   }
 
   saveKo(koData);
 
-  round.messageId = (await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)).messageId;
+  round.messageId = (
+    await sendOrEditRoundMessage(eventKey, roundKey, round, event.label)
+  ).messageId;
+
   saveKo(koData);
 
   await interaction.reply({
-    content:
-      match.status === 'confirmed'
+    content: adminOverride
+      ? `✅ Admin-Ergebnis eingetragen: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`
+      : match.status === 'confirmed'
         ? `✅ Ergebnis passt bei beiden Teams. Spiel bestätigt: **${match.homeClubName} ${homeGoals}:${awayGoals} ${match.awayClubName}**`
         : match.status === 'disputed'
           ? '🚨 Ergebnis weicht ab. Admin wurde zur Klärung informiert.'
-          : `✅ Ergebnis eingetragen. Wartet jetzt auf **${opponentClubName}**.`,
+          : `✅ Ergebnis eingetragen. Wartet jetzt auf **${match.waitingForClubName}**.`,
     flags: MessageFlags.Ephemeral,
   });
 
@@ -1915,6 +1858,28 @@ async function handleResultModal(interaction, eventKey, roundKey, matchNumber) {
   }
 
   return true;
+}
+
+function confirmKoMatch(match, homeGoals, awayGoals) {
+  match.status = 'confirmed';
+  match.reportedByTeamId = null;
+  match.reportedScore = {
+    home: homeGoals,
+    away: awayGoals,
+  };
+  match.confirmed = true;
+  match.confirmedAt = nowIso();
+  match.teamReports = {};
+  match.waitingForTeamId = null;
+  match.waitingForClubName = null;
+
+  if (homeGoals > awayGoals) {
+    match.winnerTeamId = match.homeTeamId;
+    match.loserTeamId = match.awayTeamId;
+  } else {
+    match.winnerTeamId = match.awayTeamId;
+    match.loserTeamId = match.homeTeamId;
+  }
 }
 
 // =========================
@@ -1940,44 +1905,44 @@ module.exports = {
   },
 
   async handleInteraction(interaction) {
-  if (interaction.isButton()) {
-    if (interaction.customId.startsWith('ko_result_open:')) {
-      const [, eventKey, roundKey] = interaction.customId.split(':');
-      return handleOpenResult(interaction, eventKey, roundKey);
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('ko_result_open:')) {
+        const [, eventKey, roundKey] = interaction.customId.split(':');
+        return handleOpenResult(interaction, eventKey, roundKey);
+      }
+
+      if (interaction.customId.startsWith('ko_admin_result_open:')) {
+        const [, eventKey, roundKey] = interaction.customId.split(':');
+        return handleAdminResultOpen(interaction, eventKey, roundKey);
+      }
     }
 
-    if (interaction.customId.startsWith('ko_admin_result_open:')) {
-      const [, eventKey, roundKey] = interaction.customId.split(':');
-      return handleAdminResultOpen(interaction, eventKey, roundKey);
-    }
-  }
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId.startsWith('ko_select:')) {
+        const [, eventKey, roundKey] = interaction.customId.split(':');
+        return handleSelectResult(interaction, eventKey, roundKey);
+      }
 
-  if (interaction.isStringSelectMenu()) {
-    if (interaction.customId.startsWith('ko_select:')) {
-      const [, eventKey, roundKey] = interaction.customId.split(':');
-      return handleSelectResult(interaction, eventKey, roundKey);
-    }
-
-    if (interaction.customId.startsWith('ko_admin_result_select:')) {
-      const [, eventKey, roundKey] = interaction.customId.split(':');
-      return handleAdminResultSelect(interaction, eventKey, roundKey);
-    }
-  }
-
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith('ko_modal:')) {
-      const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
-      return handleResultModal(interaction, eventKey, roundKey, matchNumber);
+      if (interaction.customId.startsWith('ko_admin_result_select:')) {
+        const [, eventKey, roundKey] = interaction.customId.split(':');
+        return handleAdminResultSelect(interaction, eventKey, roundKey);
+      }
     }
 
-    if (interaction.customId.startsWith('ko_admin_result_modal:')) {
-      const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
-      return handleAdminResultModal(interaction, eventKey, roundKey, matchNumber);
-    }
-  }
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('ko_modal:')) {
+        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+        return handleResultModal(interaction, eventKey, roundKey, matchNumber);
+      }
 
-  return false;
-},
+      if (interaction.customId.startsWith('ko_admin_result_modal:')) {
+        const [, eventKey, roundKey, matchNumber] = interaction.customId.split(':');
+        return handleAdminResultModal(interaction, eventKey, roundKey, matchNumber);
+      }
+    }
+
+    return false;
+  },
 
   async handleMessage() {
     return false;
