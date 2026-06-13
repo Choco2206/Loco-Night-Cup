@@ -1366,6 +1366,20 @@ async function cleanupKoAfterReset() {
   }
 }
 
+function forceCloseSaturdayEvent() {
+  const koData = loadKo();
+
+  if (!koData.saturday) return;
+
+  koData.saturday.completed = true;
+  koData.saturday.archived = true;
+  koData.saturday.forceClosedAt = new Date().toISOString();
+
+  saveKo(koData);
+
+  console.log('✅ Samstag K.O.-Event wurde per Code geschlossen.');
+}
+
 async function reconcileKoAuto() {
   if (koProcessing) return;
 
@@ -1875,10 +1889,12 @@ function confirmKoMatch(match, homeGoals, awayGoals) {
 
 module.exports = {
   async init(client) {
-    clientRef = client;
-    ensureKoFile();
+  clientRef = client;
+  ensureKoFile();
 
-    await reconcileKoAuto();
+  forceCloseSaturdayEvent();
+
+  await reconcileKoAuto();
 
     if (!intervalRef) {
       intervalRef = setInterval(async () => {
