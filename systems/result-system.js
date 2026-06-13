@@ -401,9 +401,8 @@ function getBackupTeamsForEvent(eventKey) {
 
   if (!event || !Array.isArray(event.teams)) return [];
 
-  const format = event.format || null;
   const actualFormat =
-    format ||
+    event.format ||
     (event.teams.length < 8
       ? 0
       : event.teams.length < 16
@@ -417,6 +416,37 @@ function getBackupTeamsForEvent(eventKey) {
   if (!actualFormat) return [];
 
   return event.teams.slice(actualFormat);
+}
+
+function syncCheckinTeamsAfterReplacement(checkinEvent, oldTeam, backupTeam) {
+  if (!checkinEvent || !Array.isArray(checkinEvent.teams)) return;
+
+  const oldIndex = checkinEvent.teams.findIndex(
+    team => String(team.teamId) === String(oldTeam.teamId)
+  );
+
+  const backupIndex = checkinEvent.teams.findIndex(
+    team => String(team.teamId) === String(backupTeam.teamId)
+  );
+
+  if (oldIndex === -1 || backupIndex === -1) return;
+
+  const oldEntry = {
+    ...checkinEvent.teams[oldIndex],
+    replacedOut: true,
+    replacedByTeamId: backupTeam.teamId,
+    replacedOutAt: nowIso(),
+  };
+
+  const backupEntry = {
+    ...checkinEvent.teams[backupIndex],
+    promotedFromBackup: true,
+    replacedTeamId: oldTeam.teamId,
+    promotedAt: nowIso(),
+  };
+
+  checkinEvent.teams[oldIndex] = backupEntry;
+  checkinEvent.teams[backupIndex] = oldEntry;
 }
 
 function getTeamUserIds(team) {
@@ -1004,9 +1034,7 @@ async function replaceTeamInGroup(eventKey, groupLetter, targetTeamId, backupTea
   const oldTeam = groupMeta.teams.find(t => String(t.teamId) === String(targetTeamId));
 if (!oldTeam) return false;
 
-checkinEvent.teams = checkinEvent.teams.filter(
-  t => String(t.teamId) !== String(backupTeamId)
-);
+syncCheckinTeamsAfterReplacement(checkinEvent, oldTeam, backupTeam);
 
 fs.writeFileSync(checkinsPath, JSON.stringify(checkins, null, 2), 'utf8');
 
