@@ -500,8 +500,9 @@ function allGroupMatchesConfirmed(eventKey) {
 // =========================
 
 function getQualifiedTeamsFromGroups(eventKey) {
-  const groupsData = loadGroups();
-  const event = groupsData[eventKey];
+  const resultsData = loadResults();
+  const event = resultsData[eventKey];
+
   if (!event || !event.groups) return null;
 
   const format = event.format;
