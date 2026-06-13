@@ -1185,8 +1185,12 @@ async function handleTeamStringSelect(interaction) {
   const guild = interaction.guild;
 
   if (!guild) {
-    ...
-  }
+  await interaction.reply({
+    content: '❌ Diese Aktion funktioniert nur auf einem Server.',
+    flags: MessageFlags.Ephemeral,
+  });
+  return true;
+}
 
   const teams = readTeams();
 
