@@ -11,6 +11,7 @@ const LIVE_CHANNEL_ID = process.env.LIVE_SPIELPLAN_CHANNEL_ID;
 
 let clientRef = null;
 let intervalRef = null;
+
 const EVENT_TYPES = [
   'monday',
   'tuesday',
@@ -39,17 +40,14 @@ function ensureLiveFile() {
       initial[eventKey] = null;
     }
 
-    fs.writeFileSync(
-      LIVE_FILE,
-      JSON.stringify(initial, null, 2),
-      'utf8'
-    );
+    fs.writeFileSync(LIVE_FILE, JSON.stringify(initial, null, 2), 'utf8');
   }
 }
 
 function readJson(file, fallback) {
   try {
     if (!fs.existsSync(file)) return fallback;
+
     const raw = fs.readFileSync(file, 'utf8');
     return raw ? JSON.parse(raw) : fallback;
   } catch (error) {
@@ -60,6 +58,7 @@ function readJson(file, fallback) {
 
 function loadLive() {
   ensureLiveFile();
+
   const parsed = readJson(LIVE_FILE, {});
   const data = {};
 
@@ -151,6 +150,7 @@ function getRoundLabel(roundKey) {
   if (roundKey === 'semiFinal') return 'Halbfinale';
   if (roundKey === 'thirdPlace') return 'Spiel um Platz 3';
   if (roundKey === 'final') return 'Finale';
+
   return 'K.O.-Runde';
 }
 
@@ -158,6 +158,7 @@ function sortRows(rows) {
   return [...rows].sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.diff !== a.diff) return b.diff - a.diff;
+
     return a.clubName.localeCompare(b.clubName, 'de');
   });
 }
@@ -179,7 +180,65 @@ function matchStatus(match) {
 }
 
 function roundIsComplete(round) {
-  return round?.matches?.length && round.matches.every(match => match.status === 'confirmed');
+  return (
+    Array.isArray(round?.matches) &&
+    round.matches.length > 0 &&
+    round.matches.every(match => match.status === 'confirmed')
+  );
+}
+
+function allGroupMatchesConfirmed(eventKey) {
+  const groupsData = loadGroups();
+  const resultsData = loadResults();
+
+  const groupEvent = groupsData[eventKey];
+  const resultEvent = resultsData[eventKey];
+
+  if (!groupEvent || !groupEvent.groups) return false;
+  if (!resultEvent || !resultEvent.groups) return false;
+
+  if (
+    groupEvent.cycleKey &&
+    resultEvent.cycleKey &&
+    groupEvent.cycleKey !== resultEvent.cycleKey
+  ) {
+    return false;
+  }
+
+  const groupLetters = Object.keys(groupEvent.groups).sort();
+
+  if (groupLetters.length === 0) return false;
+
+  for (const groupLetter of groupLetters) {
+    const drawnGroup = groupEvent.groups[groupLetter];
+    const resultGroup = resultEvent.groups[groupLetter];
+
+    if (!drawnGroup || !Array.isArray(drawnGroup.matches)) {
+      return false;
+    }
+
+    if (!resultGroup || !Array.isArray(resultGroup.matches)) {
+      return false;
+    }
+
+    if (drawnGroup.matches.length === 0) {
+      return false;
+    }
+
+    if (resultGroup.matches.length !== drawnGroup.matches.length) {
+      return false;
+    }
+
+    const confirmedMatches = resultGroup.matches.filter(match => {
+      return match.status === 'confirmed';
+    });
+
+    if (confirmedMatches.length !== drawnGroup.matches.length) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // =========================
@@ -275,6 +334,7 @@ function buildGroupEmbed(groupLetter, groupMeta, resultGroup) {
     ? rows
         .map((row, index) => {
           const diff = Number(row.diff) > 0 ? `+${row.diff}` : row.diff;
+
           return `**${index + 1}. ${row.clubName}** • S ${row.s} • U ${row.u} • N ${row.n} • Diff ${diff} • P ${row.points}`;
         })
         .join('\n')
@@ -375,10 +435,15 @@ function getVisibleKoRounds(rounds) {
   const existing = order.filter(roundKey => rounds[roundKey]);
 
   if (rounds.final || rounds.thirdPlace) {
-    return existing.filter(roundKey => roundKey === 'final' || roundKey === 'thirdPlace');
+    return existing.filter(roundKey => {
+      return roundKey === 'final' || roundKey === 'thirdPlace';
+    });
   }
 
-  const openRounds = existing.filter(roundKey => !roundIsComplete(rounds[roundKey]));
+  const openRounds = existing.filter(roundKey => {
+    return !roundIsComplete(rounds[roundKey]);
+  });
+
   if (openRounds.length) return openRounds;
 
   return existing.slice(-1);
@@ -411,15 +476,14 @@ async function syncKo(eventKey, koEvent) {
 
   const visibleRounds = getVisibleKoRounds(koEvent.rounds || {});
 
-// alte K.O.-Runden aus dem Live-Spielplan löschen
-for (const oldRoundKey of Object.keys(state.koMessageIds || {})) {
-  if (!visibleRounds.includes(oldRoundKey)) {
-    await deleteLiveMessage(channel, state.koMessageIds[oldRoundKey]);
-    delete state.koMessageIds[oldRoundKey];
+  for (const oldRoundKey of Object.keys(state.koMessageIds || {})) {
+    if (!visibleRounds.includes(oldRoundKey)) {
+      await deleteLiveMessage(channel, state.koMessageIds[oldRoundKey]);
+      delete state.koMessageIds[oldRoundKey];
+    }
   }
-}
 
-for (const roundKey of visibleRounds) {
+  for (const roundKey of visibleRounds) {
     state.koMessageIds[roundKey] = await upsertMessage(
       channel,
       state.koMessageIds[roundKey],
@@ -456,7 +520,14 @@ async function sync(eventKey) {
   const resultEvent = resultsData[eventKey];
   const koEvent = koData[eventKey];
 
-  if (koEvent && koEvent.rounds && !isExpired(koEvent)) {
+  const groupsFinished = allGroupMatchesConfirmed(eventKey);
+
+  if (
+    koEvent &&
+    koEvent.rounds &&
+    !isExpired(koEvent) &&
+    groupsFinished
+  ) {
     await syncKo(eventKey, koEvent);
     return;
   }
