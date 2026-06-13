@@ -242,6 +242,42 @@ function shuffleArray(array) {
   return arr;
 }
 
+function buildBalancedGroupsWithByes(finalTeams, groupLetters) {
+  const grouped = {};
+
+  for (const letter of groupLetters) {
+    grouped[letter] = [];
+  }
+
+  const byeTeams = shuffleArray(
+    finalTeams.filter(team => team.isByeTeam)
+  );
+
+  const normalTeams = shuffleArray(
+    finalTeams.filter(team => !team.isByeTeam)
+  );
+
+  const shuffledGroupLetters = shuffleArray(groupLetters);
+
+  byeTeams.forEach((team, index) => {
+    const letter = shuffledGroupLetters[index % shuffledGroupLetters.length];
+    grouped[letter].push(team);
+  });
+
+  for (const team of normalTeams) {
+    const targetLetter = shuffleArray(groupLetters).sort((a, b) => {
+      const sizeDiff = grouped[a].length - grouped[b].length;
+      if (sizeDiff !== 0) return sizeDiff;
+
+      return Math.random() - 0.5;
+    })[0];
+
+    grouped[targetLetter].push(team);
+  }
+
+  return grouped;
+}
+
 function getDrawTimestamp(event) {
   if (event?.drawAt) {
     return Number(event.drawAt);
@@ -687,19 +723,9 @@ const existing = groupsData[eventKey];
   }
 
   const groupLetters = getGroupLetters(format);
-  const finalTeams = event.teams.slice(0, format);
-  const shuffled = shuffleArray(finalTeams);
+const finalTeams = event.teams.slice(0, format);
 
-  const grouped = {};
-
-  groupLetters.forEach(letter => {
-    grouped[letter] = [];
-  });
-
-  shuffled.forEach((team, index) => {
-    const letter = groupLetters[index % groupLetters.length];
-    grouped[letter].push(team);
-  });
+const grouped = buildBalancedGroupsWithByes(finalTeams, groupLetters);
 
   const storedEvent = {
     eventKey,
