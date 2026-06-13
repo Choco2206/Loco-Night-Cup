@@ -485,23 +485,21 @@ function allGroupMatchesConfirmed(eventKey) {
   if (groupLetters.length === 0) return false;
 
   for (const letter of groupLetters) {
-    const drawnGroup = groupEvent.groups[letter];
     const resultGroup = resultEvent.groups[letter];
 
-    if (!drawnGroup || !Array.isArray(drawnGroup.matches)) return false;
-    if (!resultGroup || !Array.isArray(resultGroup.matches)) return false;
-
-    if (drawnGroup.matches.length === 0) return false;
-
-    if (resultGroup.matches.length !== drawnGroup.matches.length) {
+    if (!resultGroup || !Array.isArray(resultGroup.matches)) {
       return false;
     }
 
-    const confirmedMatches = resultGroup.matches.filter(match => {
+    if (resultGroup.matches.length === 0) {
+      return false;
+    }
+
+    const allConfirmed = resultGroup.matches.every(match => {
       return match.status === 'confirmed';
     });
 
-    if (confirmedMatches.length !== drawnGroup.matches.length) {
+    if (!allConfirmed) {
       return false;
     }
   }
