@@ -677,8 +677,6 @@ saveCheckins(checkins);
 
 const existing = groupsData[eventKey];
 
-  const existing = groupsData[eventKey];
-
   if (existing && existing.cycleKey === event.cycleKey) {
     return;
   }
