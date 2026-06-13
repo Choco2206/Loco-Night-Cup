@@ -36,6 +36,25 @@ const MANAGERS_WITHOUT_TEAM_CHANNEL_ID = '1487537056245616802';
 const TEAM_REGISTER_CHANNEL_ID = '1487537568751816764';
 const LOGO_CONTROL_CHANNEL_ID = '1487537056245616802';
 const LOGO_HELP_USER_ID = '1425580097661833443';
+const EVENT_TYPES = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
+
+const EVENT_LABELS = {
+  monday: 'Montag',
+  tuesday: 'Dienstag',
+  wednesday: 'Mittwoch',
+  thursday: 'Donnerstag',
+  friday: 'Freitag',
+  saturday: 'Samstag',
+  sunday: 'Sonntag',
+};
 
 let clientRef = null;
 
@@ -95,8 +114,20 @@ function saveAdminState(data) {
   writeJson(ADMIN_FILE, data);
 }
 
+function createEmptyEventData() {
+  return {
+    monday: null,
+    tuesday: null,
+    wednesday: null,
+    thursday: null,
+    friday: null,
+    saturday: null,
+    sunday: null,
+  };
+}
+
 function loadCheckins() {
-  return readJson(CHECKINS_FILE, { friday: null, saturday: null });
+  return readJson(CHECKINS_FILE, createEmptyEventData());
 }
 
 function saveCheckins(data) {
@@ -104,7 +135,7 @@ function saveCheckins(data) {
 }
 
 function loadGroups() {
-  return readJson(GROUPS_FILE, { friday: null, saturday: null });
+  return readJson(GROUPS_FILE, createEmptyEventData());
 }
 
 function saveGroups(data) {
@@ -112,7 +143,7 @@ function saveGroups(data) {
 }
 
 function loadResults() {
-  return readJson(RESULTS_FILE, { friday: null, saturday: null });
+  return readJson(RESULTS_FILE, createEmptyEventData());
 }
 
 function saveResults(data) {
@@ -120,7 +151,7 @@ function saveResults(data) {
 }
 
 function loadKo() {
-  return readJson(KO_FILE, { friday: null, saturday: null });
+  return readJson(KO_FILE, createEmptyEventData());
 }
 
 function saveKo(data) {
@@ -813,7 +844,7 @@ function syncTeamNameAcrossData(teamId, oldClubName, newClubName) {
   const results = loadResults();
   const ko = loadKo();
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const checkinEvent = checkins[eventKey];
     if (checkinEvent?.teams) {
       for (const team of checkinEvent.teams) {
@@ -825,7 +856,7 @@ function syncTeamNameAcrossData(teamId, oldClubName, newClubName) {
   }
   saveCheckins(checkins);
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = groups[eventKey];
     if (!event?.groups) continue;
 
@@ -847,7 +878,7 @@ function syncTeamNameAcrossData(teamId, oldClubName, newClubName) {
   }
   saveGroups(groups);
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = results[eventKey];
     if (!event?.groups) continue;
 
@@ -866,7 +897,7 @@ function syncTeamNameAcrossData(teamId, oldClubName, newClubName) {
   }
   saveResults(results);
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = ko[eventKey];
     if (!event?.rounds) continue;
 
@@ -1430,7 +1461,7 @@ async function deleteRegisteredTeam(teamId) {
 
   saveTeams(teams.filter(t => t.id !== teamId));
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = checkins[eventKey];
     if (!event) continue;
 
@@ -1442,7 +1473,7 @@ async function deleteRegisteredTeam(teamId) {
   }
   saveCheckins(checkins);
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = groups[eventKey];
     if (!event?.groups) continue;
 
@@ -1454,7 +1485,7 @@ async function deleteRegisteredTeam(teamId) {
   }
   saveGroups(groups);
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = results[eventKey];
     if (!event?.groups) continue;
 
@@ -1467,7 +1498,7 @@ async function deleteRegisteredTeam(teamId) {
   }
   saveResults(results);
 
-  for (const eventKey of ['friday', 'saturday']) {
+  for (const eventKey of EVENT_TYPES) {
     const event = ko[eventKey];
     if (!event?.rounds) continue;
 
@@ -1992,10 +2023,12 @@ function buildEventSelect(customId) {
     new StringSelectMenuBuilder()
       .setCustomId(customId)
       .setPlaceholder('Event auswählen')
-      .addOptions([
-        { label: 'Freitag', value: 'friday' },
-        { label: 'Samstag', value: 'saturday' },
-      ])
+      .addOptions(
+        EVENT_TYPES.map(eventKey => ({
+          label: EVENT_LABELS[eventKey],
+          value: eventKey,
+        }))
+      )
   );
 }
 
@@ -2032,10 +2065,10 @@ function buildBanReasonSelect(teamId) {
 function buildActiveBackupEventSelect(customId) {
   const checkins = loadCheckins();
 
-  const options = ['friday', 'saturday']
+  const options = EVENT_TYPES
     .filter(eventKey => checkins[eventKey]?.teams?.length)
     .map(eventKey => ({
-      label: checkins[eventKey]?.label || (eventKey === 'friday' ? 'Freitag' : 'Samstag'),
+      label: checkins[eventKey]?.label || EVENT_LABELS[eventKey],
       value: eventKey,
       description: `${checkins[eventKey].teams.length} eingecheckte Teams`,
     }));
