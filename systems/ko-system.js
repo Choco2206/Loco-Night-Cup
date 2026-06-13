@@ -463,24 +463,12 @@ function buildKoOpenMatchesText(matches) {
 // =========================
 
 function allGroupMatchesConfirmed(eventKey) {
-  const groupsData = loadGroups();
   const resultsData = loadResults();
-
-  const groupEvent = groupsData[eventKey];
   const resultEvent = resultsData[eventKey];
 
-  if (!groupEvent || !groupEvent.groups) return false;
   if (!resultEvent || !resultEvent.groups) return false;
 
-  if (
-    groupEvent.cycleKey &&
-    resultEvent.cycleKey &&
-    groupEvent.cycleKey !== resultEvent.cycleKey
-  ) {
-    return false;
-  }
-
-  const groupLetters = Object.keys(groupEvent.groups).sort();
+  const groupLetters = Object.keys(resultEvent.groups).sort();
 
   if (groupLetters.length === 0) return false;
 
