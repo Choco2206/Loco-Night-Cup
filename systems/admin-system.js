@@ -937,17 +937,17 @@ async function getManagersWithoutTeam(guild) {
     throw new Error('MANAGER_ROLE_ID fehlt.');
   }
 
-  const managerRole = await guild.roles.fetch(managerRoleId).catch(() => null);
-
-  if (!managerRole) {
-    throw new Error('Manager Rolle nicht gefunden.');
-  }
+  await guild.members.fetch();
 
   const teams = loadTeams();
   const assignedUsers = new Set();
 
   for (const team of teams) {
-    if (team.managerId) assignedUsers.add(String(team.managerId));
+    if (team.isTest || team.isByeTeam) continue;
+
+    if (team.managerId) {
+      assignedUsers.add(String(team.managerId));
+    }
 
     if (Array.isArray(team.coManagerIds)) {
       for (const id of team.coManagerIds) {
@@ -956,17 +956,12 @@ async function getManagersWithoutTeam(guild) {
     }
   }
 
-  const managersWithoutTeam = [];
+  const managersWithoutTeam = guild.members.cache
+    .filter(member => member.roles.cache.has(managerRoleId))
+    .filter(member => !assignedUsers.has(String(member.id)))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, 'de'));
 
-  for (const [userId, member] of managerRole.members) {
-    if (!assignedUsers.has(String(userId))) {
-      managersWithoutTeam.push(member);
-    }
-  }
-
-  return managersWithoutTeam.sort((a, b) =>
-    a.displayName.localeCompare(b.displayName, 'de')
-  );
+  return [...managersWithoutTeam.values()];
 }
 
 function teamHasLogo(team) {
@@ -2163,7 +2158,6 @@ function buildBackupTeamSelectRows(eventKey, mode, outgoingTeamId = null) {
 
 module.exports = {
   refreshActiveLogoControlMessage,
-  refreshActiveManagersWithoutTeamControlMessage,
 
   async init(client) {
     clientRef = client;
@@ -2378,7 +2372,7 @@ if (interaction.customId === 'live_teams_without_logo') {
           team.coManagerIds = [];
         }
 
-        if (team.coManagerIds.length >= 3) {
+        if (team.coManagerIds.length >= 5) {
           await replyTemp(interaction, {
             content: '❌ Dieses Team hat bereits 5 Co-VMs.',
           });
@@ -2607,7 +2601,7 @@ if (interaction.isUserSelectMenu()) {
       return true;
     }
 
-    if (team.coManagerIds.length >= 3) {
+    if (team.coManagerIds.length >= 5) {
       await interaction.editReply({
         content: '❌ Dieses Team hat bereits 5 Co-VMs.',
         components: [],
