@@ -934,16 +934,47 @@ async function sendOrEditRoundMessage(eventKey, roundKey, roundData, eventLabel)
 // =========================
 
 function allGroupMatchesConfirmed(eventKey) {
+  const groupsData = loadGroups();
   const resultsData = loadResults();
-  const event = resultsData[eventKey];
-  if (!event || !event.groups) return false;
 
-  for (const letter of Object.keys(event.groups)) {
-    const group = event.groups[letter];
-    if (!group || !Array.isArray(group.matches)) return false;
+  const groupEvent = groupsData[eventKey];
+  const resultEvent = resultsData[eventKey];
 
-    const allConfirmed = group.matches.every(match => match.status === 'confirmed');
-    if (!allConfirmed) return false;
+  if (!groupEvent || !groupEvent.groups) return false;
+  if (!resultEvent || !resultEvent.groups) return false;
+
+  if (
+    groupEvent.cycleKey &&
+    resultEvent.cycleKey &&
+    groupEvent.cycleKey !== resultEvent.cycleKey
+  ) {
+    return false;
+  }
+
+  const groupLetters = Object.keys(groupEvent.groups).sort();
+
+  if (groupLetters.length === 0) return false;
+
+  for (const letter of groupLetters) {
+    const drawnGroup = groupEvent.groups[letter];
+    const resultGroup = resultEvent.groups[letter];
+
+    if (!drawnGroup || !Array.isArray(drawnGroup.matches)) return false;
+    if (!resultGroup || !Array.isArray(resultGroup.matches)) return false;
+
+    if (drawnGroup.matches.length === 0) return false;
+
+    if (resultGroup.matches.length !== drawnGroup.matches.length) {
+      return false;
+    }
+
+    const confirmedMatches = resultGroup.matches.filter(match => {
+      return match.status === 'confirmed';
+    });
+
+    if (confirmedMatches.length !== drawnGroup.matches.length) {
+      return false;
+    }
   }
 
   return true;
