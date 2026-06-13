@@ -1185,15 +1185,21 @@ async function handleTeamStringSelect(interaction) {
   const guild = interaction.guild;
 
   if (!guild) {
-    await interaction.reply({
-      content: '❌ Diese Aktion funktioniert nur auf einem Server.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return true;
+    ...
   }
 
   const teams = readTeams();
-  const team = findTeamByManagerOrCoManager(interaction.user.id);
+
+  const team = teams.find(t => {
+    const isManager =
+      String(t.managerId) === String(interaction.user.id);
+
+    const isCoManager =
+      Array.isArray(t.coManagerIds) &&
+      t.coManagerIds.map(String).includes(String(interaction.user.id));
+
+    return isManager || isCoManager;
+  });
 
   if (!team) {
     await interaction.reply({
