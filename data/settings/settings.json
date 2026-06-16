@@ -1,34 +1,79 @@
 {
   "version": 1,
-  "guild": { "guildId": null },
+  "guild": {
+    "guildId": "1516390719411982346"
+  },
   "roles": {
-    "adminRoleIds": [],
-    "cupLeadRoleIds": [],
-    "playerRoleId": null,
-    "managerRoleId": null,
-    "groupRoleIds": { "A": null, "B": null, "C": null, "D": null, "E": null, "F": null, "G": null, "H": null },
-    "knockoutRoleIds": { "round_of_16": null, "quarter_final": null, "semi_final": null, "third_place": null, "final": null }
+    "adminRoleIds": ["1516427696526200902"],
+    "cupLeadRoleIds": ["1516427734136520918"],
+    "playerRoleId": "1516428987251953684",
+    "managerRoleId": "1516428922387169321",
+    "groupRoleIds": {
+      "A": "1516429048874795093",
+      "B": "1516429089865597109",
+      "C": "1516429117178908842",
+      "D": "1516429139949654187",
+      "E": "1516429168676569269",
+      "F": "1516429198594674708",
+      "G": "1516429226264236082",
+      "H": "1516429256010240062"
+    },
+    "knockoutRoleIds": {
+      "round_of_16": null,
+      "quarter_final": null,
+      "semi_final": null,
+      "third_place": null,
+      "final": null
+    }
   },
   "channels": {
-    "welcomeChannelId": null,
+    "welcomeChannelId": "1516429491704955072",
     "roleSelectChannelId": null,
-    "teamRegistrationChannelId": null,
-    "registeredTeamsChannelId": null,
+    "teamRegistrationChannelId": "1516429663457775687",
+    "registeredTeamsChannelId": "1516429682843848935",
     "rulesChannelId": null,
     "banlistChannelId": null,
-    "adminPanelChannelId": null,
-    "announcementChannelId": null,
-    "liveScheduleChannelId": null,
+    "adminPanelChannelId": "1516429821524316251",
+    "announcementChannelId": "1516429491704955072",
+    "liveScheduleChannelId": "1516429776070508555",
     "teamSearchChannelId": null,
     "helperSearchChannelId": null,
-    "checkinChannelIds": { "monday": null, "tuesday": null, "wednesday": null, "thursday": null, "friday": null, "saturday": null, "sunday": null },
-    "groupChannelIds": { "A": null, "B": null, "C": null, "D": null, "E": null, "F": null, "G": null, "H": null },
-    "knockoutChannelIds": { "round_of_16": null, "quarter_final": null, "semi_final": null, "third_place": null, "final": null }
+    "checkinChannelIds": {
+      "monday": "1516429727626170478",
+      "tuesday": "1516429727626170478",
+      "wednesday": "1516429727626170478",
+      "thursday": "1516429727626170478",
+      "friday": "1516429727626170478",
+      "saturday": "1516429727626170478",
+      "sunday": "1516429727626170478"
+    },
+    "groupChannelIds": {
+      "A": null,
+      "B": null,
+      "C": null,
+      "D": null,
+      "E": null,
+      "F": null,
+      "G": null,
+      "H": null
+    },
+    "knockoutChannelIds": {
+      "round_of_16": null,
+      "quarter_final": null,
+      "semi_final": null,
+      "third_place": null,
+      "final": null
+    }
   },
-  "categories": { "checkinCategoryId": null, "groupCategoryId": null, "knockoutCategoryId": null, "archiveCategoryId": null },
+  "categories": {
+    "checkinCategoryId": "1516390944268750890",
+    "groupCategoryId": "1516423873233424384",
+    "knockoutCategoryId": null,
+    "archiveCategoryId": null
+  },
   "permissions": {
-    "adminRoleIds": [],
-    "cupLeadRoleIds": [],
+    "adminRoleIds": ["1516427696526200902"],
+    "cupLeadRoleIds": ["1516427734136520918"],
     "adminActions": {
       "teamDetails": ["admin", "cup_lead"],
       "editTeam": ["admin", "cup_lead"],
@@ -44,28 +89,113 @@
   },
   "timeProfiles": {
     "timezone": "Europe/Berlin",
-    "eventProfiles": { "monday": "early", "tuesday": "early", "wednesday": "early", "thursday": "early", "friday": "weekend_night", "saturday": "weekend_night", "sunday": "early" },
+    "eventProfiles": {
+      "monday": "early",
+      "tuesday": "early",
+      "wednesday": "early",
+      "thursday": "early",
+      "friday": "weekend_night",
+      "saturday": "weekend_night",
+      "sunday": "early"
+    },
     "profiles": {
-      "early": { "deadlineTime": "22:00", "lateWindowUntilTime": "22:15", "drawTime": "22:20", "tournamentStartTime": "22:30", "resetTime": "07:00", "startIsNextDay": false },
-      "weekend_night": { "deadlineTime": "23:30", "lateWindowUntilTime": "23:45", "drawTime": "23:50", "tournamentStartTime": "00:00", "resetTime": "07:00", "startIsNextDay": true }
+      "early": {
+        "deadlineTime": "22:00",
+        "lateWindowUntilTime": "22:15",
+        "drawTime": "22:20",
+        "tournamentStartTime": "22:30",
+        "resetTime": "07:00",
+        "startIsNextDay": false
+      },
+      "weekend_night": {
+        "deadlineTime": "23:30",
+        "lateWindowUntilTime": "23:45",
+        "drawTime": "23:50",
+        "tournamentStartTime": "00:00",
+        "resetTime": "07:00",
+        "startIsNextDay": true
+      }
     }
   },
   "tournament": {
     "minimumRealTeams": 8,
     "allowedSizes": [8, 16, 24, 32],
     "groupSize": 4,
-    "points": { "win": 3, "draw": 1, "loss": 0 },
-    "qualificationRules": { "8": "top2", "16": "top2", "24": "top2_plus_4_best_thirds", "32": "top2" },
+    "points": {
+      "win": 3,
+      "draw": 1,
+      "loss": 0
+    },
+    "qualificationRules": {
+      "8": "top2",
+      "16": "top2",
+      "24": "top2_plus_4_best_thirds",
+      "32": "top2"
+    },
     "avoidSameGroupRematchesInFirstKoRound": true,
     "thirdPlaceMatchRequired": true,
     "knockoutDrawsAllowed": false,
     "knockoutTiebreaker": ["extra_time", "penalties"]
   },
-  "teams": { "coManagerLimit": 5, "clubNameMinLength": 2, "clubNameMaxLength": 30, "logoRequired": true, "allowedLogoExtensions": ["png", "jpg", "jpeg", "webp"], "maxLogoFileSizeMb": 8 },
-  "checkin": { "allowMultipleEventsPerTeam": true, "allowDuplicateCheckinPerEvent": false, "allowManagerCheckin": true, "allowCoManagerCheckin": true, "lateWithdrawalCreatesBan": true, "lateWithdrawalReason": "late_withdrawal", "showTeamsPublicly": true, "showWaitlistPublicly": true, "waitlistIsInformationalOnly": true, "noPromotionFromWaitlist": true },
-  "bans": { "durationsDays": { "late_withdrawal": 7, "no_show": 14, "left_tournament": 14, "disrespect": 14, "admin_other": 14 }, "affectsTeam": true, "affectsManager": true, "affectsCoManagers": true, "removeExistingCheckins": true },
-  "liveSchedule": { "enabled": true, "mode": "mirror_only", "buttonsEnabled": false, "showGroupsDuringGroupPhase": true, "deleteGroupEmbedsWhenKnockoutStarts": true, "showKnockoutDuringKnockoutPhase": true },
-  "ceremony": { "enabled": true, "postToAnnouncementChannel": true, "mentionEveryone": false, "generateImage": true, "includeTextSummary": true, "allowTestRun": true },
-  "teamSearch": { "enabled": true, "cooldownsSeconds": { "teamSearchPost": 21600, "helperSearchPost": 600 }, "autoDeleteAfterMinutes": 120 },
-  "meta": { "createdAt": null, "updatedAt": null }
+  "teams": {
+    "coManagerLimit": 5,
+    "clubNameMinLength": 2,
+    "clubNameMaxLength": 30,
+    "logoRequired": true,
+    "allowedLogoExtensions": ["png", "jpg", "jpeg", "webp"],
+    "maxLogoFileSizeMb": 8
+  },
+  "checkin": {
+    "allowMultipleEventsPerTeam": true,
+    "allowDuplicateCheckinPerEvent": false,
+    "allowManagerCheckin": true,
+    "allowCoManagerCheckin": true,
+    "lateWithdrawalCreatesBan": true,
+    "lateWithdrawalReason": "late_withdrawal",
+    "showTeamsPublicly": true,
+    "showWaitlistPublicly": true,
+    "waitlistIsInformationalOnly": true,
+    "noPromotionFromWaitlist": true
+  },
+  "bans": {
+    "durationsDays": {
+      "late_withdrawal": 7,
+      "no_show": 14,
+      "left_tournament": 14,
+      "disrespect": 14,
+      "admin_other": 14
+    },
+    "affectsTeam": true,
+    "affectsManager": true,
+    "affectsCoManagers": true,
+    "removeExistingCheckins": true
+  },
+  "liveSchedule": {
+    "enabled": true,
+    "mode": "mirror_only",
+    "buttonsEnabled": false,
+    "showGroupsDuringGroupPhase": true,
+    "deleteGroupEmbedsWhenKnockoutStarts": true,
+    "showKnockoutDuringKnockoutPhase": true
+  },
+  "ceremony": {
+    "enabled": false,
+    "postToAnnouncementChannel": false,
+    "mentionEveryone": false,
+    "generateImage": false,
+    "includeTextSummary": true,
+    "allowTestRun": false
+  },
+  "teamSearch": {
+    "enabled": false,
+    "cooldownsSeconds": {
+      "teamSearchPost": 21600,
+      "helperSearchPost": 600
+    },
+    "autoDeleteAfterMinutes": 120
+  },
+  "meta": {
+    "createdAt": null,
+    "updatedAt": null
+  }
 }
