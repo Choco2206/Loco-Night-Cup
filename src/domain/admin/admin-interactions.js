@@ -134,11 +134,10 @@ function removeManualBye(eventKey, settings) {
 }
 
 async function replyInteraction(interaction, content, extra = {}) {
-  const payload = { content, flags: EPHEMERAL, ...extra };
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply(payload).catch(() => {});
+    await interaction.editReply({ content, ...extra }).catch(() => {});
   } else {
-    await interaction.reply(payload).catch(() => {});
+    await interaction.reply({ content, flags: EPHEMERAL, ...extra }).catch(() => {});
   }
 }
 
