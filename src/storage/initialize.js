@@ -31,6 +31,51 @@ function emptyPanelMessage() {
   };
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneJson(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function mergeMissingSettings(target, seed) {
+  if (!isPlainObject(seed) || !isPlainObject(target)) return false;
+
+  let changed = false;
+
+  Object.entries(seed).forEach(([key, seedValue]) => {
+    const currentValue = target[key];
+
+    if (currentValue === undefined) {
+      target[key] = cloneJson(seedValue);
+      changed = true;
+      return;
+    }
+
+    if (currentValue === null && seedValue !== null && seedValue !== undefined) {
+      target[key] = cloneJson(seedValue);
+      changed = true;
+      return;
+    }
+
+    if (Array.isArray(currentValue)) return;
+
+    if (isPlainObject(currentValue) && isPlainObject(seedValue)) {
+      changed = mergeMissingSettings(currentValue, seedValue) || changed;
+    }
+  });
+
+  return changed;
+}
+
+function readSettingsSeed() {
+  return fs.existsSync(FILES.settingsSeed)
+    ? readJson(FILES.settingsSeed, createSettingsDefault())
+    : createSettingsDefault();
+}
+
 function ensureEventKeys(object, factory) {
   let changed = false;
 
@@ -65,14 +110,17 @@ function ensureKnockoutRounds(rounds) {
 }
 
 function seedSettingsFile() {
-  if (fs.existsSync(FILES.settings)) return readJson(FILES.settings, createSettingsDefault());
+  const seed = readSettingsSeed();
 
-  const seed = fs.existsSync(FILES.settingsSeed)
-    ? readJson(FILES.settingsSeed, createSettingsDefault())
-    : createSettingsDefault();
+  if (!fs.existsSync(FILES.settings)) {
+    writeJsonAtomic(FILES.settings, seed);
+    return seed;
+  }
 
-  writeJsonAtomic(FILES.settings, seed);
-  return seed;
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const changed = mergeMissingSettings(settings, seed);
+  if (changed) writeJsonAtomic(FILES.settings, settings);
+  return settings;
 }
 
 function seedCheckinBanner() {
@@ -207,6 +255,7 @@ function initializeStorage() {
 
 module.exports = {
   initializeStorage,
+  mergeMissingSettings,
   normalizeMessagesFile,
   seedCheckinBanner,
   seedSettingsFile,
