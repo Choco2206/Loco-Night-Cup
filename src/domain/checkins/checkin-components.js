@@ -7,6 +7,10 @@ const { EVENT_LABELS } = require('../../app/constants');
 const { FILES, ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
 const {
+  getEntryTeamIds,
+  getManualByeCount,
+} = require('./checkin-format');
+const {
   canAcceptCheckinActions,
   getCheckinWindowState,
   getDeadlineAt,
@@ -32,14 +36,6 @@ function uniqueStrings(values) {
     result.push(id);
   }
   return result;
-}
-
-function getEntryTeamIds(event) {
-  return uniqueStrings((event.checkin?.entries || []).map(entry => entry.teamId));
-}
-
-function getManualByeCount(event) {
-  return Array.isArray(event.byes) ? event.byes.length : 0;
 }
 
 function parseDateTime(dateValue, timeValue) {
@@ -81,10 +77,14 @@ function formatStatus(eventKey, event, settings, now = new Date()) {
   return '🔴 Check-in geschlossen';
 }
 
+function getParticipantSlotCount(event) {
+  return getEntryTeamIds(event).length + getManualByeCount(event);
+}
+
 function getDisplaySlotCount(event) {
   if (event.format?.lockedAt && event.format?.size) return event.format.size;
 
-  const participantSlots = getEntryTeamIds(event).length + getManualByeCount(event);
+  const participantSlots = getParticipantSlotCount(event);
   if (participantSlots >= 22) return 32;
   if (participantSlots >= 14) return 24;
   if (participantSlots >= 6) return 16;
@@ -93,8 +93,9 @@ function getDisplaySlotCount(event) {
 
 function formatFormat(event, settings, displaySlotCount) {
   const minimum = settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8;
-  const participantSlots = getEntryTeamIds(event).length + getManualByeCount(event);
-  const byeLine = getManualByeCount(event) > 0 ? `\n• ${getManualByeCount(event)} manuelle Freilose vorhanden` : '';
+  const participantSlots = getParticipantSlotCount(event);
+  const byeCount = getManualByeCount(event);
+  const byeLine = byeCount > 0 ? `\n• ${byeCount} manuelle Freilose vorhanden` : '';
 
   if (event.format?.lockedAt && event.format?.size) {
     return `${event.format.size}er Turnier (gelockt)\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
@@ -108,7 +109,10 @@ function formatFormat(event, settings, displaySlotCount) {
 }
 
 function getDisplayTeamIds(event) {
-  if (event.format?.lockedAt) return uniqueStrings(event.checkin?.activeTeamIds || []);
+  if (event.format?.lockedAt) {
+    const entryIds = new Set(getEntryTeamIds(event));
+    return uniqueStrings(event.checkin?.activeTeamIds || []).filter(teamId => entryIds.has(teamId));
+  }
   return getEntryTeamIds(event);
 }
 
@@ -117,7 +121,7 @@ function formatSlots(teamIds, byeCount, slotCount = 8) {
   for (let index = 0; index < slotCount; index += 1) {
     const teamId = teamIds[index];
     const byeIndex = index - teamIds.length;
-    const label = teamId ? teamName(teamId) : byeIndex >= 0 && byeIndex < byeCount ? 'Freilos (Admin)' : '—';
+    const label = teamId ? teamName(teamId) : byeIndex >= 0 && byeIndex < byeCount ? 'Freilos' : '—';
     lines.push(`${index + 1}. ${label}`);
   }
   return lines.join('\n');
@@ -159,6 +163,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const displaySlotCount = getDisplaySlotCount(event);
   const displayTeamIds = getDisplayTeamIds(event);
   const byeCount = getManualByeCount(event);
+  const participantSlotCount = displayTeamIds.length + byeCount;
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
   const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
 
@@ -178,7 +183,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
     '─────────────',
     `🏆 Turnierformat: ${formatFormat(event, settings, displaySlotCount)}`,
     '─────────────',
-    `👥 Teilnehmende Teams (${displayTeamIds.length})`,
+    `👥 Teilnehmende Teams/Plätze (${participantSlotCount})`,
     formatSlots(displayTeamIds, byeCount, displaySlotCount),
     '',
     '⚠️ Wichtiger Hinweis zur Abmeldung',
