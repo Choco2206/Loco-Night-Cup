@@ -3,17 +3,11 @@
 const fs = require('fs');
 const path = require('path');
 const { TEAM_LOGOS_DIR } = require('../../storage');
-const { setTeamLogo } = require('./team-service');
-
-const pendingLogoUploads = new Map();
-
-function setPendingLogoUpload(userId, teamId, channelId) {
-  pendingLogoUploads.set(String(userId), {
-    teamId,
-    channelId,
-    expiresAt: Date.now() + 10 * 60 * 1000,
-  });
-}
+const {
+  clearExpiredLogoUploads,
+  findPendingLogoUpload,
+  setTeamLogo,
+} = require('./team-service');
 
 function getExtension(attachment) {
   const contentType = String(attachment.contentType || '').toLowerCase();
@@ -38,24 +32,50 @@ function validateAttachment(attachment, settings) {
 
   const maxBytes = settings.teams.maxLogoFileSizeMb * 1024 * 1024;
   if (attachment.size && attachment.size > maxBytes) {
-    throw new Error(`Das Logo darf maximal ${settings.teams.maxLogoFileSizeMb} MB groß sein.`);
+    throw new Error(`Das Logo darf maximal ${settings.teams.maxLogoFileSizeMb} MB gross sein.`);
   }
 
   return ext;
 }
 
-async function saveLogoFromMessage(message, settings) {
-  const pending = pendingLogoUploads.get(String(message.author.id));
-  if (!pending) return null;
+function findExpiredUploadForMessage(expiredUploads, message) {
+  const userId = String(message.author.id);
+  const channelId = String(message.channel.id);
+  return expiredUploads.find(upload => {
+    if (String(upload.requestedByUserId) !== userId) return false;
+    if (String(upload.channelId) !== channelId) return false;
+    return true;
+  }) || null;
+}
 
-  if (pending.channelId !== message.channel.id || Date.now() > pending.expiresAt) {
-    pendingLogoUploads.delete(String(message.author.id));
-    return null;
+async function saveLogoFromMessage(message, settings) {
+  const now = new Date();
+  const expiredUploads = clearExpiredLogoUploads(now);
+  const expiredUpload = findExpiredUploadForMessage(expiredUploads, message);
+  if (expiredUpload) {
+    return {
+      status: 'expired',
+      expiredUpload,
+      instructionMessageId: expiredUpload.instructionMessageId || null,
+    };
   }
+
+  const team = findPendingLogoUpload({
+    userId: message.author.id,
+    channelId: message.channel.id,
+    now,
+  });
+
+  if (!team?.logoUpload) return { status: 'no_pending' };
+
+  const pending = team.logoUpload;
+  if (String(pending.teamId) !== String(team.id)) return { status: 'no_pending' };
+  if (String(pending.requestedByUserId) !== String(message.author.id)) return { status: 'no_pending' };
+  if (String(pending.channelId) !== String(message.channel.id)) return { status: 'no_pending' };
 
   const attachment = message.attachments.first();
   const ext = validateAttachment(attachment, settings);
-  const fileName = `${pending.teamId}.${ext}`;
+  const fileName = `${team.id}.${ext}`;
   const filePath = path.join(TEAM_LOGOS_DIR, fileName);
 
   if (!fs.existsSync(TEAM_LOGOS_DIR)) {
@@ -68,8 +88,8 @@ async function saveLogoFromMessage(message, settings) {
   const buffer = Buffer.from(await response.arrayBuffer());
   fs.writeFileSync(filePath, buffer);
 
-  const team = setTeamLogo({
-    teamId: pending.teamId,
+  const updatedTeam = setTeamLogo({
+    teamId: team.id,
     uploadedByUserId: message.author.id,
     logo: {
       fileName,
@@ -79,16 +99,15 @@ async function saveLogoFromMessage(message, settings) {
     },
   });
 
-  pendingLogoUploads.delete(String(message.author.id));
-
   return {
-    team,
+    status: 'saved',
+    team: updatedTeam,
     fileName,
     filePath,
+    instructionMessageId: pending.instructionMessageId || null,
   };
 }
 
 module.exports = {
   saveLogoFromMessage,
-  setPendingLogoUpload,
 };
