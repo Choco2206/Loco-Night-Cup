@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "guild": { "guildId": null },
+  "roles": {
+    "adminRoleIds": [],
+    "cupLeadRoleIds": [],
+    "playerRoleId": null,
+    "managerRoleId": null,
+    "groupRoleIds": { "A": null, "B": null, "C": null, "D": null, "E": null, "F": null, "G": null, "H": null },
+    "knockoutRoleIds": { "round_of_16": null, "quarter_final": null, "semi_final": null, "third_place": null, "final": null }
+  },
+  "channels": {
+    "welcomeChannelId": null,
+    "roleSelectChannelId": null,
+    "teamRegistrationChannelId": null,
+    "registeredTeamsChannelId": null,
+    "rulesChannelId": null,
+    "banlistChannelId": null,
+    "adminPanelChannelId": null,
+    "announcementChannelId": null,
+    "liveScheduleChannelId": null,
+    "teamSearchChannelId": null,
+    "helperSearchChannelId": null,
+    "checkinChannelIds": { "monday": null, "tuesday": null, "wednesday": null, "thursday": null, "friday": null, "saturday": null, "sunday": null },
+    "groupChannelIds": { "A": null, "B": null, "C": null, "D": null, "E": null, "F": null, "G": null, "H": null },
+    "knockoutChannelIds": { "round_of_16": null, "quarter_final": null, "semi_final": null, "third_place": null, "final": null }
+  },
+  "categories": { "checkinCategoryId": null, "groupCategoryId": null, "knockoutCategoryId": null, "archiveCategoryId": null },
+  "permissions": {
+    "adminRoleIds": [],
+    "cupLeadRoleIds": [],
+    "adminActions": {
+      "teamDetails": ["admin", "cup_lead"],
+      "editTeam": ["admin", "cup_lead"],
+      "deleteTeam": ["admin"],
+      "banTeam": ["admin"],
+      "addBye": ["admin", "cup_lead"],
+      "removeBye": ["admin", "cup_lead"],
+      "eventStatus": ["admin", "cup_lead"],
+      "cancelEvent": ["admin"],
+      "resetEvent": ["admin"],
+      "ceremonyTest": ["admin", "cup_lead"]
+    }
+  },
+  "timeProfiles": {
+    "timezone": "Europe/Berlin",
+    "eventProfiles": { "monday": "early", "tuesday": "early", "wednesday": "early", "thursday": "early", "friday": "weekend_night", "saturday": "weekend_night", "sunday": "early" },
+    "profiles": {
+      "early": { "deadlineTime": "22:00", "lateWindowUntilTime": "22:15", "drawTime": "22:20", "tournamentStartTime": "22:30", "resetTime": "07:00", "startIsNextDay": false },
+      "weekend_night": { "deadlineTime": "23:30", "lateWindowUntilTime": "23:45", "drawTime": "23:50", "tournamentStartTime": "00:00", "resetTime": "07:00", "startIsNextDay": true }
+    }
+  },
+  "tournament": {
+    "minimumRealTeams": 8,
+    "allowedSizes": [8, 16, 24, 32],
+    "groupSize": 4,
+    "points": { "win": 3, "draw": 1, "loss": 0 },
+    "qualificationRules": { "8": "top2", "16": "top2", "24": "top2_plus_4_best_thirds", "32": "top2" },
+    "avoidSameGroupRematchesInFirstKoRound": true,
+    "thirdPlaceMatchRequired": true,
+    "knockoutDrawsAllowed": false,
+    "knockoutTiebreaker": ["extra_time", "penalties"]
+  },
+  "teams": { "coManagerLimit": 5, "clubNameMinLength": 2, "clubNameMaxLength": 30, "logoRequired": true, "allowedLogoExtensions": ["png", "jpg", "jpeg", "webp"], "maxLogoFileSizeMb": 8 },
+  "checkin": { "allowMultipleEventsPerTeam": true, "allowDuplicateCheckinPerEvent": false, "allowManagerCheckin": true, "allowCoManagerCheckin": true, "lateWithdrawalCreatesBan": true, "lateWithdrawalReason": "late_withdrawal", "showTeamsPublicly": true, "showWaitlistPublicly": true, "waitlistIsInformationalOnly": true, "noPromotionFromWaitlist": true },
+  "bans": { "durationsDays": { "late_withdrawal": 7, "no_show": 14, "left_tournament": 14, "disrespect": 14, "admin_other": 14 }, "affectsTeam": true, "affectsManager": true, "affectsCoManagers": true, "removeExistingCheckins": true },
+  "liveSchedule": { "enabled": true, "mode": "mirror_only", "buttonsEnabled": false, "showGroupsDuringGroupPhase": true, "deleteGroupEmbedsWhenKnockoutStarts": true, "showKnockoutDuringKnockoutPhase": true },
+  "ceremony": { "enabled": true, "postToAnnouncementChannel": true, "mentionEveryone": false, "generateImage": true, "includeTextSummary": true, "allowTestRun": true },
+  "teamSearch": { "enabled": true, "cooldownsSeconds": { "teamSearchPost": 21600, "helperSearchPost": 600 }, "autoDeleteAfterMinutes": 120 },
+  "meta": { "createdAt": null, "updatedAt": null }
+}
