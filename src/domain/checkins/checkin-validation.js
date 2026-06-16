@@ -1,6 +1,6 @@
 'use strict';
 
-const { findNonDeletedTeamByUserId, isTeamMember } = require('../teams/team-service');
+const { isTeamMember, listVisibleTeams } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 const { canAcceptCheckinActions, canUseCheckinStatus } = require('./checkin-schedule');
 
@@ -18,12 +18,21 @@ function assertCheckinActionAllowed(event) {
 }
 
 function getEligibleTeamForUser(userId) {
-  const team = findNonDeletedTeamByUserId(userId);
-  if (!team) throw new Error('Du bist aktuell in keinem registrierten Team als VM oder Co-VM eingetragen.');
-  if (!isTeamMember(team, userId)) throw new Error('Du darfst dieses Team nicht einchecken.');
-  if (team.status !== 'active') throw new Error('Nur aktive Teams duerfen einchecken.');
-  if (team.registrationStatus !== 'complete') throw new Error('Dein Team ist noch unvollstaendig. Bitte lade zuerst ein Teamlogo hoch.');
-  return team;
+  const teams = listVisibleTeams();
+  const memberships = teams.filter(team => isTeamMember(team, userId));
+
+  if (!memberships.length) {
+    throw new Error('Du hast kein vollständiges Team. Nur VM oder Co-VM können einchecken.');
+  }
+
+  const activeTeam = memberships.find(team => team.status === 'active') || memberships[0];
+  if (!isTeamMember(activeTeam, userId)) throw new Error('Nur VM oder Co-VM können einchecken.');
+  if (activeTeam.status !== 'active') throw new Error('Nur aktive Teams dürfen einchecken.');
+  if (activeTeam.registrationStatus !== 'complete') {
+    throw new Error('Dieses Team ist noch unvollständig. Bitte lade zuerst ein Logo hoch.');
+  }
+
+  return activeTeam;
 }
 
 function assertTeamHasNoActiveBan({ team, actorUserId, now }) {
