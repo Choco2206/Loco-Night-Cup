@@ -12,21 +12,25 @@ const {
 } = require('./team-components');
 const {
   addCoManager,
+  clearExpiredLogoUploads,
   createTeam,
   deleteTeam,
   findNonDeletedTeamByUserId,
   findTeamById,
+  isLogoUploadExpired,
   isTeamMember,
   leaveTeam,
   removeCoManager,
+  requestLogoUpload,
+  setLogoUploadInstructionMessage,
   updateTeamName,
 } = require('./team-service');
-const { setPendingLogoUpload } = require('./team-logos');
 const { syncManagerRoleForUser, syncManagerRolesForTeam } = require('./team-roles');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 
 const EPHEMERAL = 64;
+const LOGO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
 function getSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -50,6 +54,71 @@ async function replyError(interaction, error) {
 function requireTeamAccess(team, userId) {
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   if (!isTeamMember(team, userId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
+}
+
+async function deleteInstructionMessage(client, channelId, messageId) {
+  if (!channelId || !messageId) return;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return;
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (message) await message.delete().catch(() => {});
+}
+
+async function deleteInstructionMessages(client, uploads) {
+  for (const upload of uploads) {
+    await deleteInstructionMessage(client, upload.channelId, upload.instructionMessageId);
+  }
+}
+
+function buildLogoInstructionContent(userId, team, settings) {
+  const maxMb = settings.teams.maxLogoFileSizeMb;
+  return `<@${userId}> Bitte lade dein Logo innerhalb von 10 Minuten hier im Kanal hoch. Erlaubt: PNG/JPG/WEBP, max. ${maxMb} MB. Team: **${team.clubName}**`;
+}
+
+function scheduleExpiredLogoCleanup(client) {
+  const timeout = setTimeout(async () => {
+    const expiredUploads = clearExpiredLogoUploads(new Date());
+    await deleteInstructionMessages(client, expiredUploads);
+  }, LOGO_UPLOAD_TIMEOUT_MS + 1000);
+
+  if (typeof timeout.unref === 'function') timeout.unref();
+}
+
+async function openLogoUpload({ interaction, client, team, settings }) {
+  const channelId = settings.channels.teamRegistrationChannelId;
+  if (!channelId) throw new Error('Teamregistrierungskanal ist nicht konfiguriert.');
+
+  const expiredUploads = clearExpiredLogoUploads(new Date());
+  await deleteInstructionMessages(client, expiredUploads);
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.send) throw new Error('Teamregistrierungskanal wurde nicht gefunden.');
+
+  const expiresAt = new Date(Date.now() + LOGO_UPLOAD_TIMEOUT_MS).toISOString();
+  const { replacedInstructionMessageId } = requestLogoUpload({
+    teamId: team.id,
+    requestedByUserId: interaction.user.id,
+    channelId,
+    expiresAt,
+    instructionMessageId: null,
+  });
+
+  await deleteInstructionMessage(client, channelId, replacedInstructionMessageId);
+
+  const instruction = await channel.send({
+    content: buildLogoInstructionContent(interaction.user.id, team, settings),
+    allowedMentions: { users: [interaction.user.id] },
+  });
+
+  setLogoUploadInstructionMessage({
+    teamId: team.id,
+    requestedByUserId: interaction.user.id,
+    instructionMessageId: instruction.id,
+  });
+
+  scheduleExpiredLogoCleanup(client);
+
+  return { instruction, expiresAt };
 }
 
 async function handleButton(interaction, client) {
@@ -82,10 +151,12 @@ async function handleButton(interaction, client) {
 
   if (action === 'team_logo_update_open') {
     requireTeamAccess(team, interaction.user.id);
-    setPendingLogoUpload(interaction.user.id, team.id, settings.channels.teamRegistrationChannelId);
-    await interaction.reply({
-      content: `Lade jetzt das Logo für **${team.clubName}** im Teamregistrierungskanal hoch. Das Team bleibt bis dahin unvollständig.`,
-      flags: EPHEMERAL,
+    await interaction.deferReply({ flags: EPHEMERAL });
+    await openLogoUpload({ interaction, client, team, settings });
+    await interaction.editReply({
+      content: `Logo-Upload fuer **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im Teamregistrierungskanal hoch.`,
+      components: [],
+      embeds: [],
     });
     return true;
   }
@@ -112,7 +183,7 @@ async function handleButton(interaction, client) {
   if (action === 'team_delete_open') {
     requireTeamAccess(team, interaction.user.id);
     if (!team.manager?.userId || String(team.manager.userId) !== String(interaction.user.id)) {
-      throw new Error('Nur der VM kann das Team löschen.');
+      throw new Error('Nur der VM kann das Team loeschen.');
     }
     await interaction.reply({ ...buildConfirmPayload('delete', team), flags: EPHEMERAL });
     return true;
@@ -135,7 +206,7 @@ async function handleButton(interaction, client) {
     deleteTeam({ teamId, actorUserId: interaction.user.id });
     for (const userId of userIds) await syncManagerRoleForUser(interaction.guild, userId, settings);
     await refreshRegisteredTeamsOverview(client);
-    await interaction.update({ content: 'Team wurde gelöscht. Statistiken bleiben erhalten.', components: [], embeds: [] });
+    await interaction.update({ content: 'Team wurde geloescht. Statistiken bleiben erhalten.', components: [], embeds: [] });
     return true;
   }
 
@@ -152,14 +223,16 @@ async function handleModal(interaction, client) {
 
   if (interaction.customId === 'team_register_modal') {
     requireGuild(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
     const clubName = interaction.fields.getTextInputValue('club_name');
     const team = createTeam({ clubName, managerUserId: interaction.user.id, settings });
     await syncManagerRoleForUser(interaction.guild, interaction.user.id, settings);
-    setPendingLogoUpload(interaction.user.id, team.id, settings.channels.teamRegistrationChannelId);
+    await openLogoUpload({ interaction, client, team, settings });
     await refreshRegisteredTeamsOverview(client);
-    await interaction.reply({
-      content: `Team **${team.clubName}** wurde angelegt. Bitte lade jetzt ein Logo im Teamregistrierungskanal hoch, damit die Registrierung vollständig wird.`,
-      flags: EPHEMERAL,
+    await interaction.editReply({
+      content: `Team **${team.clubName}** wurde angelegt. Bitte lade dein Logo innerhalb von 10 Minuten im Teamregistrierungskanal hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
+      components: [],
+      embeds: [],
     });
     return true;
   }
@@ -170,7 +243,7 @@ async function handleModal(interaction, client) {
     const newClubName = interaction.fields.getTextInputValue('new_club_name');
     const team = updateTeamName({ teamId, newClubName, actorUserId: interaction.user.id, settings });
     await refreshRegisteredTeamsOverview(client);
-    await interaction.reply({ content: `Teamname wurde auf **${team.clubName}** geändert.`, flags: EPHEMERAL });
+    await interaction.reply({ content: `Teamname wurde auf **${team.clubName}** geaendert.`, flags: EPHEMERAL });
     return true;
   }
 
@@ -191,7 +264,7 @@ async function handleUserSelect(interaction, client) {
   addCoManager({ teamId, userId, actorUserId: interaction.user.id, settings });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await refreshRegisteredTeamsOverview(client);
-  await interaction.update({ content: `<@${userId}> wurde als Co-VM hinzugefügt.`, components: [], allowedMentions: { parse: ['users'] } });
+  await interaction.update({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
 }
 
