@@ -22,6 +22,15 @@ const {
 } = require('./defaults');
 const { ensureDir, ensureJsonFile, readJson, writeJsonAtomic } = require('./json-store');
 
+function emptyPanelMessage() {
+  return {
+    channelId: null,
+    messageId: null,
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
 function ensureEventKeys(object, factory) {
   let changed = false;
 
@@ -77,6 +86,31 @@ function seedCheckinBanner() {
 function normalizeMessagesFile() {
   const messages = readJson(FILES.messages, createMessagesDefault());
   let changed = false;
+
+  if (!messages.roles) {
+    messages.roles = {};
+    changed = true;
+  }
+
+  if (!messages.roles.roleSelect) {
+    messages.roles.roleSelect = emptyPanelMessage();
+    changed = true;
+  }
+
+  if (!messages.roles.roleSelectPanel) {
+    messages.roles.roleSelectPanel = { ...emptyPanelMessage(), ...messages.roles.roleSelect };
+    changed = true;
+  }
+
+  if (!messages.admin) {
+    messages.admin = {};
+    changed = true;
+  }
+
+  if (!messages.admin.panel) {
+    messages.admin.panel = emptyPanelMessage();
+    changed = true;
+  }
 
   if (!messages.checkins) {
     messages.checkins = {};
