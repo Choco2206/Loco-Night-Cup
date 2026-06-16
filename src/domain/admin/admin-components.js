@@ -15,7 +15,7 @@ function buildAdminPanelPayload() {
     .setDescription('Zentrale Steuerung des Turniersystems.')
     .setColor(0xff0000)
     .addFields(
-      { name: 'EVENT', value: 'Check-in öffnen\nCheck-in schließen\nEvent zurücksetzen', inline: true },
+      { name: 'EVENT', value: 'Check-in öffnen\nCheck-in schließen\nEvent zurücksetzen\nFreilos hinzufügen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen', inline: true },
       { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamübersicht Refresh\nCeremony Test', inline: true }
@@ -25,7 +25,9 @@ function buildAdminPanelPayload() {
   const eventRow = new ActionRowBuilder().addComponents(
     button('admin_checkin_open', 'Check-in öffnen', ButtonStyle.Success),
     button('admin_checkin_close', 'Check-in schließen', ButtonStyle.Danger),
-    button('admin_event_reset', 'Event zurücksetzen', ButtonStyle.Secondary)
+    button('admin_event_reset', 'Event zurücksetzen', ButtonStyle.Secondary),
+    button('admin_bye_add', 'Freilos hinzufügen', ButtonStyle.Secondary),
+    button('admin_bye_remove', 'Freilos entfernen', ButtonStyle.Secondary)
   );
 
   const tournamentRow = new ActionRowBuilder().addComponents(
