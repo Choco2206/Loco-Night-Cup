@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -11,6 +13,7 @@ const {
   TextInputStyle,
   UserSelectMenuBuilder,
 } = require('discord.js');
+const { TEAM_LOGOS_DIR } = require('../../storage');
 
 function buildTeamPanelPayload() {
   const embed = new EmbedBuilder()
@@ -74,12 +77,29 @@ function mention(userId) {
   return userId ? `<@${userId}>` : 'Kein VM';
 }
 
-function buildTeamEmbed(team) {
+function getLogoAttachment(team) {
+  if (!team.logo?.fileName) return null;
+
+  const fileName = path.basename(team.logo.fileName);
+  const filePath = path.join(TEAM_LOGOS_DIR, fileName);
+  if (!fs.existsSync(filePath)) return null;
+
+  return {
+    attachment: filePath,
+    name: fileName,
+  };
+}
+
+function buildTeamEmbed(team, logoAttachment) {
   const coManagers = team.coManagers.length
     ? team.coManagers.map(co => `• ${mention(co.userId)}`).join('\n')
     : 'Keine Co-VMs';
 
-  return new EmbedBuilder()
+  const logoLine = team.logo?.fileName
+    ? `Logo: ${team.logo.fileName}${logoAttachment ? '' : ' (Datei nicht gefunden)'}`
+    : 'Logo: fehlt';
+
+  const embed = new EmbedBuilder()
     .setTitle(team.clubName)
     .setDescription([
       `Status: **${team.status}**`,
@@ -90,12 +110,19 @@ function buildTeamEmbed(team) {
       `Co-VMs (${team.coManagers.length}/5)`,
       coManagers,
       '',
-      team.logo ? `Logo: ${team.logo.fileName}` : 'Logo: fehlt',
+      logoLine,
     ].join('\n'))
     .setColor(team.registrationStatus === 'complete' ? 0x00aa55 : 0xffaa00);
+
+  if (logoAttachment) {
+    embed.setImage(`attachment://${logoAttachment.name}`);
+  }
+
+  return embed;
 }
 
 function buildMyTeamPayload(team) {
+  const logoAttachment = getLogoAttachment(team);
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`team_edit_name_open:${team.id}`)
@@ -129,8 +156,9 @@ function buildMyTeamPayload(team) {
   );
 
   return {
-    embeds: [buildTeamEmbed(team)],
+    embeds: [buildTeamEmbed(team, logoAttachment)],
     components: [row1, row2],
+    files: logoAttachment ? [logoAttachment] : [],
     allowedMentions: { parse: ['users'] },
   };
 }
