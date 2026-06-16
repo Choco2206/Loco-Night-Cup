@@ -280,6 +280,9 @@ function createSettingsDefault() {
       groupChannelIds: groupIds,
       knockoutChannelIds: knockoutIds,
     },
+    assets: {
+      checkinBannerPath: 'data/assets/check-in.png',
+    },
     categories: {
       checkinCategoryId: null,
       groupCategoryId: null,
