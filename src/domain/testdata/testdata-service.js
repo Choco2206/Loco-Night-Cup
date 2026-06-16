@@ -53,10 +53,10 @@ function createEmptyStats() {
   };
 }
 
-function createTestTeam(name, actorUserId, timestamp) {
+function createTestTeam(id, name, actorUserId, timestamp) {
   const slug = slugify(name);
   return {
-    id: `test_team_${slug}`,
+    id,
     isTestTeam: true,
     status: 'active',
     registrationStatus: 'complete',
@@ -85,6 +85,27 @@ function createTestTeam(name, actorUserId, timestamp) {
   };
 }
 
+function isNameUsedByOtherActiveTeam(teams, normalizedName, ownId) {
+  return teams.some(team => {
+    if (!team || team.status === 'deleted') return false;
+    if (String(team.id) === String(ownId)) return false;
+    return team.normalizedClubName === normalizedName;
+  });
+}
+
+function resolveTestTeamName(teams, baseName, ownId) {
+  if (!isNameUsedByOtherActiveTeam(teams, normalizeClubName(baseName), ownId)) return baseName;
+
+  const testName = `${baseName} Test`;
+  if (!isNameUsedByOtherActiveTeam(teams, normalizeClubName(testName), ownId)) return testName;
+
+  let counter = 2;
+  while (isNameUsedByOtherActiveTeam(teams, normalizeClubName(`${testName} ${counter}`), ownId)) {
+    counter += 1;
+  }
+  return `${testName} ${counter}`;
+}
+
 function ensureTestTeams(actorUserId) {
   const timestamp = nowIso();
   const createdIds = [];
@@ -93,22 +114,25 @@ function ensureTestTeams(actorUserId) {
   updateTeamsData(data => {
     data.teams = Array.isArray(data.teams) ? data.teams : [];
 
-    for (const name of TEST_TEAM_NAMES) {
-      const id = `test_team_${slugify(name)}`;
+    for (const baseName of TEST_TEAM_NAMES) {
+      const id = `test_team_${slugify(baseName)}`;
+      const name = resolveTestTeamName(data.teams, baseName, id);
       const existing = data.teams.find(team => String(team.id) === id);
       if (existing) {
         existing.status = 'active';
         existing.registrationStatus = 'complete';
         existing.isTestTeam = true;
+        existing.clubName = name;
+        existing.normalizedClubName = normalizeClubName(name);
         existing.manager = existing.manager || { userId: null, addedAt: timestamp };
         existing.coManagers = Array.isArray(existing.coManagers) ? existing.coManagers : [];
-        existing.logo = existing.logo || createTestTeam(name, actorUserId, timestamp).logo;
+        existing.logo = existing.logo || createTestTeam(id, name, actorUserId, timestamp).logo;
         existing.meta = { ...existing.meta, updatedAt: timestamp };
         existingIds.push(id);
         continue;
       }
 
-      data.teams.push(createTestTeam(name, actorUserId, timestamp));
+      data.teams.push(createTestTeam(id, name, actorUserId, timestamp));
       createdIds.push(id);
     }
 
