@@ -184,10 +184,11 @@ async function handleUserSelect(interaction, client) {
   const settings = getSettings();
   const [, teamId] = interaction.customId.split(':');
   const userId = interaction.values?.[0];
-  const selectedUser = await interaction.client.users.fetch(userId).catch(() => null);
-  ensureUserIsNotBot(selectedUser);
+  const selectedMember = await interaction.guild.members.fetch(userId).catch(() => null);
+  if (!selectedMember) throw new Error('Dieser User ist nicht auf dem Server.');
+  ensureUserIsNotBot(selectedMember.user);
 
-  const team = addCoManager({ teamId, userId, actorUserId: interaction.user.id, settings });
+  addCoManager({ teamId, userId, actorUserId: interaction.user.id, settings });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await refreshRegisteredTeamsOverview(client);
   await interaction.update({ content: `<@${userId}> wurde als Co-VM hinzugefügt.`, components: [], allowedMentions: { parse: ['users'] } });
@@ -201,7 +202,7 @@ async function handleStringSelect(interaction, client) {
   const settings = getSettings();
   const [, teamId] = interaction.customId.split(':');
   const userId = interaction.values?.[0];
-  const team = removeCoManager({ teamId, userId, actorUserId: interaction.user.id });
+  removeCoManager({ teamId, userId, actorUserId: interaction.user.id });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await refreshRegisteredTeamsOverview(client);
   await interaction.update({ content: `<@${userId}> wurde als Co-VM entfernt.`, components: [], allowedMentions: { parse: ['users'] } });
