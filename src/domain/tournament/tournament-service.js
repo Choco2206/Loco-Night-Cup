@@ -170,14 +170,42 @@ function createGroupMatches(groupKey, slots) {
   }));
 }
 
+function distributeParticipantsForGroups(participants, groupCount) {
+  const teams = participants.filter(participant => participant.type === 'team');
+  const byes = participants.filter(participant => participant.type === 'bye');
+  const reservedByes = Array.from({ length: groupCount }, () => []);
+
+  byes.forEach((bye, index) => {
+    reservedByes[index % groupCount].push(bye);
+  });
+
+  return reservedByes.map(groupByes => {
+    const groupParticipants = [];
+    const teamSlotsBeforeByes = Math.max(0, GROUP_SIZE - groupByes.length);
+
+    while (groupParticipants.length < teamSlotsBeforeByes && teams.length) {
+      groupParticipants.push(teams.shift());
+    }
+
+    groupParticipants.push(...groupByes);
+
+    while (groupParticipants.length < GROUP_SIZE && teams.length) {
+      groupParticipants.push(teams.shift());
+    }
+
+    return groupParticipants.slice(0, GROUP_SIZE);
+  });
+}
+
 function buildGroups(event) {
   const participants = getLockedParticipants(event);
   const groupCount = Number(event.format.size) / GROUP_SIZE;
+  const distributedGroups = distributeParticipantsForGroups(participants, groupCount);
   const groups = {};
 
   for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
     const groupKey = GROUP_KEYS[groupIndex];
-    const groupParticipants = participants.slice(groupIndex * GROUP_SIZE, groupIndex * GROUP_SIZE + GROUP_SIZE);
+    const groupParticipants = distributedGroups[groupIndex];
     const slots = groupParticipants.map((participant, index) => ({
       slot: index + 1,
       participant,
