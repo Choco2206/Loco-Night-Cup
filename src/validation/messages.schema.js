@@ -30,6 +30,9 @@ function validateMessages(data) {
 
   validateMessageRef(errors, data.setup?.welcome, 'setup.welcome');
   validateMessageRef(errors, data.roles?.roleSelect, 'roles.roleSelect');
+  if (data.roles?.roleSelectPanel !== undefined) {
+    validateMessageRef(errors, data.roles.roleSelectPanel, 'roles.roleSelectPanel');
+  }
   validateMessageRef(errors, data.teams?.registrationPanel, 'teams.registrationPanel');
 
   if (requireObject(errors, data.teams?.registeredTeamsOverview, 'teams.registeredTeamsOverview')) {
