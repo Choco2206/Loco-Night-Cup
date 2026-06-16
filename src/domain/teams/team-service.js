@@ -40,6 +40,13 @@ function isTeamMember(team, userId) {
   return Array.isArray(team.coManagers) && team.coManagers.some(co => String(co.userId) === id);
 }
 
+function isLogoUploadExpired(logoUpload, now = new Date()) {
+  if (!logoUpload?.expiresAt) return true;
+  const expiresAt = new Date(logoUpload.expiresAt);
+  if (Number.isNaN(expiresAt.getTime())) return true;
+  return expiresAt.getTime() <= now.getTime();
+}
+
 function findTeamById(teamId) {
   return readTeamsData().teams.find(team => String(team.id) === String(teamId)) || null;
 }
@@ -101,6 +108,7 @@ function createTeam({ clubName, managerUserId, settings }) {
       clubName: cleanName,
       normalizedClubName: normalizeClubName(cleanName),
       logo: null,
+      logoUpload: null,
       manager: {
         userId: String(managerUserId),
         addedAt: timestamp,
@@ -128,7 +136,7 @@ function createTeam({ clubName, managerUserId, settings }) {
 function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
   const cleanName = String(newClubName || '').trim();
   if (cleanName.length < settings.teams.clubNameMinLength || cleanName.length > settings.teams.clubNameMaxLength) {
-    throw new Error('Der Teamname hat eine ungültige Länge.');
+    throw new Error('Der Teamname hat eine ungueltige Laenge.');
   }
 
   let updatedTeam;
@@ -156,6 +164,7 @@ function setTeamLogo({ teamId, logo, uploadedByUserId }) {
     if (!isTeamMember(team, uploadedByUserId)) throw new Error('Du darfst dieses Logo nicht setzen.');
 
     team.logo = logo;
+    team.logoUpload = null;
     team.registrationStatus = 'complete';
     team.meta.updatedAt = nowIso();
     updatedTeam = team;
@@ -165,13 +174,109 @@ function setTeamLogo({ teamId, logo, uploadedByUserId }) {
   return updatedTeam;
 }
 
+function requestLogoUpload({ teamId, requestedByUserId, channelId, instructionMessageId = null, expiresAt }) {
+  let updatedTeam;
+  let replacedInstructionMessageId = null;
+
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+    if (!isTeamMember(team, requestedByUserId)) throw new Error('Du darfst fuer dieses Team kein Logo hochladen.');
+
+    replacedInstructionMessageId = team.logoUpload?.instructionMessageId || null;
+    team.logoUpload = {
+      requestedByUserId: String(requestedByUserId),
+      teamId: String(team.id),
+      channelId: String(channelId),
+      expiresAt,
+      instructionMessageId: instructionMessageId ? String(instructionMessageId) : null,
+    };
+    team.meta.updatedAt = nowIso();
+    updatedTeam = team;
+    return data;
+  });
+
+  return { team: updatedTeam, replacedInstructionMessageId };
+}
+
+function setLogoUploadInstructionMessage({ teamId, requestedByUserId, instructionMessageId }) {
+  let updatedTeam;
+
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team) || !team.logoUpload) throw new Error('Kein offener Logo-Upload gefunden.');
+    if (String(team.logoUpload.requestedByUserId) !== String(requestedByUserId)) throw new Error('Logo-Upload gehoert zu einem anderen User.');
+
+    team.logoUpload.instructionMessageId = instructionMessageId ? String(instructionMessageId) : null;
+    team.meta.updatedAt = nowIso();
+    updatedTeam = team;
+    return data;
+  });
+
+  return updatedTeam;
+}
+
+function findPendingLogoUpload({ userId, channelId, now = new Date() }) {
+  const teams = readTeamsData().teams;
+  const user = String(userId);
+  const channel = String(channelId);
+
+  return teams.find(team => {
+    if (!isNonDeletedTeam(team) || !team.logoUpload) return false;
+    if (String(team.logoUpload.requestedByUserId) !== user) return false;
+    if (String(team.logoUpload.channelId) !== channel) return false;
+    if (isLogoUploadExpired(team.logoUpload, now)) return false;
+    return isTeamMember(team, user);
+  }) || null;
+}
+
+function clearLogoUpload({ teamId }) {
+  let cleared = null;
+
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!team?.logoUpload) return data;
+
+    cleared = {
+      teamId: String(team.id),
+      ...team.logoUpload,
+    };
+    team.logoUpload = null;
+    if (team.meta) team.meta.updatedAt = nowIso();
+    return data;
+  });
+
+  return cleared;
+}
+
+function clearExpiredLogoUploads(now = new Date()) {
+  const expired = [];
+
+  updateTeamsData(data => {
+    for (const team of data.teams) {
+      if (!team?.logoUpload) continue;
+      if (!isLogoUploadExpired(team.logoUpload, now)) continue;
+
+      expired.push({
+        teamId: String(team.id),
+        ...team.logoUpload,
+      });
+      team.logoUpload = null;
+      if (team.meta) team.meta.updatedAt = nowIso();
+    }
+    return data;
+  });
+
+  return expired;
+}
+
 function addCoManager({ teamId, userId, actorUserId, settings }) {
   let updatedTeam;
   updateTeamsData(data => {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
     if (!isTeamMember(team, actorUserId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
-    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusätzlich Co-VM sein.');
+    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusaetzlich Co-VM sein.');
     if (team.coManagers.length >= settings.teams.coManagerLimit) throw new Error('Das Co-VM-Limit ist erreicht.');
     if (team.coManagers.some(co => String(co.userId) === String(userId))) throw new Error('Dieser User ist bereits Co-VM.');
 
@@ -215,11 +320,12 @@ function deleteTeam({ teamId, actorUserId }) {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
     if (!team.manager?.userId || String(team.manager.userId) !== String(actorUserId)) {
-      throw new Error('Nur der VM kann das Team löschen.');
+      throw new Error('Nur der VM kann das Team loeschen.');
     }
 
     const timestamp = nowIso();
     team.status = 'deleted';
+    team.logoUpload = null;
     team.meta.updatedAt = timestamp;
     team.meta.deletedAt = timestamp;
     team.meta.deletedByUserId = String(actorUserId);
@@ -238,6 +344,10 @@ function leaveTeam({ teamId, userId }) {
     if (!isTeamMember(team, userId)) throw new Error('Du bist nicht in diesem Team.');
 
     const timestamp = nowIso();
+    if (team.logoUpload?.requestedByUserId && String(team.logoUpload.requestedByUserId) === String(userId)) {
+      team.logoUpload = null;
+    }
+
     if (team.manager?.userId && String(team.manager.userId) === String(userId)) {
       const nextManager = team.coManagers.shift();
       if (nextManager) {
@@ -269,6 +379,12 @@ function handleMemberRemoved({ userId }) {
   updateTeamsData(data => {
     for (const team of data.teams) {
       if (!isNonDeletedTeam(team)) continue;
+
+      if (team.logoUpload?.requestedByUserId && String(team.logoUpload.requestedByUserId) === String(userId)) {
+        team.logoUpload = null;
+        team.meta.updatedAt = nowIso();
+        changed = true;
+      }
 
       if (team.manager?.userId && String(team.manager.userId) === String(userId)) {
         const nextManager = team.coManagers.shift();
@@ -306,18 +422,24 @@ function handleMemberRemoved({ userId }) {
 
 module.exports = {
   addCoManager,
+  clearExpiredLogoUploads,
+  clearLogoUpload,
   createTeam,
   deleteTeam,
   findNonDeletedTeamByClubName,
   findNonDeletedTeamByUserId,
+  findPendingLogoUpload,
   findTeamById,
   handleMemberRemoved,
+  isLogoUploadExpired,
   isNonDeletedTeam,
   isTeamMember,
   leaveTeam,
   listVisibleTeams,
   normalizeClubName,
   removeCoManager,
+  requestLogoUpload,
+  setLogoUploadInstructionMessage,
   setTeamLogo,
   updateTeamName,
 };
