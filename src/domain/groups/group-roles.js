@@ -17,6 +17,14 @@ function getGroupTeamIds(group) {
     .map(slot => String(slot.teamId));
 }
 
+async function getConfiguredGuild(client, settings) {
+  const guildId = settings.guild?.guildId;
+  if (guildId) {
+    return client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  }
+  return client.guilds.cache.first() || null;
+}
+
 async function assignRoleToUser(guild, userId, roleId) {
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member || member.roles.cache.has(roleId)) return false;
@@ -24,10 +32,10 @@ async function assignRoleToUser(guild, userId, roleId) {
   return true;
 }
 
-async function assignGroupRoles({ client, event }) {
+async function assignGroupRoles({ client, event, settings }) {
   if (!client) return { assigned: 0, skippedGroups: [] };
 
-  const guild = client.guilds.cache.first();
+  const guild = await getConfiguredGuild(client, settings || {});
   if (!guild) return { assigned: 0, skippedGroups: Object.keys(event.groups?.groups || {}) };
 
   let assigned = 0;
