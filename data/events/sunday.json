@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "eventKey": "sunday",
+  "label": "Sonntag",
+  "status": "idle",
+  "cycle": { "cycleKey": null, "eventDate": null, "timezone": "Europe/Berlin" },
+  "schedule": { "profile": "early", "deadlineTime": "22:00", "lateWindowUntilTime": "22:15", "drawTime": "22:20", "tournamentStartTime": "22:30", "resetTime": "07:00", "checkinOpenAt": null, "deadlineAt": null, "lateWindowUntil": null, "drawAt": null, "tournamentStartAt": null, "resetAt": null },
+  "format": { "minimumRealTeams": 8, "allowedSizes": [8, 16, 24, 32], "size": null, "realTeamCount": 0, "byeCount": 0, "waitlistCount": 0, "lockedAt": null },
+  "checkin": { "isOpen": false, "openedAt": null, "closedAt": null, "entries": [], "activeTeamIds": [], "waitlistTeamIds": [], "lateLeaveBans": [] },
+  "byes": [],
+  "groups": { "status": "not_created", "drawnAt": null, "drawnBy": null, "groups": {} },
+  "knockout": { "status": "not_created", "createdAt": null, "source": { "qualifiedRule": null, "avoidSameGroupRematches": true }, "rounds": {} },
+  "ceremony": { "status": "not_ready", "placements": { "firstTeamId": null, "secondTeamId": null, "thirdTeamId": null }, "postedAt": null, "postedMessageIds": [], "testRuns": [] },
+  "reset": { "status": "not_scheduled", "resetAt": null, "completedAt": null, "keepStats": true },
+  "meta": { "createdAt": null, "updatedAt": null, "cancelledAt": null, "cancelledByUserId": null, "cancelReason": null }
+}
