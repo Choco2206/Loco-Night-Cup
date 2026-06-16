@@ -4,6 +4,7 @@ const fs = require('fs');
 const { EVENT_KEYS, KNOCKOUT_ROUNDS } = require('../app/constants');
 const {
   BANS_DIR,
+  DATA_ASSETS_DIR,
   DATA_DIR,
   EVENTS_DIR,
   FILES,
@@ -63,6 +64,14 @@ function seedSettingsFile() {
 
   writeJsonAtomic(FILES.settings, seed);
   return seed;
+}
+
+function seedCheckinBanner() {
+  if (fs.existsSync(FILES.checkinBanner)) return false;
+  if (!fs.existsSync(FILES.checkinBannerSeed)) return false;
+
+  fs.copyFileSync(FILES.checkinBannerSeed, FILES.checkinBanner);
+  return true;
 }
 
 function normalizeMessagesFile() {
@@ -139,6 +148,7 @@ function normalizeMessagesFile() {
 function initializeStorage() {
   [
     DATA_DIR,
+    DATA_ASSETS_DIR,
     TEAMS_DIR,
     TEAM_LOGOS_DIR,
     EVENTS_DIR,
@@ -148,6 +158,7 @@ function initializeStorage() {
   ].forEach(ensureDir);
 
   seedSettingsFile();
+  seedCheckinBanner();
 
   ensureJsonFile(FILES.teams, createTeamsDefault);
   ensureJsonFile(FILES.bans, createBansDefault);
@@ -163,5 +174,6 @@ function initializeStorage() {
 module.exports = {
   initializeStorage,
   normalizeMessagesFile,
+  seedCheckinBanner,
   seedSettingsFile,
 };
