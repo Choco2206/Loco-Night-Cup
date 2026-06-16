@@ -1,8 +1,11 @@
 'use strict';
 
+const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
-const { refreshCheckinMessages } = require('../checkins/checkin-panel');
+const { refreshCheckinMessage, refreshCheckinMessages } = require('../checkins/checkin-panel');
+const { recalculateCheckinFormat } = require('../checkins/checkin-format');
+const { updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const { listVisibleTeams } = require('../teams/team-service');
 const { EVENT_KEYS } = require('../../app/constants');
@@ -19,7 +22,10 @@ const ADMIN_ACTIONS = new Set([
   'admin_checkin_refresh',
   'admin_team_overview_refresh',
   'admin_ceremony_test',
+  'admin_bye_add',
+  'admin_bye_remove',
 ]);
+const BYE_SELECT_IDS = new Set(['admin_bye_add_select', 'admin_bye_remove_select']);
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -75,13 +81,115 @@ function formatTeamsList() {
   return chunks[0] + (chunks.length > 1 ? `\n\n... ${chunks.length - 1} weitere Blöcke gekürzt.` : '');
 }
 
-async function handleAdminButton(interaction, client) {
-  if (!ADMIN_ACTIONS.has(interaction.customId)) return false;
+function buildEventSelect(customId, placeholder) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(customId)
+    .setPlaceholder(placeholder)
+    .addOptions(EVENT_KEYS.map(eventKey => ({
+      label: eventKey,
+      value: eventKey,
+    })));
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function nextByeNumber(eventKey, byes) {
+  let max = 0;
+  for (const bye of byes || []) {
+    const match = String(bye?.id || '').match(new RegExp(`^bye_${eventKey}_(\\d+)$`));
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return max + 1;
+}
+
+function addManualBye(eventKey, actorUserId, settings) {
+  updateEventData(eventKey, event => {
+    event.byes = Array.isArray(event.byes) ? event.byes : [];
+    const number = nextByeNumber(eventKey, event.byes);
+    event.byes.push({
+      type: 'bye',
+      id: `bye_${eventKey}_${number}`,
+      displayName: 'Freilos',
+      addedAt: new Date().toISOString(),
+      addedByUserId: String(actorUserId),
+    });
+    recalculateCheckinFormat(event, settings);
+    return event;
+  });
+}
+
+function removeManualBye(eventKey, settings) {
+  let removed = false;
+  updateEventData(eventKey, event => {
+    event.byes = Array.isArray(event.byes) ? event.byes : [];
+    const index = event.byes.map(bye => bye?.type).lastIndexOf('bye');
+    if (index === -1) throw new Error('Für dieses Event gibt es kein Freilos.');
+
+    event.byes.splice(index, 1);
+    removed = true;
+    recalculateCheckinFormat(event, settings);
+    return event;
+  });
+  return removed;
+}
+
+async function replyInteraction(interaction, content, extra = {}) {
+  const payload = { content, flags: EPHEMERAL, ...extra };
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply(payload).catch(() => {});
+  } else {
+    await interaction.reply(payload).catch(() => {});
+  }
+}
+
+async function handleByeSelect(interaction, client, settings) {
+  const eventKey = interaction.values?.[0];
+  if (!EVENT_KEYS.includes(eventKey)) throw new Error('Event nicht gefunden.');
+
+  await interaction.deferReply({ flags: EPHEMERAL });
+
+  if (interaction.customId === 'admin_bye_add_select') {
+    addManualBye(eventKey, interaction.user.id, settings);
+    await refreshCheckinMessage(eventKey, client);
+    await interaction.editReply({ content: `Freilos für ${eventKey} wurde hinzugefügt.`, components: [] });
+    return true;
+  }
+
+  removeManualBye(eventKey, settings);
+  await refreshCheckinMessage(eventKey, client);
+  await interaction.editReply({ content: `Freilos für ${eventKey} wurde entfernt.`, components: [] });
+  return true;
+}
+
+async function handleAdminInteraction(interaction, client) {
+  const isAdminButton = interaction.isButton?.() && ADMIN_ACTIONS.has(interaction.customId);
+  const isByeSelect = interaction.isStringSelectMenu?.() && BYE_SELECT_IDS.has(interaction.customId);
+  if (!isAdminButton && !isByeSelect) return false;
 
   const settings = readSettings();
 
   try {
     await requireAdminAccess(interaction, settings);
+
+    if (isByeSelect) return await handleByeSelect(interaction, client, settings);
+
+    if (interaction.customId === 'admin_bye_add') {
+      await interaction.reply({
+        content: 'Für welches Event soll ein Freilos hinzugefügt werden?',
+        components: [buildEventSelect('admin_bye_add_select', 'Event auswählen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_bye_remove') {
+      await interaction.reply({
+        content: 'Für welches Event soll ein Freilos entfernt werden?',
+        components: [buildEventSelect('admin_bye_remove_select', 'Event auswählen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
 
     if (interaction.customId === 'admin_checkin_refresh') {
       await interaction.deferReply({ flags: EPHEMERAL });
@@ -114,16 +222,12 @@ async function handleAdminButton(interaction, client) {
     await interaction.reply({ content: 'Funktion folgt in Phase 5.', flags: EPHEMERAL });
     return true;
   } catch (error) {
-    const content = error?.message || 'Admin-Aktion konnte nicht verarbeitet werden.';
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(content).catch(() => {});
-    } else {
-      await interaction.reply({ content, flags: EPHEMERAL }).catch(() => {});
-    }
+    await replyInteraction(interaction, error?.message || 'Admin-Aktion konnte nicht verarbeitet werden.', { components: [] });
     return true;
   }
 }
 
 module.exports = {
-  handleAdminButton,
+  handleAdminButton: handleAdminInteraction,
+  handleAdminInteraction,
 };
