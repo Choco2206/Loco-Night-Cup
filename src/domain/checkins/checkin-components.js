@@ -23,6 +23,8 @@ const {
   getTournamentStartAt,
 } = require('./checkin-schedule');
 
+const TOURNAMENT_MILESTONES = [8, 16, 24, 32];
+
 function teamName(teamId) {
   const team = findTeamById(teamId);
   return team?.clubName || `Unbekanntes Team (${teamId})`;
@@ -77,12 +79,8 @@ function displaySizeForParticipantSlots(participantSlots) {
   return 8;
 }
 
-function getDisplaySlotCount(event, settings) {
-  const participantSlots = getParticipantSlotCount(event);
-  const playableSlotCount = getPlayableSlotCount(event, settings);
-  if (playableSlotCount && participantSlots <= playableSlotCount) return playableSlotCount;
-
-  const thresholdSize = displaySizeForParticipantSlots(participantSlots);
+function getDisplaySlotCount(event) {
+  const thresholdSize = displaySizeForParticipantSlots(getParticipantSlotCount(event));
   if (event.format?.lockedAt && event.format?.size) return Math.max(Number(event.format.size), thresholdSize);
   return thresholdSize;
 }
@@ -151,31 +149,29 @@ function buildSlotState(event, settings) {
   return {
     activeLabels,
     displaySlotCount,
+    participantLabels: [...activeLabels, ...waitlistLabels],
     participantSlotCount: activeLabels.length + waitlistLabels.length,
     playableSlotCount,
     waitlistLabels,
   };
 }
 
+function formatMilestoneLine(size) {
+  return `════ ⬆️ ${size}er Turnier ⬆️ ════`;
+}
+
 function formatSlotLines(slotState) {
   const lines = [];
   const playableSlotCount = slotState.playableSlotCount;
-  const hasSeparator = Boolean(playableSlotCount && slotState.participantSlotCount > playableSlotCount);
 
   for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
-    if (hasSeparator && slot === playableSlotCount + 1) {
-      lines.push(`════ ⬆️ ${playableSlotCount}er Turnier ⬆️ ════`);
-    }
+    const label = slotState.participantLabels[slot - 1];
+    const isWaitlistSlot = Boolean(playableSlotCount && slot > playableSlotCount && label);
+    lines.push(`${slot}. ${label ? `${label}${isWaitlistSlot ? ' (WL)' : ''}` : '—'}`);
 
-    if (playableSlotCount && slot > playableSlotCount) {
-      const waitlistIndex = slot - playableSlotCount - 1;
-      const label = slotState.waitlistLabels[waitlistIndex];
-      lines.push(`${slot}. ${label ? `${label} (WL)` : '—'}`);
-      continue;
+    if (TOURNAMENT_MILESTONES.includes(slot) && slot <= slotState.displaySlotCount) {
+      lines.push(formatMilestoneLine(slot));
     }
-
-    const label = slotState.activeLabels[slot - 1];
-    lines.push(`${slot}. ${label || '—'}`);
   }
 
   return lines.join('\n');
