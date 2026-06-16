@@ -77,8 +77,12 @@ function displaySizeForParticipantSlots(participantSlots) {
   return 8;
 }
 
-function getDisplaySlotCount(event) {
-  const thresholdSize = displaySizeForParticipantSlots(getParticipantSlotCount(event));
+function getDisplaySlotCount(event, settings) {
+  const participantSlots = getParticipantSlotCount(event);
+  const playableSlotCount = getPlayableSlotCount(event, settings);
+  if (playableSlotCount && participantSlots <= playableSlotCount) return playableSlotCount;
+
+  const thresholdSize = displaySizeForParticipantSlots(participantSlots);
   if (event.format?.lockedAt && event.format?.size) return Math.max(Number(event.format.size), thresholdSize);
   return thresholdSize;
 }
@@ -127,7 +131,7 @@ function getWaitlistTeamIds(event) {
 
 function buildSlotState(event, settings) {
   const playableSlotCount = getPlayableSlotCount(event, settings);
-  const displaySlotCount = getDisplaySlotCount(event);
+  const displaySlotCount = getDisplaySlotCount(event, settings);
   const activeTeamIds = getActiveTeamIds(event);
   const waitlistTeamIds = getWaitlistTeamIds(event);
   const byeCount = getManualByeCount(event);
@@ -156,7 +160,7 @@ function buildSlotState(event, settings) {
 function formatSlotLines(slotState) {
   const lines = [];
   const playableSlotCount = slotState.playableSlotCount;
-  const hasSeparator = Boolean(playableSlotCount && slotState.displaySlotCount > playableSlotCount);
+  const hasSeparator = Boolean(playableSlotCount && slotState.participantSlotCount > playableSlotCount);
 
   for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
     if (hasSeparator && slot === playableSlotCount + 1) {
