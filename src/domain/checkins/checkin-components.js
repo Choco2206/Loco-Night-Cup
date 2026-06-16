@@ -56,19 +56,6 @@ function formatTime(date) {
   return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatStartIn(startAt, now = new Date()) {
-  if (!startAt) return 'nicht gesetzt';
-  const diffMs = startAt.getTime() - now.getTime();
-  if (diffMs <= 0) return 'Startzeit erreicht';
-
-  const totalMinutes = Math.ceil(diffMs / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours <= 0) return `${minutes} Min.`;
-  if (minutes === 0) return `${hours} Std.`;
-  return `${hours} Std. ${minutes} Min.`;
-}
-
 function formatStatus(eventKey, event, settings, now = new Date()) {
   const state = getCheckinWindowState(eventKey, event, settings, now);
   if (state.phase === 'regular') return '🟢 Check-in geöffnet';
@@ -249,7 +236,6 @@ function buildCheckinEmbed(eventKey, event, settings) {
     '',
     `🚀 Turnierstart: ${formatTime(tournamentStartAt)}`,
     nightHint,
-    `🕘 Start in: ${formatStartIn(tournamentStartAt, now)}`,
     '',
     rulesLine,
     '─────────────',
