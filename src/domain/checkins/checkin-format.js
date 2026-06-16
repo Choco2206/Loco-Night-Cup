@@ -39,7 +39,8 @@ function getEntryTeamIds(event, now = new Date()) {
 }
 
 function getManualByes(event) {
-  return Array.isArray(event.byes) ? event.byes.filter(bye => bye?.type === 'bye') : [];
+  if (!Array.isArray(event.byes)) return [];
+  return event.byes.filter(bye => bye?.type === 'bye' && bye?.status !== 'removed');
 }
 
 function getManualByeCount(event) {
@@ -80,8 +81,8 @@ function recalculateFormatBeforeLock(event, settings) {
   const activeRealCount = size ? Math.min(teamIds.length, size) : teamIds.length;
   const activeTeamIds = teamIds.slice(0, activeRealCount);
   const waitlistTeamIds = teamIds.slice(activeRealCount);
-  const activeByeCount = size ? Math.min(byeCount, Math.max(0, size - activeRealCount)) : 0;
-  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
+  const activeByeCount = size ? Math.min(byeCount, Math.max(0, size - activeRealCount)) : byeCount;
+  const waitlistByeCount = size ? Math.max(0, byeCount - activeByeCount) : 0;
 
   event.format = {
     ...event.format,
@@ -107,8 +108,8 @@ function preserveLockedFormat(event) {
   const waitlistSet = new Set(existingWaitlistIds);
   const byeCount = getManualByeCount(event);
   const lockedSize = Number(event.format?.size || 0);
-  const activeByeCount = lockedSize ? Math.min(byeCount, Math.max(0, lockedSize - activeTeamIds.length)) : 0;
-  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
+  const activeByeCount = lockedSize ? Math.min(byeCount, Math.max(0, lockedSize - activeTeamIds.length)) : byeCount;
+  const waitlistByeCount = lockedSize ? Math.max(0, byeCount - activeByeCount) : 0;
 
   for (const teamId of entryIds) {
     if (activeTeamIds.includes(teamId) || waitlistSet.has(teamId)) continue;
