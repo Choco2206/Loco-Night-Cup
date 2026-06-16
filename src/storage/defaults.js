@@ -16,6 +16,15 @@ function emptyTimestampMeta() {
   };
 }
 
+function emptyPanelMessage() {
+  return {
+    channelId: null,
+    messageId: null,
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
 function createTeamsDefault() {
   return {
     version: DATA_VERSION,
@@ -183,28 +192,14 @@ function createMessagesDefault() {
     version: DATA_VERSION,
     guildId: null,
     setup: {
-      welcome: {
-        channelId: null,
-        messageId: null,
-        createdAt: null,
-        updatedAt: null,
-      },
+      welcome: emptyPanelMessage(),
     },
     roles: {
-      roleSelect: {
-        channelId: null,
-        messageId: null,
-        createdAt: null,
-        updatedAt: null,
-      },
+      roleSelect: emptyPanelMessage(),
+      roleSelectPanel: emptyPanelMessage(),
     },
     teams: {
-      registrationPanel: {
-        channelId: null,
-        messageId: null,
-        createdAt: null,
-        updatedAt: null,
-      },
+      registrationPanel: emptyPanelMessage(),
       registeredTeamsOverview: {
         channelId: null,
         headerMessageId: null,
@@ -234,12 +229,7 @@ function createMessagesDefault() {
       updatedAt: null,
     },
     admin: {
-      panel: {
-        channelId: null,
-        messageId: null,
-        createdAt: null,
-        updatedAt: null,
-      },
+      panel: emptyPanelMessage(),
     },
     ceremony: createEventMap(() => emptyCeremonyMessages()),
     meta: emptyTimestampMeta(),
