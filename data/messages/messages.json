@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "guildId": null,
+  "setup": { "welcome": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null } },
+  "roles": { "roleSelect": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null } },
+  "teams": {
+    "registrationPanel": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null },
+    "registeredTeamsOverview": { "channelId": null, "headerMessageId": null, "listMessageIds": [], "createdAt": null, "updatedAt": null }
+  },
+  "checkins": {
+    "monday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },
+    "tuesday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },
+    "wednesday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },
+    "thursday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },
+    "friday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },
+    "saturday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },
+    "sunday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null }
+  },
+  "liveSchedule": { "channelId": null, "currentEventKey": null, "phase": null, "headerMessageId": null, "groupMessageIds": {}, "knockoutMessageIds": {}, "createdAt": null, "updatedAt": null },
+  "groups": {
+    "monday": { "cycleKey": null, "groups": {} },
+    "tuesday": { "cycleKey": null, "groups": {} },
+    "wednesday": { "cycleKey": null, "groups": {} },
+    "thursday": { "cycleKey": null, "groups": {} },
+    "friday": { "cycleKey": null, "groups": {} },
+    "saturday": { "cycleKey": null, "groups": {} },
+    "sunday": { "cycleKey": null, "groups": {} }
+  },
+  "knockout": {
+    "monday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } },
+    "tuesday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } },
+    "wednesday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } },
+    "thursday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } },
+    "friday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } },
+    "saturday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } },
+    "sunday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } }
+  },
+  "banlist": { "channelId": null, "infoMessageId": null, "listMessageId": null, "createdAt": null, "updatedAt": null },
+  "admin": { "panel": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null } },
+  "ceremony": {
+    "monday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
+    "tuesday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
+    "wednesday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
+    "thursday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
+    "friday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
+    "saturday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
+    "sunday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null }
+  },
+  "meta": { "createdAt": null, "updatedAt": null }
+}
