@@ -1,6 +1,7 @@
 'use strict';
 
 const { findTeamById } = require('../teams/team-service');
+const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 
 function uniqueStrings(values) {
   const seen = new Set();
@@ -14,25 +15,27 @@ function uniqueStrings(values) {
   return result;
 }
 
-function isValidTournamentTeam(team) {
-  return team?.status === 'active' && team.registrationStatus === 'complete';
+function isValidTournamentTeam(team, now = new Date()) {
+  if (team?.status !== 'active') return false;
+  if (team.registrationStatus !== 'complete') return false;
+  return !findActiveBanForTeamOrManagers(team, team.manager?.userId, now);
 }
 
-function isValidTournamentTeamId(teamId) {
-  return isValidTournamentTeam(findTeamById(teamId));
+function isValidTournamentTeamId(teamId, now = new Date()) {
+  return isValidTournamentTeam(findTeamById(teamId), now);
 }
 
-function pruneInvalidCheckinEntries(event) {
-  event.checkin.entries = (event.checkin?.entries || []).filter(entry => isValidTournamentTeamId(entry.teamId));
-  event.checkin.activeTeamIds = uniqueStrings(event.checkin?.activeTeamIds || []).filter(isValidTournamentTeamId);
-  event.checkin.waitlistTeamIds = uniqueStrings(event.checkin?.waitlistTeamIds || []).filter(isValidTournamentTeamId);
+function pruneInvalidCheckinEntries(event, now = new Date()) {
+  event.checkin.entries = (event.checkin?.entries || []).filter(entry => isValidTournamentTeamId(entry.teamId, now));
+  event.checkin.activeTeamIds = uniqueStrings(event.checkin?.activeTeamIds || []).filter(teamId => isValidTournamentTeamId(teamId, now));
+  event.checkin.waitlistTeamIds = uniqueStrings(event.checkin?.waitlistTeamIds || []).filter(teamId => isValidTournamentTeamId(teamId, now));
   return event;
 }
 
-function getEntryTeamIds(event) {
+function getEntryTeamIds(event, now = new Date()) {
   return uniqueStrings((event.checkin?.entries || [])
     .map(entry => entry.teamId)
-    .filter(isValidTournamentTeamId));
+    .filter(teamId => isValidTournamentTeamId(teamId, now)));
 }
 
 function getManualByes(event) {
@@ -43,15 +46,19 @@ function getManualByeCount(event) {
   return getManualByes(event).length;
 }
 
-function chooseFormatSize({ realTeamCount, byeCount, minimumRealTeams, allowedSizes }) {
-  if (realTeamCount < minimumRealTeams) return null;
+function getAllowedSizes(settings, event) {
+  const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
+    ? settings.tournament.allowedSizes
+    : event.format?.allowedSizes || [8, 16, 24, 32];
+  return [...allowedSizes].filter(size => [8, 16, 24, 32].includes(Number(size))).map(Number).sort((a, b) => a - b);
+}
 
-  const totalSlots = realTeamCount + byeCount;
-  const sizes = [...allowedSizes].sort((a, b) => a - b);
+function chooseFormatSize({ participantSlotCount, minimumParticipantSlots, allowedSizes }) {
+  if (participantSlotCount < minimumParticipantSlots) return null;
+
   let selected = null;
-
-  for (const size of sizes) {
-    if (size <= totalSlots) selected = size;
+  for (const size of [...allowedSizes].sort((a, b) => a - b)) {
+    if (size <= participantSlotCount) selected = size;
   }
 
   return selected;
@@ -60,30 +67,32 @@ function chooseFormatSize({ realTeamCount, byeCount, minimumRealTeams, allowedSi
 function recalculateFormatBeforeLock(event, settings) {
   const teamIds = getEntryTeamIds(event);
   const byeCount = getManualByeCount(event);
-  const minimumRealTeams = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
-  const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
-    ? settings.tournament.allowedSizes
-    : event.format?.allowedSizes || [8, 16, 24, 32];
+  const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  const allowedSizes = getAllowedSizes(settings, event);
+  const participantSlotCount = teamIds.length + byeCount;
 
   const size = chooseFormatSize({
-    realTeamCount: teamIds.length,
-    byeCount,
-    minimumRealTeams,
+    participantSlotCount,
+    minimumParticipantSlots,
     allowedSizes,
   });
 
-  const activeCapacity = size ? Math.max(0, size - byeCount) : teamIds.length;
-  const activeTeamIds = teamIds.slice(0, activeCapacity);
-  const waitlistTeamIds = teamIds.slice(activeCapacity);
+  const activeRealCount = size ? Math.min(teamIds.length, size) : teamIds.length;
+  const activeTeamIds = teamIds.slice(0, activeRealCount);
+  const waitlistTeamIds = teamIds.slice(activeRealCount);
+  const activeByeCount = size ? Math.min(byeCount, Math.max(0, size - activeRealCount)) : 0;
+  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   event.format = {
     ...event.format,
-    minimumRealTeams,
+    minimumRealTeams: minimumParticipantSlots,
     allowedSizes: [...allowedSizes],
     size,
     realTeamCount: teamIds.length,
     byeCount,
-    waitlistCount: waitlistTeamIds.length,
+    activeByeCount,
+    waitlistByeCount,
+    waitlistCount: waitlistTeamIds.length + waitlistByeCount,
   };
 
   event.checkin.activeTeamIds = activeTeamIds;
@@ -96,6 +105,10 @@ function preserveLockedFormat(event) {
   const activeTeamIds = uniqueStrings(event.checkin?.activeTeamIds || []).filter(teamId => entryIds.has(teamId));
   const existingWaitlistIds = uniqueStrings(event.checkin?.waitlistTeamIds || []).filter(teamId => entryIds.has(teamId));
   const waitlistSet = new Set(existingWaitlistIds);
+  const byeCount = getManualByeCount(event);
+  const lockedSize = Number(event.format?.size || 0);
+  const activeByeCount = lockedSize ? Math.min(byeCount, Math.max(0, lockedSize - activeTeamIds.length)) : 0;
+  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   for (const teamId of entryIds) {
     if (activeTeamIds.includes(teamId) || waitlistSet.has(teamId)) continue;
@@ -108,26 +121,30 @@ function preserveLockedFormat(event) {
   event.format = {
     ...event.format,
     realTeamCount: entryIds.size,
-    byeCount: getManualByeCount(event),
-    waitlistCount: existingWaitlistIds.length,
+    byeCount,
+    activeByeCount,
+    waitlistByeCount,
+    waitlistCount: existingWaitlistIds.length + waitlistByeCount,
   };
   return event;
 }
 
-function recalculateCheckinFormat(event, settings) {
+function recalculateCheckinFormat(event, settings, now = new Date()) {
   event.checkin = event.checkin || {};
   event.checkin.entries = Array.isArray(event.checkin.entries) ? event.checkin.entries : [];
   event.checkin.activeTeamIds = Array.isArray(event.checkin.activeTeamIds) ? event.checkin.activeTeamIds : [];
   event.checkin.waitlistTeamIds = Array.isArray(event.checkin.waitlistTeamIds) ? event.checkin.waitlistTeamIds : [];
   event.byes = Array.isArray(event.byes) ? event.byes : [];
 
-  pruneInvalidCheckinEntries(event);
+  pruneInvalidCheckinEntries(event, now);
 
   if (event.format?.lockedAt) return preserveLockedFormat(event);
   return recalculateFormatBeforeLock(event, settings);
 }
 
 module.exports = {
+  chooseFormatSize,
+  getAllowedSizes,
   getEntryTeamIds,
   getManualByeCount,
   getManualByes,
