@@ -4,6 +4,8 @@ const { Client, Events, GatewayIntentBits } = require('discord.js');
 const { bootstrapPhaseOne } = require('./src/app/bootstrap');
 const teamSystem = require('./src/domain/teams');
 const checkinSystem = require('./src/domain/checkins');
+const adminSystem = require('./src/domain/admin');
+const roleSystem = require('./src/domain/roles');
 
 function runBootstrap() {
   const result = bootstrapPhaseOne();
@@ -31,6 +33,8 @@ async function main() {
       runBootstrap();
       await teamSystem.init(client);
       await checkinSystem.init(client);
+      await adminSystem.init(client);
+      await roleSystem.init(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
     } catch (error) {
       console.error('Startup validation failed:', error);
@@ -41,6 +45,8 @@ async function main() {
 
   client.on(Events.InteractionCreate, async interaction => {
     try {
+      if (await adminSystem.handleInteraction(interaction, client)) return;
+      if (await roleSystem.handleInteraction(interaction, client)) return;
       if (await teamSystem.handleInteraction(interaction, client)) return;
       if (await checkinSystem.handleInteraction(interaction, client)) return;
     } catch (error) {
