@@ -16,6 +16,12 @@ function parseRoleSelect(customId) {
   return null;
 }
 
+function managerIntentSuccessMessage(settings) {
+  const channelId = settings.channels?.teamRegistrationChannelId;
+  if (channelId) return `Du kannst jetzt im <#${channelId}> Kanal ein Team registrieren.`;
+  return 'Du kannst jetzt im Team-Anmeldungskanal ein Team registrieren.';
+}
+
 async function ensureConfiguredRole(guild, roleId, label) {
   if (!roleId) throw new Error(`${label}-Rolle ist nicht konfiguriert.`);
   const role = guild.roles.cache.get(String(roleId)) || await guild.roles.fetch(String(roleId)).catch(() => null);
@@ -39,7 +45,7 @@ async function applyExclusiveRole(member, selectedRole, settings) {
 
   if (member.roles.cache.has(playerRole.id)) await member.roles.remove(playerRole.id);
   if (!member.roles.cache.has(managerRole.id)) await member.roles.add(managerRole.id);
-  return 'Du kannst jetzt im Team-Anmeldungskanal ein Team registrieren.';
+  return managerIntentSuccessMessage(settings);
 }
 
 async function replySafely(interaction, content) {
