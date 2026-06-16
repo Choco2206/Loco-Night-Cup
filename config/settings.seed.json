@@ -28,7 +28,7 @@
   },
   "channels": {
     "welcomeChannelId": "1516429491704955072",
-    "roleSelectChannelId": null,
+    "roleSelectChannelId": "1516543498113908866",
     "teamRegistrationChannelId": "1516429663457775687",
     "registeredTeamsChannelId": "1516429682843848935",
     "rulesChannelId": null,
