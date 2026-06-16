@@ -131,10 +131,9 @@ function buildSlotState(event, settings) {
   const activeTeamIds = getActiveTeamIds(event);
   const waitlistTeamIds = getWaitlistTeamIds(event);
   const byeCount = getManualByeCount(event);
-  const activeByeCount = playableSlotCount
-    ? Math.min(byeCount, Math.max(0, playableSlotCount - activeTeamIds.length))
-    : 0;
-  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
+  const activeCapacity = playableSlotCount || displaySlotCount;
+  const activeByeCount = Math.min(byeCount, Math.max(0, activeCapacity - activeTeamIds.length));
+  const waitlistByeCount = playableSlotCount ? Math.max(0, byeCount - activeByeCount) : 0;
 
   const activeLabels = [
     ...activeTeamIds.map(teamName),
