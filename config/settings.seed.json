@@ -65,6 +65,9 @@
       "final": null
     }
   },
+  "assets": {
+    "checkinBannerPath": "data/assets/check-in.png"
+  },
   "categories": {
     "checkinCategoryId": "1516390944268750890",
     "groupCategoryId": "1516423873233424384",
