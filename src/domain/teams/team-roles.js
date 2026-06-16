@@ -19,27 +19,36 @@ function userHasActiveTeamRole(userId) {
   return readTeamsData().teams.some(team => isActiveTeam(team) && isTeamMember(team, id));
 }
 
+async function getRole(guild, roleId) {
+  if (!guild || !roleId) return null;
+  return guild.roles.cache.get(String(roleId)) || await guild.roles.fetch(String(roleId)).catch(() => null);
+}
+
 async function syncManagerRoleForUser(guild, userId, settings) {
   const managerRoleId = settings.roles.managerRoleId;
   const playerRoleId = settings.roles.playerRoleId;
   if (!guild || !managerRoleId || !userId) return false;
 
+  const managerRole = await getRole(guild, managerRoleId);
+  if (!managerRole) return false;
+
+  const playerRole = await getRole(guild, playerRoleId);
   const member = await guild.members.fetch(String(userId)).catch(() => null);
   if (!member) return false;
 
   const shouldHaveManagerRole = userHasActiveTeamRole(userId);
-  const hasManagerRole = member.roles.cache.has(managerRoleId);
-  const hasPlayerRole = playerRoleId ? member.roles.cache.has(playerRoleId) : false;
+  const hasManagerRole = member.roles.cache.has(managerRole.id);
+  const hasPlayerRole = playerRole ? member.roles.cache.has(playerRole.id) : false;
   let changed = false;
 
   if (shouldHaveManagerRole) {
     if (hasPlayerRole) {
-      await member.roles.remove(playerRoleId);
+      await member.roles.remove(playerRole.id).catch(() => {});
       changed = true;
     }
 
     if (!hasManagerRole) {
-      await member.roles.add(managerRoleId);
+      await member.roles.add(managerRole.id).catch(() => {});
       changed = true;
     }
 
@@ -47,7 +56,7 @@ async function syncManagerRoleForUser(guild, userId, settings) {
   }
 
   if (hasManagerRole) {
-    await member.roles.remove(managerRoleId);
+    await member.roles.remove(managerRole.id).catch(() => {});
     changed = true;
   }
 
@@ -66,6 +75,9 @@ async function syncAllManagerRoles(guild, settings) {
   const managerRoleId = settings.roles.managerRoleId;
   if (!guild || !managerRoleId) return;
 
+  const managerRole = await getRole(guild, managerRoleId);
+  if (!managerRole) return;
+
   const userIds = new Set();
   readTeamsData().teams
     .filter(isActiveTeam)
@@ -74,7 +86,7 @@ async function syncAllManagerRoles(guild, settings) {
   await guild.members.fetch().catch(() => null);
 
   guild.members.cache.forEach(member => {
-    if (member.roles.cache.has(managerRoleId)) {
+    if (member.roles.cache.has(managerRole.id)) {
       userIds.add(member.id);
     }
   });
