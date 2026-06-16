@@ -61,6 +61,12 @@ function validateSettings(data) {
     validateIdMap(errors, data.channels.knockoutChannelIds, KNOCKOUT_ROUNDS, 'channels.knockoutChannelIds');
   }
 
+  if (data.assets !== undefined && data.assets !== null && requireObject(errors, data.assets, 'assets')) {
+    if (data.assets.checkinBannerPath !== null && data.assets.checkinBannerPath !== undefined && typeof data.assets.checkinBannerPath !== 'string') {
+      errors.push('assets.checkinBannerPath must be a string or null');
+    }
+  }
+
   if (requireObject(errors, data.categories, 'categories')) {
     ['checkinCategoryId', 'groupCategoryId', 'knockoutCategoryId', 'archiveCategoryId'].forEach(field => {
       requireSnowflakeOrNull(errors, data.categories[field], `categories.${field}`);
