@@ -5,6 +5,26 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { saveLogoFromMessage } = require('./team-logos');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 
+const TEMP_MESSAGE_MS = 8000;
+
+async function sendTemporary(channel, content) {
+  const notice = await channel.send({ content }).catch(() => null);
+  if (!notice) return null;
+
+  const timeout = setTimeout(() => {
+    notice.delete().catch(() => {});
+  }, TEMP_MESSAGE_MS);
+  if (typeof timeout.unref === 'function') timeout.unref();
+
+  return notice;
+}
+
+async function deleteInstructionMessage(channel, messageId) {
+  if (!messageId || !channel?.messages?.fetch) return;
+  const instruction = await channel.messages.fetch(messageId).catch(() => null);
+  if (instruction) await instruction.delete().catch(() => {});
+}
+
 async function handleMessage(message, client) {
   if (!message.guild || message.author.bot) return false;
   if (!message.attachments || message.attachments.size === 0) return false;
@@ -15,22 +35,37 @@ async function handleMessage(message, client) {
 
   try {
     const result = await saveLogoFromMessage(message, settings);
-    if (!result) return false;
+
+    if (result.status === 'no_pending') {
+      await sendTemporary(
+        message.channel,
+        'Kein offener Logo-Upload gefunden. Bitte registriere zuerst dein Team oder oeffne "Mein Team" -> Logo aendern.'
+      );
+      return true;
+    }
+
+    if (result.status === 'expired') {
+      await deleteInstructionMessage(message.channel, result.instructionMessageId);
+      await sendTemporary(
+        message.channel,
+        'Der offene Logo-Upload ist abgelaufen. Bitte oeffne "Mein Team" -> Logo aendern erneut.'
+      );
+      return true;
+    }
+
+    if (result.status !== 'saved') return false;
 
     await refreshRegisteredTeamsOverview(client);
-
+    await deleteInstructionMessage(message.channel, result.instructionMessageId);
     await message.delete().catch(() => {});
-    const confirmation = await message.channel.send({
-      content: `Logo für **${result.team.clubName}** wurde gespeichert. Die Registrierung ist jetzt vollständig.`,
-    });
-
-    setTimeout(() => {
-      confirmation.delete().catch(() => {});
-    }, 8000);
+    await sendTemporary(
+      message.channel,
+      `Logo fuer **${result.team.clubName}** wurde gespeichert. Die Registrierung ist jetzt vollstaendig.`
+    );
 
     return true;
   } catch (error) {
-    await message.reply(`Fehler: ${error.message}`).catch(() => {});
+    await sendTemporary(message.channel, `Fehler: ${error.message}`);
     return true;
   }
 }
