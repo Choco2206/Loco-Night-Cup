@@ -26,6 +26,13 @@ function getMessageState(messages, eventKey) {
   return messages.checkins[eventKey];
 }
 
+function createEditPayload(payload) {
+  return {
+    ...payload,
+    attachments: [],
+  };
+}
+
 async function refreshCheckinMessage(eventKey, client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const channelId = settings.channels?.checkinChannelIds?.[eventKey];
@@ -41,7 +48,7 @@ async function refreshCheckinMessage(eventKey, client) {
 
   let message = await fetchMessage(channel, state.mainMessageId);
   if (message) {
-    await message.edit(payload);
+    await message.edit(createEditPayload(payload));
   } else {
     message = await channel.send(payload);
   }
