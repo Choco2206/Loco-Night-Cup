@@ -2,6 +2,8 @@
 
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
+const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
+const { refreshCheckinMessages } = require('../checkins/checkin-panel');
 const {
   buildAddCoManagerPayload,
   buildConfirmPayload,
@@ -18,6 +20,7 @@ const {
   findNonDeletedTeamByUserId,
   findTeamById,
   isTeamMember,
+  isValidTournamentTeam,
   leaveTeam,
   removeCoManager,
   requestLogoUpload,
@@ -30,10 +33,22 @@ const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 
 const EPHEMERAL = 64;
 const LOGO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
-const MANAGER_INTENT_REQUIRED_MESSAGE = "Bitte waehle zuerst im Rollenkanal 'Team anmelden / Manager', bevor du ein Team registrierst.";
 
 function getSettings() {
   return readJson(FILES.settings, createSettingsDefault());
+}
+
+function managerIntentRequiredMessage(settings) {
+  const channelId = settings.channels?.roleSelectChannelId;
+  if (channelId) {
+    return `Bitte wähle zuerst im <#${channelId}> Kanal die Option 'Team anmelden / Manager', bevor du ein Team registrierst.`;
+  }
+  return "Bitte waehle zuerst im Rollenkanal 'Team anmelden / Manager', bevor du ein Team registrierst.";
+}
+
+function teamRegistrationChannelLabel(settings) {
+  const channelId = settings.channels?.teamRegistrationChannelId;
+  return channelId ? `<#${channelId}>` : 'Teamregistrierungskanal';
 }
 
 function shouldLogInteractionError(error) {
@@ -73,7 +88,7 @@ async function requireManagerIntentRole(interaction, settings) {
 
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   if (!member || !member.roles.cache.has(managerRole.id)) {
-    throw new Error(MANAGER_INTENT_REQUIRED_MESSAGE);
+    throw new Error(managerIntentRequiredMessage(settings));
   }
 
   return member;
@@ -82,6 +97,17 @@ async function requireManagerIntentRole(interaction, settings) {
 function requireTeamAccess(team, userId) {
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   if (!isTeamMember(team, userId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
+}
+
+async function removeTeamCheckinsAndRefresh({ teamId, settings, client }) {
+  const affectedEventKeys = removeTeamFromAllEvents({ teamId, settings });
+  if (affectedEventKeys.length) await refreshCheckinMessages(affectedEventKeys, client);
+  return affectedEventKeys;
+}
+
+async function cleanupInvalidTeamCheckins({ team, settings, client }) {
+  if (isValidTournamentTeam(team)) return [];
+  return removeTeamCheckinsAndRefresh({ teamId: team.id, settings, client });
 }
 
 async function deleteInstructionMessage(client, channelId, messageId) {
@@ -182,7 +208,7 @@ async function handleButton(interaction, client) {
     await interaction.deferReply({ flags: EPHEMERAL });
     await openLogoUpload({ interaction, client, team, settings });
     await interaction.editReply({
-      content: `Logo-Upload fuer **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im Teamregistrierungskanal hoch.`,
+      content: `Logo-Upload fuer **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch.`,
       components: [],
       embeds: [],
     });
@@ -223,6 +249,7 @@ async function handleButton(interaction, client) {
     const updated = leaveTeam({ teamId, userId: beforeUserId });
     await syncManagerRoleForUser(interaction.guild, beforeUserId, settings);
     await syncManagerRolesForTeam(interaction.guild, updated, settings);
+    await cleanupInvalidTeamCheckins({ team: updated, settings, client });
     await refreshRegisteredTeamsOverview(client);
     await interaction.update({ content: 'Team verlassen.', components: [], embeds: [] });
     return true;
@@ -232,6 +259,7 @@ async function handleButton(interaction, client) {
     requireTeamAccess(team, interaction.user.id);
     const userIds = [team.manager?.userId, ...team.coManagers.map(co => co.userId)].filter(Boolean);
     deleteTeam({ teamId, actorUserId: interaction.user.id });
+    await removeTeamCheckinsAndRefresh({ teamId, settings, client });
     for (const userId of userIds) await syncManagerRoleForUser(interaction.guild, userId, settings);
     await refreshRegisteredTeamsOverview(client);
     await interaction.update({ content: 'Team wurde geloescht. Statistiken bleiben erhalten.', components: [], embeds: [] });
@@ -258,7 +286,7 @@ async function handleModal(interaction, client) {
     await openLogoUpload({ interaction, client, team, settings });
     await refreshRegisteredTeamsOverview(client);
     await interaction.editReply({
-      content: `Team **${team.clubName}** wurde angelegt. Bitte lade dein Logo innerhalb von 10 Minuten im Teamregistrierungskanal hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
+      content: `Team **${team.clubName}** wurde angelegt. Bitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
       components: [],
       embeds: [],
     });
