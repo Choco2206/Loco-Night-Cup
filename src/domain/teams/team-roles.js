@@ -47,12 +47,21 @@ async function syncManagerRolesForTeam(guild, team, settings) {
 }
 
 async function syncAllManagerRoles(guild, settings) {
-  if (!guild || !settings.roles.managerRoleId) return;
+  const managerRoleId = settings.roles.managerRoleId;
+  if (!guild || !managerRoleId) return;
 
-  const teams = readTeamsData().teams.filter(isNonDeletedTeam);
   const userIds = new Set();
+  readTeamsData().teams
+    .filter(isNonDeletedTeam)
+    .forEach(team => getTeamUserIds(team).forEach(userId => userIds.add(userId)));
 
-  teams.forEach(team => getTeamUserIds(team).forEach(userId => userIds.add(userId)));
+  await guild.members.fetch().catch(() => null);
+
+  guild.members.cache.forEach(member => {
+    if (member.roles.cache.has(managerRoleId)) {
+      userIds.add(member.id);
+    }
+  });
 
   for (const userId of userIds) {
     await syncManagerRoleForUser(guild, userId, settings);
