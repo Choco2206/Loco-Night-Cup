@@ -63,6 +63,19 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
     }
   }
 
+  if (team.logoUpload !== null && team.logoUpload !== undefined) {
+    if (requireObject(errors, team.logoUpload, `${path}.logoUpload`)) {
+      if (typeof team.logoUpload.teamId !== 'string') errors.push(`${path}.logoUpload.teamId is required`);
+      if (team.logoUpload.teamId && String(team.logoUpload.teamId) !== String(team.id)) {
+        errors.push(`${path}.logoUpload.teamId must match team id`);
+      }
+      requireSnowflakeOrNull(errors, team.logoUpload.requestedByUserId, `${path}.logoUpload.requestedByUserId`);
+      requireSnowflakeOrNull(errors, team.logoUpload.channelId, `${path}.logoUpload.channelId`);
+      requireIsoDateOrNull(errors, team.logoUpload.expiresAt, `${path}.logoUpload.expiresAt`);
+      requireSnowflakeOrNull(errors, team.logoUpload.instructionMessageId, `${path}.logoUpload.instructionMessageId`);
+    }
+  }
+
   if (team.status !== 'leaderless') {
     if (!requireObject(errors, team.manager, `${path}.manager`)) return;
     requireSnowflakeOrNull(errors, team.manager.userId, `${path}.manager.userId`);
