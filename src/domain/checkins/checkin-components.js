@@ -7,6 +7,8 @@ const { EVENT_LABELS } = require('../../app/constants');
 const { FILES, ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
 const {
+  chooseFormatSize,
+  getAllowedSizes,
   getEntryTeamIds,
   getManualByeCount,
 } = require('./checkin-format');
@@ -81,50 +83,122 @@ function getParticipantSlotCount(event) {
   return getEntryTeamIds(event).length + getManualByeCount(event);
 }
 
-function getDisplaySlotCount(event) {
-  if (event.format?.lockedAt && event.format?.size) return event.format.size;
-
-  const participantSlots = getParticipantSlotCount(event);
+function displaySizeForParticipantSlots(participantSlots) {
   if (participantSlots >= 22) return 32;
   if (participantSlots >= 14) return 24;
   if (participantSlots >= 6) return 16;
   return 8;
 }
 
-function formatFormat(event, settings, displaySlotCount) {
-  const minimum = settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8;
+function getDisplaySlotCount(event) {
+  const thresholdSize = displaySizeForParticipantSlots(getParticipantSlotCount(event));
+  if (event.format?.lockedAt && event.format?.size) return Math.max(Number(event.format.size), thresholdSize);
+  return thresholdSize;
+}
+
+function getPlayableSlotCount(event, settings) {
+  if (event.format?.lockedAt && event.format?.size) return Number(event.format.size);
+  if (event.format?.size) return Number(event.format.size);
+
+  const minimum = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  return chooseFormatSize({
+    participantSlotCount: getParticipantSlotCount(event),
+    minimumParticipantSlots: minimum,
+    allowedSizes: getAllowedSizes(settings, event),
+  });
+}
+
+function formatFormat(event, settings) {
+  const minimum = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
   const participantSlots = getParticipantSlotCount(event);
   const byeCount = getManualByeCount(event);
   const byeLine = byeCount > 0 ? `\n• ${byeCount} manuelle Freilose vorhanden` : '';
+  const playableSlotCount = getPlayableSlotCount(event, settings);
 
-  if (event.format?.lockedAt && event.format?.size) {
-    return `${event.format.size}er Turnier (gelockt)\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
+  if (event.format?.lockedAt && playableSlotCount) {
+    return `${playableSlotCount}er Turnier (gelockt)\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
   }
 
-  if (participantSlots < minimum) {
+  if (!playableSlotCount || participantSlots < minimum) {
     return `Noch kein gültiges Turnierformat\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
   }
 
-  return `Voraussichtliche Anzeige: ${displaySlotCount} Teilnehmerplätze\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
+  return `${playableSlotCount}er Turnier\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
 }
 
-function getDisplayTeamIds(event) {
-  if (event.format?.lockedAt) {
-    const entryIds = new Set(getEntryTeamIds(event));
-    return uniqueStrings(event.checkin?.activeTeamIds || []).filter(teamId => entryIds.has(teamId));
-  }
+function getActiveTeamIds(event) {
+  const entryIds = new Set(getEntryTeamIds(event));
+  const activeTeamIds = uniqueStrings(event.checkin?.activeTeamIds || []).filter(teamId => entryIds.has(teamId));
+  if (activeTeamIds.length || event.format?.size) return activeTeamIds;
   return getEntryTeamIds(event);
 }
 
-function formatSlots(teamIds, byeCount, slotCount = 8) {
+function getWaitlistTeamIds(event) {
+  const entryIds = new Set(getEntryTeamIds(event));
+  return uniqueStrings(event.checkin?.waitlistTeamIds || []).filter(teamId => entryIds.has(teamId));
+}
+
+function buildSlotState(event, settings) {
+  const playableSlotCount = getPlayableSlotCount(event, settings);
+  const displaySlotCount = getDisplaySlotCount(event);
+  const activeTeamIds = getActiveTeamIds(event);
+  const waitlistTeamIds = getWaitlistTeamIds(event);
+  const byeCount = getManualByeCount(event);
+  const activeByeCount = playableSlotCount
+    ? Math.min(byeCount, Math.max(0, playableSlotCount - activeTeamIds.length))
+    : 0;
+  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
+
+  const activeLabels = [
+    ...activeTeamIds.map(teamName),
+    ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos-Team ${index + 1}` : 'Freilos'),
+  ];
+  const waitlistLabels = [
+    ...waitlistTeamIds.map(teamName),
+    ...Array.from({ length: waitlistByeCount }, (_, index) => waitlistByeCount > 1 ? `Freilos-Team ${activeByeCount + index + 1}` : 'Freilos'),
+  ];
+
+  return {
+    activeLabels,
+    displaySlotCount,
+    participantSlotCount: activeLabels.length + waitlistLabels.length,
+    playableSlotCount,
+    waitlistLabels,
+  };
+}
+
+function formatSlotLines(slotState) {
   const lines = [];
-  for (let index = 0; index < slotCount; index += 1) {
-    const teamId = teamIds[index];
-    const byeIndex = index - teamIds.length;
-    const label = teamId ? teamName(teamId) : byeIndex >= 0 && byeIndex < byeCount ? 'Freilos' : '—';
-    lines.push(`${index + 1}. ${label}`);
+  const playableSlotCount = slotState.playableSlotCount;
+  const hasSeparator = Boolean(playableSlotCount && slotState.displaySlotCount > playableSlotCount);
+
+  for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
+    if (hasSeparator && slot === playableSlotCount + 1) {
+      lines.push(`════ ⬆️ ${playableSlotCount}er Turnier ⬆️ ════`);
+    }
+
+    if (playableSlotCount && slot > playableSlotCount) {
+      const waitlistIndex = slot - playableSlotCount - 1;
+      const label = slotState.waitlistLabels[waitlistIndex];
+      lines.push(`${slot}. ${label ? `${label} (WL)` : '—'}`);
+      continue;
+    }
+
+    const label = slotState.activeLabels[slot - 1];
+    lines.push(`${slot}. ${label || '—'}`);
   }
+
   return lines.join('\n');
+}
+
+function formatWaitlistSection(slotState) {
+  if (!slotState.waitlistLabels.length) return null;
+  return [
+    '───────────────',
+    '',
+    '⚠️ Warteliste (aktuell nicht teilnahmeberechtigt)',
+    ...slotState.waitlistLabels.map((label, index) => `${index + 1}. ${label}`),
+  ].join('\n');
 }
 
 function getBannerAttachment(settings) {
@@ -160,12 +234,10 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);
   const drawAt = getDrawAt(eventKey, event, settings, now);
   const tournamentStartAt = getTournamentStartAt(eventKey, event, settings, now);
-  const displaySlotCount = getDisplaySlotCount(event);
-  const displayTeamIds = getDisplayTeamIds(event);
-  const byeCount = getManualByeCount(event);
-  const participantSlotCount = displayTeamIds.length + byeCount;
+  const slotState = buildSlotState(event, settings);
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
   const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
+  const waitlistSection = formatWaitlistSection(slotState);
 
   const description = [
     formatStatus(eventKey, event, settings, now),
@@ -181,10 +253,11 @@ function buildCheckinEmbed(eventKey, event, settings) {
     '',
     rulesLine,
     '─────────────',
-    `🏆 Turnierformat: ${formatFormat(event, settings, displaySlotCount)}`,
+    `🏆 Turnierformat: ${formatFormat(event, settings)}`,
     '─────────────',
-    `👥 Teilnehmende Teams/Plätze (${participantSlotCount})`,
-    formatSlots(displayTeamIds, byeCount, displaySlotCount),
+    `👥 Teilnehmende Teams/Plätze (${slotState.participantSlotCount})`,
+    formatSlotLines(slotState),
+    waitlistSection,
     '',
     '⚠️ Wichtiger Hinweis zur Abmeldung',
     `Nach dem offiziellen Anmeldeschluss um ${formatTime(deadlineAt)} Uhr führt eine Abmeldung automatisch zu einer 7-Tage-Sperre.`,
