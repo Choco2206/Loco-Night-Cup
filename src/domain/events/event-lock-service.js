@@ -74,7 +74,7 @@ function lockEventAndCreateGroups({ eventKey, actorUserId = null, client = null,
 
   return Promise.resolve()
     .then(async () => {
-      const roleResult = await assignGroupRoles({ client, event: lockedEvent });
+      const roleResult = await assignGroupRoles({ client, event: lockedEvent, settings });
       const channelResult = await prepareGroupChannels({ client, event: lockedEvent });
       return {
         event: lockedEvent,
