@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const { EVENT_KEYS, KNOCKOUT_ROUNDS } = require('../app/constants');
 const {
   BANS_DIR,
@@ -51,6 +52,17 @@ function ensureKnockoutRounds(rounds) {
   }
 
   return changed;
+}
+
+function seedSettingsFile() {
+  if (fs.existsSync(FILES.settings)) return readJson(FILES.settings, createSettingsDefault());
+
+  const seed = fs.existsSync(FILES.settingsSeed)
+    ? readJson(FILES.settingsSeed, createSettingsDefault())
+    : createSettingsDefault();
+
+  writeJsonAtomic(FILES.settings, seed);
+  return seed;
 }
 
 function normalizeMessagesFile() {
@@ -135,10 +147,11 @@ function initializeStorage() {
     SETTINGS_DIR,
   ].forEach(ensureDir);
 
+  seedSettingsFile();
+
   ensureJsonFile(FILES.teams, createTeamsDefault);
   ensureJsonFile(FILES.bans, createBansDefault);
   ensureJsonFile(FILES.messages, createMessagesDefault);
-  ensureJsonFile(FILES.settings, createSettingsDefault);
 
   for (const eventKey of EVENT_KEYS) {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));
@@ -150,4 +163,5 @@ function initializeStorage() {
 module.exports = {
   initializeStorage,
   normalizeMessagesFile,
+  seedSettingsFile,
 };
