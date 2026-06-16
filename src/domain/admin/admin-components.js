@@ -18,7 +18,7 @@ function buildAdminPanelPayload() {
       { name: 'EVENT', value: 'Check-in öffnen\nCheck-in schließen\nEvent zurücksetzen\nFreilos hinzufügen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen', inline: true },
       { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
-      { name: 'TESTS', value: 'Check-in Refresh\nTeamübersicht Refresh\nCeremony Test', inline: true }
+      { name: 'TESTS', value: 'Check-in Refresh\nTeamübersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nCeremony Test', inline: true }
     )
     .setTimestamp(new Date());
 
@@ -43,6 +43,8 @@ function buildAdminPanelPayload() {
   const testsRow = new ActionRowBuilder().addComponents(
     button('admin_checkin_refresh', 'Check-in Refresh', ButtonStyle.Secondary),
     button('admin_team_overview_refresh', 'Teamübersicht Refresh', ButtonStyle.Secondary),
+    button('admin_testdata_create', '🧪 Testdaten erzeugen', ButtonStyle.Secondary),
+    button('admin_testdata_remove', '🗑️ Testdaten entfernen', ButtonStyle.Danger),
     button('admin_ceremony_test', 'Ceremony Test', ButtonStyle.Secondary)
   );
 
