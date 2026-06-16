@@ -1,0 +1,101 @@
+'use strict';
+
+const {
+  EVENT_KEYS,
+  EVENT_PROFILE_BY_KEY,
+  EVENT_STATUSES,
+} = require('../app/constants');
+const {
+  hasNoDuplicates,
+  requireArray,
+  requireIsoDateOrNull,
+  requireObject,
+  requireOneOf,
+} = require('./common');
+
+function validateEvent(data, expectedEventKey = null) {
+  const errors = [];
+  if (!requireObject(errors, data, 'event root')) return errors;
+
+  if (data.version !== 1) errors.push('version must be 1');
+  requireOneOf(errors, data.eventKey, EVENT_KEYS, 'eventKey');
+  requireOneOf(errors, data.status, EVENT_STATUSES, 'status');
+
+  if (expectedEventKey && data.eventKey !== expectedEventKey) {
+    errors.push(`eventKey must match file name: ${expectedEventKey}`);
+  }
+
+  if (requireObject(errors, data.cycle, 'cycle')) {
+    if (data.cycle.cycleKey !== null && typeof data.cycle.cycleKey !== 'string') errors.push('cycle.cycleKey must be string or null');
+    if (data.cycle.eventDate !== null && typeof data.cycle.eventDate !== 'string') errors.push('cycle.eventDate must be string or null');
+    if (data.cycle.timezone !== 'Europe/Berlin') errors.push('cycle.timezone must be Europe/Berlin');
+  }
+
+  if (requireObject(errors, data.schedule, 'schedule')) {
+    const expectedProfile = EVENT_PROFILE_BY_KEY[data.eventKey];
+    if (data.schedule.profile !== expectedProfile) errors.push(`schedule.profile must be ${expectedProfile}`);
+    ['checkinOpenAt', 'deadlineAt', 'lateWindowUntil', 'drawAt', 'tournamentStartAt', 'resetAt'].forEach(field => {
+      requireIsoDateOrNull(errors, data.schedule[field], `schedule.${field}`);
+    });
+  }
+
+  if (requireObject(errors, data.format, 'format')) {
+    if (data.format.minimumRealTeams !== 8) errors.push('format.minimumRealTeams must be 8');
+    if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify([8, 16, 24, 32])) {
+      errors.push('format.allowedSizes must be [8,16,24,32]');
+    }
+    if (data.format.size !== null && ![8, 16, 24, 32].includes(data.format.size)) {
+      errors.push('format.size must be null, 8, 16, 24, or 32');
+    }
+  }
+
+  if (requireObject(errors, data.checkin, 'checkin')) {
+    if (!requireArray(errors, data.checkin.entries, 'checkin.entries')) return errors;
+    if (!requireArray(errors, data.checkin.activeTeamIds, 'checkin.activeTeamIds')) return errors;
+    if (!requireArray(errors, data.checkin.waitlistTeamIds, 'checkin.waitlistTeamIds')) return errors;
+    if (!requireArray(errors, data.checkin.lateLeaveBans, 'checkin.lateLeaveBans')) return errors;
+
+    const entryTeamIds = data.checkin.entries.map(entry => entry.teamId).filter(Boolean);
+    if (!hasNoDuplicates(entryTeamIds)) errors.push('checkin.entries must contain each team only once per event');
+
+    const active = new Set(data.checkin.activeTeamIds.map(String));
+    data.checkin.waitlistTeamIds.map(String).forEach(teamId => {
+      if (active.has(teamId)) errors.push(`team ${teamId} cannot be both active and waitlisted`);
+    });
+  }
+
+  if (!requireArray(errors, data.byes, 'byes')) return errors;
+  data.byes.forEach((bye, index) => {
+    const path = `byes[${index}]`;
+    if (!requireObject(errors, bye, path)) return;
+    if (!bye.id || typeof bye.id !== 'string') errors.push(`${path}.id is required`);
+    if (!['active', 'removed'].includes(bye.status)) errors.push(`${path}.status must be active or removed`);
+  });
+
+  if (requireObject(errors, data.groups, 'groups') && typeof data.groups.groups !== 'object') {
+    errors.push('groups.groups must be an object');
+  }
+
+  if (requireObject(errors, data.knockout, 'knockout')) {
+    if (!requireObject(errors, data.knockout.source, 'knockout.source')) return errors;
+    if (data.knockout.source.avoidSameGroupRematches !== true) {
+      errors.push('knockout.source.avoidSameGroupRematches must be true');
+    }
+  }
+
+  if (requireObject(errors, data.ceremony, 'ceremony')) {
+    requireIsoDateOrNull(errors, data.ceremony.postedAt, 'ceremony.postedAt');
+  }
+
+  if (requireObject(errors, data.reset, 'reset')) {
+    requireIsoDateOrNull(errors, data.reset.resetAt, 'reset.resetAt');
+    requireIsoDateOrNull(errors, data.reset.completedAt, 'reset.completedAt');
+    if (data.reset.keepStats !== true) errors.push('reset.keepStats must be true');
+  }
+
+  return errors;
+}
+
+module.exports = {
+  validateEvent,
+};
