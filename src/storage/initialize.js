@@ -131,6 +131,56 @@ function seedCheckinBanner() {
   return true;
 }
 
+function normalizeLegacyBye(bye, eventKey, index) {
+  const normalized = isPlainObject(bye) ? bye : { legacyValue: bye };
+  let changed = normalized !== bye;
+
+  if (!normalized.id || typeof normalized.id !== 'string') {
+    normalized.id = `bye_${eventKey}_${index + 1}`;
+    changed = true;
+  }
+
+  if (!normalized.type) {
+    normalized.type = 'bye';
+    changed = true;
+  }
+
+  if (!['active', 'removed'].includes(normalized.status)) {
+    normalized.status = 'active';
+    changed = true;
+  }
+
+  if (!normalized.displayName) {
+    normalized.displayName = normalized.name || 'Freilos';
+    changed = true;
+  }
+
+  return { bye: normalized, changed };
+}
+
+function normalizeEventFile(eventKey) {
+  const event = readJson(FILES.events[eventKey], createEventDefault(eventKey));
+  let changed = false;
+
+  if (!Array.isArray(event.byes)) {
+    event.byes = [];
+    changed = true;
+  }
+
+  event.byes = event.byes.map((bye, index) => {
+    const result = normalizeLegacyBye(bye, eventKey, index);
+    changed = result.changed || changed;
+    return result.bye;
+  });
+
+  if (changed) writeJsonAtomic(FILES.events[eventKey], event);
+  return event;
+}
+
+function normalizeEventFiles() {
+  return EVENT_KEYS.map(eventKey => normalizeEventFile(eventKey));
+}
+
 function normalizeMessagesFile() {
   const messages = readJson(FILES.messages, createMessagesDefault());
   let changed = false;
@@ -250,12 +300,15 @@ function initializeStorage() {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));
   }
 
+  normalizeEventFiles();
   normalizeMessagesFile();
 }
 
 module.exports = {
   initializeStorage,
   mergeMissingSettings,
+  normalizeEventFile,
+  normalizeEventFiles,
   normalizeMessagesFile,
   seedCheckinBanner,
   seedSettingsFile,
