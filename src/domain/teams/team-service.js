@@ -33,6 +33,10 @@ function isNonDeletedTeam(team) {
   return team && team.status !== 'deleted';
 }
 
+function isValidTournamentTeam(team) {
+  return team?.status === 'active' && team.registrationStatus === 'complete';
+}
+
 function isTeamMember(team, userId) {
   if (!team || !userId) return false;
   const id = String(userId);
@@ -374,6 +378,7 @@ function leaveTeam({ teamId, userId }) {
 
 function handleMemberRemoved({ userId }) {
   const affectedUserIds = new Set([String(userId)]);
+  const invalidTeamIds = new Set();
   let changed = false;
 
   updateTeamsData(data => {
@@ -397,6 +402,7 @@ function handleMemberRemoved({ userId }) {
         } else {
           team.manager = null;
           team.status = 'leaderless';
+          invalidTeamIds.add(String(team.id));
         }
         team.meta.updatedAt = nowIso();
         changed = true;
@@ -417,6 +423,7 @@ function handleMemberRemoved({ userId }) {
   return {
     changed,
     affectedUserIds: [...affectedUserIds],
+    invalidTeamIds: [...invalidTeamIds],
   };
 }
 
@@ -434,6 +441,7 @@ module.exports = {
   isLogoUploadExpired,
   isNonDeletedTeam,
   isTeamMember,
+  isValidTournamentTeam,
   leaveTeam,
   listVisibleTeams,
   normalizeClubName,
