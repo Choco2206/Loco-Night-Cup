@@ -108,6 +108,7 @@ function addManualBye(eventKey, actorUserId, settings) {
     const number = nextByeNumber(eventKey, event.byes);
     event.byes.push({
       type: 'bye',
+      status: 'active',
       id: `bye_${eventKey}_${number}`,
       displayName: 'Freilos',
       addedAt: new Date().toISOString(),
@@ -118,14 +119,19 @@ function addManualBye(eventKey, actorUserId, settings) {
   });
 }
 
-function removeManualBye(eventKey, settings) {
+function removeManualBye(eventKey, actorUserId, settings) {
   let removed = false;
   updateEventData(eventKey, event => {
     event.byes = Array.isArray(event.byes) ? event.byes : [];
-    const index = event.byes.map(bye => bye?.type).lastIndexOf('bye');
+    const index = event.byes.map(bye => bye?.type === 'bye' && bye?.status !== 'removed').lastIndexOf(true);
     if (index === -1) throw new Error('Für dieses Event gibt es kein Freilos.');
 
-    event.byes.splice(index, 1);
+    event.byes[index] = {
+      ...event.byes[index],
+      status: 'removed',
+      removedAt: new Date().toISOString(),
+      removedByUserId: String(actorUserId),
+    };
     removed = true;
     recalculateCheckinFormat(event, settings);
     return event;
@@ -154,7 +160,7 @@ async function handleByeSelect(interaction, client, settings) {
     return true;
   }
 
-  removeManualBye(eventKey, settings);
+  removeManualBye(eventKey, interaction.user.id, settings);
   await refreshCheckinMessage(eventKey, client);
   await interaction.editReply({ content: `Freilos für ${eventKey} wurde entfernt.`, components: [] });
   return true;
