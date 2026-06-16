@@ -4,6 +4,16 @@ const { isTeamMember, listVisibleTeams } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 const { canAcceptCheckinActions, canUseCheckinStatus } = require('./checkin-schedule');
 
+const BAN_REASON_LABELS = {
+  late_withdrawal: 'Abmeldung nach Deadline',
+  no_show: 'No-Show',
+  tournament_left: 'Turnier verlassen',
+  disrespect: 'Beleidigung/Respektlosigkeit',
+  insult: 'Beleidigung/Respektlosigkeit',
+  admin: 'Sonstige Admin-Sperre',
+  admin_other: 'Sonstige Admin-Sperre',
+};
+
 function assertEventSupportsPhaseThree(event) {
   if (!canUseCheckinStatus(event.status)) {
     throw new Error('Dieses Event ist nicht im Check-in-Modus.');
@@ -35,19 +45,41 @@ function getEligibleTeamForUser(userId) {
   return activeTeam;
 }
 
+function formatBanReason(reason) {
+  const key = String(reason || '').trim();
+  if (!key) return 'Nicht angegeben';
+  if (BAN_REASON_LABELS[key]) return BAN_REASON_LABELS[key];
+  return key.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function formatBanExpiration(expiresAt) {
+  if (!expiresAt) return 'unbegrenzt';
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) return 'unbekannt';
+  return date.toLocaleString('de-DE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function buildBanCheckinMessage(team, activeBan) {
+  const ban = activeBan?.ban || activeBan;
+  return [
+    '🚫 Dein Team ist aktuell für den Loco Night Cup gesperrt.',
+    '',
+    `Team: ${team?.clubName || 'Unbekanntes Team'}`,
+    `Grund: ${formatBanReason(ban?.reason)}`,
+    `Sperre bis: ${formatBanExpiration(ban?.expiresAt)}`,
+    '',
+    'Während dieser Sperre können VM und Co-VMs nicht am Check-in teilnehmen.',
+  ].join('\n');
+}
+
 function assertTeamHasNoActiveBan({ team, actorUserId, now }) {
   const activeBan = findActiveBanForTeamOrManagers(team, actorUserId, now);
   if (!activeBan) return;
 
-  if (activeBan.type === 'team') {
-    throw new Error('Dieses Team ist aktuell gesperrt und darf nicht einchecken.');
-  }
-
-  if (activeBan.type === 'actor') {
-    throw new Error('Du bist aktuell gesperrt und darfst kein Team einchecken.');
-  }
-
-  throw new Error('Ein aktueller VM oder Co-VM dieses Teams ist gesperrt. Das Team darf nicht einchecken.');
+  throw new Error(buildBanCheckinMessage(team, activeBan));
 }
 
 module.exports = {
