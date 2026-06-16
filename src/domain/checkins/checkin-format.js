@@ -1,5 +1,7 @@
 'use strict';
 
+const { findTeamById } = require('../teams/team-service');
+
 function uniqueStrings(values) {
   const seen = new Set();
   const result = [];
@@ -12,12 +14,33 @@ function uniqueStrings(values) {
   return result;
 }
 
+function isValidTournamentTeam(team) {
+  return team?.status === 'active' && team.registrationStatus === 'complete';
+}
+
+function isValidTournamentTeamId(teamId) {
+  return isValidTournamentTeam(findTeamById(teamId));
+}
+
+function pruneInvalidCheckinEntries(event) {
+  event.checkin.entries = (event.checkin?.entries || []).filter(entry => isValidTournamentTeamId(entry.teamId));
+  event.checkin.activeTeamIds = uniqueStrings(event.checkin?.activeTeamIds || []).filter(isValidTournamentTeamId);
+  event.checkin.waitlistTeamIds = uniqueStrings(event.checkin?.waitlistTeamIds || []).filter(isValidTournamentTeamId);
+  return event;
+}
+
 function getEntryTeamIds(event) {
-  return uniqueStrings((event.checkin?.entries || []).map(entry => entry.teamId));
+  return uniqueStrings((event.checkin?.entries || [])
+    .map(entry => entry.teamId)
+    .filter(isValidTournamentTeamId));
+}
+
+function getManualByes(event) {
+  return Array.isArray(event.byes) ? event.byes.filter(bye => bye?.type === 'bye') : [];
 }
 
 function getManualByeCount(event) {
-  return Array.isArray(event.byes) ? event.byes.length : 0;
+  return getManualByes(event).length;
 }
 
 function chooseFormatSize({ realTeamCount, byeCount, minimumRealTeams, allowedSizes }) {
@@ -96,6 +119,9 @@ function recalculateCheckinFormat(event, settings) {
   event.checkin.entries = Array.isArray(event.checkin.entries) ? event.checkin.entries : [];
   event.checkin.activeTeamIds = Array.isArray(event.checkin.activeTeamIds) ? event.checkin.activeTeamIds : [];
   event.checkin.waitlistTeamIds = Array.isArray(event.checkin.waitlistTeamIds) ? event.checkin.waitlistTeamIds : [];
+  event.byes = Array.isArray(event.byes) ? event.byes : [];
+
+  pruneInvalidCheckinEntries(event);
 
   if (event.format?.lockedAt) return preserveLockedFormat(event);
   return recalculateFormatBeforeLock(event, settings);
@@ -104,5 +130,8 @@ function recalculateCheckinFormat(event, settings) {
 module.exports = {
   getEntryTeamIds,
   getManualByeCount,
+  getManualByes,
+  isValidTournamentTeam,
+  isValidTournamentTeamId,
   recalculateCheckinFormat,
 };
