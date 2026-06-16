@@ -24,14 +24,26 @@ function readJson(filePath, fallback = null) {
   }
 }
 
+function writeFileSynced(filePath, payload) {
+  const fd = fs.openSync(filePath, 'w');
+
+  try {
+    fs.writeFileSync(fd, payload, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 function writeJsonAtomic(filePath, data) {
   ensureDir(path.dirname(filePath));
 
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const randomSuffix = Math.random().toString(36).slice(2);
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`;
   const payload = `${JSON.stringify(data, null, 2)}\n`;
 
   try {
-    fs.writeFileSync(tempPath, payload, 'utf8');
+    writeFileSynced(tempPath, payload);
     fs.renameSync(tempPath, filePath);
   } catch (error) {
     if (fs.existsSync(tempPath)) {
