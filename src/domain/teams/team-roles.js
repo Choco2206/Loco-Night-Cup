@@ -1,7 +1,7 @@
 'use strict';
 
 const { readTeamsData } = require('./team-repository');
-const { isNonDeletedTeam, isTeamMember } = require('./team-service');
+const { isTeamMember } = require('./team-service');
 
 function getTeamUserIds(team) {
   return [
@@ -10,32 +10,48 @@ function getTeamUserIds(team) {
   ].filter(Boolean).map(String);
 }
 
-function userHasNonDeletedTeam(userId) {
+function isActiveTeam(team) {
+  return team && team.status === 'active';
+}
+
+function userHasActiveTeamRole(userId) {
   const id = String(userId);
-  return readTeamsData().teams.some(team => isNonDeletedTeam(team) && isTeamMember(team, id));
+  return readTeamsData().teams.some(team => isActiveTeam(team) && isTeamMember(team, id));
 }
 
 async function syncManagerRoleForUser(guild, userId, settings) {
   const managerRoleId = settings.roles.managerRoleId;
+  const playerRoleId = settings.roles.playerRoleId;
   if (!guild || !managerRoleId || !userId) return false;
 
   const member = await guild.members.fetch(String(userId)).catch(() => null);
   if (!member) return false;
 
-  const shouldHaveRole = userHasNonDeletedTeam(userId);
-  const hasRole = member.roles.cache.has(managerRoleId);
+  const shouldHaveManagerRole = userHasActiveTeamRole(userId);
+  const hasManagerRole = member.roles.cache.has(managerRoleId);
+  const hasPlayerRole = playerRoleId ? member.roles.cache.has(playerRoleId) : false;
+  let changed = false;
 
-  if (shouldHaveRole && !hasRole) {
-    await member.roles.add(managerRoleId);
-    return true;
+  if (shouldHaveManagerRole) {
+    if (hasPlayerRole) {
+      await member.roles.remove(playerRoleId);
+      changed = true;
+    }
+
+    if (!hasManagerRole) {
+      await member.roles.add(managerRoleId);
+      changed = true;
+    }
+
+    return changed;
   }
 
-  if (!shouldHaveRole && hasRole) {
+  if (hasManagerRole) {
     await member.roles.remove(managerRoleId);
-    return true;
+    changed = true;
   }
 
-  return false;
+  return changed;
 }
 
 async function syncManagerRolesForTeam(guild, team, settings) {
@@ -52,7 +68,7 @@ async function syncAllManagerRoles(guild, settings) {
 
   const userIds = new Set();
   readTeamsData().teams
-    .filter(isNonDeletedTeam)
+    .filter(isActiveTeam)
     .forEach(team => getTeamUserIds(team).forEach(userId => userIds.add(userId)));
 
   await guild.members.fetch().catch(() => null);
@@ -73,5 +89,5 @@ module.exports = {
   syncAllManagerRoles,
   syncManagerRoleForUser,
   syncManagerRolesForTeam,
-  userHasNonDeletedTeam,
+  userHasActiveTeamRole,
 };
