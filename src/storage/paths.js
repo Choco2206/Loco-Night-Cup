@@ -5,6 +5,7 @@ const { EVENT_KEYS } = require('../app/constants');
 
 const ROOT_DIR = process.cwd();
 const DATA_DIR = path.join(ROOT_DIR, 'data');
+const CONFIG_DIR = path.join(ROOT_DIR, 'config');
 
 const TEAMS_DIR = path.join(DATA_DIR, 'teams');
 const TEAM_LOGOS_DIR = path.join(TEAMS_DIR, 'logos');
@@ -18,6 +19,7 @@ const FILES = {
   bans: path.join(BANS_DIR, 'bans.json'),
   messages: path.join(MESSAGES_DIR, 'messages.json'),
   settings: path.join(SETTINGS_DIR, 'settings.json'),
+  settingsSeed: path.join(CONFIG_DIR, 'settings.seed.json'),
   events: Object.fromEntries(
     EVENT_KEYS.map(eventKey => [eventKey, path.join(EVENTS_DIR, `${eventKey}.json`)])
   ),
@@ -25,6 +27,7 @@ const FILES = {
 
 module.exports = {
   BANS_DIR,
+  CONFIG_DIR,
   DATA_DIR,
   EVENTS_DIR,
   FILES,
