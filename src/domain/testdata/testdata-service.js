@@ -6,7 +6,7 @@ const { normalizeClubName } = require('../teams/team-service');
 const { updateEventData } = require('../checkins/checkin-repository');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { FILES, readJson } = require('../../storage');
-const { createSettingsDefault } = require('../../storage/defaults');
+const { createEventDefault, createSettingsDefault } = require('../../storage/defaults');
 
 const TEST_TEAM_NAMES = [
   'Alpha FC',
@@ -121,6 +121,8 @@ function ensureTestTeams(actorUserId) {
 function addTestCheckins(eventKey, teamIds) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   updateEventData(eventKey, event => {
+    if (event.format?.lockedAt) throw new Error('Testdaten können nicht in ein bereits gelocktes Event eingefügt werden. Entferne zuerst Testdaten oder resette das Event.');
+
     event.checkin = event.checkin || {};
     event.checkin.entries = Array.isArray(event.checkin.entries) ? event.checkin.entries : [];
     const existing = new Set(event.checkin.entries.map(entry => String(entry.teamId)));
@@ -152,6 +154,37 @@ function createTestDataForEvent({ eventKey, actorUserId }) {
   return result;
 }
 
+function participantContainsRemovedTeam(participant, removedSet) {
+  return participant?.type === 'team' && removedSet.has(String(participant.teamId));
+}
+
+function eventContainsRemovedTestData(event, removedSet) {
+  if ((event.format?.participants || []).some(participant => participantContainsRemovedTeam(participant, removedSet))) return true;
+
+  for (const group of Object.values(event.groups?.groups || {})) {
+    for (const slot of group.slots || []) {
+      if (participantContainsRemovedTeam(slot.participant, removedSet)) return true;
+    }
+  }
+
+  return false;
+}
+
+function resetTournamentStateIfNeeded(eventKey, event, removedSet) {
+  if (!eventContainsRemovedTestData(event, removedSet)) return false;
+
+  const defaults = createEventDefault(eventKey);
+  event.format = {
+    ...defaults.format,
+    allowedSizes: event.format?.allowedSizes || defaults.format.allowedSizes,
+    minimumRealTeams: event.format?.minimumRealTeams || defaults.format.minimumRealTeams,
+  };
+  event.groups = defaults.groups;
+  event.knockout = defaults.knockout;
+  event.status = 'checkin';
+  return true;
+}
+
 function removeTestData() {
   const removedIds = [];
 
@@ -177,6 +210,7 @@ function removeTestData() {
       event.checkin.activeTeamIds = (event.checkin.activeTeamIds || []).filter(teamId => !removedSet.has(String(teamId)));
       event.checkin.waitlistTeamIds = (event.checkin.waitlistTeamIds || []).filter(teamId => !removedSet.has(String(teamId)));
 
+      resetTournamentStateIfNeeded(eventKey, event, removedSet);
       if (!event.format?.lockedAt) recalculateCheckinFormat(event, settings);
       event.meta = { ...event.meta, updatedAt: nowIso() };
       return event;
