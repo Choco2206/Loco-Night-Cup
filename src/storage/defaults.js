@@ -1,0 +1,414 @@
+'use strict';
+
+const {
+  DATA_VERSION,
+  EVENT_KEYS,
+  EVENT_LABELS,
+  EVENT_PROFILE_BY_KEY,
+  GROUP_KEYS,
+  KNOCKOUT_ROUNDS,
+} = require('../app/constants');
+
+function emptyTimestampMeta() {
+  return {
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
+function createTeamsDefault() {
+  return {
+    version: DATA_VERSION,
+    teams: [],
+  };
+}
+
+function createBansDefault() {
+  return {
+    version: DATA_VERSION,
+    bans: [],
+  };
+}
+
+function createScheduleDefault(eventKey) {
+  const profile = EVENT_PROFILE_BY_KEY[eventKey];
+  const early = profile === 'early';
+
+  return {
+    profile,
+    deadlineTime: early ? '22:00' : '23:30',
+    lateWindowUntilTime: early ? '22:15' : '23:45',
+    drawTime: early ? '22:20' : '23:50',
+    tournamentStartTime: early ? '22:30' : '00:00',
+    resetTime: '07:00',
+    checkinOpenAt: null,
+    deadlineAt: null,
+    lateWindowUntil: null,
+    drawAt: null,
+    tournamentStartAt: null,
+    resetAt: null,
+  };
+}
+
+function createEventDefault(eventKey) {
+  return {
+    version: DATA_VERSION,
+    eventKey,
+    label: EVENT_LABELS[eventKey],
+    status: 'idle',
+    cycle: {
+      cycleKey: null,
+      eventDate: null,
+      timezone: 'Europe/Berlin',
+    },
+    schedule: createScheduleDefault(eventKey),
+    format: {
+      minimumRealTeams: 8,
+      allowedSizes: [8, 16, 24, 32],
+      size: null,
+      realTeamCount: 0,
+      byeCount: 0,
+      waitlistCount: 0,
+      lockedAt: null,
+    },
+    checkin: {
+      isOpen: false,
+      openedAt: null,
+      closedAt: null,
+      entries: [],
+      activeTeamIds: [],
+      waitlistTeamIds: [],
+      lateLeaveBans: [],
+    },
+    byes: [],
+    groups: {
+      status: 'not_created',
+      drawnAt: null,
+      drawnBy: null,
+      groups: {},
+    },
+    knockout: {
+      status: 'not_created',
+      createdAt: null,
+      source: {
+        qualifiedRule: null,
+        avoidSameGroupRematches: true,
+      },
+      rounds: {},
+    },
+    ceremony: {
+      status: 'not_ready',
+      placements: {
+        firstTeamId: null,
+        secondTeamId: null,
+        thirdTeamId: null,
+      },
+      postedAt: null,
+      postedMessageIds: [],
+      testRuns: [],
+    },
+    reset: {
+      status: 'not_scheduled',
+      resetAt: null,
+      completedAt: null,
+      keepStats: true,
+    },
+    meta: {
+      createdAt: null,
+      updatedAt: null,
+      cancelledAt: null,
+      cancelledByUserId: null,
+      cancelReason: null,
+    },
+  };
+}
+
+function createEventMap(factory) {
+  return Object.fromEntries(EVENT_KEYS.map(eventKey => [eventKey, factory(eventKey)]));
+}
+
+function emptyCheckinMessages() {
+  return {
+    channelId: null,
+    mainMessageId: null,
+    teamsListMessageIds: [],
+    waitlistMessageIds: [],
+    warningMessageId: null,
+    summaryMessageId: null,
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
+function emptyGroupMessages() {
+  return {
+    cycleKey: null,
+    groups: {},
+  };
+}
+
+function emptyKnockoutMessages() {
+  return {
+    cycleKey: null,
+    rounds: Object.fromEntries(
+      KNOCKOUT_ROUNDS.map(roundKey => [
+        roundKey,
+        {
+          channelId: null,
+          messageId: null,
+          releaseMessageId: null,
+          reminderMessageIds: [],
+          createdAt: null,
+          updatedAt: null,
+        },
+      ])
+    ),
+  };
+}
+
+function emptyCeremonyMessages() {
+  return {
+    cycleKey: null,
+    channelId: null,
+    imageMessageId: null,
+    textMessageId: null,
+    testMessageIds: [],
+    postedAt: null,
+    updatedAt: null,
+  };
+}
+
+function createMessagesDefault() {
+  return {
+    version: DATA_VERSION,
+    guildId: null,
+    setup: {
+      welcome: {
+        channelId: null,
+        messageId: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    },
+    roles: {
+      roleSelect: {
+        channelId: null,
+        messageId: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    },
+    teams: {
+      registrationPanel: {
+        channelId: null,
+        messageId: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+      registeredTeamsOverview: {
+        channelId: null,
+        headerMessageId: null,
+        listMessageIds: [],
+        createdAt: null,
+        updatedAt: null,
+      },
+    },
+    checkins: createEventMap(() => emptyCheckinMessages()),
+    liveSchedule: {
+      channelId: null,
+      currentEventKey: null,
+      phase: null,
+      headerMessageId: null,
+      groupMessageIds: {},
+      knockoutMessageIds: {},
+      createdAt: null,
+      updatedAt: null,
+    },
+    groups: createEventMap(() => emptyGroupMessages()),
+    knockout: createEventMap(() => emptyKnockoutMessages()),
+    banlist: {
+      channelId: null,
+      infoMessageId: null,
+      listMessageId: null,
+      createdAt: null,
+      updatedAt: null,
+    },
+    admin: {
+      panel: {
+        channelId: null,
+        messageId: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    },
+    ceremony: createEventMap(() => emptyCeremonyMessages()),
+    meta: emptyTimestampMeta(),
+  };
+}
+
+function createSettingsDefault() {
+  const groupIds = Object.fromEntries(GROUP_KEYS.map(key => [key, null]));
+  const knockoutIds = Object.fromEntries(KNOCKOUT_ROUNDS.map(key => [key, null]));
+  const eventIds = Object.fromEntries(EVENT_KEYS.map(key => [key, null]));
+
+  return {
+    version: DATA_VERSION,
+    guild: {
+      guildId: null,
+    },
+    roles: {
+      adminRoleIds: [],
+      cupLeadRoleIds: [],
+      playerRoleId: null,
+      managerRoleId: null,
+      groupRoleIds: groupIds,
+      knockoutRoleIds: knockoutIds,
+    },
+    channels: {
+      welcomeChannelId: null,
+      roleSelectChannelId: null,
+      teamRegistrationChannelId: null,
+      registeredTeamsChannelId: null,
+      rulesChannelId: null,
+      banlistChannelId: null,
+      adminPanelChannelId: null,
+      announcementChannelId: null,
+      liveScheduleChannelId: null,
+      teamSearchChannelId: null,
+      helperSearchChannelId: null,
+      checkinChannelIds: eventIds,
+      groupChannelIds: groupIds,
+      knockoutChannelIds: knockoutIds,
+    },
+    categories: {
+      checkinCategoryId: null,
+      groupCategoryId: null,
+      knockoutCategoryId: null,
+      archiveCategoryId: null,
+    },
+    permissions: {
+      adminRoleIds: [],
+      cupLeadRoleIds: [],
+      adminActions: {
+        teamDetails: ['admin', 'cup_lead'],
+        editTeam: ['admin', 'cup_lead'],
+        deleteTeam: ['admin'],
+        banTeam: ['admin'],
+        addBye: ['admin', 'cup_lead'],
+        removeBye: ['admin', 'cup_lead'],
+        eventStatus: ['admin', 'cup_lead'],
+        cancelEvent: ['admin'],
+        resetEvent: ['admin'],
+        ceremonyTest: ['admin', 'cup_lead'],
+      },
+    },
+    timeProfiles: {
+      timezone: 'Europe/Berlin',
+      eventProfiles: { ...EVENT_PROFILE_BY_KEY },
+      profiles: {
+        early: {
+          deadlineTime: '22:00',
+          lateWindowUntilTime: '22:15',
+          drawTime: '22:20',
+          tournamentStartTime: '22:30',
+          resetTime: '07:00',
+          startIsNextDay: false,
+        },
+        weekend_night: {
+          deadlineTime: '23:30',
+          lateWindowUntilTime: '23:45',
+          drawTime: '23:50',
+          tournamentStartTime: '00:00',
+          resetTime: '07:00',
+          startIsNextDay: true,
+        },
+      },
+    },
+    tournament: {
+      minimumRealTeams: 8,
+      allowedSizes: [8, 16, 24, 32],
+      groupSize: 4,
+      points: {
+        win: 3,
+        draw: 1,
+        loss: 0,
+      },
+      qualificationRules: {
+        8: 'top2',
+        16: 'top2',
+        24: 'top2_plus_4_best_thirds',
+        32: 'top2',
+      },
+      avoidSameGroupRematchesInFirstKoRound: true,
+      thirdPlaceMatchRequired: true,
+      knockoutDrawsAllowed: false,
+      knockoutTiebreaker: ['extra_time', 'penalties'],
+    },
+    teams: {
+      coManagerLimit: 5,
+      clubNameMinLength: 2,
+      clubNameMaxLength: 30,
+      logoRequired: true,
+      allowedLogoExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+      maxLogoFileSizeMb: 8,
+    },
+    checkin: {
+      allowMultipleEventsPerTeam: true,
+      allowDuplicateCheckinPerEvent: false,
+      allowManagerCheckin: true,
+      allowCoManagerCheckin: true,
+      lateWithdrawalCreatesBan: true,
+      lateWithdrawalReason: 'late_withdrawal',
+      showTeamsPublicly: true,
+      showWaitlistPublicly: true,
+      waitlistIsInformationalOnly: true,
+      noPromotionFromWaitlist: true,
+    },
+    bans: {
+      durationsDays: {
+        late_withdrawal: 7,
+        no_show: 14,
+        left_tournament: 14,
+        disrespect: 14,
+        admin_other: 14,
+      },
+      affectsTeam: true,
+      affectsManager: true,
+      affectsCoManagers: true,
+      removeExistingCheckins: true,
+    },
+    liveSchedule: {
+      enabled: true,
+      mode: 'mirror_only',
+      buttonsEnabled: false,
+      showGroupsDuringGroupPhase: true,
+      deleteGroupEmbedsWhenKnockoutStarts: true,
+      showKnockoutDuringKnockoutPhase: true,
+    },
+    ceremony: {
+      enabled: true,
+      postToAnnouncementChannel: true,
+      mentionEveryone: false,
+      generateImage: true,
+      includeTextSummary: true,
+      allowTestRun: true,
+    },
+    teamSearch: {
+      enabled: true,
+      cooldownsSeconds: {
+        teamSearchPost: 21600,
+        helperSearchPost: 600,
+      },
+      autoDeleteAfterMinutes: 120,
+    },
+    meta: emptyTimestampMeta(),
+  };
+}
+
+module.exports = {
+  createBansDefault,
+  createEventDefault,
+  createMessagesDefault,
+  createSettingsDefault,
+  createTeamsDefault,
+};
