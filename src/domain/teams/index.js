@@ -2,6 +2,8 @@
 
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
+const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
+const { refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { ensureTeamPanel } = require('./team-panel');
 const { handleInteraction } = require('./team-interactions');
 const { handleMessage } = require('./team-message-handler');
@@ -29,6 +31,15 @@ async function handleGuildMemberRemove(member, client) {
 
   for (const userId of result.affectedUserIds) {
     await syncManagerRoleForUser(member.guild, userId, settings).catch(() => {});
+  }
+
+  const affectedEventKeys = [];
+  for (const teamId of result.invalidTeamIds || []) {
+    affectedEventKeys.push(...removeTeamFromAllEvents({ teamId, settings }));
+  }
+
+  if (affectedEventKeys.length) {
+    await refreshCheckinMessages([...new Set(affectedEventKeys)], client);
   }
 
   await refreshRegisteredTeamsOverview(client);
