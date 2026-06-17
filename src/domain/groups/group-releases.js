@@ -387,6 +387,25 @@ async function releaseSlot(client, eventKey, slot, now = new Date()) {
   scheduleEvent(client, eventKey);
 }
 
+async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
+  const event = readEventData(eventKey);
+  if (!event.groups?.groups || !Object.keys(event.groups.groups).length) {
+    throw new Error('Fuer dieses Event wurden noch keine Gruppen gezogen.');
+  }
+  if (event.groups?.status === 'completed') {
+    throw new Error('Die Gruppenphase ist bereits abgeschlossen.');
+  }
+
+  ensureReleaseState(eventKey, event, now);
+  const slot = nextReleasableSlot(event);
+  if (!slot) {
+    throw new Error('Aktuell kann kein weiterer Spieltag freigegeben werden.');
+  }
+
+  await releaseSlot(client, eventKey, slot, now);
+  return { slot };
+}
+
 async function maybeReleaseNextSlot(client, eventKey, now = new Date()) {
   const event = readEventData(eventKey);
   if (event.groups?.status === 'completed') return;
@@ -476,6 +495,7 @@ module.exports = {
   afterGroupResultConfirmed,
   applyAutoScores,
   ensureReleaseState,
+  forceReleaseNextSlot,
   initGroupReleases,
   isMatchReleased,
   maybeReleaseNextSlot,
