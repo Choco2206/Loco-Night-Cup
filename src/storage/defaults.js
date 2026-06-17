@@ -113,6 +113,9 @@ function createEventDefault(eventKey) {
       },
       postedAt: null,
       postedMessageIds: [],
+      cleanupStatus: null,
+      cleanupScheduledAt: null,
+      cleanupCompletedAt: null,
       testRuns: [],
     },
     reset: {
