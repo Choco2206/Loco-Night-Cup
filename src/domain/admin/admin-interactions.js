@@ -233,8 +233,11 @@ async function handleAdminSelect(interaction, client, settings) {
         `K.O.-Phase fuer ${EVENT_LABELS[eventKey]} wurde erstellt.`,
         `Qualifiziert: ${result.knockout.qualifiedTeams.length} Teams`,
         `Erste Runde: ${result.knockout.firstRoundKey}`,
-        result.post?.channelId ? `K.O.-Kanal: <#${result.post.channelId}>` : 'K.O.-Kanal konnte nicht erstellt/gepostet werden.',
-      ].join('\n'),
+        result.post?.categoryId ? `Kategorie: ${result.post.categoryId}` : null,
+        result.post?.overviewChannelId ? `Uebersicht: <#${result.post.overviewChannelId}>` : 'K.O.-Uebersicht konnte nicht erstellt/gepostet werden.',
+        result.post?.ceremonyChannelId ? `Siegerehrung: <#${result.post.ceremonyChannelId}>` : null,
+        result.post?.roundPosts?.length ? `Rundenkanaele: ${result.post.roundPosts.length}` : null,
+      ].filter(Boolean).join('\n'),
       components: [],
     });
     return true;
