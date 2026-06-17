@@ -73,28 +73,70 @@ function buildLiveTableEmbed(group) {
       String(a.displayName || '').localeCompare(String(b.displayName || ''), 'de', { sensitivity: 'base' })
     ));
 
-  const table = rows.length
-    ? rows.map((row, index) => {
-      const name = row.displayName || findTeamById(row.teamId)?.clubName || row.teamId || row.participantKey;
-      return [
-        `${index + 1}. ${name}`,
-        `${row.played} Sp`,
-        `${row.wins} S`,
-        `${row.draws} U`,
-        `${row.losses} N`,
-        `${row.goalsFor}:${row.goalsAgainst}`,
-        `TD ${row.goalDifference}`,
-        `${row.points} Pkt`,
-      ].join(' | ');
-    }).join('\n')
-    : 'Noch keine echten Teams in dieser Gruppe.';
+  const byes = (group.slots || []).filter(slot => slot.type === 'bye');
+  const tableRows = [
+    '#  Team              Sp  S  U  N  TD  Pkt',
+    '\u2500'.repeat(41),
+    ...rows.map((row, index) => formatStandingRow(index + 1, {
+      name: row.displayName || findTeamById(row.teamId)?.clubName || row.teamId || row.participantKey,
+      played: row.played,
+      wins: row.wins,
+      draws: row.draws,
+      losses: row.losses,
+      goalDifference: row.goalDifference,
+      points: row.points,
+    })),
+    ...byes.map((_, index) => formatByeRow(rows.length + index + 1)),
+  ];
+
+  const table = `\`\`\`txt\n${tableRows.join('\n')}\n\`\`\``;
+  const qualification = getQualificationText(group.formatSize);
 
   return new EmbedBuilder()
     .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Live-Tabelle`)
     .setColor(0x27ae60)
-    .setDescription(table)
-    .setFooter({ text: 'Freilose werden nicht in der Tabelle gefuehrt.' })
+    .setDescription(`${table}\n${qualification}`)
+    .setFooter({ text: 'Freilose sind Platzhalter und haben keine Tabellenwirkung.' })
     .setTimestamp(new Date());
+}
+
+function truncateTeamName(name, width = 16) {
+  const clean = String(name || 'Team').trim();
+  if (clean.length <= width) return clean.padEnd(width, ' ');
+  return `${clean.slice(0, width - 1)}~`;
+}
+
+function formatStandingRow(place, row) {
+  return [
+    String(place).padEnd(2, ' '),
+    truncateTeamName(row.name),
+    String(row.played).padStart(2, ' '),
+    String(row.wins).padStart(2, ' '),
+    String(row.draws).padStart(2, ' '),
+    String(row.losses).padStart(2, ' '),
+    String(row.goalDifference).padStart(3, ' '),
+    String(row.points).padStart(3, ' '),
+  ].join(' ');
+}
+
+function formatByeRow(place) {
+  return [
+    String(place).padEnd(2, ' '),
+    truncateTeamName('Freilos'),
+    ' -',
+    ' -',
+    ' -',
+    ' -',
+    '  -',
+    '  -',
+  ].join(' ');
+}
+
+function getQualificationText(formatSize) {
+  if (Number(formatSize) === 24) {
+    return '\u{1f3c6} Weiterkommen: Platz 1 & 2 + die 4 besten Drittplatzierten';
+  }
+  return '\u{1f3c6} Weiterkommen: Platz 1 & 2';
 }
 
 function formatParticipant(participant) {
