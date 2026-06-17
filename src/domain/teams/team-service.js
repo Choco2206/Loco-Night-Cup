@@ -360,6 +360,22 @@ function hasTeamLeadership(team) {
   return Boolean(team?.manager?.userId) || (Array.isArray(team?.coManagers) && team.coManagers.length > 0);
 }
 
+function cleanupTeamsWithoutLeadership() {
+  const deletedTeamIds = [];
+
+  updateTeamsData(data => {
+    for (const team of data.teams) {
+      if (!isNonDeletedTeam(team)) continue;
+      if (hasTeamLeadership(team)) continue;
+      markTeamDeleted(team, { reason: 'cleanup_no_team_leadership' });
+      deletedTeamIds.push(String(team.id));
+    }
+    return data;
+  });
+
+  return deletedTeamIds;
+}
+
 function leaveTeam({ teamId, userId }) {
   let updatedTeam;
   updateTeamsData(data => {
@@ -457,6 +473,7 @@ module.exports = {
   addCoManager,
   clearExpiredLogoUploads,
   clearLogoUpload,
+  cleanupTeamsWithoutLeadership,
   createTeam,
   deleteTeam,
   findNonDeletedTeamByClubName,
