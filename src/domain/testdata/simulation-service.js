@@ -8,6 +8,7 @@ const {
   recalculateGroupStandings,
   updateGroupCompletion,
 } = require('../groups/group-results');
+const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('../knockout/knockout-posts');
 
 const KNOCKOUT_ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
@@ -222,7 +223,7 @@ function applyPlacements(event, timestamp) {
   };
 
   event.ceremony = event.ceremony || {};
-  event.ceremony.status = 'ready';
+  if (event.ceremony.status !== 'posted') event.ceremony.status = 'ready';
   event.ceremony.placements = {
     ...(event.ceremony.placements || {}),
     firstTeamId: first?.teamId || null,
@@ -279,7 +280,11 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
   });
 
   const post = await upsertKnockoutPost({ client, guild, eventKey, event: outcome.event });
-  return { ...outcome, post };
+  const ceremony = await maybePostHallOfFameCeremony({ guild, eventKey }).catch(error => {
+    console.warn(`K.O.-Simulation: Hall of Fame konnte nicht automatisch gepostet werden: ${error.message}`);
+    return { posted: false, reason: 'error', error };
+  });
+  return { ...outcome, post, ceremony };
 }
 
 module.exports = {
