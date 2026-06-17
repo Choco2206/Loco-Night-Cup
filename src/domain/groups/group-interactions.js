@@ -15,6 +15,13 @@ const { findTeamById } = require('../teams/team-service');
 const { refreshGroupPosts } = require('./group-posts');
 const { afterGroupResultConfirmed } = require('./group-releases');
 const {
+  announceReplacement,
+  getAvailableReplacementTeams,
+  getReplaceableParticipants,
+  replaceGroupParticipant,
+  syncReplacementDiscordResources,
+} = require('./group-replacements');
+const {
   getAdminSelectableMatches,
   getCurrentReleasedSlot,
   getUserSelectableMatches,
@@ -23,6 +30,8 @@ const {
 } = require('./group-results');
 
 const EPHEMERAL = 64;
+const SELECT_OPTION_LIMIT = 25;
+const SELECT_ROW_LIMIT = 5;
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -152,8 +161,111 @@ async function handleOpenAdminResult(interaction, eventKey, groupKey) {
   return true;
 }
 
-async function handleReplacementPlaceholder(interaction) {
-  await interaction.reply({ content: 'Diese Funktion kommt in einer spaeteren Phase.', flags: EPHEMERAL });
+function buildReplacementTargetSelect(eventKey, groupKey, participants) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`group_replacement_target:${eventKey}:${groupKey}`)
+      .setPlaceholder('Slot oder Teilnehmer ersetzen')
+      .addOptions(participants.map(participant => ({
+        label: participant.label.slice(0, 100),
+        value: participant.participantKey,
+        description: participant.description.slice(0, 100),
+      })))
+  );
+}
+
+function chunk(entries, size) {
+  const chunks = [];
+  for (let index = 0; index < entries.length; index += size) {
+    chunks.push(entries.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, teams) {
+  const chunks = chunk(teams, SELECT_OPTION_LIMIT);
+  if (chunks.length > SELECT_ROW_LIMIT) {
+    throw new Error('Es sind zu viele Ersatzteams verfuegbar. Bitte reduziere die Auswahl voruebergehend.');
+  }
+
+  return chunks.map((teamChunk, index) => new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`group_replacement_team:${eventKey}:${groupKey}:${encodeURIComponent(participantKeyValue)}:${index}`)
+      .setPlaceholder(chunks.length === 1 ? 'Ersatzteam auswaehlen' : `Ersatzteam auswaehlen (${index + 1}/${chunks.length})`)
+      .addOptions(teamChunk.map(team => ({
+        label: team.label.slice(0, 100),
+        value: team.id,
+        description: team.description.slice(0, 100),
+      })))
+  ));
+}
+
+async function handleOpenReplacement(interaction, eventKey, groupKey) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst keinen Nachruecker einsetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const participants = getReplaceableParticipants({ eventKey, groupKey });
+  if (!participants.length) {
+    await interaction.reply({ content: 'In dieser Gruppe gibt es keinen ersetzbaren Slot.', flags: EPHEMERAL });
+    return true;
+  }
+
+  await interaction.reply({
+    content: 'Waehle den Slot oder Teilnehmer aus, der ersetzt werden soll.',
+    components: [buildReplacementTargetSelect(eventKey, groupKey, participants)],
+    flags: EPHEMERAL,
+  });
+  return true;
+}
+
+async function handleReplacementTargetSelect(interaction, eventKey, groupKey) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst keinen Nachruecker einsetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const participantKeyValue = interaction.values?.[0];
+  const teams = getAvailableReplacementTeams({ eventKey, groupKey, participantKeyValue });
+  if (!teams.length) {
+    await interaction.update({
+      content: 'Kein verfuegbares Ersatzteam gefunden.',
+      components: [],
+    });
+    return true;
+  }
+
+  await interaction.update({
+    content: 'Waehle das Ersatzteam aus.',
+    components: buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, teams),
+  });
+  return true;
+}
+
+async function handleReplacementTeamSelect(interaction, eventKey, groupKey, encodedParticipantKey, client) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst keinen Nachruecker einsetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const participantKeyValue = decodeURIComponent(encodedParticipantKey);
+  const replacementTeamId = interaction.values?.[0];
+  await interaction.deferUpdate();
+
+  const outcome = replaceGroupParticipant({
+    eventKey,
+    groupKey,
+    participantKeyValue,
+    replacementTeamId,
+  });
+  const sync = await syncReplacementDiscordResources({ client, eventKey, outcome });
+  await announceReplacement({ interaction, outcome, newUserIds: sync.newUserIds });
+
+  await interaction.editReply({
+    content: `Nachruecker eingesetzt: **${outcome.newTeam.clubName}**. Gruppenanzeigen, Rollen, Kanalrechte und Check-in wurden aktualisiert.`,
+    components: [],
+  });
   return true;
 }
 
@@ -262,14 +374,16 @@ async function handleGroupInteraction(interaction, client) {
     if (!EVENT_KEYS.includes(eventKey)) return false;
     if (action === 'group_result_open') return handleOpenTeamResult(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_open') return handleOpenAdminResult(interaction, eventKey, groupKey);
-    if (action === 'group_replacement_open') return handleReplacementPlaceholder(interaction);
+    if (action === 'group_replacement_open') return handleOpenReplacement(interaction, eventKey, groupKey);
   }
 
   if (interaction.isStringSelectMenu?.()) {
-    const [action, eventKey, groupKey] = customId.split(':');
+    const [action, eventKey, groupKey, encodedParticipantKey] = customId.split(':');
     if (!EVENT_KEYS.includes(eventKey)) return false;
     if (action === 'group_result_select') return handleTeamResultSelect(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_select') return handleAdminResultSelect(interaction, eventKey, groupKey);
+    if (action === 'group_replacement_target') return handleReplacementTargetSelect(interaction, eventKey, groupKey);
+    if (action === 'group_replacement_team') return handleReplacementTeamSelect(interaction, eventKey, groupKey, encodedParticipantKey, client);
   }
 
   if (interaction.isModalSubmit?.()) {
