@@ -166,10 +166,12 @@ function buildScheduleEmbed(group) {
     lines.push('');
   }
 
+  const scheduleText = lines.join('\n').trim() || 'Noch kein Spielplan vorhanden.';
+
   return new EmbedBuilder()
     .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Spielplan`)
     .setColor(0xf2c94c)
-    .setDescription(lines.join('\n').trim() || 'Noch kein Spielplan vorhanden.')
+    .setDescription(`${scheduleText}\n\n\u26a0\ufe0f Beide Teams muessen das Ergebnis eintragen.`)
     .setFooter({ text: 'Freilose sind Platzhalter und erzeugen keine automatische Wertung.' })
     .setTimestamp(new Date());
 }
