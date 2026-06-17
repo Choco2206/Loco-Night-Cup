@@ -518,7 +518,9 @@ function updateKnockoutMessageState({ eventKey, event, categoryId, overview, rou
       updatedAt: null,
     };
     messages.ceremony[eventKey].cycleKey = event.cycle?.cycleKey || null;
-    messages.ceremony[eventKey].channelId = ceremonyChannelId || messages.ceremony[eventKey].channelId || null;
+    if (event.ceremony?.status !== 'posted' && !messages.ceremony[eventKey].imageMessageId && !messages.ceremony[eventKey].textMessageId) {
+      messages.ceremony[eventKey].channelId = ceremonyChannelId || messages.ceremony[eventKey].channelId || null;
+    }
     messages.ceremony[eventKey].updatedAt = timestamp;
     messages.meta = { ...(messages.meta || {}), updatedAt: timestamp };
     return messages;
@@ -574,7 +576,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     category,
     userIds: [],
     roleIds: [],
-    existingChannelId: event.ceremony?.channelId || event.knockout?.ceremonyChannelId || null,
+    existingChannelId: event.knockout?.ceremonyChannelId || null,
     publicView: true,
   });
 
