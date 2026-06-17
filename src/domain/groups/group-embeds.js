@@ -151,7 +151,10 @@ function formatResult(match) {
 }
 
 function formatMatch(match) {
-  const status = STATUS_LABELS[match.status] || match.status || 'Offen';
+  const effectiveStatus = match.home?.type === 'team' && match.away?.type === 'team' && !match.release?.releasedAt
+    ? 'not_released'
+    : match.status;
+  const status = STATUS_LABELS[effectiveStatus] || effectiveStatus || 'Offen';
   const pairing = `${formatParticipant(match.home)} vs. ${formatParticipant(match.away)}`;
   return `- ${pairing} - ${status}${formatResult(match)}`;
 }
