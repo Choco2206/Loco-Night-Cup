@@ -145,18 +145,57 @@ function formatParticipant(participant) {
   return participant.displayName || findTeamById(participant.teamId)?.clubName || participant.teamId || 'Team';
 }
 
-function formatResult(match) {
-  if (!match.result) return '';
-  return ` - ${match.result.homeGoals}:${match.result.awayGoals}`;
+function formatParticipantKey(participant) {
+  if (!participant) return null;
+  if (participant.participantKey) return participant.participantKey;
+  if (participant.type === 'team') return `team:${participant.teamId}`;
+  if (participant.type === 'bye') return `bye:${participant.byeId}`;
+  return null;
+}
+
+function hasResult(match) {
+  return match.result
+    && Number.isFinite(Number(match.result.homeGoals))
+    && Number.isFinite(Number(match.result.awayGoals));
+}
+
+function isByeMatch(match) {
+  return match.home?.type === 'bye' || match.away?.type === 'bye' || match.status === 'bye';
+}
+
+function formatByeMatch(match) {
+  const team = match.home?.type === 'team' ? match.home : match.away;
+  return `${'\ud83c\udf9f\ufe0f'} ${formatParticipant(team)} \u2014 spielfrei`;
+}
+
+function formatConfirmedMatch(match, homeName, awayName) {
+  if (!hasResult(match)) return `${'\u2705'} ${homeName} vs ${awayName} \u2014 Bestaetigt`;
+  return `${'\u2705'} ${homeName} ${match.result.homeGoals}:${match.result.awayGoals} ${awayName} \u2014 Bestaetigt`;
+}
+
+function formatPendingMatch(match, homeName, awayName) {
+  const reported = new Set((match.reports || []).map(report => report.participantKey).filter(Boolean));
+  const candidates = [match.home, match.away].filter(participant => participant?.type === 'team');
+  const waiting = candidates.find(participant => !reported.has(formatParticipantKey(participant)));
+  const waitingName = waiting ? formatParticipant(waiting) : 'Gegner';
+  return `${'\ud83d\udd50'} ${homeName} vs ${awayName} \u2014 Wartet auf ${waitingName}`;
 }
 
 function formatMatch(match) {
-  const effectiveStatus = match.home?.type === 'team' && match.away?.type === 'team' && !match.release?.releasedAt
+  if (isByeMatch(match)) return formatByeMatch(match);
+
+  const homeName = formatParticipant(match.home);
+  const awayName = formatParticipant(match.away);
+  const released = Boolean(match.release?.releasedAt);
+  const effectiveStatus = match.home?.type === 'team' && match.away?.type === 'team' && !released
     ? 'not_released'
     : match.status;
-  const status = STATUS_LABELS[effectiveStatus] || effectiveStatus || 'Offen';
-  const pairing = `${formatParticipant(match.home)} vs. ${formatParticipant(match.away)}`;
-  return `- ${pairing} - ${status}${formatResult(match)}`;
+
+  if (effectiveStatus === 'confirmed') return formatConfirmedMatch(match, homeName, awayName);
+  if (effectiveStatus === 'pending_confirmation') return formatPendingMatch(match, homeName, awayName);
+  if (effectiveStatus === 'admin_decision_required') return `${'\ud83d\udea8'} ${homeName} vs ${awayName} \u2014 Admin-Entscheidung erforderlich`;
+  if (effectiveStatus === 'not_released') return `${'\ud83d\udd12'} ${homeName} vs ${awayName} \u2014 Noch nicht freigegeben`;
+  return `${'\u23f3'} ${homeName} vs ${awayName} \u2014 Offen`;
 }
 
 function buildScheduleEmbed(group) {
