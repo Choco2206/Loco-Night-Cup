@@ -13,6 +13,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { refreshGroupPosts } = require('./group-posts');
+const { afterGroupResultConfirmed } = require('./group-releases');
 const {
   getAdminSelectableMatches,
   getCurrentReleasedSlot,
@@ -112,7 +113,7 @@ async function handleOpenTeamResult(interaction, eventKey, groupKey) {
   if (!entries.length) {
     const slot = getCurrentReleasedSlot(group);
     await interaction.reply({
-      content: `Keine meldbaren Spiele fuer dich im aktuell freigegebenen Slot ${slot}.`,
+      content: `Keine meldbaren Spiele fuer dich im aktuell freigegebenen Slot ${slot || '-'}.`,
       flags: EPHEMERAL,
     });
     return true;
@@ -216,6 +217,9 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
 
   await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
   await notifyAdminDecision(interaction, outcome.match);
+  if (outcome.status === 'confirmed') {
+    await afterGroupResultConfirmed(client, eventKey);
+  }
 
   const message = outcome.status === 'confirmed'
     ? 'Ergebnis bestaetigt. Tabelle und Spielplan wurden aktualisiert.'
@@ -242,6 +246,7 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
   });
 
   await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
+  await afterGroupResultConfirmed(client, eventKey);
   await interaction.reply({
     content: 'Admin-Ergebnis gesetzt. Tabelle und Spielplan wurden aktualisiert.',
     flags: EPHEMERAL,
