@@ -10,6 +10,7 @@ const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const { listVisibleTeams } = require('../teams/team-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
+const { createKnockoutPhase } = require('../knockout');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
 
@@ -21,6 +22,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_format_lock',
   'admin_groups_draw',
   'admin_group_release_current',
+  'admin_knockout_create',
   'admin_teams_list',
   'admin_team_details',
   'admin_checkin_refresh',
@@ -37,6 +39,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_format_lock_select',
   'admin_groups_draw_select',
   'admin_group_release_current_select',
+  'admin_knockout_create_select',
   'admin_event_reset_select',
   'admin_testdata_create_select',
 ]);
@@ -218,6 +221,25 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_knockout_create_select') {
+    const result = await createKnockoutPhase({
+      eventKey,
+      actorUserId: interaction.user.id,
+      client,
+      guild: interaction.guild,
+    });
+    await interaction.editReply({
+      content: [
+        `K.O.-Phase fuer ${EVENT_LABELS[eventKey]} wurde erstellt.`,
+        `Qualifiziert: ${result.knockout.qualifiedTeams.length} Teams`,
+        `Erste Runde: ${result.knockout.firstRoundKey}`,
+        result.post?.channelId ? `K.O.-Kanal: <#${result.post.channelId}>` : 'K.O.-Kanal konnte nicht erstellt/gepostet werden.',
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   if (interaction.customId === 'admin_event_reset_select') {
     await interaction.editReply({
       content: [
@@ -296,6 +318,15 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Fuer welches Event soll der aktuelle Spieltag sofort freigegeben werden?',
         components: [buildEventSelect('admin_group_release_current_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_knockout_create') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll die K.O.-Phase erstellt werden?',
+        components: [buildEventSelect('admin_knockout_create_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
