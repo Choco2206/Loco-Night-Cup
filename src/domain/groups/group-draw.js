@@ -6,15 +6,17 @@ const { createGroupMatchdays } = require('./group-matches');
 function createTeamSlot(team) {
   return {
     type: 'team',
-    teamId: String(team.id),
+    teamId: String(team.teamId || team.id),
+    displayName: team.displayName || team.clubName || `Team ${team.teamId || team.id}`,
+    isTestTeam: team.isTestTeam === true,
   };
 }
 
 function createByeSlot(bye) {
   return {
     type: 'bye',
-    byeId: String(bye.id),
-    label: bye.label || 'Freilos',
+    byeId: String(bye.byeId || bye.id),
+    displayName: bye.displayName || bye.label || 'Freilos',
   };
 }
 
@@ -28,48 +30,89 @@ function createEmptyGroups(groupCount, settings) {
   }));
 }
 
-function placeByes(groups, byes) {
-  if (byes.length > groups.length) {
-    throw new Error('Maximal ein Freilos pro Gruppe erlaubt.');
-  }
-
-  byes.forEach((bye, index) => {
-    groups[index].slots[3] = createByeSlot(bye);
-  });
-}
-
-function placeTeams(groups, teams) {
-  let teamIndex = 0;
-
+function shuffledSlotRefs(groups) {
+  const refs = [];
   for (const group of groups) {
     for (let slotIndex = 0; slotIndex < group.slots.length; slotIndex += 1) {
-      if (group.slots[slotIndex]) continue;
-      const team = teams[teamIndex];
-      if (!team) return;
-      group.slots[slotIndex] = createTeamSlot(team);
-      teamIndex += 1;
+      refs.push({ group, slotIndex });
     }
+  }
+  return shuffleParticipants(refs);
+}
+
+function groupHasBye(group) {
+  return group.slots.some(slot => slot?.type === 'bye');
+}
+
+function placeParticipants(groups, participants) {
+  const slotRefs = shuffledSlotRefs(groups);
+
+  for (const participant of participants) {
+    const slotRef = slotRefs.find(ref => {
+      if (ref.group.slots[ref.slotIndex]) return false;
+      if (participant.type === 'bye' && groupHasBye(ref.group)) return false;
+      return true;
+    });
+
+    if (!slotRef) {
+      throw new Error('Gruppen konnten nicht zufaellig mit den gelockten Teilnehmern belegt werden.');
+    }
+
+    slotRef.group.slots[slotRef.slotIndex] = participant.type === 'bye'
+      ? createByeSlot(participant)
+      : createTeamSlot(participant);
   }
 }
 
 function finalizeSlots(group) {
   group.slots = group.slots.map((entry, index) => ({
     slot: index + 1,
+    participantKey: entry.type === 'team' ? `team:${entry.teamId}` : `bye:${entry.byeId}`,
     ...entry,
   }));
   return group;
 }
 
+function createStandings(slots) {
+  return slots
+    .filter(slot => slot.type === 'team')
+    .map(slot => ({
+      slot: slot.slot,
+      participantKey: slot.participantKey,
+      teamId: slot.teamId,
+      displayName: slot.displayName,
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      points: 0,
+    }));
+}
+
+function shuffleParticipants(participants) {
+  const shuffled = [...participants];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 function createGroups({ eventKey, field, settings, createdAt }) {
   const groups = createEmptyGroups(field.groupCount, settings);
-  placeByes(groups, field.activeByes);
-  placeTeams(groups, field.activeTeams);
+  const participants = shuffleParticipants(Array.isArray(field.participants) ? field.participants : []);
+  placeParticipants(groups, participants);
 
   const finalizedGroups = groups.map(group => {
     finalizeSlots(group);
     if (group.slots.some(slot => !slot.type)) {
       throw new Error(`Gruppe ${group.groupKey} konnte nicht vollstaendig mit 4 Slots erstellt werden.`);
     }
+    group.name = `Gruppe ${group.groupKey}`;
+    group.standings = createStandings(group.slots);
     group.matchdays = createGroupMatchdays({ eventKey, group, createdAt });
     return group;
   });
