@@ -18,7 +18,7 @@ function uniqueEntryTeamIds(entries) {
 }
 
 function getActiveManualByes(event) {
-  return (event.byes || []).filter(bye => bye && bye.status !== 'removed');
+  return (event.byes || []).filter(bye => bye?.type === 'bye' && bye.status === 'active');
 }
 
 function getAllowedSizes(settings, event) {
@@ -59,19 +59,18 @@ function collectValidRealTeams(event, now = new Date()) {
 }
 
 function choosePlayableFormat({ realTeamCount, byeCount, settings, event }) {
-  const minimumRealTeams = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
-  if (realTeamCount < minimumRealTeams) return null;
+  const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  const participantSlotCount = realTeamCount + byeCount;
+  if (participantSlotCount < minimumParticipantSlots) return null;
 
   const allowedSizes = getAllowedSizes(settings, event).sort((a, b) => b - a);
 
   for (const size of allowedSizes) {
-    const neededByes = Math.max(0, size - realTeamCount);
-    const totalAvailableSlots = realTeamCount + byeCount;
-    const maxByesForGroups = groupCountForSize(size);
-
-    if (size > totalAvailableSlots) continue;
+    const activeTeamCount = Math.min(realTeamCount, size);
+    const neededByes = Math.max(0, size - activeTeamCount);
+    if (size > participantSlotCount) continue;
     if (neededByes > byeCount) continue;
-    if (neededByes > maxByesForGroups) continue;
+    if (neededByes > groupCountForSize(size)) continue;
     return size;
   }
 
@@ -80,7 +79,7 @@ function choosePlayableFormat({ realTeamCount, byeCount, settings, event }) {
 
 function buildLockedParticipantField(event, now = new Date()) {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const minimumRealTeams = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
   const allowedSizes = getAllowedSizes(settings, event);
   const { teams, skipped } = collectValidRealTeams(event, now);
   const manualByes = getActiveManualByes(event);
@@ -93,7 +92,7 @@ function buildLockedParticipantField(event, now = new Date()) {
   });
 
   if (!size) {
-    throw new Error(`Format-Lock nicht moeglich: mindestens ${minimumRealTeams} gueltige echte Teams und ein spielbares Format aus 8, 16, 24 oder 32 Slots erforderlich.`);
+    throw new Error(`Format-Lock nicht moeglich: mindestens ${minimumParticipantSlots} gueltige Teilnehmerplaetze und ein spielbares Format aus 8, 16, 24 oder 32 Slots erforderlich.`);
   }
 
   const activeRealCount = Math.min(teams.length, size);
@@ -101,24 +100,43 @@ function buildLockedParticipantField(event, now = new Date()) {
   const activeTeams = teams.slice(0, activeRealCount);
   const waitlistTeams = teams.slice(activeRealCount);
   const activeByes = manualByes.slice(0, neededByeCount);
+  const waitlistByes = manualByes.slice(neededByeCount);
   const groupCount = groupCountForSize(size);
 
   if (activeByes.length > groupCount) {
     throw new Error('Format-Lock nicht moeglich: maximal ein Freilos pro Gruppe erlaubt.');
   }
 
+  const participants = [
+    ...activeTeams.map(team => ({
+      type: 'team',
+      teamId: String(team.id),
+      displayName: team.clubName,
+      isTestTeam: team.isTestTeam === true,
+    })),
+    ...activeByes.map(bye => ({
+      type: 'bye',
+      byeId: String(bye.id),
+      displayName: bye.displayName || bye.label || 'Freilos',
+    })),
+  ];
+
   return {
     allowedSizes,
-    minimumRealTeams,
+    minimumRealTeams: minimumParticipantSlots,
     size,
     groupCount,
+    participants,
     activeTeams,
     waitlistTeams,
     activeByes,
+    waitlistByes,
     skipped,
     realTeamCount: activeTeams.length,
     checkedInRealTeamCount: teams.length,
     byeCount: activeByes.length,
+    activeByeCount: activeByes.length,
+    waitlistByeCount: waitlistByes.length,
   };
 }
 
