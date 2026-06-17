@@ -1,6 +1,9 @@
 'use strict';
 
 const { EVENT_KEYS, EVENT_PROFILE_BY_KEY } = require('../../app/constants');
+const { FILES, readJson } = require('../../storage');
+const { createSettingsDefault } = require('../../storage/defaults');
+const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { refreshGroupPosts } = require('./group-posts');
 const {
@@ -58,8 +61,8 @@ function berlinOffsetForDate(date) {
   return `${sign}${hours}:${minutes}`;
 }
 
-function getFirstSlotStart(eventKey, event, now = new Date()) {
-  if (event.groups?.releases?.slots?.[1]?.plannedAt) {
+function getFirstSlotStart(eventKey, event, now = new Date(), { useExistingPlanned = true } = {}) {
+  if (useExistingPlanned && event.groups?.releases?.slots?.[1]?.plannedAt) {
     const planned = new Date(event.groups.releases.slots[1].plannedAt);
     if (!Number.isNaN(planned.getTime())) return planned;
   }
@@ -68,6 +71,10 @@ function getFirstSlotStart(eventKey, event, now = new Date()) {
     const scheduled = new Date(event.schedule.tournamentStartAt);
     if (!Number.isNaN(scheduled.getTime())) return scheduled;
   }
+
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const scheduleStart = getTournamentStartAt(eventKey, event, settings, now);
+  if (scheduleStart && !Number.isNaN(scheduleStart.getTime())) return scheduleStart;
 
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Berlin',
@@ -81,6 +88,62 @@ function getFirstSlotStart(eventKey, event, now = new Date()) {
   return new Date(`${datePart}T${timePart}${offset}`);
 }
 
+function createEmptySlotRelease(slot, firstPlannedAt = null) {
+  return {
+    status: 'not_released',
+    plannedAt: slot === 1 ? firstPlannedAt : null,
+    releasedAt: null,
+    inviteStartAt: null,
+    inviteEndAt: null,
+    releaseMessageIds: {},
+    reminderAt: null,
+    reminderSentAt: null,
+    reminderMessageIds: {},
+    autoScoreAt: null,
+    autoScoredAt: null,
+  };
+}
+
+function createInitialReleaseState(eventKey, event, now = new Date()) {
+  const firstPlannedAt = getFirstSlotStart(eventKey, event, now, { useExistingPlanned: false }).toISOString();
+  return {
+    currentSlot: null,
+    slots: {
+      1: createEmptySlotRelease(1, firstPlannedAt),
+      2: createEmptySlotRelease(2, firstPlannedAt),
+      3: createEmptySlotRelease(3, firstPlannedAt),
+    },
+  };
+}
+
+function normalizeSlotRelease(slot, release, firstPlannedAt) {
+  const base = createEmptySlotRelease(slot, firstPlannedAt);
+  const normalized = {
+    ...base,
+    ...(release || {}),
+  };
+
+  const releasedDate = normalized.releasedAt ? new Date(normalized.releasedAt) : null;
+  if (!normalized.releasedAt || Number.isNaN(releasedDate.getTime())) {
+    return {
+      ...base,
+      plannedAt: slot === 1 ? normalized.plannedAt || firstPlannedAt : null,
+      releaseMessageIds: {},
+      reminderMessageIds: {},
+      cleanedAt: normalized.cleanedAt || null,
+    };
+  }
+
+  normalized.status = normalized.status && normalized.status !== 'not_released'
+    ? normalized.status
+    : 'released';
+  normalized.releaseMessageIds = normalized.releaseMessageIds || {};
+  normalized.reminderMessageIds = normalized.reminderMessageIds || {};
+  normalized.reminderAt = normalized.reminderAt || new Date(releasedDate.getTime() + REMINDER_DELAY_MS).toISOString();
+  normalized.autoScoreAt = normalized.autoScoreAt || new Date(releasedDate.getTime() + AUTO_SCORE_DELAY_MS).toISOString();
+  return normalized;
+}
+
 function ensureReleaseState(eventKey, event, now = new Date()) {
   event.groups = event.groups || {};
   const previous = event.groups.releases || {};
@@ -89,20 +152,7 @@ function ensureReleaseState(eventKey, event, now = new Date()) {
 
   for (const slot of [1, 2, 3]) {
     const key = slotKey(slot);
-    slots[key] = {
-      status: 'locked',
-      plannedAt: slot === 1 ? firstPlannedAt : null,
-      releasedAt: null,
-      inviteStartAt: null,
-      inviteEndAt: null,
-      releaseMessageIds: {},
-      reminderAt: null,
-      reminderSentAt: null,
-      reminderMessageIds: {},
-      autoScoreAt: null,
-      autoScoredAt: null,
-      ...(slots[key] || {}),
-    };
+    slots[key] = normalizeSlotRelease(slot, slots[key], firstPlannedAt);
   }
 
   event.groups.releases = {
@@ -273,7 +323,7 @@ async function deletePreviousSlotPosts(client, eventKey, event, slot, now = new 
 
 async function postReleaseMessage(client, eventKey, event, slot) {
   const release = event.groups?.releases?.slots?.[slotKey(slot)];
-  if (!release || Object.keys(release.releaseMessageIds || {}).length) return;
+  if (!release?.releasedAt || Object.keys(release.releaseMessageIds || {}).length) return;
 
   const content = [
     `\u2705 Spieltag ${slot} ist freigegeben`,
@@ -301,7 +351,7 @@ async function postReleaseMessage(client, eventKey, event, slot) {
 
 async function postReminderMessage(client, eventKey, event, slot, now = new Date()) {
   const release = event.groups?.releases?.slots?.[slotKey(slot)];
-  if (!release || release.reminderSentAt) return;
+  if (!release?.releasedAt || !release.reminderAt || release.reminderSentAt) return;
 
   const missingText = formatOpenMatchesByGroup(event, slot);
   if (!missingText) {
@@ -488,6 +538,14 @@ function clearTimer(key) {
   timers.delete(key);
 }
 
+function clearEventTimers(eventKey) {
+  for (const slot of [1, 2, 3]) {
+    clearTimer(`${eventKey}:release:${slot}`);
+    clearTimer(`${eventKey}:reminder:${slot}`);
+    clearTimer(`${eventKey}:autoscore:${slot}`);
+  }
+}
+
 function setTimer(key, targetAt, callback) {
   clearTimer(key);
   const delay = Math.max(0, new Date(targetAt).getTime() - Date.now());
@@ -497,6 +555,7 @@ function setTimer(key, targetAt, callback) {
 }
 
 function scheduleEvent(client, eventKey) {
+  clearEventTimers(eventKey);
   const event = readEventData(eventKey);
   if (!event.groups?.groups || !Object.keys(event.groups.groups).length) return;
   if (event.groups.status === 'completed') return;
@@ -525,7 +584,11 @@ function scheduleEvent(client, eventKey) {
     if (release.reminderAt && !release.reminderSentAt) {
       setTimer(`${eventKey}:reminder:${slot}`, release.reminderAt, async () => {
         const latest = readEventData(eventKey);
-        await postReminderMessage(client, eventKey, latest, slot).catch(error => console.error('Gruppen-Reminder fehlgeschlagen:', error));
+        ensureReleaseState(eventKey, latest);
+        const latestRelease = latest.groups?.releases?.slots?.[slotKey(slot)];
+        if (latestRelease?.releasedAt) {
+          await postReminderMessage(client, eventKey, latest, slot).catch(error => console.error('Gruppen-Reminder fehlgeschlagen:', error));
+        }
         scheduleEvent(client, eventKey);
       });
     }
@@ -552,6 +615,7 @@ async function initGroupReleases(client) {
 module.exports = {
   afterGroupResultConfirmed,
   applyAutoScores,
+  createInitialReleaseState,
   ensureReleaseState,
   forceReleaseNextSlot,
   initGroupReleases,
