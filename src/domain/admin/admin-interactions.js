@@ -12,6 +12,7 @@ const { resetEventForTesting } = require('../events/event-cleanup-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createKnockoutPhase } = require('../knockout');
+const { CEREMONY_DAY_LABELS, postHallOfFameTest } = require('../ceremony');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
@@ -30,6 +31,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_checkin_refresh',
   'admin_team_overview_refresh',
   'admin_ceremony_test',
+  'admin_hof_test',
   'admin_bye_add',
   'admin_bye_remove',
   'admin_testdata_create',
@@ -49,6 +51,12 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_simulate_groups_select',
   'admin_simulate_knockout_select',
 ]);
+const ADMIN_SELECT_PREFIXES = [
+  'admin_hof_first_select',
+  'admin_hof_second_select:',
+  'admin_hof_third_select:',
+  'admin_hof_day_select:',
+];
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -117,6 +125,43 @@ function buildEventSelect(customId, placeholder) {
   return new ActionRowBuilder().addComponents(select);
 }
 
+function isAdminSelectId(customId) {
+  return ADMIN_SELECT_IDS.has(customId) || ADMIN_SELECT_PREFIXES.some(prefix => String(customId).startsWith(prefix));
+}
+
+function sortedRegisteredTeams(excludeTeamIds = []) {
+  const excluded = new Set(excludeTeamIds.filter(Boolean).map(String));
+  return listVisibleTeams()
+    .filter(team => !excluded.has(String(team.id)))
+    .slice()
+    .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de', { sensitivity: 'base' }));
+}
+
+function buildTeamSelect(customId, placeholder, excludeTeamIds = []) {
+  const teams = sortedRegisteredTeams(excludeTeamIds);
+  if (!teams.length) throw new Error('Es gibt keine auswaehlbaren Teams.');
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(customId)
+    .setPlaceholder(placeholder)
+    .addOptions(teams.slice(0, 25).map(team => ({
+      label: team.clubName.slice(0, 100),
+      value: String(team.id),
+      description: team.logo?.fileName ? `Logo: ${team.logo.fileName}`.slice(0, 100) : 'Logo fehlt',
+    })));
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`admin_hof_day_select:${firstTeamId}:${secondTeamId}:${thirdTeamId}`)
+    .setPlaceholder('Wochentag auswaehlen')
+    .addOptions(Object.entries(CEREMONY_DAY_LABELS).map(([value, label]) => ({ label, value })));
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
 function nextByeNumber(eventKey, byes) {
   let max = 0;
   for (const bye of byes || []) {
@@ -174,6 +219,59 @@ async function replyInteraction(interaction, content, extra = {}) {
 }
 
 async function handleAdminSelect(interaction, client, settings) {
+  if (interaction.customId === 'admin_hof_first_select') {
+    const firstTeamId = interaction.values?.[0];
+    await interaction.update({
+      content: 'Platz 2 auswaehlen.',
+      components: [buildTeamSelect(`admin_hof_second_select:${firstTeamId}`, 'Platz 2 auswaehlen', [firstTeamId])],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_second_select:')) {
+    const [, firstTeamId] = interaction.customId.split(':');
+    const secondTeamId = interaction.values?.[0];
+    await interaction.update({
+      content: 'Platz 3 auswaehlen.',
+      components: [buildTeamSelect(`admin_hof_third_select:${firstTeamId}:${secondTeamId}`, 'Platz 3 auswaehlen', [firstTeamId, secondTeamId])],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_third_select:')) {
+    const [, firstTeamId, secondTeamId] = interaction.customId.split(':');
+    const thirdTeamId = interaction.values?.[0];
+    await interaction.update({
+      content: 'Wochentag fuer den Hall-of-Fame-Test auswaehlen.',
+      components: [buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId)],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_day_select:')) {
+    const [, firstTeamId, secondTeamId, thirdTeamId] = interaction.customId.split(':');
+    const dayKey = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const result = await postHallOfFameTest({
+      guild: interaction.guild,
+      dayKey,
+      firstTeamId,
+      secondTeamId,
+      thirdTeamId,
+    });
+    await interaction.editReply({
+      content: [
+        `Hall-of-Fame-Test wurde in <#${result.channelId}> gepostet.`,
+        `Wochentag: ${result.dayLabel}`,
+        `1. ${result.teams.first.clubName}`,
+        `2. ${result.teams.second.clubName}`,
+        `3. ${result.teams.third.clubName}`,
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   const eventKey = interaction.values?.[0];
   if (!EVENT_KEYS.includes(eventKey)) throw new Error('Event nicht gefunden.');
 
@@ -329,7 +427,7 @@ async function handleAdminSelect(interaction, client, settings) {
 
 async function handleAdminInteraction(interaction, client) {
   const isAdminButton = interaction.isButton?.() && ADMIN_ACTIONS.has(interaction.customId);
-  const isAdminSelect = interaction.isStringSelectMenu?.() && ADMIN_SELECT_IDS.has(interaction.customId);
+  const isAdminSelect = interaction.isStringSelectMenu?.() && isAdminSelectId(interaction.customId);
   if (!isAdminButton && !isAdminSelect) return false;
 
   const settings = readSettings();
@@ -424,6 +522,17 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Fuer welches Event soll die K.O.-Phase simuliert werden?',
         components: [buildEventSelect('admin_simulate_knockout_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_hof_test') {
+      const teams = sortedRegisteredTeams();
+      if (teams.length < 3) throw new Error('Fuer den Hall-of-Fame-Test werden mindestens drei registrierte Teams benoetigt.');
+      await interaction.reply({
+        content: 'Platz 1 auswaehlen.',
+        components: [buildTeamSelect('admin_hof_first_select', 'Platz 1 auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
