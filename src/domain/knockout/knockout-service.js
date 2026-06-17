@@ -47,7 +47,6 @@ function buildKnockoutState({ eventKey, event, actorUserId = null, now = new Dat
     overviewMessageId: null,
     channelId: null,
     messageId: null,
-    ceremonyChannelId: null,
     source: {
       qualifiedRule: qualification.rule,
       avoidSameGroupRematches: true,
@@ -70,9 +69,6 @@ function applyPostRefs(event, post) {
   event.knockout.overviewMessageId = post.overviewMessageId || event.knockout.overviewMessageId || null;
   event.knockout.channelId = event.knockout.overviewChannelId;
   event.knockout.messageId = event.knockout.overviewMessageId;
-  event.knockout.ceremonyChannelId = post.ceremonyChannelId || event.knockout.ceremonyChannelId || null;
-  event.ceremony = event.ceremony || {};
-  event.ceremony.channelId = event.knockout.ceremonyChannelId;
 
   for (const [roundKey, refs] of Object.entries(post.roundPosts || {})) {
     const round = event.knockout.rounds?.[roundKey];
