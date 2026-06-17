@@ -11,6 +11,7 @@ module.exports = {
   ...require('./group-matches'),
   ...require('./group-message-cleanup'),
   ...require('./group-posts'),
+  ...require('./group-replacements'),
   ...groupReleases,
   ...require('./group-results'),
   ...require('./group-roles'),
