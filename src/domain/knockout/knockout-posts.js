@@ -24,6 +24,13 @@ const ROUND_CHANNEL_NAMES = {
   third_place: 'ko-platz-3',
   final: 'ko-finale',
 };
+const ROUND_ROLE_NAMES = {
+  round_of_16: 'LNC K.O. Achtelfinale',
+  quarter_final: 'LNC K.O. Viertelfinale',
+  semi_final: 'LNC K.O. Halbfinale',
+  third_place: 'LNC K.O. Platz 3',
+  final: 'LNC K.O. Finale',
+};
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const STATUS_LABELS = {
   open: '⏳ Offen',
@@ -69,6 +76,10 @@ function getRoundTeamUserIds(round) {
     }
   }
   return uniqueStrings(ids);
+}
+
+function roundRoleIds(settings) {
+  return uniqueStrings(Object.values(settings.roles?.knockoutRoleIds || {}));
 }
 
 function getQualifiedUserIds(qualifiedTeams) {
@@ -126,9 +137,29 @@ function baseOverwrites(guild, settings) {
   ];
 }
 
-function channelOverwrites(guild, settings, userIds = []) {
+function channelOverwrites(guild, settings, { userIds = [], roleIds = [], publicView = false } = {}) {
+  if (publicView) {
+    return [
+      {
+        id: guild.roles.everyone.id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+      },
+      ...baseOverwrites(guild, settings).filter(overwrite => String(overwrite.id) !== String(guild.roles.everyone.id)),
+    ];
+  }
+
   return [
     ...baseOverwrites(guild, settings),
+    ...uniqueStrings(roleIds).map(roleId => ({
+      id: roleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+    })),
     ...uniqueStrings(userIds).map(userId => ({
       id: userId,
       allow: [
@@ -154,6 +185,18 @@ async function pruneMemberOverwrites(channel, allowedUserIds = []) {
     const type = String(overwrite.type).toLowerCase();
     const isMemberOverwrite = overwrite.type === 1 || type === 'member';
     if (!isMemberOverwrite || allowed.has(String(overwrite.id))) continue;
+    await channel.permissionOverwrites.delete(overwrite.id).catch(() => null);
+  }
+}
+
+async function pruneKnockoutRoleOverwrites(channel, settings, allowedRoleIds = []) {
+  if (!channel?.permissionOverwrites?.cache) return;
+  const allowed = new Set(uniqueStrings(allowedRoleIds));
+  const knockoutRoles = new Set(roundRoleIds(settings));
+  for (const overwrite of channel.permissionOverwrites.cache.values()) {
+    const type = String(overwrite.type).toLowerCase();
+    const isRoleOverwrite = overwrite.type === 0 || type === 'role';
+    if (!isRoleOverwrite || !knockoutRoles.has(String(overwrite.id)) || allowed.has(String(overwrite.id))) continue;
     await channel.permissionOverwrites.delete(overwrite.id).catch(() => null);
   }
 }
@@ -184,12 +227,62 @@ async function ensureKnockoutCategory(guild, settings) {
   return category;
 }
 
-async function ensureTextChannel({ guild, settings, name, category, userIds = [], existingChannelId = null }) {
+async function ensureKnockoutRole(guild, settings, roundKey) {
+  const configuredRoleId = settings.roles?.knockoutRoleIds?.[roundKey];
+  const configuredRole = configuredRoleId ? await guild.roles.fetch(configuredRoleId).catch(() => null) : null;
+  if (configuredRole) return configuredRole;
+
+  const name = ROUND_ROLE_NAMES[roundKey];
+  const existingRole = guild.roles.cache.find(role => role.name === name);
+  if (existingRole) return existingRole;
+
+  return guild.roles.create({
+    name,
+    mentionable: false,
+    reason: 'Loco Night Cup K.O.-Phase',
+  });
+}
+
+async function syncKnockoutRoles(guild, settings, event) {
+  const roleIds = {};
+  const desiredUsersByRoleId = {};
+
+  for (const roundKey of activeRoundKeys(event)) {
+    const role = await ensureKnockoutRole(guild, settings, roundKey).catch(() => null);
+    if (!role) continue;
+    roleIds[roundKey] = role.id;
+    desiredUsersByRoleId[role.id] = getRoundTeamUserIds(event.knockout?.rounds?.[roundKey]);
+  }
+
+  await guild.members.fetch().catch(() => null);
+  for (const [roundKey, roleId] of Object.entries(roleIds)) {
+    const role = await guild.roles.fetch(roleId).catch(() => null);
+    if (!role) continue;
+    const desired = new Set(desiredUsersByRoleId[roleId] || []);
+
+    for (const userId of desired) {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (member && !member.roles.cache.has(role.id)) {
+        await member.roles.add(role.id, 'Loco Night Cup K.O.-Rollen-Sync').catch(() => null);
+      }
+    }
+
+    for (const member of role.members.values()) {
+      if (!desired.has(String(member.id))) {
+        await member.roles.remove(role.id, 'Loco Night Cup K.O.-Rollen-Sync').catch(() => null);
+      }
+    }
+  }
+
+  return roleIds;
+}
+
+async function ensureTextChannel({ guild, settings, name, category, userIds = [], roleIds = [], existingChannelId = null, publicView = false }) {
   const configured = existingChannelId ? await guild.channels.fetch(existingChannelId).catch(() => null) : null;
   const existing = guild.channels.cache.find(channel => (
     channel.name === name && channel.type === ChannelType.GuildText
   ));
-  const overwrites = channelOverwrites(guild, settings, userIds);
+  const overwrites = channelOverwrites(guild, settings, { userIds, roleIds, publicView });
   const channel = configured?.isTextBased?.()
     ? configured
     : existing || await guild.channels.create({
@@ -205,6 +298,7 @@ async function ensureTextChannel({ guild, settings, name, category, userIds = []
   }
   await applyOverwrites(channel, overwrites);
   await pruneMemberOverwrites(channel, userIds);
+  await pruneKnockoutRoleOverwrites(channel, settings, roleIds);
   return channel;
 }
 
@@ -369,10 +463,15 @@ async function upsertMessage(channel, messageId, payload) {
   return existing ? existing.edit(payload) : channel.send(payload);
 }
 
-function updateGeneratedSettings({ categoryId, roundChannels }) {
+function updateGeneratedSettings({ categoryId, roundChannels, roundRoles }) {
   updateJson(FILES.settings, createSettingsDefault(), settings => {
     settings.categories = settings.categories || {};
     settings.categories.knockoutCategoryId = categoryId || settings.categories.knockoutCategoryId || null;
+    settings.roles = settings.roles || {};
+    settings.roles.knockoutRoleIds = settings.roles.knockoutRoleIds || {};
+    for (const [roundKey, roleId] of Object.entries(roundRoles || {})) {
+      if (roleId) settings.roles.knockoutRoleIds[roundKey] = roleId;
+    }
     settings.channels = settings.channels || {};
     settings.channels.knockoutChannelIds = settings.channels.knockoutChannelIds || {};
     for (const [roundKey, channelId] of Object.entries(roundChannels || {})) {
@@ -433,12 +532,13 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
   if (!targetGuild) return null;
 
   const category = await ensureKnockoutCategory(targetGuild, settings);
+  const roundRoles = await syncKnockoutRoles(targetGuild, settings, event);
   const overviewChannel = await ensureTextChannel({
     guild: targetGuild,
     settings,
     name: KNOCKOUT_OVERVIEW_CHANNEL_NAME,
     category,
-    userIds: getQualifiedUserIds(event.knockout?.qualifiedTeams || []),
+    roleIds: uniqueStrings(Object.values(roundRoles)),
     existingChannelId: event.knockout?.overviewChannelId || event.knockout?.channelId || null,
   });
   const overviewMessage = await upsertMessage(overviewChannel, event.knockout?.overviewMessageId || event.knockout?.messageId || null, {
@@ -455,7 +555,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
       settings,
       name: ROUND_CHANNEL_NAMES[roundKey],
       category,
-      userIds: getRoundTeamUserIds(round),
+      roleIds: roundRoles[roundKey] ? [roundRoles[roundKey]] : [],
       existingChannelId: round.channelId || null,
     });
     const message = await upsertMessage(channel, round.messageId || null, {
@@ -473,10 +573,12 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     name: CEREMONY_CHANNEL_NAME,
     category,
     userIds: [],
+    roleIds: [],
     existingChannelId: event.ceremony?.channelId || event.knockout?.ceremonyChannelId || null,
+    publicView: true,
   });
 
-  updateGeneratedSettings({ categoryId: category.id, roundChannels });
+  updateGeneratedSettings({ categoryId: category.id, roundChannels, roundRoles });
   updateKnockoutMessageState({
     eventKey,
     event,
@@ -500,6 +602,7 @@ module.exports = {
   KNOCKOUT_CATEGORY_NAME,
   KNOCKOUT_OVERVIEW_CHANNEL_NAME,
   ROUND_CHANNEL_NAMES,
+  ROUND_ROLE_NAMES,
   buildOverviewEmbed,
   buildRoundButtons,
   buildRoundEmbed,
