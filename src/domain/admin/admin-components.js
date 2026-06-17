@@ -16,7 +16,7 @@ function buildAdminPanelPayload() {
     .setColor(0xff0000)
     .addFields(
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
-      { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben', inline: true },
+      { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
       { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nCeremony Test', inline: true }
     )
@@ -33,7 +33,8 @@ function buildAdminPanelPayload() {
   const tournamentRow = new ActionRowBuilder().addComponents(
     button('admin_format_lock', 'Format locken', ButtonStyle.Primary),
     button('admin_groups_draw', 'Gruppen ziehen', ButtonStyle.Primary),
-    button('admin_group_release_current', 'Aktuellen Spieltag freigeben', ButtonStyle.Success)
+    button('admin_group_release_current', 'Aktuellen Spieltag freigeben', ButtonStyle.Success),
+    button('admin_knockout_create', 'K.O. erstellen', ButtonStyle.Primary).setEmoji('\ud83c\udfc6')
   );
 
   const teamsRow = new ActionRowBuilder().addComponents(
