@@ -25,7 +25,7 @@ function buildAdminPanelPayload() {
   const eventRow = new ActionRowBuilder().addComponents(
     button('admin_checkin_open', 'Check-in oeffnen', ButtonStyle.Success),
     button('admin_checkin_close', 'Check-in schliessen', ButtonStyle.Danger),
-    button('admin_event_reset', 'Event zuruecksetzen', ButtonStyle.Secondary),
+    button('admin_event_reset', 'Event zuruecksetzen', ButtonStyle.Secondary).setEmoji('\ud83e\uddf9'),
     button('admin_bye_add', 'Freilos hinzufuegen', ButtonStyle.Secondary),
     button('admin_bye_remove', 'Freilos entfernen', ButtonStyle.Secondary)
   );
