@@ -11,28 +11,29 @@ function button(customId, label, style = ButtonStyle.Secondary) {
 
 function buildAdminPanelPayload() {
   const embed = new EmbedBuilder()
-    .setTitle('🔧 Loco Night Cup Admin Panel')
+    .setTitle('Loco Night Cup Admin Panel')
     .setDescription('Zentrale Steuerung des Turniersystems.')
     .setColor(0xff0000)
     .addFields(
-      { name: 'EVENT', value: 'Check-in öffnen\nCheck-in schließen\nEvent zurücksetzen\nFreilos hinzufügen\nFreilos entfernen', inline: true },
-      { name: 'TURNIER', value: 'Format locken\nGruppen ziehen', inline: true },
+      { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
+      { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben', inline: true },
       { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
-      { name: 'TESTS', value: 'Check-in Refresh\nTeamübersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nCeremony Test', inline: true }
+      { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nCeremony Test', inline: true }
     )
     .setTimestamp(new Date());
 
   const eventRow = new ActionRowBuilder().addComponents(
-    button('admin_checkin_open', 'Check-in öffnen', ButtonStyle.Success),
-    button('admin_checkin_close', 'Check-in schließen', ButtonStyle.Danger),
-    button('admin_event_reset', 'Event zurücksetzen', ButtonStyle.Secondary),
-    button('admin_bye_add', 'Freilos hinzufügen', ButtonStyle.Secondary),
+    button('admin_checkin_open', 'Check-in oeffnen', ButtonStyle.Success),
+    button('admin_checkin_close', 'Check-in schliessen', ButtonStyle.Danger),
+    button('admin_event_reset', 'Event zuruecksetzen', ButtonStyle.Secondary),
+    button('admin_bye_add', 'Freilos hinzufuegen', ButtonStyle.Secondary),
     button('admin_bye_remove', 'Freilos entfernen', ButtonStyle.Secondary)
   );
 
   const tournamentRow = new ActionRowBuilder().addComponents(
     button('admin_format_lock', 'Format locken', ButtonStyle.Primary),
-    button('admin_groups_draw', 'Gruppen ziehen', ButtonStyle.Primary)
+    button('admin_groups_draw', 'Gruppen ziehen', ButtonStyle.Primary),
+    button('admin_group_release_current', 'Aktuellen Spieltag freigeben', ButtonStyle.Success)
   );
 
   const teamsRow = new ActionRowBuilder().addComponents(
@@ -42,9 +43,9 @@ function buildAdminPanelPayload() {
 
   const testsRow = new ActionRowBuilder().addComponents(
     button('admin_checkin_refresh', 'Check-in Refresh', ButtonStyle.Secondary),
-    button('admin_team_overview_refresh', 'Teamübersicht Refresh', ButtonStyle.Secondary),
-    button('admin_testdata_create', '🧪 Testdaten erzeugen', ButtonStyle.Secondary),
-    button('admin_testdata_remove', '🗑️ Testdaten entfernen', ButtonStyle.Danger),
+    button('admin_team_overview_refresh', 'Teamuebersicht Refresh', ButtonStyle.Secondary),
+    button('admin_testdata_create', 'Testdaten erzeugen', ButtonStyle.Secondary),
+    button('admin_testdata_remove', 'Testdaten entfernen', ButtonStyle.Danger),
     button('admin_ceremony_test', 'Ceremony Test', ButtonStyle.Secondary)
   );
 
