@@ -7,6 +7,7 @@ const checkinSystem = require('./src/domain/checkins');
 const adminSystem = require('./src/domain/admin');
 const roleSystem = require('./src/domain/roles');
 const groupSystem = require('./src/domain/groups');
+const knockoutSystem = require('./src/domain/knockout');
 
 const EPHEMERAL = 64;
 
@@ -73,6 +74,7 @@ async function main() {
     try {
       if (await adminSystem.handleInteraction(interaction, client)) return;
       if (await groupSystem.handleGroupInteraction(interaction, client)) return;
+      if (await knockoutSystem.handleKnockoutInteraction(interaction, client)) return;
       if (await roleSystem.handleInteraction(interaction, client)) return;
       if (await teamSystem.handleInteraction(interaction, client)) return;
       if (await checkinSystem.handleInteraction(interaction, client)) return;
