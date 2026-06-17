@@ -30,10 +30,15 @@ function createMatch({ eventKey, group, matchday, matchIndex, homeSlot, awaySlot
     awaySlot,
     home,
     away,
-    status: hasBye(home, away) ? 'admin_decision_required' : 'scheduled',
+    status: hasBye(home, away) ? 'bye' : 'open',
     result: null,
+    reports: [],
     confirmedBy: [],
     adminDecision: null,
+    release: {
+      slot: null,
+      releasedAt: null,
+    },
     meta: {
       createdAt,
       updatedAt: null,
