@@ -214,6 +214,63 @@ async function sendToActiveGroupChannels(client, event, content, idBucketName, s
   return messageIds;
 }
 
+async function deleteMessageFromGroup(client, group, messageId, label) {
+  if (!client || !group?.channelId || !messageId) return false;
+
+  const channel = await client.channels.fetch(group.channelId).catch(error => {
+    console.error(`Gruppe ${group.groupKey}: Kanal fuer ${label} konnte nicht geladen werden.`, error);
+    return null;
+  });
+  if (!channel) return false;
+
+  const message = await channel.messages.fetch(messageId).catch(error => {
+    if (error?.code !== 10008) {
+      console.error(`Gruppe ${group.groupKey}: ${label} konnte nicht geladen werden.`, error);
+    }
+    return null;
+  });
+  if (!message) return false;
+
+  await message.delete().catch(error => {
+    if (error?.code !== 10008) {
+      console.error(`Gruppe ${group.groupKey}: ${label} konnte nicht geloescht werden.`, error);
+    }
+  });
+  return true;
+}
+
+async function deleteStoredSlotPosts(client, eventKey, event, slot, now = new Date()) {
+  const release = event.groups?.releases?.slots?.[slotKey(slot)];
+  if (!release) return;
+
+  const releaseIds = release.releaseMessageIds || {};
+  const reminderIds = release.reminderMessageIds || {};
+  if (!Object.keys(releaseIds).length && !Object.keys(reminderIds).length) return;
+
+  const groups = event.groups?.groups || {};
+  for (const [groupKey, messageId] of Object.entries(releaseIds)) {
+    await deleteMessageFromGroup(client, groups[groupKey], messageId, `Freigabe-Post Spieltag ${slot}`);
+  }
+  for (const [groupKey, messageId] of Object.entries(reminderIds)) {
+    await deleteMessageFromGroup(client, groups[groupKey], messageId, `Reminder-Post Spieltag ${slot}`);
+  }
+
+  updateEventData(eventKey, current => {
+    ensureReleaseState(eventKey, current, now);
+    const currentRelease = current.groups.releases.slots[slotKey(slot)];
+    currentRelease.releaseMessageIds = {};
+    currentRelease.reminderMessageIds = {};
+    currentRelease.cleanedAt = nowIso(now);
+    return current;
+  });
+}
+
+async function deletePreviousSlotPosts(client, eventKey, event, slot, now = new Date()) {
+  const previousSlot = Number(slot) - 1;
+  if (previousSlot < 1) return;
+  await deleteStoredSlotPosts(client, eventKey, event, previousSlot, now);
+}
+
 async function postReleaseMessage(client, eventKey, event, slot) {
   const release = event.groups?.releases?.slots?.[slotKey(slot)];
   if (!release || Object.keys(release.releaseMessageIds || {}).length) return;
@@ -380,6 +437,7 @@ async function releaseSlot(client, eventKey, slot, now = new Date()) {
   });
 
   if (didRelease && releasedEvent) {
+    await deletePreviousSlotPosts(client, eventKey, releasedEvent, slot, now);
     await postReleaseMessage(client, eventKey, releasedEvent, slot);
     await refreshAllGroups(client, eventKey, releasedEvent);
   }
