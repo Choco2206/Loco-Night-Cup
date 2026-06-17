@@ -191,7 +191,7 @@ function updateRoundStatuses(event) {
 
 function setCeremonyReady(event, placements, timestamp) {
   event.ceremony = event.ceremony || {};
-  event.ceremony.status = 'ready';
+  if (event.ceremony.status !== 'posted') event.ceremony.status = 'ready';
   event.ceremony.placements = {
     ...(event.ceremony.placements || {}),
     firstTeamId: placements.first?.teamId || null,
