@@ -340,6 +340,26 @@ function deleteTeam({ teamId, actorUserId }) {
   return deletedTeam;
 }
 
+function markTeamDeleted(team, { deletedByUserId = null, reason = 'no_team_leadership' } = {}) {
+  const timestamp = nowIso();
+  team.status = 'deleted';
+  team.manager = null;
+  team.coManagers = [];
+  team.logoUpload = null;
+  team.meta = {
+    ...(team.meta || {}),
+    updatedAt: timestamp,
+    deletedAt: team.meta?.deletedAt || timestamp,
+    deletedByUserId: deletedByUserId ? String(deletedByUserId) : null,
+    deleteReason: reason,
+  };
+  return team;
+}
+
+function hasTeamLeadership(team) {
+  return Boolean(team?.manager?.userId) || (Array.isArray(team?.coManagers) && team.coManagers.length > 0);
+}
+
 function leaveTeam({ teamId, userId }) {
   let updatedTeam;
   updateTeamsData(data => {
@@ -361,14 +381,16 @@ function leaveTeam({ teamId, userId }) {
         };
         team.status = 'active';
       } else {
-        team.manager = null;
-        team.status = 'leaderless';
+        markTeamDeleted(team, { deletedByUserId: userId, reason: 'last_manager_left_team' });
       }
     } else {
       team.coManagers = team.coManagers.filter(co => String(co.userId) !== String(userId));
+      if (!hasTeamLeadership(team)) {
+        markTeamDeleted(team, { deletedByUserId: userId, reason: 'last_comanager_left_team' });
+      }
     }
 
-    team.meta.updatedAt = timestamp;
+    team.meta.updatedAt = nowIso();
     updatedTeam = team;
     return data;
   });
@@ -398,10 +420,10 @@ function handleMemberRemoved({ userId }) {
             userId: String(nextManager.userId),
             addedAt: nowIso(),
           };
+          team.status = 'active';
           affectedUserIds.add(String(nextManager.userId));
         } else {
-          team.manager = null;
-          team.status = 'leaderless';
+          markTeamDeleted(team, { deletedByUserId: userId, reason: 'last_manager_left_server' });
           invalidTeamIds.add(String(team.id));
         }
         team.meta.updatedAt = nowIso();
@@ -412,6 +434,10 @@ function handleMemberRemoved({ userId }) {
       const before = team.coManagers.length;
       team.coManagers = team.coManagers.filter(co => String(co.userId) !== String(userId));
       if (team.coManagers.length !== before) {
+        if (!hasTeamLeadership(team)) {
+          markTeamDeleted(team, { deletedByUserId: userId, reason: 'last_comanager_left_server' });
+          invalidTeamIds.add(String(team.id));
+        }
         team.meta.updatedAt = nowIso();
         changed = true;
       }
