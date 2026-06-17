@@ -38,17 +38,16 @@ function getSettings() {
   return readJson(FILES.settings, createSettingsDefault());
 }
 
-function managerIntentRequiredMessage(settings) {
-  const channelId = settings.channels?.roleSelectChannelId;
-  if (channelId) {
-    return `Bitte wähle zuerst im <#${channelId}> Kanal die Option 'Team anmelden / Manager', bevor du ein Team registrierst.`;
-  }
-  return "Bitte waehle zuerst im Rollenkanal 'Team anmelden / Manager', bevor du ein Team registrierst.";
-}
-
 function teamRegistrationChannelLabel(settings) {
   const channelId = settings.channels?.teamRegistrationChannelId;
   return channelId ? `<#${channelId}>` : 'Teamregistrierungskanal';
+}
+
+function strictManagerRoleRequiredMessage(settings) {
+  const prefix = '\u274c Du brauchst zuerst die Manager-Rolle, um ein Team zu registrieren.';
+  const channelId = settings.channels?.roleSelectChannelId;
+  if (channelId) return `${prefix}\nBitte waehle zuerst im <#${channelId}> die Manager-Rolle aus.`;
+  return `${prefix}\nBitte waehle zuerst in der Rollenauswahl die Manager-Rolle aus.`;
 }
 
 function shouldLogInteractionError(error) {
@@ -80,15 +79,22 @@ async function getConfiguredRole(guild, roleId) {
   return guild.roles.cache.get(String(roleId)) || await guild.roles.fetch(String(roleId)).catch(() => null);
 }
 
-async function requireManagerIntentRole(interaction, settings) {
+async function requireStrictManagerRegistrationRole(interaction, settings) {
   requireGuild(interaction);
 
-  const managerRole = await getConfiguredRole(interaction.guild, settings.roles.managerRoleId);
+  const managerRoleId = settings.roles?.managerRoleId ? String(settings.roles.managerRoleId) : null;
+  const playerRoleId = settings.roles?.playerRoleId ? String(settings.roles.playerRoleId) : null;
+  if (!managerRoleId) throw new Error('Manager-Rolle ist nicht konfiguriert.');
+  if (playerRoleId && playerRoleId === managerRoleId) {
+    throw new Error('Manager- und Spieler-Rolle sind gleich konfiguriert. Bitte Settings pruefen.');
+  }
+
+  const managerRole = await getConfiguredRole(interaction.guild, managerRoleId);
   if (!managerRole) throw new Error('Manager-Rolle ist nicht konfiguriert oder wurde nicht gefunden.');
 
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   if (!member || !member.roles.cache.has(managerRole.id)) {
-    throw new Error(managerIntentRequiredMessage(settings));
+    throw new Error(strictManagerRoleRequiredMessage(settings));
   }
 
   return member;
@@ -179,7 +185,7 @@ async function handleButton(interaction, client) {
   const settings = getSettings();
 
   if (interaction.customId === 'team_register_open') {
-    await requireManagerIntentRole(interaction, settings);
+    await requireStrictManagerRegistrationRole(interaction, settings);
     await interaction.showModal(buildRegisterModal(settings));
     return true;
   }
@@ -278,7 +284,7 @@ async function handleModal(interaction, client) {
   const settings = getSettings();
 
   if (interaction.customId === 'team_register_modal') {
-    await requireManagerIntentRole(interaction, settings);
+    await requireStrictManagerRegistrationRole(interaction, settings);
     await interaction.deferReply({ flags: EPHEMERAL });
     const clubName = interaction.fields.getTextInputValue('club_name');
     const team = createTeam({ clubName, managerUserId: interaction.user.id, settings });
