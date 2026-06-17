@@ -8,13 +8,23 @@ const { ensureTeamPanel } = require('./team-panel');
 const { handleInteraction } = require('./team-interactions');
 const { handleMessage } = require('./team-message-handler');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
-const { handleMemberRemoved } = require('./team-service');
+const { cleanupTeamsWithoutLeadership, handleMemberRemoved } = require('./team-service');
 const { syncAllManagerRoles, syncManagerRoleForUser } = require('./team-roles');
 
 async function init(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
 
   await ensureTeamPanel(client);
+
+  const deletedTeamIds = cleanupTeamsWithoutLeadership();
+  const affectedEventKeys = [];
+  for (const teamId of deletedTeamIds) {
+    affectedEventKeys.push(...removeTeamFromAllEvents({ teamId, settings }));
+  }
+  if (affectedEventKeys.length) {
+    await refreshCheckinMessages([...new Set(affectedEventKeys)], client);
+  }
+
   await refreshRegisteredTeamsOverview(client);
 
   for (const guild of client.guilds.cache.values()) {
