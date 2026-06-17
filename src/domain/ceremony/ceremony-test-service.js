@@ -56,17 +56,17 @@ const CEREMONY_LOGO_POSITIONS = {
     third: { x: 1148, y: 812, width: 214, height: 66 },
   },
   wednesday: {
-    first: { x: 713, y: 800, width: 216, height: 82 },
-    second: { x: 266, y: 812, width: 214, height: 66 },
-    third: { x: 1128, y: 812, width: 214, height: 66 },
+    first: { x: 703, y: 824, width: 216, height: 82 },
+    second: { x: 256, y: 836, width: 214, height: 66 },
+    third: { x: 1128, y: 836, width: 214, height: 66 },
   },
   thursday: {
     first: { x: 728, y: 790, width: 216, height: 82 },
-    second: { x: 316, y: 806, width: 214, height: 66 },
-    third: { x: 1138, y: 806, width: 214, height: 66 },
+    second: { x: 326, y: 806, width: 214, height: 66 },
+    third: { x: 1128, y: 806, width: 214, height: 66 },
   },
   friday: {
-    first: { x: 713, y: 798, width: 216, height: 82 },
+    first: { x: 718, y: 810, width: 216, height: 82 },
     second: { x: 306, y: 814, width: 214, height: 66 },
     third: { x: 1148, y: 814, width: 214, height: 66 },
   },
@@ -76,9 +76,9 @@ const CEREMONY_LOGO_POSITIONS = {
     third: { x: 1158, y: 824, width: 214, height: 66 },
   },
   sunday: {
-    first: { x: 728, y: 812, width: 216, height: 82 },
-    second: { x: 326, y: 824, width: 214, height: 66 },
-    third: { x: 1128, y: 824, width: 214, height: 66 },
+    first: { x: 728, y: 836, width: 216, height: 82 },
+    second: { x: 336, y: 840, width: 214, height: 66 },
+    third: { x: 1118, y: 840, width: 214, height: 66 },
   },
 };
 
