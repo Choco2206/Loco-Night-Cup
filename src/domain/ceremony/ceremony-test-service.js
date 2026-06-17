@@ -45,13 +45,41 @@ function createDefaultLogoPositions() {
 }
 
 const CEREMONY_LOGO_POSITIONS = {
-  monday: createDefaultLogoPositions(),
-  tuesday: createDefaultLogoPositions(),
-  wednesday: createDefaultLogoPositions(),
-  thursday: createDefaultLogoPositions(),
-  friday: createDefaultLogoPositions(),
-  saturday: createDefaultLogoPositions(),
-  sunday: createDefaultLogoPositions(),
+  monday: {
+    first: { x: 716, y: 773, width: 240, height: 92 },
+    second: { x: 266, y: 792, width: 214, height: 66 },
+    third: { ...DEFAULT_LOGO_POSITIONS.third },
+  },
+  tuesday: {
+    first: { x: 728, y: 798, width: 216, height: 82 },
+    second: { x: 306, y: 812, width: 214, height: 66 },
+    third: { x: 1148, y: 812, width: 214, height: 66 },
+  },
+  wednesday: {
+    first: { x: 713, y: 800, width: 216, height: 82 },
+    second: { x: 266, y: 812, width: 214, height: 66 },
+    third: { x: 1128, y: 812, width: 214, height: 66 },
+  },
+  thursday: {
+    first: { x: 728, y: 790, width: 216, height: 82 },
+    second: { x: 316, y: 806, width: 214, height: 66 },
+    third: { x: 1138, y: 806, width: 214, height: 66 },
+  },
+  friday: {
+    first: { x: 713, y: 798, width: 216, height: 82 },
+    second: { x: 306, y: 814, width: 214, height: 66 },
+    third: { x: 1148, y: 814, width: 214, height: 66 },
+  },
+  saturday: {
+    first: { x: 728, y: 810, width: 216, height: 82 },
+    second: { x: 286, y: 824, width: 214, height: 66 },
+    third: { x: 1158, y: 824, width: 214, height: 66 },
+  },
+  sunday: {
+    first: { x: 728, y: 812, width: 216, height: 82 },
+    second: { x: 326, y: 824, width: 214, height: 66 },
+    third: { x: 1128, y: 824, width: 214, height: 66 },
+  },
 };
 
 function assertDay(dayKey) {
