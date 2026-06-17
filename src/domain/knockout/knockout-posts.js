@@ -7,7 +7,23 @@ const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
 
-const KNOCKOUT_CHANNEL_NAME = 'ko-phase';
+const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
+const KNOCKOUT_OVERVIEW_CHANNEL_NAME = 'ko-phase';
+const CEREMONY_CHANNEL_NAME = 'siegerehrung';
+const ROUND_CHANNEL_NAMES = {
+  round_of_16: 'ko-achtelfinale',
+  quarter_final: 'ko-viertelfinale',
+  semi_final: 'ko-halbfinale',
+  third_place: 'ko-platz-3',
+  final: 'ko-finale',
+};
+const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
+const STATUS_LABELS = {
+  open: '⏳ Offen',
+  locked: '🔒 Noch nicht bereit',
+  not_needed: 'Nicht benoetigt',
+  confirmed: '✅ Bestaetigt',
+};
 
 function nowIso() {
   return new Date().toISOString();
@@ -17,13 +33,31 @@ function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
 }
 
+function uniqueStrings(values) {
+  return [...new Set((values || []).filter(Boolean).map(String))];
+}
+
 function getAdminRoleIds(guild, settings) {
-  return [
+  return uniqueStrings([
     ...(settings.roles?.adminRoleIds || []),
     ...(settings.roles?.cupLeadRoleIds || []),
     ...(settings.permissions?.adminRoleIds || []),
     ...(settings.permissions?.cupLeadRoleIds || []),
-  ].filter(Boolean).map(String).filter(roleId => guild.roles.cache.has(roleId));
+  ]).filter(roleId => guild.roles.cache.has(roleId));
+}
+
+function getTeamIdsFromParticipant(participant) {
+  return participant?.type === 'team' && participant.teamId ? [String(participant.teamId)] : [];
+}
+
+function getRoundTeamUserIds(round) {
+  const ids = [];
+  for (const match of round?.matches || []) {
+    for (const teamId of [...getTeamIdsFromParticipant(match.home), ...getTeamIdsFromParticipant(match.away)]) {
+      ids.push(...getTeamUserIds(findTeamById(teamId)));
+    }
+  }
+  return uniqueStrings(ids);
 }
 
 function getQualifiedUserIds(qualifiedTeams) {
@@ -31,43 +65,34 @@ function getQualifiedUserIds(qualifiedTeams) {
   for (const qualified of qualifiedTeams || []) {
     ids.push(...getTeamUserIds(findTeamById(qualified.teamId)));
   }
-  return [...new Set(ids.map(String))];
+  return uniqueStrings(ids);
 }
 
-function overwriteForAllow(extra = {}) {
-  return {
-    ViewChannel: true,
-    SendMessages: true,
-    ReadMessageHistory: true,
-    ...extra,
-  };
+function overwriteOptions(overwrite) {
+  const options = {};
+  for (const permission of overwrite.allow || []) {
+    if (permission === PermissionFlagsBits.ViewChannel) options.ViewChannel = true;
+    if (permission === PermissionFlagsBits.SendMessages) options.SendMessages = true;
+    if (permission === PermissionFlagsBits.ReadMessageHistory) options.ReadMessageHistory = true;
+    if (permission === PermissionFlagsBits.ManageChannels) options.ManageChannels = true;
+    if (permission === PermissionFlagsBits.ManageMessages) options.ManageMessages = true;
+    if (permission === PermissionFlagsBits.AttachFiles) options.AttachFiles = true;
+    if (permission === PermissionFlagsBits.EmbedLinks) options.EmbedLinks = true;
+  }
+  for (const permission of overwrite.deny || []) {
+    if (permission === PermissionFlagsBits.ViewChannel) options.ViewChannel = false;
+  }
+  return options;
 }
 
-async function ensureKnockoutChannel({ client, guild, settings, event }) {
-  const targetGuild = guild || await getConfiguredGuild(client, settings);
-  if (!targetGuild) return null;
-
-  const existingChannelId = event.knockout?.channelId || Object.values(event.knockout?.rounds || {})
-    .map(round => round.channelId)
-    .find(Boolean);
-  const configuredChannel = existingChannelId
-    ? await targetGuild.channels.fetch(existingChannelId).catch(() => null)
-    : null;
-  const existingByName = targetGuild.channels.cache.find(channel => (
-    channel.name === KNOCKOUT_CHANNEL_NAME && channel.type === ChannelType.GuildText
-  ));
-
-  const channel = configuredChannel?.isTextBased?.() ? configuredChannel : existingByName;
-  const adminRoleIds = getAdminRoleIds(targetGuild, settings);
-  const qualifiedUserIds = getQualifiedUserIds(event.knockout?.qualifiedTeams || []);
-
-  const permissionOverwrites = [
+function baseOverwrites(guild, settings) {
+  return [
     {
-      id: targetGuild.roles.everyone.id,
+      id: guild.roles.everyone.id,
       deny: [PermissionFlagsBits.ViewChannel],
     },
     {
-      id: targetGuild.client.user.id,
+      id: guild.client.user.id,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -78,7 +103,7 @@ async function ensureKnockoutChannel({ client, guild, settings, event }) {
         PermissionFlagsBits.EmbedLinks,
       ],
     },
-    ...adminRoleIds.map(roleId => ({
+    ...getAdminRoleIds(guild, settings).map(roleId => ({
       id: roleId,
       allow: [
         PermissionFlagsBits.ViewChannel,
@@ -87,7 +112,13 @@ async function ensureKnockoutChannel({ client, guild, settings, event }) {
         PermissionFlagsBits.ManageMessages,
       ],
     })),
-    ...qualifiedUserIds.map(userId => ({
+  ];
+}
+
+function channelOverwrites(guild, settings, userIds = []) {
+  return [
+    ...baseOverwrites(guild, settings),
+    ...uniqueStrings(userIds).map(userId => ({
       id: userId,
       allow: [
         PermissionFlagsBits.ViewChannel,
@@ -96,33 +127,69 @@ async function ensureKnockoutChannel({ client, guild, settings, event }) {
       ],
     })),
   ];
+}
 
-  if (channel) {
-    for (const overwrite of permissionOverwrites) {
-      const options = {};
-      for (const permission of overwrite.allow || []) {
-        if (permission === PermissionFlagsBits.ViewChannel) options.ViewChannel = true;
-        if (permission === PermissionFlagsBits.SendMessages) options.SendMessages = true;
-        if (permission === PermissionFlagsBits.ReadMessageHistory) options.ReadMessageHistory = true;
-        if (permission === PermissionFlagsBits.ManageChannels) options.ManageChannels = true;
-        if (permission === PermissionFlagsBits.ManageMessages) options.ManageMessages = true;
-        if (permission === PermissionFlagsBits.AttachFiles) options.AttachFiles = true;
-        if (permission === PermissionFlagsBits.EmbedLinks) options.EmbedLinks = true;
-      }
-      for (const permission of overwrite.deny || []) {
-        if (permission === PermissionFlagsBits.ViewChannel) options.ViewChannel = false;
-      }
-      await channel.permissionOverwrites.edit(overwrite.id, options).catch(() => null);
-    }
-    return channel;
+async function applyOverwrites(channel, overwrites) {
+  if (!channel?.permissionOverwrites) return;
+  for (const overwrite of overwrites) {
+    await channel.permissionOverwrites.edit(overwrite.id, overwriteOptions(overwrite)).catch(() => null);
+  }
+}
+
+async function ensureKnockoutCategory(guild, settings) {
+  const configuredId = settings.categories?.knockoutCategoryId;
+  const configured = configuredId ? await guild.channels.fetch(configuredId).catch(() => null) : null;
+  const existing = guild.channels.cache.find(channel => (
+    channel.name === KNOCKOUT_CATEGORY_NAME && channel.type === ChannelType.GuildCategory
+  ));
+  const category = configured?.type === ChannelType.GuildCategory
+    ? configured
+    : existing || await guild.channels.create({
+      name: KNOCKOUT_CATEGORY_NAME,
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: baseOverwrites(guild, settings),
+      reason: 'Loco Night Cup K.O.-Phase',
+    });
+
+  await applyOverwrites(category, baseOverwrites(guild, settings));
+
+  const groupCategoryId = settings.categories?.groupCategoryId;
+  const groupCategory = groupCategoryId ? await guild.channels.fetch(groupCategoryId).catch(() => null) : null;
+  if (groupCategory?.type === ChannelType.GuildCategory && typeof category.setPosition === 'function') {
+    await category.setPosition(groupCategory.position + 1).catch(() => null);
   }
 
-  return targetGuild.channels.create({
-    name: KNOCKOUT_CHANNEL_NAME,
-    type: ChannelType.GuildText,
-    parent: settings.categories?.knockoutCategoryId || undefined,
-    permissionOverwrites,
-    reason: 'Loco Night Cup K.O.-Phase',
+  return category;
+}
+
+async function ensureTextChannel({ guild, settings, name, category, userIds = [], existingChannelId = null }) {
+  const configured = existingChannelId ? await guild.channels.fetch(existingChannelId).catch(() => null) : null;
+  const existing = guild.channels.cache.find(channel => (
+    channel.name === name && channel.type === ChannelType.GuildText
+  ));
+  const overwrites = channelOverwrites(guild, settings, userIds);
+  const channel = configured?.isTextBased?.()
+    ? configured
+    : existing || await guild.channels.create({
+      name,
+      type: ChannelType.GuildText,
+      parent: category?.id || undefined,
+      permissionOverwrites: overwrites,
+      reason: 'Loco Night Cup K.O.-Phase',
+    });
+
+  if (category?.id && channel.parentId !== category.id && typeof channel.setParent === 'function') {
+    await channel.setParent(category.id, { lockPermissions: false }).catch(() => null);
+  }
+  await applyOverwrites(channel, overwrites);
+  return channel;
+}
+
+function activeRoundKeys(event) {
+  const rounds = event.knockout?.rounds || {};
+  return ROUND_ORDER.filter(roundKey => {
+    const round = rounds[roundKey];
+    return round?.matches?.length && round.status !== 'not_needed';
   });
 }
 
@@ -133,104 +200,197 @@ function participantName(participant) {
   return participant.displayName || 'TBD';
 }
 
-function formatMatch(match) {
-  const label = `${participantName(match.home)} vs ${participantName(match.away)}`;
-  return `M${match.matchIndex}: ${label} (${match.status})`;
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status || 'Unbekannt';
 }
 
-function formatRound(round) {
-  if (!round?.matches?.length) return 'Nicht benoetigt';
-  return round.matches.map(formatMatch).join('\n').slice(0, 1000);
+function buildRoundEmbed(eventKey, event, roundKey) {
+  const round = event.knockout?.rounds?.[roundKey];
+  const label = ROUND_LABELS[roundKey] || roundKey;
+  const lines = [];
+
+  for (const match of round?.matches || []) {
+    lines.push(`⚔️ **M${match.matchIndex}**`);
+    lines.push(`${participantName(match.home)} vs ${participantName(match.away)}`);
+    lines.push(`Status: ${statusLabel(match.status)}`);
+    lines.push('');
+  }
+
+  if (!lines.length) lines.push('Diese Runde wird in diesem Format nicht benoetigt.');
+
+  return new EmbedBuilder()
+    .setTitle(`🏆 ${label}`)
+    .setColor(roundKey === event.knockout?.firstRoundKey ? 0xf2c94c : 0x5865f2)
+    .setDescription(lines.join('\n').trim())
+    .addFields({
+      name: 'Hinweis',
+      value: '⚠️ Beide Teams muessen das Ergebnis eintragen. Bei Gleichstand muss spaeter ein Sieger nach Verlaengerung/Elfmeterschiessen angegeben werden.',
+      inline: false,
+    })
+    .setFooter({ text: `${event.label || eventKey} · K.O.-Phase` })
+    .setTimestamp(new Date());
 }
 
-function buildQualifiedText(qualifiedTeams) {
-  return (qualifiedTeams || [])
-    .map(team => `${team.seed}. ${team.displayName} (Gruppe ${team.groupKey}, Platz ${team.groupRank})`)
-    .join('\n')
-    .slice(0, 1000) || 'Keine qualifizierten Teams gefunden.';
-}
-
-function buildKnockoutEmbed(eventKey, event) {
+function buildOverviewEmbed(eventKey, event) {
   const knockout = event.knockout || {};
-  const rounds = knockout.rounds || {};
-  const embed = new EmbedBuilder()
-    .setTitle('K.O.-Phase')
+  const qualified = (knockout.qualifiedTeams || [])
+    .map(team => `${team.seed}. ${team.displayName} · Gruppe ${team.groupKey}, Platz ${team.groupRank}`)
+    .join('\n') || 'Keine qualifizierten Teams gefunden.';
+  const rounds = activeRoundKeys(event)
+    .map(roundKey => `• ${ROUND_LABELS[roundKey] || roundKey}`)
+    .join('\n') || 'Keine aktiven K.O.-Runden.';
+
+  return new EmbedBuilder()
+    .setTitle('🏆 K.O.-Phase Übersicht')
     .setColor(0xf2c94c)
     .setDescription([
       `Event: **${event.label || eventKey}**`,
       `Format: **${event.format?.size || '-'}er Turnier**`,
-      `Status: **${knockout.status || 'not_created'}**`,
-      `Qualifikation: **${knockout.source?.qualifiedRule || '-'}**`,
+      `Erste Runde: **${ROUND_LABELS[knockout.firstRoundKey] || knockout.firstRoundKey || '-'}**`,
     ].join('\n'))
-    .addFields({
-      name: 'Qualifizierte Teams',
-      value: buildQualifiedText(knockout.qualifiedTeams),
-      inline: false,
-    })
+    .addFields(
+      { name: 'Runden', value: rounds, inline: true },
+      { name: 'Qualifizierte Teams', value: qualified.slice(0, 1000), inline: false }
+    )
     .setTimestamp(new Date());
+}
 
-  for (const roundKey of ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final']) {
-    const round = rounds[roundKey];
-    embed.addFields({
-      name: ROUND_LABELS[roundKey] || roundKey,
-      value: formatRound(round),
-      inline: false,
-    });
-  }
+async function upsertMessage(channel, messageId, payload) {
+  const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
+  return existing ? existing.edit(payload) : channel.send(payload);
+}
 
-  return embed;
+function updateGeneratedSettings({ categoryId, roundChannels }) {
+  updateJson(FILES.settings, createSettingsDefault(), settings => {
+    settings.categories = settings.categories || {};
+    settings.categories.knockoutCategoryId = categoryId || settings.categories.knockoutCategoryId || null;
+    settings.channels = settings.channels || {};
+    settings.channels.knockoutChannelIds = settings.channels.knockoutChannelIds || {};
+    for (const [roundKey, channelId] of Object.entries(roundChannels || {})) {
+      if (channelId) settings.channels.knockoutChannelIds[roundKey] = channelId;
+    }
+    settings.meta = { ...(settings.meta || {}), updatedAt: nowIso() };
+    return settings;
+  });
+}
+
+function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts, ceremonyChannelId }) {
+  updateJson(FILES.messages, createMessagesDefault(), messages => {
+    const timestamp = nowIso();
+    messages.knockout = messages.knockout || {};
+    messages.knockout[eventKey] = messages.knockout[eventKey] || { cycleKey: null, rounds: {} };
+    messages.knockout[eventKey].cycleKey = event.cycle?.cycleKey || null;
+    messages.knockout[eventKey].categoryId = categoryId || null;
+    messages.knockout[eventKey].channelId = overview?.channelId || null;
+    messages.knockout[eventKey].messageId = overview?.messageId || null;
+    messages.knockout[eventKey].updatedAt = timestamp;
+    messages.knockout[eventKey].rounds = messages.knockout[eventKey].rounds || {};
+
+    for (const roundKey of ROUND_ORDER) {
+      const previous = messages.knockout[eventKey].rounds[roundKey] || {};
+      const post = roundPosts[roundKey] || {};
+      messages.knockout[eventKey].rounds[roundKey] = {
+        channelId: post.channelId || previous.channelId || null,
+        messageId: post.messageId || previous.messageId || null,
+        releaseMessageId: previous.releaseMessageId || null,
+        reminderMessageIds: Array.isArray(previous.reminderMessageIds) ? previous.reminderMessageIds : [],
+        createdAt: previous.createdAt || timestamp,
+        updatedAt: post.messageId ? timestamp : previous.updatedAt || null,
+      };
+    }
+
+    messages.ceremony = messages.ceremony || {};
+    messages.ceremony[eventKey] = messages.ceremony[eventKey] || {
+      cycleKey: null,
+      channelId: null,
+      imageMessageId: null,
+      textMessageId: null,
+      testMessageIds: [],
+      postedAt: null,
+      updatedAt: null,
+    };
+    messages.ceremony[eventKey].cycleKey = event.cycle?.cycleKey || null;
+    messages.ceremony[eventKey].channelId = ceremonyChannelId || messages.ceremony[eventKey].channelId || null;
+    messages.ceremony[eventKey].updatedAt = timestamp;
+    messages.meta = { ...(messages.meta || {}), updatedAt: timestamp };
+    return messages;
+  });
 }
 
 async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
   if (!client) return null;
   const settings = readSettings();
-  const channel = await ensureKnockoutChannel({ client, guild, settings, event });
-  if (!channel?.send) return null;
+  const targetGuild = guild || await getConfiguredGuild(client, settings);
+  if (!targetGuild) return null;
 
-  const messages = readJson(FILES.messages, createMessagesDefault());
-  const state = messages.knockout?.[eventKey] || {};
-  const messageId = event.knockout?.messageId || state.messageId || Object.values(state.rounds || {})
-    .map(round => round.messageId)
-    .find(Boolean);
-  const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
-  const payload = {
-    embeds: [buildKnockoutEmbed(eventKey, event)],
+  const category = await ensureKnockoutCategory(targetGuild, settings);
+  const overviewChannel = await ensureTextChannel({
+    guild: targetGuild,
+    settings,
+    name: KNOCKOUT_OVERVIEW_CHANNEL_NAME,
+    category,
+    userIds: getQualifiedUserIds(event.knockout?.qualifiedTeams || []),
+    existingChannelId: event.knockout?.overviewChannelId || event.knockout?.channelId || null,
+  });
+  const overviewMessage = await upsertMessage(overviewChannel, event.knockout?.overviewMessageId || event.knockout?.messageId || null, {
+    embeds: [buildOverviewEmbed(eventKey, event)],
     allowedMentions: { parse: [] },
-  };
-
-  const message = existing ? await existing.edit(payload) : await channel.send(payload);
-  const timestamp = nowIso();
-
-  updateJson(FILES.messages, createMessagesDefault(), current => {
-    current.knockout = current.knockout || {};
-    current.knockout[eventKey] = current.knockout[eventKey] || { cycleKey: null, rounds: {} };
-    current.knockout[eventKey].cycleKey = event.cycle?.cycleKey || null;
-    current.knockout[eventKey].channelId = channel.id;
-    current.knockout[eventKey].messageId = message.id;
-    current.knockout[eventKey].updatedAt = timestamp;
-    current.knockout[eventKey].rounds = current.knockout[eventKey].rounds || {};
-
-    for (const roundKey of ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final']) {
-      const previous = current.knockout[eventKey].rounds[roundKey] || {};
-      current.knockout[eventKey].rounds[roundKey] = {
-        channelId: channel.id,
-        messageId: roundKey === event.knockout.firstRoundKey ? message.id : (previous.messageId || null),
-        releaseMessageId: previous.releaseMessageId || null,
-        reminderMessageIds: Array.isArray(previous.reminderMessageIds) ? previous.reminderMessageIds : [],
-        createdAt: previous.createdAt || timestamp,
-        updatedAt: timestamp,
-      };
-    }
-
-    current.meta = { ...(current.meta || {}), updatedAt: timestamp };
-    return current;
   });
 
-  return { channelId: channel.id, messageId: message.id };
+  const roundPosts = {};
+  const roundChannels = {};
+  for (const roundKey of activeRoundKeys(event)) {
+    const round = event.knockout.rounds[roundKey];
+    const channel = await ensureTextChannel({
+      guild: targetGuild,
+      settings,
+      name: ROUND_CHANNEL_NAMES[roundKey],
+      category,
+      userIds: getRoundTeamUserIds(round),
+      existingChannelId: round.channelId || null,
+    });
+    const message = await upsertMessage(channel, round.messageId || null, {
+      embeds: [buildRoundEmbed(eventKey, event, roundKey)],
+      allowedMentions: { parse: [] },
+    });
+    roundPosts[roundKey] = { channelId: channel.id, messageId: message.id };
+    roundChannels[roundKey] = channel.id;
+  }
+
+  const ceremonyChannel = await ensureTextChannel({
+    guild: targetGuild,
+    settings,
+    name: CEREMONY_CHANNEL_NAME,
+    category,
+    userIds: [],
+    existingChannelId: event.ceremony?.channelId || event.knockout?.ceremonyChannelId || null,
+  });
+
+  updateGeneratedSettings({ categoryId: category.id, roundChannels });
+  updateKnockoutMessageState({
+    eventKey,
+    event,
+    categoryId: category.id,
+    overview: { channelId: overviewChannel.id, messageId: overviewMessage.id },
+    roundPosts,
+    ceremonyChannelId: ceremonyChannel.id,
+  });
+
+  return {
+    categoryId: category.id,
+    overviewChannelId: overviewChannel.id,
+    overviewMessageId: overviewMessage.id,
+    roundPosts,
+    ceremonyChannelId: ceremonyChannel.id,
+  };
 }
 
 module.exports = {
-  KNOCKOUT_CHANNEL_NAME,
-  buildKnockoutEmbed,
+  CEREMONY_CHANNEL_NAME,
+  KNOCKOUT_CATEGORY_NAME,
+  KNOCKOUT_OVERVIEW_CHANNEL_NAME,
+  ROUND_CHANNEL_NAMES,
+  buildOverviewEmbed,
+  buildRoundEmbed,
   upsertKnockoutPost,
 };
