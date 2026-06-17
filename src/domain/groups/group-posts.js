@@ -1,0 +1,126 @@
+'use strict';
+
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { FILES, updateJson } = require('../../storage');
+const { createMessagesDefault } = require('../../storage/defaults');
+const { buildLiveTableEmbed, buildScheduleEmbed, buildTeamOverviewEmbed } = require('./group-embeds');
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function buildHeaderPayload(group) {
+  return {
+    content: [
+      `**${group.name || `Gruppe ${group.groupKey}`}**`,
+      '',
+      'Dieser Kanal enthaelt Teamuebersicht, Live-Tabelle und Spielplan fuer die Gruppenphase.',
+      'Ergebnisfunktionen werden in Phase 6.2 freigeschaltet.',
+    ].join('\n'),
+    allowedMentions: { parse: [] },
+  };
+}
+
+function buildScheduleButtons(group) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`group_result_open:${group.eventKey}:${group.groupKey}`)
+      .setLabel('⚽ Ergebnis eintragen')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`group_admin_result_open:${group.eventKey}:${group.groupKey}`)
+      .setLabel('🛠️ Admin-Ergebnis')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`group_replacement_open:${group.eventKey}:${group.groupKey}`)
+      .setLabel('🔁 Nachrücker einsetzen')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+async function upsertMessage(channel, messageId, payload, label) {
+  const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
+  if (existing) {
+    try {
+      return await existing.edit(payload);
+    } catch (error) {
+      console.error(`Gruppe ${label}: vorhandene Message konnte nicht aktualisiert werden.`, error);
+      throw error;
+    }
+  }
+
+  try {
+    return await channel.send(payload);
+  } catch (error) {
+    console.error(`Gruppe ${label}: Message konnte nicht gesendet werden. Bitte Bot-Berechtigungen pruefen.`, error);
+    throw error;
+  }
+}
+
+async function upsertGroupPosts(channel, group, refs = {}) {
+  const groupWithEvent = {
+    ...group,
+    eventKey: group.eventKey || refs.eventKey,
+  };
+
+  const header = await upsertMessage(channel, refs.headerMessageId || refs.messageId || group.messageId, buildHeaderPayload(group), `${group.groupKey} Header`);
+  const teams = await upsertMessage(channel, refs.teamsMessageId || group.teamsMessageId, {
+    embeds: [buildTeamOverviewEmbed(group)],
+    allowedMentions: { parse: ['users'] },
+  }, `${group.groupKey} Teamuebersicht`);
+  const table = await upsertMessage(channel, refs.tableMessageId || group.tableMessageId, {
+    embeds: [buildLiveTableEmbed(group)],
+    allowedMentions: { parse: [] },
+  }, `${group.groupKey} Live-Tabelle`);
+  const schedule = await upsertMessage(channel, refs.scheduleMessageId || group.scheduleMessageId, {
+    embeds: [buildScheduleEmbed(group)],
+    components: [buildScheduleButtons(groupWithEvent)],
+    allowedMentions: { parse: [] },
+  }, `${group.groupKey} Spielplan`);
+
+  return {
+    headerMessageId: header.id,
+    messageId: header.id,
+    teamsMessageId: teams.id,
+    tableMessageId: table.id,
+    scheduleMessageId: schedule.id,
+  };
+}
+
+function updateGroupMessageRefs(eventKey, event, groupUpdates) {
+  updateJson(FILES.messages, createMessagesDefault(), messages => {
+    messages.groups = messages.groups || {};
+    messages.groups[eventKey] = messages.groups[eventKey] || { cycleKey: null, groups: {} };
+    messages.groups[eventKey].cycleKey = event.cycle?.cycleKey || null;
+    messages.groups[eventKey].groups = messages.groups[eventKey].groups || {};
+
+    for (const update of groupUpdates) {
+      const previous = messages.groups[eventKey].groups[update.groupKey] || {};
+      messages.groups[eventKey].groups[update.groupKey] = {
+        ...previous,
+        channelId: update.channelId,
+        roleId: update.roleId,
+        messageId: update.messageId || update.headerMessageId,
+        headerMessageId: update.headerMessageId || update.messageId,
+        teamsMessageId: update.teamsMessageId,
+        tableMessageId: update.tableMessageId,
+        scheduleMessageId: update.scheduleMessageId,
+        updatedAt: nowIso(),
+      };
+    }
+
+    messages.meta = {
+      ...(messages.meta || {}),
+      updatedAt: nowIso(),
+    };
+
+    return messages;
+  });
+}
+
+module.exports = {
+  buildHeaderPayload,
+  buildScheduleButtons,
+  updateGroupMessageRefs,
+  upsertGroupPosts,
+};
