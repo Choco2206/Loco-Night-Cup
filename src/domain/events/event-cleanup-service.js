@@ -14,9 +14,15 @@ const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-halbfinale',
   'ko-platz-3',
   'ko-finale',
-  'siegerehrung',
 ]);
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
+const KNOCKOUT_ROLE_NAMES = [
+  'LNC K.O. Achtelfinale',
+  'LNC K.O. Viertelfinale',
+  'LNC K.O. Halbfinale',
+  'LNC K.O. Finale',
+  'LNC K.O. Platz 3',
+];
 
 function nowIso() {
   return new Date().toISOString();
@@ -58,10 +64,6 @@ function collectKnockoutChannelIds(eventKey, event, messages) {
   for (const round of Object.values(knockoutMessages.rounds || {})) {
     if (round?.channelId) ids.push(round.channelId);
   }
-
-  if (event.knockout?.ceremonyChannelId) ids.push(event.knockout.ceremonyChannelId);
-  if (event.ceremony?.channelId) ids.push(event.ceremony.channelId);
-  if (messages.ceremony?.[eventKey]?.channelId) ids.push(messages.ceremony[eventKey].channelId);
 
   return uniqueStrings(ids);
 }
@@ -155,6 +157,36 @@ async function clearRoleMembers(guild, groupRefs, summary) {
   }
 }
 
+async function clearKnockoutRoleMembers(guild, settings, summary) {
+  if (!guild) return;
+  await guild.members.fetch().catch(() => null);
+  const configuredRoleIds = uniqueStrings(Object.values(settings.roles?.knockoutRoleIds || {}));
+  const roles = new Map();
+
+  for (const roleId of configuredRoleIds) {
+    const role = await guild.roles.fetch(roleId).catch(() => null);
+    if (role) roles.set(role.id, role);
+    else summary.missingRoles.push(roleId);
+  }
+
+  for (const roleName of KNOCKOUT_ROLE_NAMES) {
+    const role = guild.roles.cache.find(entry => entry.name === roleName);
+    if (role) roles.set(role.id, role);
+  }
+
+  for (const role of roles.values()) {
+    let removed = 0;
+    for (const member of role.members.values()) {
+      await member.roles.remove(role.id, 'Loco Night Cup Event reset').catch(error => {
+        console.warn(`Event cleanup could not remove K.O. role ${role.id} from ${member.id}: ${error.message}`);
+        return null;
+      });
+      removed += 1;
+    }
+    summary.clearedKnockoutRoles.push({ roleId: role.id, name: role.name, removed });
+  }
+}
+
 function resetEventRuntime(eventKey, actorUserId) {
   let resetEvent;
   updateJson(FILES.events[eventKey], createEventDefault(eventKey), event => {
@@ -215,6 +247,7 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
     deletedKnockoutChannels: [],
     deletedKnockoutCategoryId: null,
     clearedGroupRoles: [],
+    clearedKnockoutRoles: [],
     missingChannels: [],
     missingRoles: [],
     messagesReset: false,
@@ -226,6 +259,7 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   const knockoutChannelIds = collectKnockoutChannelIds(eventKey, event, messages);
 
   await clearRoleMembers(targetGuild, groupRefs, summary);
+  await clearKnockoutRoleMembers(targetGuild, activeSettings, summary);
   await deleteGroupChannels(client, groupRefs, summary);
   await deleteKnockoutChannels(client, knockoutChannelIds, summary);
   await deleteEmptyKnockoutCategory(targetGuild, event, messages, summary);
