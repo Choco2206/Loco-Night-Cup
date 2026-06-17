@@ -8,5 +8,6 @@ module.exports = {
   ...require('./group-interactions'),
   ...require('./group-matches'),
   ...require('./group-posts'),
+  ...require('./group-results'),
   ...require('./group-roles'),
 };
