@@ -49,7 +49,6 @@ function createScheduleDefault(eventKey) {
     lateWindowUntilTime: early ? '22:15' : '23:45',
     drawTime: early ? '22:20' : '23:50',
     tournamentStartTime: early ? '22:30' : '00:00',
-    resetTime: '07:00',
     checkinOpenAt: null,
     deadlineAt: null,
     lateWindowUntil: null,
@@ -304,7 +303,6 @@ function createSettingsDefault() {
           lateWindowUntilTime: '22:15',
           drawTime: '22:20',
           tournamentStartTime: '22:30',
-          resetTime: '07:00',
           startIsNextDay: false,
         },
         weekend_night: {
@@ -312,7 +310,6 @@ function createSettingsDefault() {
           lateWindowUntilTime: '23:45',
           drawTime: '23:50',
           tournamentStartTime: '00:00',
-          resetTime: '07:00',
           startIsNextDay: true,
         },
       },
