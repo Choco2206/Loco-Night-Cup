@@ -9,7 +9,7 @@ const { assertCanLockEvent, assertGroupsHaveFourSlots } = require('../groups/gro
 const { ensureGroupRolesAndMembers } = require('../groups/group-roles');
 const { ensureGroupChannel, getGroupUserIds } = require('../groups/group-channels');
 const { updateGroupMessageRefs, upsertGroupPosts } = require('../groups/group-posts');
-const { maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
+const { createInitialReleaseState, maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -202,6 +202,7 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
       drawnAt: timestamp,
       drawnBy: actorUserId ? String(actorUserId) : null,
       groups,
+      releases: createInitialReleaseState(eventKey, event, now),
     };
     event.meta = {
       ...event.meta,
