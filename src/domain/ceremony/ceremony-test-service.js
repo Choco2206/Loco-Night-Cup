@@ -7,6 +7,7 @@ const { AttachmentBuilder, ChannelType } = require('discord.js');
 const { FILES, ROOT_DIR, TEAM_LOGOS_DIR, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
+const { getAutoCleanupScheduledAt, scheduleAutoCleanupForEvent } = require('../events/event-cleanup-service');
 const { findTeamById } = require('../teams/team-service');
 
 const HALL_OF_FAME_CHANNEL_ID = '1516915002957758616';
@@ -355,6 +356,9 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     storedEvent.ceremony.imageMessageId = imageMessage.id;
     storedEvent.ceremony.textMessageId = textMessage.id;
     storedEvent.ceremony.postedMessageIds = [imageMessage.id, textMessage.id];
+    storedEvent.ceremony.cleanupStatus = 'scheduled';
+    storedEvent.ceremony.cleanupScheduledAt = getAutoCleanupScheduledAt(timestamp);
+    storedEvent.ceremony.cleanupCompletedAt = null;
     storedEvent.meta = { ...(storedEvent.meta || {}), updatedAt: timestamp };
     updatedEvent = storedEvent;
     return storedEvent;
@@ -365,6 +369,12 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     imageMessageId: imageMessage.id,
     textMessageId: textMessage.id,
     timestamp,
+  });
+  scheduleAutoCleanupForEvent({
+    eventKey,
+    guild,
+    scheduledAt: updatedEvent.ceremony.cleanupScheduledAt,
+    client: guild.client,
   });
 
   return {
