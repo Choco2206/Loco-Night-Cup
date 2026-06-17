@@ -1,6 +1,129 @@
 'use strict';
 
-const { PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { findTeamById } = require('../teams/team-service');
+const { getGroupTeamIds, getTeamUserIds } = require('./group-roles');
+
+function channelNameForGroup(groupKey) {
+  return `gruppe-${String(groupKey).toLowerCase()}`;
+}
+
+function uniqueStrings(values) {
+  return [...new Set((values || []).filter(Boolean).map(String))];
+}
+
+function getExistingRoleIds(guild, roleIds) {
+  return uniqueStrings(roleIds).filter(roleId => guild.roles.cache.has(roleId));
+}
+
+function getGroupUserIds(group) {
+  const ids = [];
+  for (const teamId of getGroupTeamIds(group)) {
+    ids.push(...getTeamUserIds(findTeamById(teamId)));
+  }
+  return uniqueStrings(ids);
+}
+
+function overwriteOptions(overwrite) {
+  const options = {};
+  for (const permission of overwrite.allow || []) {
+    if (permission === PermissionFlagsBits.ViewChannel) options.ViewChannel = true;
+    if (permission === PermissionFlagsBits.SendMessages) options.SendMessages = true;
+    if (permission === PermissionFlagsBits.ReadMessageHistory) options.ReadMessageHistory = true;
+    if (permission === PermissionFlagsBits.ManageChannels) options.ManageChannels = true;
+    if (permission === PermissionFlagsBits.ManageMessages) options.ManageMessages = true;
+    if (permission === PermissionFlagsBits.AttachFiles) options.AttachFiles = true;
+    if (permission === PermissionFlagsBits.EmbedLinks) options.EmbedLinks = true;
+  }
+  for (const permission of overwrite.deny || []) {
+    if (permission === PermissionFlagsBits.ViewChannel) options.ViewChannel = false;
+  }
+  return options;
+}
+
+async function ensureGroupChannel(guild, settings, group, userIds) {
+  const configuredChannelId = settings.channels?.groupChannelIds?.[group.groupKey];
+  const configuredChannel = configuredChannelId
+    ? await guild.channels.fetch(configuredChannelId).catch(() => null)
+    : null;
+
+  const channelName = channelNameForGroup(group.groupKey);
+  const existingChannel = guild.channels.cache.find(channel => (
+    channel.name === channelName && channel.type === ChannelType.GuildText
+  ));
+
+  const adminRoleIds = getExistingRoleIds(guild, [
+    ...(settings.roles?.adminRoleIds || []),
+    ...(settings.roles?.cupLeadRoleIds || []),
+    ...(settings.permissions?.adminRoleIds || []),
+    ...(settings.permissions?.cupLeadRoleIds || []),
+  ]);
+
+  const permissionOverwrites = [
+    {
+      id: guild.roles.everyone.id,
+      deny: [PermissionFlagsBits.ViewChannel],
+    },
+    {
+      id: guild.client.user.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.ManageMessages,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+    },
+    ...adminRoleIds.map(roleId => ({
+      id: roleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageMessages,
+      ],
+    })),
+    ...(group.roleId ? [{
+      id: group.roleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+    }] : []),
+    ...userIds.map(userId => ({
+      id: userId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+      ],
+    })),
+  ];
+
+  const channel = configuredChannel?.isTextBased?.()
+    ? configuredChannel
+    : existingChannel;
+
+  if (channel) {
+    for (const overwrite of permissionOverwrites) {
+      await channel.permissionOverwrites.edit(overwrite.id, overwriteOptions(overwrite)).catch(() => null);
+    }
+    return channel;
+  }
+
+  return guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: settings.categories?.groupCategoryId || undefined,
+    permissionOverwrites,
+    reason: 'Loco Night Cup Phase 5 Gruppenziehung',
+  });
+}
 
 async function prepareGroupChannels({ client, event }) {
   if (!client) return { prepared: 0, skippedGroups: [] };
@@ -35,5 +158,7 @@ async function prepareGroupChannels({ client, event }) {
 }
 
 module.exports = {
+  ensureGroupChannel,
+  getGroupUserIds,
   prepareGroupChannels,
 };
