@@ -1,7 +1,7 @@
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { FILES, updateJson } = require('../../storage');
+const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
 const { buildLiveTableEmbed, buildScheduleEmbed, buildTeamOverviewEmbed } = require('./group-embeds');
 
@@ -15,7 +15,7 @@ function buildHeaderPayload(group) {
       `**${group.name || `Gruppe ${group.groupKey}`}**`,
       '',
       'Dieser Kanal enthaelt Teamuebersicht, Live-Tabelle und Spielplan fuer die Gruppenphase.',
-      'Ergebnisfunktionen werden in Phase 6.2 freigeschaltet.',
+      'Ergebnisse koennen ueber die Buttons unter dem Spielplan gemeldet werden.',
     ].join('\n'),
     allowedMentions: { parse: [] },
   };
@@ -25,15 +25,18 @@ function buildScheduleButtons(group) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`group_result_open:${group.eventKey}:${group.groupKey}`)
-      .setLabel('⚽ Ergebnis eintragen')
+      .setLabel('Ergebnis eintragen')
+      .setEmoji('\u26bd')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`group_admin_result_open:${group.eventKey}:${group.groupKey}`)
-      .setLabel('🛠️ Admin-Ergebnis')
+      .setLabel('Admin-Ergebnis')
+      .setEmoji('\ud83d\udee0\ufe0f')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`group_replacement_open:${group.eventKey}:${group.groupKey}`)
-      .setLabel('🔁 Nachrücker einsetzen')
+      .setLabel('Nachruecker einsetzen')
+      .setEmoji('\ud83d\udd01')
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -87,6 +90,36 @@ async function upsertGroupPosts(channel, group, refs = {}) {
   };
 }
 
+async function refreshGroupPosts({ client, eventKey, event, group }) {
+  if (!client || !group) return null;
+
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const refs = messages.groups?.[eventKey]?.groups?.[group.groupKey] || {};
+  const channelId = group.channelId || refs.channelId;
+  if (!channelId) return null;
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel) return null;
+
+  const messageRefs = await upsertGroupPosts(channel, {
+    ...group,
+    eventKey,
+    formatSize: event.format?.size,
+  }, {
+    eventKey,
+    ...refs,
+  });
+
+  updateGroupMessageRefs(eventKey, event, [{
+    groupKey: group.groupKey,
+    roleId: group.roleId || refs.roleId || null,
+    channelId,
+    ...messageRefs,
+  }]);
+
+  return messageRefs;
+}
+
 function updateGroupMessageRefs(eventKey, event, groupUpdates) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     messages.groups = messages.groups || {};
@@ -121,6 +154,7 @@ function updateGroupMessageRefs(eventKey, event, groupUpdates) {
 module.exports = {
   buildHeaderPayload,
   buildScheduleButtons,
+  refreshGroupPosts,
   updateGroupMessageRefs,
   upsertGroupPosts,
 };
