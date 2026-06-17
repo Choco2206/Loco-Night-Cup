@@ -9,6 +9,7 @@ const { createMessagesDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 
+const HALL_OF_FAME_CHANNEL_ID = '1516915002957758616';
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
 
@@ -184,6 +185,9 @@ async function renderHallOfFameCeremonyImage({ dayKey, teams }) {
 }
 
 async function ensureHallOfFameChannel(guild) {
+  const configured = await guild.channels.fetch(HALL_OF_FAME_CHANNEL_ID).catch(() => null);
+  if (configured?.type === ChannelType.GuildText) return configured;
+
   const existing = guild.channels.cache.find(channel => (
     channel.name === HALL_OF_FAME_CHANNEL_NAME && channel.type === ChannelType.GuildText
   ));
