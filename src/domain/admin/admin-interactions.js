@@ -37,6 +37,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_format_lock_select',
   'admin_groups_draw_select',
   'admin_group_release_current_select',
+  'admin_event_reset_select',
   'admin_testdata_create_select',
 ]);
 
@@ -217,6 +218,18 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_event_reset_select') {
+    await interaction.editReply({
+      content: [
+        `Event-Reset fuer ${EVENT_LABELS[eventKey]} ist vorbereitet, aber noch nicht aktiv.`,
+        'Aktuell wird nichts geloescht oder zurueckgesetzt.',
+        'Geplanter Cleanup: Gruppenrollen leeren, Gruppen-/K.O.-Kanaele loeschen, Gruppen-/Matchdaten und Message-IDs zuruecksetzen, Check-in neu vorbereiten.',
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   if (interaction.customId === 'admin_testdata_create_select') {
     const result = createTestDataForEvent({ eventKey, actorUserId: interaction.user.id });
     await refreshRegisteredTeamsOverview(client).catch(() => null);
@@ -283,6 +296,15 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Fuer welches Event soll der aktuelle Spieltag sofort freigegeben werden?',
         components: [buildEventSelect('admin_group_release_current_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_event_reset') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll der Reset vorbereitet werden?',
+        components: [buildEventSelect('admin_event_reset_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
