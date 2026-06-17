@@ -18,7 +18,7 @@ function buildAdminPanelPayload() {
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
       { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
-      { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen', inline: true }
+      { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen\nSiegerehrung posten', inline: true }
     )
     .setTimestamp(new Date());
 
@@ -52,7 +52,8 @@ function buildAdminPanelPayload() {
   const simulationRow = new ActionRowBuilder().addComponents(
     button('admin_simulate_groups', 'Gruppenphase simulieren', ButtonStyle.Danger).setEmoji('\ud83e\uddea'),
     button('admin_simulate_knockout', 'K.O.-Phase simulieren', ButtonStyle.Danger).setEmoji('\ud83e\uddea'),
-    button('admin_hof_test', 'Hall of Fame testen', ButtonStyle.Secondary).setEmoji('\ud83c\udfc6')
+    button('admin_hof_test', 'Hall of Fame testen', ButtonStyle.Secondary).setEmoji('\ud83c\udfc6'),
+    button('admin_ceremony_post', 'Siegerehrung posten', ButtonStyle.Success).setEmoji('\ud83c\udfc6')
   );
 
   return {
