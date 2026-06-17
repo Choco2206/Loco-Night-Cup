@@ -40,7 +40,7 @@ function getEntryTeamIds(event, now = new Date()) {
 
 function getManualByes(event) {
   if (!Array.isArray(event.byes)) return [];
-  return event.byes.filter(bye => bye?.type === 'bye' && bye?.status !== 'removed');
+  return event.byes.filter(bye => bye?.type === 'bye' && bye?.status === 'active');
 }
 
 function getManualByeCount(event) {
