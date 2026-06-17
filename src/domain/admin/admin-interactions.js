@@ -8,6 +8,7 @@ const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const { listVisibleTeams } = require('../teams/team-service');
+const { resetEventForTesting } = require('../events/event-cleanup-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createKnockoutPhase } = require('../knockout');
@@ -249,11 +250,22 @@ async function handleAdminSelect(interaction, client, settings) {
   }
 
   if (interaction.customId === 'admin_event_reset_select') {
+    const result = await resetEventForTesting({
+      eventKey,
+      actorUserId: interaction.user.id,
+      client,
+      guild: interaction.guild,
+      settings,
+    });
     await interaction.editReply({
       content: [
-        `Event-Reset fuer ${EVENT_LABELS[eventKey]} ist vorbereitet, aber noch nicht aktiv.`,
-        'Aktuell wird nichts geloescht oder zurueckgesetzt.',
-        'Geplanter Cleanup: Gruppenrollen leeren, Gruppen-/K.O.-Kanaele loeschen, Gruppen-/Matchdaten und Message-IDs zuruecksetzen, Check-in neu vorbereiten.',
+        `Event-Reset fuer ${EVENT_LABELS[eventKey]} wurde ausgefuehrt.`,
+        `Gruppenkanaele geloescht: ${result.deletedGroupChannels.length}`,
+        `K.O.-Kanaele geloescht: ${result.deletedKnockoutChannels.length}`,
+        `Gruppenrollen geleert: ${result.clearedGroupRoles.length}`,
+        `Fehlende Kanaele ignoriert: ${result.missingChannels.length}`,
+        `Check-in aktualisiert: ${result.checkinRefreshed ? 'ja' : 'nein'}`,
+        'Eventdaten und Message-Refs wurden zurueckgesetzt. Teamregistrierungen wurden nicht geloescht.',
       ].join('\n'),
       components: [],
     });
