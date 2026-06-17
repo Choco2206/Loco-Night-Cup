@@ -12,6 +12,7 @@ const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-se
 const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createKnockoutPhase } = require('../knockout');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
+const { simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
 
 const EPHEMERAL = 64;
@@ -32,6 +33,8 @@ const ADMIN_ACTIONS = new Set([
   'admin_bye_remove',
   'admin_testdata_create',
   'admin_testdata_remove',
+  'admin_simulate_groups',
+  'admin_simulate_knockout',
 ]);
 const ADMIN_SELECT_IDS = new Set([
   'admin_bye_add_select',
@@ -42,6 +45,8 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_knockout_create_select',
   'admin_event_reset_select',
   'admin_testdata_create_select',
+  'admin_simulate_groups_select',
+  'admin_simulate_knockout_select',
 ]);
 
 function readSettings() {
@@ -266,6 +271,46 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_simulate_groups_select') {
+    const result = await simulateGroupPhase({
+      eventKey,
+      actorUserId: interaction.user.id,
+      client,
+    });
+    await interaction.editReply({
+      content: [
+        `Gruppenphase fuer ${EVENT_LABELS[eventKey]} wurde simuliert.`,
+        `Gruppen: ${result.groups}`,
+        `Bestaetigte Spiele: ${result.simulatedMatches}`,
+        'Status: Gruppenphase completed. K.O. erstellen kann jetzt getestet werden.',
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
+  if (interaction.customId === 'admin_simulate_knockout_select') {
+    const result = await simulateKnockoutPhase({
+      eventKey,
+      actorUserId: interaction.user.id,
+      client,
+      guild: interaction.guild,
+    });
+    await interaction.editReply({
+      content: [
+        `K.O.-Phase fuer ${EVENT_LABELS[eventKey]} wurde simuliert.`,
+        `Bestaetigte K.O.-Spiele: ${result.simulatedMatches}`,
+        result.placements?.firstTeamId ? `Platz 1: ${result.placements.first.displayName}` : null,
+        result.placements?.secondTeamId ? `Platz 2: ${result.placements.second.displayName}` : null,
+        result.placements?.thirdTeamId ? `Platz 3: ${result.placements.third.displayName}` : null,
+        result.placements?.fourthTeamId ? `Platz 4: ${result.placements.fourth.displayName}` : null,
+        'Status: K.O. completed, Ceremony ist vorbereitet.',
+      ].filter(Boolean).join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   throw new Error('Unbekannte Admin-Auswahl.');
 }
 
@@ -348,6 +393,24 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Fuer welches Event sollen Testdaten erzeugt und eingecheckt werden?',
         components: [buildEventSelect('admin_testdata_create_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_simulate_groups') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll die Gruppenphase simuliert werden?',
+        components: [buildEventSelect('admin_simulate_groups_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_simulate_knockout') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll die K.O.-Phase simuliert werden?',
+        components: [buildEventSelect('admin_simulate_knockout_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
