@@ -1,6 +1,13 @@
 'use strict';
 
-const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelType,
+  EmbedBuilder,
+  PermissionFlagsBits,
+} = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
@@ -20,10 +27,14 @@ const ROUND_CHANNEL_NAMES = {
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const STATUS_LABELS = {
   open: '⏳ Offen',
+  pending_confirmation: '🕐 Wartet auf Bestaetigung',
+  admin_decision_required: '🚨 Admin-Klaerung',
   locked: '🔒 Noch nicht bereit',
   not_needed: 'Nicht benoetigt',
+  completed: '✅ Abgeschlossen',
   confirmed: '✅ Bestaetigt',
 };
+const DIVIDER = '━━━━━━━━━━━━━━';
 
 function nowIso() {
   return new Date().toISOString();
@@ -136,6 +147,17 @@ async function applyOverwrites(channel, overwrites) {
   }
 }
 
+async function pruneMemberOverwrites(channel, allowedUserIds = []) {
+  if (!channel?.permissionOverwrites?.cache) return;
+  const allowed = new Set(uniqueStrings(allowedUserIds));
+  for (const overwrite of channel.permissionOverwrites.cache.values()) {
+    const type = String(overwrite.type).toLowerCase();
+    const isMemberOverwrite = overwrite.type === 1 || type === 'member';
+    if (!isMemberOverwrite || allowed.has(String(overwrite.id))) continue;
+    await channel.permissionOverwrites.delete(overwrite.id).catch(() => null);
+  }
+}
+
 async function ensureKnockoutCategory(guild, settings) {
   const configuredId = settings.categories?.knockoutCategoryId;
   const configured = configuredId ? await guild.channels.fetch(configuredId).catch(() => null) : null;
@@ -182,6 +204,7 @@ async function ensureTextChannel({ guild, settings, name, category, userIds = []
     await channel.setParent(category.id, { lockPermissions: false }).catch(() => null);
   }
   await applyOverwrites(channel, overwrites);
+  await pruneMemberOverwrites(channel, userIds);
   return channel;
 }
 
@@ -204,6 +227,74 @@ function statusLabel(status) {
   return STATUS_LABELS[status] || status || 'Unbekannt';
 }
 
+function participantKey(participant) {
+  if (!participant) return null;
+  if (participant.participantKey) return participant.participantKey;
+  if (participant.type === 'team') return `team:${participant.teamId}`;
+  return null;
+}
+
+function waitingForLabel(match) {
+  const reports = Array.isArray(match.reports) ? match.reports : [];
+  const reported = new Set(reports.map(report => report.participantKey).filter(Boolean));
+  const pending = [match.home, match.away]
+    .filter(participant => participant?.type === 'team')
+    .filter(participant => !reported.has(participantKey(participant)))
+    .map(participantName);
+  return pending.length ? `🕐 Wartet auf Bestaetigung von ${pending.join(' & ')}` : statusLabel(match.status);
+}
+
+function formatMatchStatus(match) {
+  if (match.status === 'pending_confirmation') return waitingForLabel(match);
+  return statusLabel(match.status);
+}
+
+function resultLine(match) {
+  if (!match.result) return null;
+  return `Ergebnis: ${participantName(match.home)} ${match.result.homeGoals}:${match.result.awayGoals} ${participantName(match.away)}`;
+}
+
+function winnerLine(match) {
+  if (!match.winner) return null;
+  return `Sieger: ${participantName(match.winner)}`;
+}
+
+function buildRoundButtons(eventKey, roundKey) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
+      .setLabel('Ergebnis eintragen')
+      .setEmoji('⚽')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`ko_admin_result_open:${eventKey}:${roundKey}`)
+      .setLabel('Admin-Ergebnis')
+      .setEmoji('🛠️')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function currentRoundLabel(event) {
+  const roundKey = ROUND_ORDER.find(key => {
+    const round = event.knockout?.rounds?.[key];
+    return round?.matches?.length && ['open', 'pending_confirmation', 'admin_decision_required'].includes(round.status);
+  });
+  if (!roundKey) {
+    if (event.knockout?.status === 'completed') return 'K.O.-Phase abgeschlossen';
+    return 'Noch keine aktive Runde';
+  }
+  return `${ROUND_LABELS[roundKey] || roundKey} laeuft`;
+}
+
+function channelLines(event) {
+  const lines = [];
+  for (const roundKey of activeRoundKeys(event)) {
+    const channelId = event.knockout?.rounds?.[roundKey]?.channelId;
+    lines.push(`• ${ROUND_LABELS[roundKey] || roundKey}: ${channelId ? `<#${channelId}>` : 'wird vorbereitet'}`);
+  }
+  return lines.join('\n') || 'Noch keine K.O.-Kanaele vorbereitet.';
+}
+
 function buildRoundEmbed(eventKey, event, roundKey) {
   const round = event.knockout?.rounds?.[roundKey];
   const label = ROUND_LABELS[roundKey] || roundKey;
@@ -212,7 +303,11 @@ function buildRoundEmbed(eventKey, event, roundKey) {
   for (const match of round?.matches || []) {
     lines.push(`⚔️ **M${match.matchIndex}**`);
     lines.push(`${participantName(match.home)} vs ${participantName(match.away)}`);
-    lines.push(`Status: ${statusLabel(match.status)}`);
+    lines.push(`Status: ${formatMatchStatus(match)}`);
+    const result = resultLine(match);
+    if (result) lines.push(result);
+    const winner = winnerLine(match);
+    if (winner) lines.push(winner);
     lines.push('');
   }
 
@@ -221,10 +316,18 @@ function buildRoundEmbed(eventKey, event, roundKey) {
   return new EmbedBuilder()
     .setTitle(`🏆 ${label}`)
     .setColor(roundKey === event.knockout?.firstRoundKey ? 0xf2c94c : 0x5865f2)
-    .setDescription(lines.join('\n').trim())
+    .setDescription([
+      DIVIDER,
+      lines.join('\n').trim(),
+      DIVIDER,
+    ].join('\n\n'))
     .addFields({
       name: 'Hinweis',
-      value: '⚠️ Beide Teams muessen das Ergebnis eintragen. Bei Gleichstand muss spaeter ein Sieger nach Verlaengerung/Elfmeterschiessen angegeben werden.',
+      value: [
+        '⚠️ Beide Teams muessen das Ergebnis eintragen.',
+        '⚠️ In der K.O.-Phase muss ein Sieger feststehen.',
+        'Spielt bei Gleichstand Verlaengerung und Elfmeterschiessen, bis ein Gewinner feststeht.',
+      ].join('\n'),
       inline: false,
     })
     .setFooter({ text: `${event.label || eventKey} · K.O.-Phase` })
@@ -234,24 +337,30 @@ function buildRoundEmbed(eventKey, event, roundKey) {
 function buildOverviewEmbed(eventKey, event) {
   const knockout = event.knockout || {};
   const qualified = (knockout.qualifiedTeams || [])
-    .map(team => `${team.seed}. ${team.displayName} · Gruppe ${team.groupKey}, Platz ${team.groupRank}`)
+    .map(team => `${team.seed}. ${team.displayName}`)
     .join('\n') || 'Keine qualifizierten Teams gefunden.';
-  const rounds = activeRoundKeys(event)
-    .map(roundKey => `• ${ROUND_LABELS[roundKey] || roundKey}`)
-    .join('\n') || 'Keine aktiven K.O.-Runden.';
 
   return new EmbedBuilder()
-    .setTitle('🏆 K.O.-Phase Übersicht')
+    .setTitle('🏆 K.O.-Phase Uebersicht')
     .setColor(0xf2c94c)
     .setDescription([
-      `Event: **${event.label || eventKey}**`,
-      `Format: **${event.format?.size || '-'}er Turnier**`,
-      `Erste Runde: **${ROUND_LABELS[knockout.firstRoundKey] || knockout.firstRoundKey || '-'}**`,
+      `**Event:** ${event.label || eventKey}`,
+      `**Format:** ${event.format?.size || '-'}er Turnier`,
+      `**Status:** ${knockout.status === 'completed' ? 'Abgeschlossen' : 'Aktiv'}`,
+      '',
+      DIVIDER,
+      '',
+      '🎟️ **Qualifizierte Teams**',
+      qualified.slice(0, 900),
+      '',
+      DIVIDER,
+      '',
+      '⚔️ **Aktuelle Runde**',
+      currentRoundLabel(event),
+      '',
+      '📍 **Kanaele**',
+      channelLines(event),
     ].join('\n'))
-    .addFields(
-      { name: 'Runden', value: rounds, inline: true },
-      { name: 'Qualifizierte Teams', value: qualified.slice(0, 1000), inline: false }
-    )
     .setTimestamp(new Date());
 }
 
@@ -351,6 +460,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     });
     const message = await upsertMessage(channel, round.messageId || null, {
       embeds: [buildRoundEmbed(eventKey, event, roundKey)],
+      components: [buildRoundButtons(eventKey, roundKey)],
       allowedMentions: { parse: [] },
     });
     roundPosts[roundKey] = { channelId: channel.id, messageId: message.id };
@@ -391,6 +501,7 @@ module.exports = {
   KNOCKOUT_OVERVIEW_CHANNEL_NAME,
   ROUND_CHANNEL_NAMES,
   buildOverviewEmbed,
+  buildRoundButtons,
   buildRoundEmbed,
   upsertKnockoutPost,
 };
