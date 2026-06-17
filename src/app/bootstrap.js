@@ -2,9 +2,11 @@
 
 const { initializeStorage } = require('../storage');
 const { validateAllStorage } = require('../validation');
+const { repairTeamRuntimeData } = require('../domain/teams/team-runtime-repair');
 
 function bootstrapPhaseOne() {
   initializeStorage();
+  repairTeamRuntimeData();
   validateAllStorage();
 
   return {
