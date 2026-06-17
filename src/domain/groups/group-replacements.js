@@ -1,6 +1,5 @@
 'use strict';
 
-const { PermissionFlagsBits } = require('discord.js');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
@@ -254,10 +253,11 @@ function replaceGroupParticipant({ eventKey, groupKey, participantKeyValue, repl
       throw new Error('Dieses Team ist nicht als Ersatzteam verfuegbar.');
     }
 
-    const oldTeam = oldSlot.type === 'team' ? findTeamById(oldSlot.teamId) : null;
-    const replacementParticipant = createTeamParticipantFromSlot(oldSlot, newTeam);
+    const originalSlot = { ...oldSlot };
+    const oldTeam = originalSlot.type === 'team' ? findTeamById(originalSlot.teamId) : null;
+    const replacementParticipant = createTeamParticipantFromSlot(originalSlot, newTeam);
+    replaceParticipantInFormat(event, originalSlot, newTeam);
     replaceSlotInGroup(group, oldSlot, replacementParticipant);
-    replaceParticipantInFormat(event, oldSlot, newTeam);
     updateEventCheckin(event, oldTeam?.id || null, newTeam.id);
     refreshFormatCounts(event);
     recalculateGroupStandings(group);
@@ -272,7 +272,7 @@ function replaceGroupParticipant({ eventKey, groupKey, participantKeyValue, repl
       group,
       oldTeam,
       newTeam,
-      oldSlot: { ...oldSlot },
+      oldSlot: originalSlot,
       replacementParticipant,
     };
     return event;
