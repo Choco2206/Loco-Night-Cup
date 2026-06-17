@@ -123,6 +123,26 @@ function seedSettingsFile() {
   return settings;
 }
 
+function removeLegacyResetTimeFromSettings(settings) {
+  let changed = false;
+  const profiles = settings.timeProfiles?.profiles || {};
+
+  for (const profile of Object.values(profiles)) {
+    if (!isPlainObject(profile) || !Object.prototype.hasOwnProperty.call(profile, 'resetTime')) continue;
+    delete profile.resetTime;
+    changed = true;
+  }
+
+  return changed;
+}
+
+function removeLegacyResetTimeFromSettingsFile() {
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const changed = removeLegacyResetTimeFromSettings(settings);
+  if (changed) writeJsonAtomic(FILES.settings, settings);
+  return changed;
+}
+
 function seedCheckinBanner() {
   if (fs.existsSync(FILES.checkinBanner)) return false;
   if (!fs.existsSync(FILES.checkinBannerSeed)) return false;
@@ -161,6 +181,11 @@ function normalizeLegacyBye(bye, eventKey, index) {
 function normalizeEventFile(eventKey) {
   const event = readJson(FILES.events[eventKey], createEventDefault(eventKey));
   let changed = false;
+
+  if (event.schedule && Object.prototype.hasOwnProperty.call(event.schedule, 'resetTime')) {
+    delete event.schedule.resetTime;
+    changed = true;
+  }
 
   if (!Array.isArray(event.byes)) {
     event.byes = [];
@@ -290,6 +315,7 @@ function initializeStorage() {
   ].forEach(ensureDir);
 
   seedSettingsFile();
+  removeLegacyResetTimeFromSettingsFile();
   seedCheckinBanner();
 
   ensureJsonFile(FILES.teams, createTeamsDefault);
