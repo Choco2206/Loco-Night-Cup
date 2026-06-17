@@ -18,7 +18,7 @@ function buildAdminPanelPayload() {
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
       { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
-      { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nCeremony Test', inline: true }
+      { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nCeremony Test', inline: true }
     )
     .setTimestamp(new Date());
 
@@ -46,13 +46,18 @@ function buildAdminPanelPayload() {
     button('admin_checkin_refresh', 'Check-in Refresh', ButtonStyle.Secondary),
     button('admin_team_overview_refresh', 'Teamuebersicht Refresh', ButtonStyle.Secondary),
     button('admin_testdata_create', 'Testdaten erzeugen', ButtonStyle.Secondary),
-    button('admin_testdata_remove', 'Testdaten entfernen', ButtonStyle.Danger),
+    button('admin_testdata_remove', 'Testdaten entfernen', ButtonStyle.Danger)
+  );
+
+  const simulationRow = new ActionRowBuilder().addComponents(
+    button('admin_simulate_groups', 'Gruppenphase simulieren', ButtonStyle.Danger).setEmoji('\ud83e\uddea'),
+    button('admin_simulate_knockout', 'K.O.-Phase simulieren', ButtonStyle.Danger).setEmoji('\ud83e\uddea'),
     button('admin_ceremony_test', 'Ceremony Test', ButtonStyle.Secondary)
   );
 
   return {
     embeds: [embed],
-    components: [eventRow, tournamentRow, teamsRow, testsRow],
+    components: [eventRow, tournamentRow, teamsRow, testsRow, simulationRow],
   };
 }
 
