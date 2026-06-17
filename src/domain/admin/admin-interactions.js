@@ -8,7 +8,8 @@ const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const { listVisibleTeams } = require('../teams/team-service');
-const { lockEventFormat, drawGroupsForEvent } = require('../tournament/tournament-service');
+const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
+const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
 
@@ -19,6 +20,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_event_reset',
   'admin_format_lock',
   'admin_groups_draw',
+  'admin_group_release_current',
   'admin_teams_list',
   'admin_team_details',
   'admin_checkin_refresh',
@@ -34,6 +36,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_bye_remove_select',
   'admin_format_lock_select',
   'admin_groups_draw_select',
+  'admin_group_release_current_select',
   'admin_testdata_create_select',
 ]);
 
@@ -71,7 +74,7 @@ function formatTeamsList() {
   if (!teams.length) return 'Noch keine Teams registriert.';
 
   const lines = teams.map((team, index) => {
-    const complete = team.registrationStatus === 'complete' ? 'Vollständig' : 'Unvollständig';
+    const complete = team.registrationStatus === 'complete' ? 'Vollstaendig' : 'Unvollstaendig';
     const vm = team.manager?.userId ? `<@${team.manager.userId}>` : 'Kein VM';
     const marker = team.isTestTeam ? ' | Testteam' : '';
     return `${index + 1}. **${team.clubName}**${marker}\nStatus: ${team.status} | ${complete}\nVM: ${vm} | Co-VMs: ${team.coManagers.length}`;
@@ -89,7 +92,7 @@ function formatTeamsList() {
     }
   }
   if (current) chunks.push(current);
-  return chunks[0] + (chunks.length > 1 ? `\n\n... ${chunks.length - 1} weitere Blöcke gekürzt.` : '');
+  return chunks[0] + (chunks.length > 1 ? `\n\n... ${chunks.length - 1} weitere Bloecke gekuerzt.` : '');
 }
 
 function buildEventSelect(customId, placeholder) {
@@ -115,7 +118,7 @@ function nextByeNumber(eventKey, byes) {
 
 function addManualBye(eventKey, actorUserId, settings) {
   updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock können keine Freilose mehr hinzugefügt werden.');
+    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr hinzugefuegt werden.');
     event.byes = Array.isArray(event.byes) ? event.byes : [];
     const number = nextByeNumber(eventKey, event.byes);
     event.byes.push({
@@ -134,10 +137,10 @@ function addManualBye(eventKey, actorUserId, settings) {
 function removeManualBye(eventKey, actorUserId, settings) {
   let removed = false;
   updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock können keine Freilose mehr entfernt werden.');
+    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr entfernt werden.');
     event.byes = Array.isArray(event.byes) ? event.byes : [];
     const index = event.byes.map(bye => bye?.type === 'bye' && bye?.status !== 'removed').lastIndexOf(true);
-    if (index === -1) throw new Error('Für dieses Event gibt es kein Freilos.');
+    if (index === -1) throw new Error('Fuer dieses Event gibt es kein Freilos.');
 
     event.byes[index] = {
       ...event.byes[index],
@@ -169,14 +172,14 @@ async function handleAdminSelect(interaction, client, settings) {
   if (interaction.customId === 'admin_bye_add_select') {
     addManualBye(eventKey, interaction.user.id, settings);
     await refreshCheckinMessage(eventKey, client);
-    await interaction.editReply({ content: `Freilos für ${EVENT_LABELS[eventKey]} wurde hinzugefügt.`, components: [] });
+    await interaction.editReply({ content: `Freilos fuer ${EVENT_LABELS[eventKey]} wurde hinzugefuegt.`, components: [] });
     return true;
   }
 
   if (interaction.customId === 'admin_bye_remove_select') {
     removeManualBye(eventKey, interaction.user.id, settings);
     await refreshCheckinMessage(eventKey, client);
-    await interaction.editReply({ content: `Freilos für ${EVENT_LABELS[eventKey]} wurde entfernt.`, components: [] });
+    await interaction.editReply({ content: `Freilos fuer ${EVENT_LABELS[eventKey]} wurde entfernt.`, components: [] });
     return true;
   }
 
@@ -184,7 +187,7 @@ async function handleAdminSelect(interaction, client, settings) {
     const result = lockEventFormat(eventKey, interaction.user.id);
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
-      content: `Format für ${EVENT_LABELS[eventKey]} wurde gelockt: ${result.size}er Turnier mit ${result.participants.length} Teilnehmerplätzen.`,
+      content: `Format fuer ${EVENT_LABELS[eventKey]} wurde gelockt: ${result.size}er Turnier mit ${result.participants.length} Teilnehmerplaetzen. Warteliste: ${result.waitlistTeamIds.length} Teams, ${result.waitlistByeCount} Freilose.`,
       components: [],
     });
     return true;
@@ -199,7 +202,16 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
-      content: `Gruppen für ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
+      content: `Gruppen fuer ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
+      components: [],
+    });
+    return true;
+  }
+
+  if (interaction.customId === 'admin_group_release_current_select') {
+    const result = await forceReleaseNextSlot(client, eventKey);
+    await interaction.editReply({
+      content: `Spieltag ${result.slot} fuer ${EVENT_LABELS[eventKey]} wurde sofort freigegeben.`,
       components: [],
     });
     return true;
@@ -210,7 +222,7 @@ async function handleAdminSelect(interaction, client, settings) {
     await refreshRegisteredTeamsOverview(client).catch(() => null);
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
-      content: `Testdaten für ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} Testteams eingecheckt.`,
+      content: `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} Testteams eingecheckt.`,
       components: [],
     });
     return true;
@@ -233,8 +245,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (interaction.customId === 'admin_bye_add') {
       await interaction.reply({
-        content: 'Für welches Event soll ein Freilos hinzugefügt werden?',
-        components: [buildEventSelect('admin_bye_add_select', 'Event auswählen')],
+        content: 'Fuer welches Event soll ein Freilos hinzugefuegt werden?',
+        components: [buildEventSelect('admin_bye_add_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -242,8 +254,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (interaction.customId === 'admin_bye_remove') {
       await interaction.reply({
-        content: 'Für welches Event soll ein Freilos entfernt werden?',
-        components: [buildEventSelect('admin_bye_remove_select', 'Event auswählen')],
+        content: 'Fuer welches Event soll ein Freilos entfernt werden?',
+        components: [buildEventSelect('admin_bye_remove_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -251,8 +263,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (interaction.customId === 'admin_format_lock') {
       await interaction.reply({
-        content: 'Für welches Event soll das Format gelockt werden?',
-        components: [buildEventSelect('admin_format_lock_select', 'Event auswählen')],
+        content: 'Fuer welches Event soll das Format gelockt werden?',
+        components: [buildEventSelect('admin_format_lock_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -260,8 +272,17 @@ async function handleAdminInteraction(interaction, client) {
 
     if (interaction.customId === 'admin_groups_draw') {
       await interaction.reply({
-        content: 'Für welches Event sollen Gruppen gezogen werden?',
-        components: [buildEventSelect('admin_groups_draw_select', 'Event auswählen')],
+        content: 'Fuer welches Event sollen Gruppen gezogen werden?',
+        components: [buildEventSelect('admin_groups_draw_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_group_release_current') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll der aktuelle Spieltag sofort freigegeben werden?',
+        components: [buildEventSelect('admin_group_release_current_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -269,8 +290,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (interaction.customId === 'admin_testdata_create') {
       await interaction.reply({
-        content: 'Für welches Event sollen Testdaten erzeugt und eingecheckt werden?',
-        components: [buildEventSelect('admin_testdata_create_select', 'Event auswählen')],
+        content: 'Fuer welches Event sollen Testdaten erzeugt und eingecheckt werden?',
+        components: [buildEventSelect('admin_testdata_create_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -281,7 +302,7 @@ async function handleAdminInteraction(interaction, client) {
       const result = removeTestData();
       await refreshRegisteredTeamsOverview(client).catch(() => null);
       await refreshCheckinMessages(EVENT_KEYS, client);
-      await interaction.editReply(`Testdaten wurden entfernt: ${result.removedIds.length} Testteams gelöscht. Echte Teams wurden nicht angerührt.`);
+      await interaction.editReply(`Testdaten wurden entfernt: ${result.removedIds.length} Testteams geloescht. Echte Teams wurden nicht angeruehrt.`);
       return true;
     }
 
@@ -295,7 +316,7 @@ async function handleAdminInteraction(interaction, client) {
     if (interaction.customId === 'admin_team_overview_refresh') {
       await interaction.deferReply({ flags: EPHEMERAL });
       await refreshRegisteredTeamsOverview(client);
-      await interaction.editReply('Teamübersicht wurde aktualisiert.');
+      await interaction.editReply('Teamuebersicht wurde aktualisiert.');
       return true;
     }
 
@@ -309,11 +330,11 @@ async function handleAdminInteraction(interaction, client) {
     }
 
     if (interaction.customId === 'admin_ceremony_test') {
-      await interaction.reply({ content: 'Ceremony-Test wird in späterer Phase implementiert.', flags: EPHEMERAL });
+      await interaction.reply({ content: 'Ceremony-Test wird in spaeterer Phase implementiert.', flags: EPHEMERAL });
       return true;
     }
 
-    await interaction.reply({ content: 'Funktion folgt in Phase 5.', flags: EPHEMERAL });
+    await interaction.reply({ content: 'Funktion folgt in spaeterer Phase.', flags: EPHEMERAL });
     return true;
   } catch (error) {
     await replyInteraction(interaction, error?.message || 'Admin-Aktion konnte nicht verarbeitet werden.', { components: [] });
