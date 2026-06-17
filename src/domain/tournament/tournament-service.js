@@ -276,6 +276,11 @@ async function ensureGroupRole(guild, settings, groupKey) {
   });
 }
 
+function getExistingRoleIds(guild, roleIds) {
+  return [...new Set((roleIds || []).filter(Boolean).map(String))]
+    .filter(roleId => guild.roles.cache.has(roleId));
+}
+
 async function ensureGroupChannel(guild, settings, groupKey, role, userIds) {
   const configuredChannelId = settings.channels?.groupChannelIds?.[groupKey];
   const existingById = configuredChannelId ? await guild.channels.fetch(configuredChannelId).catch(() => null) : null;
@@ -285,12 +290,12 @@ async function ensureGroupChannel(guild, settings, groupKey, role, userIds) {
   const existingByName = guild.channels.cache.find(channel => channel.name === channelName && channel.type === ChannelType.GuildText);
   if (existingByName) return existingByName;
 
-  const adminRoleIds = [
+  const adminRoleIds = getExistingRoleIds(guild, [
     ...(settings.roles?.adminRoleIds || []),
     ...(settings.roles?.cupLeadRoleIds || []),
     ...(settings.permissions?.adminRoleIds || []),
     ...(settings.permissions?.cupLeadRoleIds || []),
-  ].filter(Boolean).map(String);
+  ]);
 
   const permissionOverwrites = [
     {
