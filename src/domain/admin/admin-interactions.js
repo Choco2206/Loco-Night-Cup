@@ -12,7 +12,7 @@ const { resetEventForTesting } = require('../events/event-cleanup-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createKnockoutPhase } = require('../knockout');
-const { CEREMONY_DAY_LABELS, postHallOfFameTest } = require('../ceremony');
+const { CEREMONY_DAY_LABELS, postHallOfFameCeremony, postHallOfFameTest } = require('../ceremony');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
@@ -31,6 +31,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_checkin_refresh',
   'admin_team_overview_refresh',
   'admin_ceremony_test',
+  'admin_ceremony_post',
   'admin_hof_test',
   'admin_bye_add',
   'admin_bye_remove',
@@ -50,6 +51,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_testdata_create_select',
   'admin_simulate_groups_select',
   'admin_simulate_knockout_select',
+  'admin_ceremony_post_select',
 ]);
 const ADMIN_SELECT_PREFIXES = [
   'admin_hof_first_select',
@@ -422,6 +424,24 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_ceremony_post_select') {
+    const result = await postHallOfFameCeremony({
+      guild: interaction.guild,
+      eventKey,
+    });
+    await interaction.editReply({
+      content: [
+        `Siegerehrung fuer ${EVENT_LABELS[eventKey]} wurde gepostet.`,
+        `Kanal: <#${result.channelId}>`,
+        `1. ${result.teams.first.clubName}`,
+        `2. ${result.teams.second.clubName}`,
+        `3. ${result.teams.third.clubName}`,
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   throw new Error('Unbekannte Admin-Auswahl.');
 }
 
@@ -533,6 +553,15 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Platz 1 auswaehlen.',
         components: [buildTeamSelect('admin_hof_first_select', 'Platz 1 auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_ceremony_post') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll die Siegerehrung gepostet werden?',
+        components: [buildEventSelect('admin_ceremony_post_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
       });
       return true;
