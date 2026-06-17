@@ -263,6 +263,7 @@ async function handleAdminSelect(interaction, client, settings) {
         `Gruppenkanaele geloescht: ${result.deletedGroupChannels.length}`,
         `K.O.-Kanaele geloescht: ${result.deletedKnockoutChannels.length}`,
         `Gruppenrollen geleert: ${result.clearedGroupRoles.length}`,
+        `K.O.-Rollen geleert: ${result.clearedKnockoutRoles.length}`,
         `Fehlende Kanaele ignoriert: ${result.missingChannels.length}`,
         `Check-in aktualisiert: ${result.checkinRefreshed ? 'ja' : 'nein'}`,
         'Eventdaten und Message-Refs wurden zurueckgesetzt. Teamregistrierungen wurden nicht geloescht.',
