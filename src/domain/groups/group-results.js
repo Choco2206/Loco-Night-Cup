@@ -37,6 +37,11 @@ function getMatchSlot(match) {
   return Number(match.matchday || match.release?.slot || 0);
 }
 
+function isMatchReleased(match) {
+  if (!isRealMatch(match)) return false;
+  return Boolean(match.release?.releasedAt);
+}
+
 function getCurrentReleasedSlot(group) {
   const slots = [...new Set(getMatches(group)
     .filter(isRealMatch)
@@ -47,10 +52,11 @@ function getCurrentReleasedSlot(group) {
   for (const slot of slots) {
     const slotMatches = getMatches(group).filter(match => isRealMatch(match) && getMatchSlot(match) === slot);
     if (!slotMatches.length) continue;
+    if (!slotMatches.some(isMatchReleased)) continue;
     if (!slotMatches.every(match => match.status === 'confirmed')) return slot;
   }
 
-  return slots[0] || 1;
+  return null;
 }
 
 function normalizeMatchState(match) {
@@ -87,8 +93,10 @@ function getUserParticipantKeysForMatch(match, userId) {
 function getUserSelectableMatches(group, userId) {
   normalizeGroupMatches(group);
   const currentSlot = getCurrentReleasedSlot(group);
+  if (!currentSlot) return [];
   return getMatches(group)
     .filter(match => isRealMatch(match))
+    .filter(isMatchReleased)
     .filter(match => getMatchSlot(match) === currentSlot)
     .filter(match => ['open', 'pending_confirmation'].includes(match.status))
     .map(match => ({
@@ -228,7 +236,7 @@ function submitTeamResult({ eventKey, groupKey, matchId, participantKeyValue, us
 
     const match = findMatch(group, matchId);
     if (!match || !isRealMatch(match)) throw new Error('Spiel wurde nicht gefunden.');
-    if (getMatchSlot(match) !== getCurrentReleasedSlot(group)) throw new Error('Dieses Spiel ist noch nicht freigegeben.');
+    if (!isMatchReleased(match) || getMatchSlot(match) !== getCurrentReleasedSlot(group)) throw new Error('Dieses Spiel ist noch nicht freigegeben.');
     if (!['open', 'pending_confirmation'].includes(match.status)) throw new Error('Dieses Spiel kann aktuell nicht gemeldet werden.');
     if (!isParticipantInMatch(match, participantKeyValue)) throw new Error('Du darfst dieses Spiel nicht melden.');
     if (!getUserParticipantKeysForMatch(match, userId).includes(participantKeyValue)) throw new Error('Du bist fuer dieses Team nicht berechtigt.');
@@ -295,9 +303,15 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
 module.exports = {
   getAdminSelectableMatches,
   getCurrentReleasedSlot,
+  getMatches,
+  getMatchSlot,
   getUserSelectableMatches,
+  isGroupComplete,
+  isMatchReleased,
+  isRealMatch,
   participantKey,
   recalculateGroupStandings,
   setAdminResult,
   submitTeamResult,
+  updateGroupCompletion,
 };
