@@ -14,6 +14,12 @@ function isManagerObject(value) {
 
 function normalizeUserId(value) {
   if (value === null || value === undefined || value === '') return null;
+  const text = String(value);
+  return /^\d{17,20}$/.test(text) ? text : null;
+}
+
+function normalizeTeamId(value) {
+  if (value === null || value === undefined || value === '') return null;
   return String(value);
 }
 
@@ -140,7 +146,7 @@ function repairTeamRuntimeData() {
 
     for (const team of currentTeams) {
       const result = repairTeam(team);
-      const teamId = normalizeUserId(result.team?.id || team?.id);
+      const teamId = normalizeTeamId(result.team?.id || team?.id);
       if (result.remove) {
         if (teamId) removedTeamIds.push(teamId);
         continue;
