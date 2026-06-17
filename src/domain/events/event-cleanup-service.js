@@ -1,12 +1,13 @@
 'use strict';
 
-const { ChannelType } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createEventDefault, createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage } = require('../checkins/checkin-panel');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
+const { EVENT_KEYS } = require('../../app/constants');
 
+const AUTO_CLEANUP_DELAY_MS = 10 * 60 * 1000;
 const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-phase',
   'ko-achtelfinale',
@@ -15,7 +16,6 @@ const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-platz-3',
   'ko-finale',
 ]);
-const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
 const KNOCKOUT_ROLE_NAMES = [
   'LNC K.O. Achtelfinale',
   'LNC K.O. Viertelfinale',
@@ -23,6 +23,7 @@ const KNOCKOUT_ROLE_NAMES = [
   'LNC K.O. Finale',
   'LNC K.O. Platz 3',
 ];
+const autoCleanupTimers = new Map();
 
 function nowIso() {
   return new Date().toISOString();
@@ -104,22 +105,6 @@ async function deleteKnockoutChannels(client, channelIds, summary) {
   }
 }
 
-async function deleteEmptyKnockoutCategory(guild, event, messages, summary) {
-  if (!guild) return;
-  const categoryId = event.knockout?.categoryId || messages.knockout?.[event.eventKey]?.categoryId || null;
-  const category = categoryId
-    ? await guild.channels.fetch(categoryId).catch(() => null)
-    : guild.channels.cache.find(channel => channel.type === ChannelType.GuildCategory && channel.name === KNOCKOUT_CATEGORY_NAME);
-  if (!category || category.type !== ChannelType.GuildCategory) return;
-  const children = guild.channels.cache.filter(channel => channel.parentId === category.id);
-  if (children.size > 0) return;
-  await category.delete('Loco Night Cup Event reset: empty K.O. category').catch(error => {
-    console.warn(`Event cleanup could not delete K.O. category ${category.id}: ${error.message}`);
-    return null;
-  });
-  summary.deletedKnockoutCategoryId = category.id;
-}
-
 function userIdsForGroupRef(ref) {
   const ids = [];
   for (const teamId of ref.teamIds || []) ids.push(...getTeamUserIds(findTeamById(teamId)));
@@ -187,26 +172,68 @@ async function clearKnockoutRoleMembers(guild, settings, summary) {
   }
 }
 
-function resetEventRuntime(eventKey, actorUserId) {
+function nextEventDate(eventKey, now = new Date()) {
+  const indexByEventKey = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+  };
+  const targetDay = indexByEventKey[eventKey];
+  if (targetDay === undefined) return null;
+
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  let diffDays = (targetDay - date.getDay() + 7) % 7;
+  if (diffDays === 0) diffDays = 7;
+  date.setDate(date.getDate() + diffDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function prepareNextCheckin(event, eventKey, timestamp) {
+  event.status = 'checkin';
+  event.cycle = {
+    ...(event.cycle || {}),
+    eventDate: nextEventDate(eventKey) || null,
+    timezone: 'Europe/Berlin',
+  };
+  event.checkin = {
+    ...(event.checkin || {}),
+    isOpen: true,
+    openedAt: timestamp,
+    closedAt: null,
+    entries: [],
+    activeTeamIds: [],
+    waitlistTeamIds: [],
+    lateLeaveBans: [],
+  };
+}
+
+function resetEventRuntime(eventKey, actorUserId, { openNextCheckin = true } = {}) {
   let resetEvent;
   updateJson(FILES.events[eventKey], createEventDefault(eventKey), event => {
     const defaults = createEventDefault(eventKey);
+    const timestamp = nowIso();
     resetEvent = {
       ...defaults,
       reset: {
         ...defaults.reset,
         status: 'completed',
-        completedAt: nowIso(),
+        completedAt: timestamp,
         keepStats: true,
       },
       meta: {
         ...defaults.meta,
         createdAt: event.meta?.createdAt || defaults.meta.createdAt,
-        updatedAt: nowIso(),
-        resetAt: nowIso(),
+        updatedAt: timestamp,
+        resetAt: timestamp,
         resetByUserId: actorUserId ? String(actorUserId) : null,
       },
     };
+    if (openNextCheckin) prepareNextCheckin(resetEvent, eventKey, timestamp);
     return resetEvent;
   });
   return resetEvent;
@@ -236,6 +263,11 @@ function resetMessages(eventKey) {
 }
 
 async function resetEventForTesting({ eventKey, actorUserId, client, guild = null, settings = null }) {
+  if (autoCleanupTimers.has(eventKey)) {
+    clearTimeout(autoCleanupTimers.get(eventKey));
+    autoCleanupTimers.delete(eventKey);
+  }
+
   const event = readJson(FILES.events[eventKey], createEventDefault(eventKey));
   const messages = readJson(FILES.messages, createMessagesDefault());
   const activeSettings = settings || readJson(FILES.settings, createSettingsDefault());
@@ -262,7 +294,6 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   await clearKnockoutRoleMembers(targetGuild, activeSettings, summary);
   await deleteGroupChannels(client, groupRefs, summary);
   await deleteKnockoutChannels(client, knockoutChannelIds, summary);
-  await deleteEmptyKnockoutCategory(targetGuild, event, messages, summary);
 
   resetEventRuntime(eventKey, actorUserId);
   summary.eventReset = true;
@@ -277,6 +308,91 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   return summary;
 }
 
+function getAutoCleanupScheduledAt(postedAt) {
+  const postedDate = new Date(postedAt);
+  if (Number.isNaN(postedDate.getTime())) return null;
+  return new Date(postedDate.getTime() + AUTO_CLEANUP_DELAY_MS).toISOString();
+}
+
+function markCeremonyAutoCleanupScheduled(eventKey, postedAt) {
+  let scheduledAt = null;
+  updateJson(FILES.events[eventKey], createEventDefault(eventKey), event => {
+    if (event.ceremony?.status !== 'posted') return event;
+    event.ceremony.cleanupScheduledAt = event.ceremony.cleanupScheduledAt || getAutoCleanupScheduledAt(postedAt);
+    event.ceremony.cleanupStatus = event.ceremony.cleanupStatus || 'scheduled';
+    event.ceremony.cleanupCompletedAt = event.ceremony.cleanupCompletedAt || null;
+    event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
+    scheduledAt = event.ceremony.cleanupScheduledAt || null;
+    return event;
+  });
+  return scheduledAt;
+}
+
+function shouldRunAutoCleanup(event, scheduledAt) {
+  if (event?.ceremony?.status !== 'posted') return false;
+  if (event.ceremony.cleanupStatus === 'completed') return false;
+  if (event.ceremony.cleanupCompletedAt) return false;
+  if (scheduledAt && event.ceremony.cleanupScheduledAt && event.ceremony.cleanupScheduledAt !== scheduledAt) return false;
+  return true;
+}
+
+async function runAutoCleanup({ eventKey, client, guild = null, scheduledAt = null }) {
+  autoCleanupTimers.delete(eventKey);
+  const event = readJson(FILES.events[eventKey], createEventDefault(eventKey));
+  if (!shouldRunAutoCleanup(event, scheduledAt)) {
+    console.log(`Auto-cleanup skipped for ${eventKey}: ceremony is no longer pending cleanup.`);
+    return { skipped: true, reason: 'not_pending' };
+  }
+
+  console.log(`Auto-cleanup started for ${eventKey}.`);
+  return resetEventForTesting({
+    eventKey,
+    actorUserId: 'auto-cleanup',
+    client,
+    guild,
+  });
+}
+
+function scheduleAutoCleanupForEvent({ eventKey, client, guild = null, scheduledAt = null }) {
+  if (!client || !EVENT_KEYS.includes(eventKey)) return null;
+  const event = readJson(FILES.events[eventKey], createEventDefault(eventKey));
+  const targetScheduledAt = scheduledAt || event.ceremony?.cleanupScheduledAt || null;
+  if (!targetScheduledAt || !shouldRunAutoCleanup(event, targetScheduledAt)) return null;
+
+  const scheduledDate = new Date(targetScheduledAt);
+  if (Number.isNaN(scheduledDate.getTime())) return null;
+
+  if (autoCleanupTimers.has(eventKey)) {
+    clearTimeout(autoCleanupTimers.get(eventKey));
+    autoCleanupTimers.delete(eventKey);
+  }
+
+  const delay = Math.max(0, scheduledDate.getTime() - Date.now());
+  const timer = setTimeout(() => {
+    runAutoCleanup({ eventKey, client, guild, scheduledAt: targetScheduledAt }).catch(error => {
+      console.error(`Auto-cleanup failed for ${eventKey}:`, error);
+    });
+  }, delay);
+  if (typeof timer.unref === 'function') timer.unref();
+  autoCleanupTimers.set(eventKey, timer);
+  console.log(`Auto-cleanup scheduled for ${eventKey} at ${targetScheduledAt}.`);
+  return { eventKey, scheduledAt: targetScheduledAt, delayMs: delay };
+}
+
+function schedulePendingAutoCleanups(client) {
+  const scheduled = [];
+  for (const eventKey of EVENT_KEYS) {
+    const result = scheduleAutoCleanupForEvent({ eventKey, client });
+    if (result) scheduled.push(result);
+  }
+  return scheduled;
+}
+
 module.exports = {
+  AUTO_CLEANUP_DELAY_MS,
+  getAutoCleanupScheduledAt,
+  markCeremonyAutoCleanupScheduled,
+  scheduleAutoCleanupForEvent,
+  schedulePendingAutoCleanups,
   resetEventForTesting,
 };
