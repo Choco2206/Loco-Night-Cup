@@ -196,16 +196,25 @@ function recalculateGroupStandings(group) {
   return rows;
 }
 
-function updateGroupCompletion(event, group) {
+function isGroupComplete(group) {
+  normalizeGroupMatches(group);
   const realMatches = getMatches(group).filter(isRealMatch);
-  const complete = realMatches.length > 0 && realMatches.every(match => match.status === 'confirmed');
-  if (!complete) return false;
+  return realMatches.every(match => match.status === 'confirmed');
+}
+
+function updateGroupCompletion(event, group) {
+  if (!isGroupComplete(group)) return false;
 
   const timestamp = nowIso();
   group.completedAt = group.completedAt || timestamp;
   group.status = 'completed';
-  event.groups.status = 'completed';
-  event.groups.completedAt = event.groups.completedAt || timestamp;
+
+  const allGroupsComplete = Object.values(event.groups?.groups || {}).every(isGroupComplete);
+  if (allGroupsComplete) {
+    event.groups.status = 'completed';
+    event.groups.completedAt = event.groups.completedAt || timestamp;
+  }
+
   return true;
 }
 
