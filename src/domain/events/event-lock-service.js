@@ -143,7 +143,7 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
     const channel = await ensureGroupChannel(roleResult.guild || guild, settings, group, userIds);
     group.channelId = channel.id;
 
-    const messageRefs = await upsertGroupPosts(channel, { ...group, eventKey }, {
+    const messageRefs = await upsertGroupPosts(channel, { ...group, eventKey, formatSize: event.format?.size }, {
       eventKey,
       ...(storedRefs[group.groupKey] || {}),
       messageId: group.messageId || storedRefs[group.groupKey]?.messageId || null,
