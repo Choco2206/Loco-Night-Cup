@@ -12,6 +12,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
+const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
 const {
   getAdminSelectableMatches,
@@ -196,6 +197,15 @@ async function refreshKnockout(client, guild, eventKey, event) {
   await upsertKnockoutPost({ client, guild, eventKey, event });
 }
 
+async function postCeremonyIfReady(guild, eventKey) {
+  try {
+    return await maybePostHallOfFameCeremony({ guild, eventKey });
+  } catch (error) {
+    console.warn(`Hall of Fame ceremony auto-post failed for ${eventKey}: ${error.message}`);
+    return { posted: false, reason: 'error', error };
+  }
+}
+
 async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, selectedParticipantKey, client) {
   const outcome = submitTeamResult({
     eventKey,
@@ -208,9 +218,12 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
   });
 
   await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
   await notifyAdminDecision(interaction, outcome.match);
   const message = outcome.status === 'confirmed'
-    ? 'K.O.-Ergebnis bestaetigt. Sieger und naechste Runde wurden aktualisiert.'
+    ? ceremony.posted
+      ? `K.O.-Ergebnis bestaetigt. Sieger und naechste Runde wurden aktualisiert. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
+      : 'K.O.-Ergebnis bestaetigt. Sieger und naechste Runde wurden aktualisiert.'
     : outcome.status === 'admin_decision_required'
       ? 'Ergebnis gespeichert. Es ist eine Admin-Entscheidung erforderlich.'
       : 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.';
@@ -234,8 +247,11 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
   });
 
   await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
   await interaction.reply({
-    content: outcome.completed
+    content: ceremony.posted
+      ? `K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
+      : outcome.completed
       ? 'K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen und Ceremony ist vorbereitet.'
       : 'K.O.-Admin-Ergebnis gesetzt. Sieger und naechste Runde wurden aktualisiert.',
     flags: EPHEMERAL,
