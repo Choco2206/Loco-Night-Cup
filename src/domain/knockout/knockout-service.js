@@ -42,8 +42,12 @@ function buildKnockoutState({ eventKey, event, actorUserId = null, now = new Dat
     createdAt: timestamp,
     createdByUserId: actorUserId ? String(actorUserId) : null,
     firstRoundKey: bracket.firstRoundKey,
+    categoryId: null,
+    overviewChannelId: null,
+    overviewMessageId: null,
     channelId: null,
     messageId: null,
+    ceremonyChannelId: null,
     source: {
       qualifiedRule: qualification.rule,
       avoidSameGroupRematches: true,
@@ -56,6 +60,26 @@ function buildKnockoutState({ eventKey, event, actorUserId = null, now = new Dat
       updatedAt: timestamp,
     },
   };
+}
+
+function applyPostRefs(event, post) {
+  if (!post) return;
+
+  event.knockout.categoryId = post.categoryId || event.knockout.categoryId || null;
+  event.knockout.overviewChannelId = post.overviewChannelId || event.knockout.overviewChannelId || null;
+  event.knockout.overviewMessageId = post.overviewMessageId || event.knockout.overviewMessageId || null;
+  event.knockout.channelId = event.knockout.overviewChannelId;
+  event.knockout.messageId = event.knockout.overviewMessageId;
+  event.knockout.ceremonyChannelId = post.ceremonyChannelId || event.knockout.ceremonyChannelId || null;
+  event.ceremony = event.ceremony || {};
+  event.ceremony.channelId = event.knockout.ceremonyChannelId;
+
+  for (const [roundKey, refs] of Object.entries(post.roundPosts || {})) {
+    const round = event.knockout.rounds?.[roundKey];
+    if (!round) continue;
+    round.channelId = refs.channelId || round.channelId || null;
+    round.messageId = refs.messageId || round.messageId || null;
+  }
 }
 
 async function createKnockoutPhase({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
@@ -76,12 +100,7 @@ async function createKnockoutPhase({ eventKey, actorUserId = null, client = null
   const post = await upsertKnockoutPost({ client, guild, eventKey, event: result.event });
   if (post) {
     updateEventData(eventKey, event => {
-      event.knockout.channelId = post.channelId;
-      event.knockout.messageId = post.messageId;
-      for (const round of Object.values(event.knockout.rounds || {})) {
-        if (round.matches?.length) round.channelId = post.channelId;
-        if (round.roundKey === event.knockout.firstRoundKey) round.messageId = post.messageId;
-      }
+      applyPostRefs(event, post);
       event.knockout.meta = {
         ...(event.knockout.meta || {}),
         updatedAt: nowIso(),
