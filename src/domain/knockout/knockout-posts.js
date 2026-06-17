@@ -16,7 +16,6 @@ const { ROUND_LABELS } = require('./knockout-bracket');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
 const KNOCKOUT_OVERVIEW_CHANNEL_NAME = 'ko-phase';
-const CEREMONY_CHANNEL_NAME = 'siegerehrung';
 const ROUND_CHANNEL_NAMES = {
   round_of_16: 'ko-achtelfinale',
   quarter_final: 'ko-viertelfinale',
@@ -482,7 +481,7 @@ function updateGeneratedSettings({ categoryId, roundChannels, roundRoles }) {
   });
 }
 
-function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts, ceremonyChannelId }) {
+function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts }) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     const timestamp = nowIso();
     messages.knockout = messages.knockout || {};
@@ -507,21 +506,6 @@ function updateKnockoutMessageState({ eventKey, event, categoryId, overview, rou
       };
     }
 
-    messages.ceremony = messages.ceremony || {};
-    messages.ceremony[eventKey] = messages.ceremony[eventKey] || {
-      cycleKey: null,
-      channelId: null,
-      imageMessageId: null,
-      textMessageId: null,
-      testMessageIds: [],
-      postedAt: null,
-      updatedAt: null,
-    };
-    messages.ceremony[eventKey].cycleKey = event.cycle?.cycleKey || null;
-    if (event.ceremony?.status !== 'posted' && !messages.ceremony[eventKey].imageMessageId && !messages.ceremony[eventKey].textMessageId) {
-      messages.ceremony[eventKey].channelId = ceremonyChannelId || messages.ceremony[eventKey].channelId || null;
-    }
-    messages.ceremony[eventKey].updatedAt = timestamp;
     messages.meta = { ...(messages.meta || {}), updatedAt: timestamp };
     return messages;
   });
@@ -569,17 +553,6 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     roundChannels[roundKey] = channel.id;
   }
 
-  const ceremonyChannel = await ensureTextChannel({
-    guild: targetGuild,
-    settings,
-    name: CEREMONY_CHANNEL_NAME,
-    category,
-    userIds: [],
-    roleIds: [],
-    existingChannelId: event.knockout?.ceremonyChannelId || null,
-    publicView: true,
-  });
-
   updateGeneratedSettings({ categoryId: category.id, roundChannels, roundRoles });
   updateKnockoutMessageState({
     eventKey,
@@ -587,7 +560,6 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     categoryId: category.id,
     overview: { channelId: overviewChannel.id, messageId: overviewMessage.id },
     roundPosts,
-    ceremonyChannelId: ceremonyChannel.id,
   });
 
   return {
@@ -595,12 +567,10 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     overviewChannelId: overviewChannel.id,
     overviewMessageId: overviewMessage.id,
     roundPosts,
-    ceremonyChannelId: ceremonyChannel.id,
   };
 }
 
 module.exports = {
-  CEREMONY_CHANNEL_NAME,
   KNOCKOUT_CATEGORY_NAME,
   KNOCKOUT_OVERVIEW_CHANNEL_NAME,
   ROUND_CHANNEL_NAMES,
