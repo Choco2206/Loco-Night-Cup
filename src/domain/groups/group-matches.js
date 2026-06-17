@@ -36,7 +36,7 @@ function createMatch({ eventKey, group, matchday, matchIndex, homeSlot, awaySlot
     confirmedBy: [],
     adminDecision: null,
     release: {
-      slot: null,
+      slot: matchday,
       releasedAt: null,
     },
     meta: {
