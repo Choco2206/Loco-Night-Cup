@@ -60,6 +60,7 @@ async function main() {
       await checkinSystem.init(client);
       await adminSystem.init(client);
       await roleSystem.init(client);
+      await groupSystem.init(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
     } catch (error) {
       console.error('Startup validation failed:', error);
@@ -82,6 +83,7 @@ async function main() {
 
   client.on(Events.MessageCreate, async message => {
     try {
+      if (await groupSystem.handleGroupMessage(message, client)) return;
       if (await teamSystem.handleMessage(message, client)) return;
     } catch (error) {
       console.error('Message handling failed:', error);
