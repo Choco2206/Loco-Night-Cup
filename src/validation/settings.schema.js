@@ -54,6 +54,8 @@ function validateSettings(data) {
       'liveScheduleChannelId',
       'teamSearchChannelId',
       'helperSearchChannelId',
+      'hallOfFameChannelId',
+      'knockoutOverviewChannelId',
     ].forEach(field => requireSnowflakeOrNull(errors, data.channels[field], `channels.${field}`));
 
     validateIdMap(errors, data.channels.checkinChannelIds, EVENT_KEYS, 'channels.checkinChannelIds');
