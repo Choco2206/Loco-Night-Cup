@@ -2,6 +2,7 @@
 
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createBansDefault } = require('../../storage/defaults');
+const { createTeamBanEntry, findActiveBanForTeamOrManagers } = require('../bans/ban-service');
 
 function nowIso() {
   return new Date().toISOString();
@@ -69,7 +70,7 @@ function getCurrentTeamUserIds(team) {
   return [...new Set(ids)];
 }
 
-function findActiveBanForTeamOrManagers(team, actorUserId, now = new Date()) {
+function findActiveBanForTeamOrManagersLegacy(team, actorUserId, now = new Date()) {
   const teamBan = findActiveTeamBan(team?.id, now);
   if (teamBan) return { type: 'team', ban: teamBan };
 
@@ -86,31 +87,11 @@ function findActiveBanForTeamOrManagers(team, actorUserId, now = new Date()) {
 
 function createLateWithdrawalBan({ team, eventKey, actorUserId, settings, now = new Date() }) {
   const durationDays = Number(settings.bans?.durationsDays?.late_withdrawal || 7);
-  const timestamp = now.toISOString();
-  const userIds = getCurrentTeamUserIds(team);
   const ban = {
-    id: createBanId(),
-    status: 'active',
-    reason: 'late_withdrawal',
-    durationDays,
-    startsAt: timestamp,
-    expiresAt: addDays(now, durationDays).toISOString(),
-    createdAt: timestamp,
-    createdByUserId: String(actorUserId),
+    ...createTeamBanEntry(team, 'late_withdrawal', actorUserId, durationDays, now),
     source: {
       type: 'deadline_withdrawal',
       eventKey,
-    },
-    targets: {
-      teamId: String(team.id),
-      managerUserId: team.manager?.userId ? String(team.manager.userId) : null,
-      coManagerUserIds: (team.coManagers || []).map(co => String(co.userId)),
-      userIds,
-    },
-    meta: {
-      revokedAt: null,
-      revokedByUserId: null,
-      revokeReason: null,
     },
   };
 
@@ -125,6 +106,7 @@ function createLateWithdrawalBan({ team, eventKey, actorUserId, settings, now = 
 module.exports = {
   createLateWithdrawalBan,
   findActiveBanForTeamOrManagers,
+  findActiveBanForTeamOrManagersLegacy,
   findActiveTeamBan,
   findActiveUserBan,
   getCurrentTeamUserIds,
