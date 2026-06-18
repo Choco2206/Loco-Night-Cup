@@ -12,7 +12,7 @@ const {
   assertTeamHasNoActiveBan,
   getEligibleTeamForUser,
 } = require('./checkin-validation');
-const { isAfterDeadline } = require('./checkin-schedule');
+const { getCheckinWindowState, isAfterDeadline } = require('./checkin-schedule');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -87,6 +87,10 @@ function withdrawTeam({ eventKey, userId, now = new Date() }) {
 
   if (event.status === 'cancelled' || event.status === 'reset') {
     throw new Error('Bei diesem Event ist keine Abmeldung moeglich.');
+  }
+
+  if (!getCheckinWindowState(eventKey, event, settings, now).canLeave) {
+    throw new Error('Die Anmeldung ist bereits geschlossen.');
   }
 
   if (!hasTeamEntry(event, team.id)) {
