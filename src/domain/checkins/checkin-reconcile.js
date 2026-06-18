@@ -167,7 +167,7 @@ function scheduleCheckinEvent(client, eventKey, now = new Date()) {
   const settings = readSettings();
   const repaired = repairEventCycle(eventKey, settings, now);
   const event = repaired.event;
-  if (RECONCILE_SKIP_STATUSES.has(event.status)) {
+  if (RECONCILE_SKIP_STATUSES.has(event.status) && event.status !== 'reset') {
     clearEventTimer(eventKey);
     return null;
   }
