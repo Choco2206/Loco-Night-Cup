@@ -4,6 +4,7 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { drawGroupsForEvent, lockEventFormat } = require('../events/event-lock-service');
+const { maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 const { recalculateCheckinFormat } = require('./checkin-format');
 const { readEventData, updateEventData } = require('./checkin-repository');
 const { refreshCheckinMessage } = require('./checkin-panel');
@@ -11,10 +12,11 @@ const {
   getDeadlineAt,
   getDrawAt,
   getLateWindowUntil,
+  getTournamentStartAt,
 } = require('./checkin-schedule');
 
 const RECONCILE_INTERVAL_MS = 60 * 1000;
-const RECONCILE_SKIP_STATUSES = new Set(['groups', 'knockout', 'ceremony', 'completed', 'reset']);
+const RECONCILE_SKIP_STATUSES = new Set(['knockout', 'ceremony', 'completed', 'reset']);
 
 let reconcileTimer = null;
 let activeClient = null;
@@ -22,6 +24,10 @@ let isRunning = false;
 
 function nowIso(now = new Date()) {
   return now.toISOString();
+}
+
+function logStatus(eventKey, status) {
+  console.log(`[checkin-reconcile] ${eventKey} ${status}`);
 }
 
 function readSettings() {
@@ -97,6 +103,32 @@ function isReached(date, now) {
   return date && now.getTime() >= date.getTime();
 }
 
+function markCheckinOpen(eventKey, now) {
+  let changed = false;
+  let eventAfter = null;
+
+  updateEventData(eventKey, event => {
+    if (!['idle', 'checkin'].includes(event.status)) {
+      eventAfter = event;
+      return event;
+    }
+
+    event.status = 'checkin_open';
+    event.checkin = {
+      ...(event.checkin || {}),
+      isOpen: true,
+      openedAt: event.checkin?.openedAt || nowIso(now),
+    };
+    event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
+    changed = true;
+    eventAfter = event;
+    return event;
+  });
+
+  if (changed) logStatus(eventKey, 'checkin_open');
+  return { changed, event: eventAfter || readEventData(eventKey) };
+}
+
 async function getCheckinChannel(client, eventKey, settings) {
   const channelId = settings.channels?.checkinChannelIds?.[eventKey];
   if (!client || !channelId) return null;
@@ -144,7 +176,7 @@ function markDeadlineReached(eventKey, settings, now) {
   let eventAfter = null;
 
   updateEventData(eventKey, event => {
-    if (event.format?.lockedAt || RECONCILE_SKIP_STATUSES.has(event.status)) {
+    if (event.format?.lockedAt || RECONCILE_SKIP_STATUSES.has(event.status) || ['groups', 'groups_running'].includes(event.status)) {
       eventAfter = event;
       return event;
     }
@@ -164,6 +196,38 @@ function markDeadlineReached(eventKey, settings, now) {
     return event;
   });
 
+  if (changed) logStatus(eventKey, 'deadline_reached');
+  return { changed, event: eventAfter || readEventData(eventKey) };
+}
+
+function markCheckinClosed(eventKey, settings, now) {
+  let changed = false;
+  let eventAfter = null;
+
+  updateEventData(eventKey, event => {
+    if (['cancelled', 'draw_ready', 'groups', 'groups_running'].includes(event.status) || RECONCILE_SKIP_STATUSES.has(event.status)) {
+      eventAfter = event;
+      return event;
+    }
+
+    recalculateCheckinFormat(event, settings, now);
+    if (event.status !== 'checkin_closed' || event.checkin?.isOpen !== false) {
+      event.status = 'checkin_closed';
+      event.checkin = {
+        ...(event.checkin || {}),
+        isOpen: false,
+        closedAt: event.checkin?.closedAt || nowIso(now),
+        finalizedAt: event.checkin?.finalizedAt || nowIso(now),
+        finalizationStatus: 'checking',
+      };
+      event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
+      changed = true;
+    }
+    eventAfter = event;
+    return event;
+  });
+
+  if (changed) logStatus(eventKey, 'checkin_closed');
   return { changed, event: eventAfter || readEventData(eventKey) };
 }
 
@@ -189,6 +253,7 @@ function cancelEventAfterLate(eventKey, settings, now) {
     eventAfter = event;
     return event;
   });
+  logStatus(eventKey, 'cancelled');
   return eventAfter || readEventData(eventKey);
 }
 
@@ -207,15 +272,20 @@ function markDrawReady(eventKey, now) {
     eventAfter = event;
     return event;
   });
+  logStatus(eventKey, 'draw_ready');
   return eventAfter || readEventData(eventKey);
 }
 
 function finalizeAfterLate(eventKey, settings, now) {
   const current = readEventData(eventKey);
-  if (current.status === 'cancelled' || current.status === 'draw_ready') {
+  if (current.status === 'cancelled' || current.status === 'draw_ready' || ['groups', 'groups_running'].includes(current.status)) {
     return { changed: false, event: current, finalState: current.status };
   }
-  if (current.format?.lockedAt) {
+
+  const closed = markCheckinClosed(eventKey, settings, now);
+  const afterClose = closed.event;
+
+  if (afterClose.format?.lockedAt) {
     const ready = markDrawReady(eventKey, now);
     return { changed: true, event: ready, finalState: 'draw_ready' };
   }
@@ -239,6 +309,26 @@ function finalizeAfterLate(eventKey, settings, now) {
   return { changed: true, event: ready, finalState: 'draw_ready' };
 }
 
+function markGroupsRunning(eventKey, now) {
+  let changed = false;
+  let eventAfter = null;
+
+  updateEventData(eventKey, event => {
+    if (event.status !== 'groups') {
+      eventAfter = event;
+      return event;
+    }
+    event.status = 'groups_running';
+    event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
+    changed = true;
+    eventAfter = event;
+    return event;
+  });
+
+  if (changed) logStatus(eventKey, 'groups_running');
+  return { changed, event: eventAfter || readEventData(eventKey) };
+}
+
 async function maybeDrawGroups({ client, eventKey, event, drawAt, now }) {
   if (!isReached(drawAt, now)) return { changed: false, event };
   if (event.status !== 'draw_ready') return { changed: false, event };
@@ -251,11 +341,28 @@ async function maybeDrawGroups({ client, eventKey, event, drawAt, now }) {
       client,
       now,
     });
-    return { changed: true, event: result.event };
+    const running = markGroupsRunning(eventKey, now);
+    return { changed: true, event: running.event || result.event };
   } catch (error) {
     console.warn(`[checkin-reconcile] ${eventKey}: auto draw failed: ${error.message}`);
     return { changed: false, event };
   }
+}
+
+async function maybeStartGroups({ client, eventKey, event, startAt, now }) {
+  if (!['groups', 'groups_running'].includes(event.status)) return { changed: false, event };
+  if (!event.groups?.groups || !Object.keys(event.groups.groups).length) return { changed: false, event };
+  if (!isReached(startAt, now)) {
+    scheduleEvent(client, eventKey);
+    return { changed: false, event };
+  }
+
+  const running = event.status === 'groups' ? markGroupsRunning(eventKey, now) : { changed: false, event };
+  await maybeReleaseNextSlot(client, eventKey, now).catch(error => {
+    console.warn(`[checkin-reconcile] ${eventKey}: auto group release failed: ${error.message}`);
+  });
+  scheduleEvent(client, eventKey);
+  return { changed: running.changed, event: running.event };
 }
 
 async function reconcileCheckinEvent(eventKey, client = activeClient, now = new Date()) {
@@ -266,11 +373,24 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
   const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
   const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);
   const drawAt = getDrawAt(eventKey, event, settings, now);
+  const startAt = getTournamentStartAt(eventKey, event, settings, now);
 
-  if (isBefore(deadlineAt, now)) return { changed: false, event };
+  if (['groups', 'groups_running'].includes(event.status)) {
+    return maybeStartGroups({ client, eventKey, event, startAt, now });
+  }
 
   let latest = event;
   let changed = false;
+
+  if (isBefore(deadlineAt, now)) {
+    const open = markCheckinOpen(eventKey, now);
+    latest = open.event;
+    changed = changed || open.changed;
+    if (changed) await refreshCheckinMessage(eventKey, client).catch(error => {
+      console.warn(`[checkin-reconcile] ${eventKey}: check-in refresh failed: ${error.message}`);
+    });
+    return { changed, event: latest };
+  }
 
   if (isReached(deadlineAt, now) && isBefore(lateWindowUntil, now)) {
     const deadline = markDeadlineReached(eventKey, settings, now);
