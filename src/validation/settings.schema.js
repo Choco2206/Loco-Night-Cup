@@ -37,6 +37,7 @@ function validateSettings(data) {
     requireArray(errors, data.roles.cupLeadRoleIds, 'roles.cupLeadRoleIds');
     requireSnowflakeOrNull(errors, data.roles.playerRoleId, 'roles.playerRoleId');
     requireSnowflakeOrNull(errors, data.roles.managerRoleId, 'roles.managerRoleId');
+    requireSnowflakeOrNull(errors, data.roles.coManagerRoleId, 'roles.coManagerRoleId');
     validateIdMap(errors, data.roles.groupRoleIds, GROUP_KEYS, 'roles.groupRoleIds');
     validateIdMap(errors, data.roles.knockoutRoleIds, KNOCKOUT_ROUNDS, 'roles.knockoutRoleIds');
   }
@@ -55,6 +56,14 @@ function validateSettings(data) {
       'teamSearchChannelId',
       'helperSearchChannelId',
       'hallOfFameChannelId',
+      'logChannelId',
+      'rulebookChannelId',
+      'chatChannelId',
+      'cooperationChannelId',
+      'feedbackChannelId',
+      'managerSupportChannelId',
+      'playerSearchChannelId',
+      'helperAvailableChannelId',
       'knockoutOverviewChannelId',
     ].forEach(field => requireSnowflakeOrNull(errors, data.channels[field], `channels.${field}`));
 
@@ -70,7 +79,21 @@ function validateSettings(data) {
   }
 
   if (requireObject(errors, data.categories, 'categories')) {
-    ['checkinCategoryId', 'groupCategoryId', 'knockoutCategoryId', 'archiveCategoryId'].forEach(field => {
+    [
+      'welcomeCategoryId',
+      'systemCategoryId',
+      'accessCategoryId',
+      'nightHubCategoryId',
+      'managerCategoryId',
+      'publicScheduleCategoryId',
+      'nightEventsCategoryId',
+      'searchCategoryId',
+      'groupsCategoryId',
+      'checkinCategoryId',
+      'groupCategoryId',
+      'knockoutCategoryId',
+      'archiveCategoryId',
+    ].forEach(field => {
       requireSnowflakeOrNull(errors, data.categories[field], `categories.${field}`);
     });
   }
