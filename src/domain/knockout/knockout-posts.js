@@ -27,7 +27,7 @@ const ROUND_ROLE_NAMES = {
   round_of_16: 'LNC K.O. Achtelfinale',
   quarter_final: 'LNC K.O. Viertelfinale',
   semi_final: 'LNC K.O. Halbfinale',
-  third_place: 'LNC K.O. Platz 3',
+  third_place: 'LNC K.O. Spiel um Platz 3',
   final: 'LNC K.O. Finale',
 };
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
