@@ -66,20 +66,32 @@ function isActiveCycle(event = {}) {
 }
 
 function getEventDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
-  if (event.cycle?.eventDate) return event.cycle.eventDate;
+  const timeZone = getTimeZone(settings, event);
+  if (event.cycle?.eventDate) {
+    const resetAt = getCycleResetAt(event.cycle.eventDate, timeZone);
+    if (!resetAt || now.getTime() < resetAt.getTime()) return event.cycle.eventDate;
+  }
 
+  return getCurrentCycleDateValue(eventKey, event, now, settings);
+}
+
+function getCurrentCycleDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
   const targetDay = EVENT_WEEKDAY_INDEX[eventKey];
   if (targetDay === undefined) return null;
 
   const timeZone = getTimeZone(settings, event);
   const zonedDay = getZonedWeekday(now, timeZone);
-  const diffDays = isActiveCycle(event)
-    ? -((zonedDay - targetDay + 7) % 7)
-    : (targetDay - zonedDay + 7) % 7;
+  const previousDiffDays = -((zonedDay - targetDay + 7) % 7);
+  const previousDate = new Date(now);
+  previousDate.setUTCDate(previousDate.getUTCDate() + previousDiffDays);
+  const previousDateValue = toDateOnly(previousDate, timeZone);
+  const resetAt = getCycleResetAt(previousDateValue, timeZone);
 
-  const date = new Date(now);
-  date.setUTCDate(date.getUTCDate() + diffDays);
-  return toDateOnly(date, timeZone);
+  if (resetAt && now.getTime() < resetAt.getTime()) return previousDateValue;
+
+  const nextDate = new Date(previousDate);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 7);
+  return toDateOnly(nextDate, timeZone);
 }
 
 function getTimeZoneOffsetMinutes(timeZone, date) {
@@ -112,6 +124,10 @@ function parseDateTime(dateValue, timeValue, addDay = false, timeZone = DEFAULT_
   return parsed;
 }
 
+function getCycleResetAt(eventDate, timeZone = DEFAULT_TIMEZONE) {
+  return parseDateTime(eventDate, '07:00', true, timeZone);
+}
+
 function getScheduleDate(eventKey, event, settings, explicitField, profileField, scheduleField, addDayField = false, now = new Date()) {
   if (event.schedule?.[explicitField]) {
     const explicit = new Date(event.schedule[explicitField]);
@@ -142,7 +158,7 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
     profile?.startIsNextDay === true,
     timeZone
   );
-  const resetAt = parseDateTime(eventDate, '00:00', true, timeZone);
+  const resetAt = getCycleResetAt(eventDate, timeZone);
 
   return {
     cycleKey: buildCycleKey(eventKey, eventDate),
@@ -157,8 +173,11 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
 }
 
 function ensureEventCycle(eventKey, event, settings, now = new Date()) {
+  const previousEventDate = event.cycle?.eventDate || null;
+  const previousResetAt = previousEventDate ? getCycleResetAt(previousEventDate, getTimeZone(settings, event)) : null;
   const planned = getPlannedSchedule(eventKey, event, settings, now);
   if (!planned.eventDate) return false;
+  const switchedCycle = Boolean(previousEventDate && previousEventDate !== planned.eventDate && previousResetAt && now.getTime() >= previousResetAt.getTime());
 
   let changed = false;
   event.cycle = event.cycle || {};
@@ -201,7 +220,53 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
     changed = true;
   }
 
+  if (switchedCycle) {
+    resetToOpenCheckinCycle(event);
+    changed = true;
+  } else if (planned.deadlineAt && now.getTime() < planned.deadlineAt.getTime() && !['checkin', 'checkin_open'].includes(event.status)) {
+    resetToOpenCheckinCycle(event);
+    changed = true;
+  }
+
   return changed;
+}
+
+function resetToOpenCheckinCycle(event) {
+  event.status = 'checkin_open';
+  event.format = {
+    ...(event.format || {}),
+    size: null,
+    realTeamCount: 0,
+    byeCount: 0,
+    activeByeCount: 0,
+    waitlistByeCount: 0,
+    waitlistCount: 0,
+    lockedAt: null,
+    lockedByUserId: null,
+    participants: [],
+  };
+  event.checkin = {
+    ...(event.checkin || {}),
+    isOpen: true,
+    closedAt: null,
+    entries: [],
+    activeTeamIds: [],
+    waitlistTeamIds: [],
+    lateLeaveBans: [],
+  };
+  event.byes = [];
+  event.groups = {
+    status: 'not_created',
+    drawnAt: null,
+    drawnBy: null,
+    groups: {},
+  };
+  event.knockout = {
+    status: 'not_created',
+    createdAt: null,
+    source: { qualifiedRule: null, avoidSameGroupRematches: true },
+    rounds: {},
+  };
 }
 
 function getDeadlineAt(eventKey, event, settings, now = new Date()) {
@@ -307,6 +372,7 @@ module.exports = {
   getDeadlineAt,
   getDrawAt,
   getEventDateValue,
+  getCycleResetAt,
   getPlannedSchedule,
   getLateWindowUntil,
   getProfileForEvent,
