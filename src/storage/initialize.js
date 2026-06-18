@@ -21,6 +21,7 @@ const {
   createTeamsDefault,
 } = require('./defaults');
 const { ensureDir, ensureJsonFile, readJson, writeJsonAtomic } = require('./json-store');
+const { ensureEventCycle } = require('../domain/checkins/checkin-schedule');
 
 function emptyPanelMessage() {
   return {
@@ -204,6 +205,7 @@ function normalizeLegacyBye(bye, eventKey, index) {
 
 function normalizeEventFile(eventKey) {
   const event = readJson(FILES.events[eventKey], createEventDefault(eventKey));
+  const settings = readJson(FILES.settings, createSettingsDefault());
   let changed = false;
 
   if (event.schedule && Object.prototype.hasOwnProperty.call(event.schedule, 'resetTime')) {
@@ -221,6 +223,8 @@ function normalizeEventFile(eventKey) {
     changed = result.changed || changed;
     return result.bye;
   });
+
+  changed = ensureEventCycle(eventKey, event, settings) || changed;
 
   if (changed) writeJsonAtomic(FILES.events[eventKey], event);
   return event;
