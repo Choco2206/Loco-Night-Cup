@@ -3,6 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
+const { refreshLiveSchedule } = require('../live-schedule');
 const { buildLiveTableEmbed, buildScheduleEmbed, buildTeamOverviewEmbed } = require('./group-embeds');
 
 function nowIso() {
@@ -116,6 +117,10 @@ async function refreshGroupPosts({ client, eventKey, event, group }) {
     channelId,
     ...messageRefs,
   }]);
+
+  await refreshLiveSchedule(client, eventKey, event).catch(error => {
+    console.warn(`[live-schedule] Gruppen-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+  });
 
   return messageRefs;
 }
