@@ -1,6 +1,15 @@
 'use strict';
 
-const CHECKIN_EVENT_STATUSES = ['idle', 'checkin', 'deadline_reached', 'draw_ready', 'cancelled', 'reset'];
+const CHECKIN_EVENT_STATUSES = [
+  'idle',
+  'checkin',
+  'checkin_open',
+  'deadline_reached',
+  'checkin_closed',
+  'draw_ready',
+  'cancelled',
+  'reset',
+];
 
 const EVENT_WEEKDAY_INDEX = {
   sunday: 0,
@@ -104,6 +113,10 @@ function canUseCheckinStatus(status) {
 }
 
 function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
+  if (['checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) {
+    return { label: 'Geschlossen', phase: event.status, canJoin: false, canLeave: false };
+  }
+
   if (event.status === 'cancelled') {
     return { label: 'Abgesagt', phase: 'cancelled', canJoin: false, canLeave: false };
   }
