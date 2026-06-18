@@ -21,6 +21,12 @@ const EVENT_WEEKDAY_INDEX = {
   saturday: 6,
 };
 
+const DEFAULT_TIMEZONE = 'Europe/Berlin';
+
+function getTimeZone(settings, event = {}) {
+  return event.cycle?.timezone || settings.timeProfiles?.timezone || DEFAULT_TIMEZONE;
+}
+
 function getProfileForEvent(eventKey, settings, event = {}) {
   const profileKey = settings.timeProfiles?.eventProfiles?.[eventKey] || event.schedule?.profile || 'early';
   return settings.timeProfiles?.profiles?.[profileKey] || null;
@@ -30,28 +36,79 @@ function pad2(value) {
   return String(value).padStart(2, '0');
 }
 
-function toDateOnly(date) {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+function toDateOnly(date, timeZone = DEFAULT_TIMEZONE) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
-function getEventDateValue(eventKey, event = {}, now = new Date()) {
+function getZonedWeekday(date, timeZone = DEFAULT_TIMEZONE) {
+  const value = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(date);
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(value);
+}
+
+function isActiveCycle(event = {}) {
+  if (event.cycle?.eventDate) return true;
+  if (event.status && !['idle', 'reset', 'cancelled', 'completed'].includes(event.status)) return true;
+  if (event.checkin?.isOpen === true) return true;
+  if ((event.checkin?.entries || []).length) return true;
+  if ((event.checkin?.activeTeamIds || []).length) return true;
+  if ((event.checkin?.waitlistTeamIds || []).length) return true;
+  if (event.format?.lockedAt) return true;
+  if (event.groups?.status && event.groups.status !== 'not_created') return true;
+  if (event.knockout?.status && event.knockout.status !== 'not_created') return true;
+  return false;
+}
+
+function getEventDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
   if (event.cycle?.eventDate) return event.cycle.eventDate;
 
   const targetDay = EVENT_WEEKDAY_INDEX[eventKey];
   if (targetDay === undefined) return null;
 
+  const timeZone = getTimeZone(settings, event);
+  const zonedDay = getZonedWeekday(now, timeZone);
+  const diffDays = isActiveCycle(event)
+    ? -((zonedDay - targetDay + 7) % 7)
+    : (targetDay - zonedDay + 7) % 7;
+
   const date = new Date(now);
-  date.setHours(0, 0, 0, 0);
-  const diffDays = (targetDay - date.getDay() + 7) % 7;
-  date.setDate(date.getDate() + diffDays);
-  return toDateOnly(date);
+  date.setUTCDate(date.getUTCDate() + diffDays);
+  return toDateOnly(date, timeZone);
 }
 
-function parseDateTime(dateValue, timeValue, addDay = false) {
+function getTimeZoneOffsetMinutes(timeZone, date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'shortOffset',
+    hour: '2-digit',
+  }).formatToParts(date);
+  const zone = parts.find(part => part.type === 'timeZoneName')?.value || 'GMT';
+  const match = zone.match(/^GMT(?:(?<sign>[+-])(?<hours>\d{1,2})(?::(?<minutes>\d{2}))?)?$/);
+  if (!match) return 0;
+  const sign = match.groups.sign === '-' ? -1 : 1;
+  const hours = Number(match.groups.hours || 0);
+  const minutes = Number(match.groups.minutes || 0);
+  return sign * (hours * 60 + minutes);
+}
+
+function parseDateTime(dateValue, timeValue, addDay = false, timeZone = DEFAULT_TIMEZONE) {
   if (!dateValue || !timeValue) return null;
-  const parsed = new Date(`${dateValue}T${timeValue}:00`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  if (addDay) parsed.setDate(parsed.getDate() + 1);
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const [hour, minute] = timeValue.split(':').map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+
+  let utcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let offset = getTimeZoneOffsetMinutes(timeZone, new Date(utcMs));
+  let parsed = new Date(utcMs - offset * 60 * 1000);
+  offset = getTimeZoneOffsetMinutes(timeZone, parsed);
+  parsed = new Date(utcMs - offset * 60 * 1000);
+  if (addDay) parsed.setUTCDate(parsed.getUTCDate() + 1);
   return parsed;
 }
 
@@ -62,10 +119,89 @@ function getScheduleDate(eventKey, event, settings, explicitField, profileField,
   }
 
   const profile = getProfileForEvent(eventKey, settings, event);
-  const dateValue = getEventDateValue(eventKey, event, now);
+  const dateValue = getEventDateValue(eventKey, event, now, settings);
   const timeValue = profile?.[profileField] || event.schedule?.[scheduleField];
   const addDay = addDayField && profile?.startIsNextDay === true;
-  return parseDateTime(dateValue, timeValue, addDay);
+  return parseDateTime(dateValue, timeValue, addDay, getTimeZone(settings, event));
+}
+
+function buildCycleKey(eventKey, eventDate) {
+  return eventDate ? `${eventKey}_${eventDate}` : null;
+}
+
+function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
+  const profile = getProfileForEvent(eventKey, settings, event);
+  const eventDate = getEventDateValue(eventKey, event, now, settings);
+  const timeZone = getTimeZone(settings, event);
+  const deadlineAt = parseDateTime(eventDate, profile?.deadlineTime || event.schedule?.deadlineTime, false, timeZone);
+  const lateWindowUntil = parseDateTime(eventDate, profile?.lateWindowUntilTime || event.schedule?.lateWindowUntilTime, false, timeZone);
+  const drawAt = parseDateTime(eventDate, profile?.drawTime || event.schedule?.drawTime, false, timeZone);
+  const tournamentStartAt = parseDateTime(
+    eventDate,
+    profile?.tournamentStartTime || event.schedule?.tournamentStartTime,
+    profile?.startIsNextDay === true,
+    timeZone
+  );
+  const resetAt = parseDateTime(eventDate, '00:00', true, timeZone);
+
+  return {
+    cycleKey: buildCycleKey(eventKey, eventDate),
+    eventDate,
+    timeZone,
+    deadlineAt,
+    lateWindowUntil,
+    drawAt,
+    tournamentStartAt,
+    resetAt,
+  };
+}
+
+function ensureEventCycle(eventKey, event, settings, now = new Date()) {
+  const planned = getPlannedSchedule(eventKey, event, settings, now);
+  if (!planned.eventDate) return false;
+
+  let changed = false;
+  event.cycle = event.cycle || {};
+  event.schedule = event.schedule || {};
+  event.reset = event.reset || {};
+
+  const next = {
+    cycleKey: planned.cycleKey,
+    eventDate: planned.eventDate,
+    timezone: planned.timeZone,
+    deadlineAt: planned.deadlineAt?.toISOString() || null,
+    lateWindowUntil: planned.lateWindowUntil?.toISOString() || null,
+    drawAt: planned.drawAt?.toISOString() || null,
+    tournamentStartAt: planned.tournamentStartAt?.toISOString() || null,
+    resetAt: planned.resetAt?.toISOString() || null,
+  };
+
+  if (event.cycle.cycleKey !== next.cycleKey) {
+    event.cycle.cycleKey = next.cycleKey;
+    changed = true;
+  }
+  if (event.cycle.eventDate !== next.eventDate) {
+    event.cycle.eventDate = next.eventDate;
+    changed = true;
+  }
+  if (event.cycle.timezone !== next.timezone) {
+    event.cycle.timezone = next.timezone;
+    changed = true;
+  }
+
+  for (const field of ['deadlineAt', 'lateWindowUntil', 'drawAt', 'tournamentStartAt', 'resetAt']) {
+    if (event.schedule[field] !== next[field]) {
+      event.schedule[field] = next[field];
+      changed = true;
+    }
+  }
+
+  if (event.reset.resetAt !== next.resetAt) {
+    event.reset.resetAt = next.resetAt;
+    changed = true;
+  }
+
+  return changed;
 }
 
 function getDeadlineAt(eventKey, event, settings, now = new Date()) {
@@ -171,8 +307,11 @@ module.exports = {
   getDeadlineAt,
   getDrawAt,
   getEventDateValue,
+  getPlannedSchedule,
   getLateWindowUntil,
   getProfileForEvent,
   getTournamentStartAt,
+  ensureEventCycle,
   isAfterDeadline,
+  parseDateTime,
 };
