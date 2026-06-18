@@ -4,6 +4,7 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createEventDefault, createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { ensureEventCycle } = require('../checkins/checkin-schedule');
 const { refreshCheckinMessage } = require('../checkins/checkin-panel');
+const { scheduleCheckinEvent } = require('../checkins/checkin-reconcile');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { cleanupLiveScheduleForEvent } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
@@ -222,11 +223,18 @@ function resetEventRuntime(eventKey, actorUserId, { openNextCheckin = true } = {
   updateJson(FILES.events[eventKey], createEventDefault(eventKey), event => {
     const defaults = createEventDefault(eventKey);
     const timestamp = nowIso();
+    const resetAt = event.reset?.resetAt || event.schedule?.resetAt || defaults.reset.resetAt;
     resetEvent = {
       ...defaults,
+      status: openNextCheckin ? defaults.status : 'reset',
+      cycle: openNextCheckin ? defaults.cycle : { ...defaults.cycle, ...(event.cycle || {}) },
+      schedule: openNextCheckin ? defaults.schedule : { ...defaults.schedule, ...(event.schedule || {}) },
+      format: openNextCheckin ? defaults.format : { ...defaults.format, ...(event.format || {}) },
+      checkin: openNextCheckin ? defaults.checkin : { ...defaults.checkin, ...(event.checkin || {}), isOpen: false },
       reset: {
         ...defaults.reset,
         status: 'completed',
+        resetAt,
         completedAt: timestamp,
         keepStats: true,
       },
@@ -304,7 +312,7 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
     return { cleaned: false, deletedMessageIds: [] };
   });
 
-  resetEventRuntime(eventKey, actorUserId);
+  resetEventRuntime(eventKey, actorUserId, { openNextCheckin: false });
   summary.eventReset = true;
   resetMessages(eventKey);
   summary.messagesReset = true;
@@ -312,8 +320,9 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
     console.warn(`Event cleanup could not refresh check-in for ${eventKey}: ${error.message}`);
     return false;
   });
+  summary.checkinRescheduled = Boolean(scheduleCheckinEvent(client, eventKey));
 
-  console.log(`Event cleanup complete for ${eventKey}: groupChannels=${summary.deletedGroupChannels.length}, knockoutChannels=${summary.deletedKnockoutChannels.length}, roles=${summary.clearedGroupRoles.length}, checkinRefreshed=${summary.checkinRefreshed}`);
+  console.log(`Event cleanup complete for ${eventKey}: groupChannels=${summary.deletedGroupChannels.length}, knockoutChannels=${summary.deletedKnockoutChannels.length}, roles=${summary.clearedGroupRoles.length}, checkinRefreshed=${summary.checkinRefreshed}, checkinRescheduled=${summary.checkinRescheduled}`);
   return summary;
 }
 
