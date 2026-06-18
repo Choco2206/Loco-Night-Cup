@@ -4,6 +4,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
 const { refreshCheckinMessages } = require('../checkins/checkin-panel');
+const { setTeamCoManagerNickname, setTeamManagerNickname } = require('../nicknames');
 const {
   buildAddCoManagerPayload,
   buildConfirmPayload,
@@ -44,7 +45,7 @@ function teamRegistrationChannelLabel(settings) {
 }
 
 function strictManagerRoleRequiredMessage(settings) {
-  const prefix = '\u274c Du brauchst zuerst die Manager-Rolle, um ein Team zu registrieren.';
+  const prefix = '❌ Du brauchst zuerst die Manager-Rolle, um ein Team zu registrieren.';
   const channelId = settings.channels?.roleSelectChannelId;
   if (channelId) return `${prefix}\nBitte waehle zuerst im <#${channelId}> die Manager-Rolle aus.`;
   return `${prefix}\nBitte waehle zuerst in der Rollenauswahl die Manager-Rolle aus.`;
@@ -114,6 +115,20 @@ async function removeTeamCheckinsAndRefresh({ teamId, settings, client }) {
 async function cleanupInvalidTeamCheckins({ team, settings, client }) {
   if (isValidTournamentTeam(team)) return [];
   return removeTeamCheckinsAndRefresh({ teamId: team.id, settings, client });
+}
+
+async function syncTeamNicknames(guild, team) {
+  if (!team || team.status !== 'active') return [];
+  const results = [];
+  if (team.manager?.userId) {
+    results.push(await setTeamManagerNickname(guild, team.manager.userId, team));
+  }
+  for (const coManager of team.coManagers || []) {
+    if (coManager?.userId) {
+      results.push(await setTeamCoManagerNickname(guild, coManager.userId, team));
+    }
+  }
+  return results;
 }
 
 async function deleteInstructionMessage(client, channelId, messageId) {
@@ -304,6 +319,7 @@ async function handleModal(interaction, client) {
     const [, teamId] = interaction.customId.split(':');
     const newClubName = interaction.fields.getTextInputValue('new_club_name');
     const team = updateTeamName({ teamId, newClubName, actorUserId: interaction.user.id, settings });
+    await syncTeamNicknames(interaction.guild, team);
     await refreshRegisteredTeamsOverview(client);
     await interaction.reply({ content: `Teamname wurde auf **${team.clubName}** geaendert.`, flags: EPHEMERAL });
     return true;
@@ -323,8 +339,9 @@ async function handleUserSelect(interaction, client) {
   if (!selectedMember) throw new Error('Dieser User ist nicht auf dem Server.');
   ensureUserIsNotBot(selectedMember.user);
 
-  addCoManager({ teamId, userId, actorUserId: interaction.user.id, settings });
+  const team = addCoManager({ teamId, userId, actorUserId: interaction.user.id, settings });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
+  await setTeamCoManagerNickname(interaction.guild, userId, team).catch(() => null);
   await refreshRegisteredTeamsOverview(client);
   await interaction.update({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
