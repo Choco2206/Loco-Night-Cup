@@ -268,8 +268,10 @@ function createSettingsDefault() {
       liveScheduleChannelId: null,
       teamSearchChannelId: null,
       helperSearchChannelId: null,
+      hallOfFameChannelId: null,
       checkinChannelIds: eventIds,
       groupChannelIds: groupIds,
+      knockoutOverviewChannelId: null,
       knockoutChannelIds: knockoutIds,
     },
     assets: {
