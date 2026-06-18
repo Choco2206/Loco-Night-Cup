@@ -12,7 +12,7 @@ const {
   assertTeamHasNoActiveBan,
   getEligibleTeamForUser,
 } = require('./checkin-validation');
-const { getCheckinWindowState, isAfterDeadline } = require('./checkin-schedule');
+const { ensureEventCycle, getCheckinWindowState, isAfterDeadline } = require('./checkin-schedule');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -154,7 +154,10 @@ function removeTeamFromAllEvents({ teamId, settings = readSettings(), now = new 
 
 function refreshEventFormat(eventKey) {
   const settings = readSettings();
-  return updateEventData(eventKey, event => recalculateCheckinFormat(event, settings));
+  return updateEventData(eventKey, event => {
+    ensureEventCycle(eventKey, event, settings);
+    return recalculateCheckinFormat(event, settings);
+  });
 }
 
 function getPublicCheckinState(eventKey) {
