@@ -17,7 +17,7 @@ function buildAdminPanelPayload() {
     .addFields(
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
-      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nTeam sperren\nSperre entfernen\nServerstruktur einrichten', inline: true },
+      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nTeam sperren\nSperre entfernen\nServerstruktur einrichten\nNicknames synchronisieren', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen\nSiegerehrung posten', inline: true }
     )
     .setTimestamp(new Date());
@@ -49,7 +49,8 @@ function buildAdminPanelPayload() {
     button('admin_checkin_refresh', 'Check-in Refresh', ButtonStyle.Secondary),
     button('admin_team_overview_refresh', 'Teamuebersicht Refresh', ButtonStyle.Secondary),
     button('admin_testdata_create', 'Testdaten erzeugen', ButtonStyle.Secondary),
-    button('admin_testdata_remove', 'Testdaten entfernen', ButtonStyle.Danger)
+    button('admin_testdata_remove', 'Testdaten entfernen', ButtonStyle.Danger),
+    button('admin_nickname_sync', 'Nicknames synchronisieren', ButtonStyle.Secondary).setEmoji('🏷️')
   );
 
   const simulationRow = new ActionRowBuilder().addComponents(
