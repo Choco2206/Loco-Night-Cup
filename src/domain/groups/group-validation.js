@@ -1,7 +1,7 @@
 'use strict';
 
 function assertCanLockEvent(event) {
-  if (!['checkin', 'idle', 'deadline_reached', 'draw_ready'].includes(event.status)) {
+  if (!['checkin', 'checkin_open', 'idle', 'deadline_reached', 'checkin_closed', 'draw_ready'].includes(event.status)) {
     throw new Error('Format-Lock ist nur vor der Gruppenphase moeglich.');
   }
 
