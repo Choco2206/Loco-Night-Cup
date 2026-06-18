@@ -230,7 +230,7 @@ function formatDate(value) {
 
 function formatReason(reason) {
   const labels = {
-    late_withdrawal: 'Abmeldung nach Deadline',
+    late_withdrawal: 'Abmeldung nach offiziellem Anmeldeschluss',
     no_show: 'Eingecheckt, aber nicht erschienen',
     left_tournament: 'Turnier verlassen',
     disrespect: 'Beleidigung/Respektlosigkeit',
