@@ -160,13 +160,14 @@ function repairEventCycle(eventKey, settings, now) {
   });
 
   if (changed) console.log(`[checkin-reconcile] ${eventKey} cycle_repaired`);
-  return eventAfter || readEventData(eventKey);
+  return { changed, event: eventAfter || readEventData(eventKey) };
 }
 
 function scheduleCheckinEvent(client, eventKey, now = new Date()) {
   const settings = readSettings();
-  const event = repairEventCycle(eventKey, settings, now);
-  if (RECONCILE_SKIP_STATUSES.has(event.status) || event.status === 'cancelled') {
+  const repaired = repairEventCycle(eventKey, settings, now);
+  const event = repaired.event;
+  if (RECONCILE_SKIP_STATUSES.has(event.status)) {
     clearEventTimer(eventKey);
     return null;
   }
@@ -448,7 +449,8 @@ async function maybeStartGroups({ client, eventKey, event, startAt, now }) {
 
 async function reconcileCheckinEvent(eventKey, client = activeClient, now = new Date()) {
   const settings = readSettings();
-  const event = repairEventCycle(eventKey, settings, now);
+  const repaired = repairEventCycle(eventKey, settings, now);
+  const event = repaired.event;
   if (RECONCILE_SKIP_STATUSES.has(event.status) || event.status === 'cancelled') return { changed: false, event };
 
   const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
@@ -461,7 +463,7 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
   }
 
   let latest = event;
-  let changed = false;
+  let changed = repaired.changed;
 
   if (isBefore(deadlineAt, now)) {
     const open = markCheckinOpen(eventKey, now);
