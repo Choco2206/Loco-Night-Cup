@@ -8,6 +8,7 @@ const adminSystem = require('./src/domain/admin');
 const roleSystem = require('./src/domain/roles');
 const groupSystem = require('./src/domain/groups');
 const knockoutSystem = require('./src/domain/knockout');
+const banSystem = require('./src/domain/bans');
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
 
 const EPHEMERAL = 64;
@@ -62,6 +63,7 @@ async function main() {
       await checkinSystem.init(client);
       await adminSystem.init(client);
       await roleSystem.init(client);
+      await banSystem.initBanService(client);
       await groupSystem.init(client);
       schedulePendingAutoCleanups(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
