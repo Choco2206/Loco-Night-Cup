@@ -11,6 +11,7 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
+const { refreshLiveSchedule } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
 const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
@@ -195,6 +196,9 @@ async function notifyAdminDecision(interaction, match) {
 
 async function refreshKnockout(client, guild, eventKey, event) {
   await upsertKnockoutPost({ client, guild, eventKey, event });
+  await refreshLiveSchedule(client, eventKey, event).catch(error => {
+    console.warn(`[live-schedule] K.O.-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+  });
 }
 
 async function postCeremonyIfReady(guild, eventKey) {
