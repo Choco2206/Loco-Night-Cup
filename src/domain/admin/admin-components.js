@@ -17,7 +17,7 @@ function buildAdminPanelPayload() {
     .addFields(
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
-      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nServerstruktur einrichten', inline: true },
+      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nTeam sperren\nSperre entfernen\nServerstruktur einrichten', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen\nSiegerehrung posten', inline: true }
     )
     .setTimestamp(new Date());
@@ -25,7 +25,7 @@ function buildAdminPanelPayload() {
   const eventRow = new ActionRowBuilder().addComponents(
     button('admin_checkin_open', 'Check-in oeffnen', ButtonStyle.Success),
     button('admin_checkin_close', 'Check-in schliessen', ButtonStyle.Danger),
-    button('admin_event_reset', 'Event zuruecksetzen', ButtonStyle.Secondary).setEmoji('\ud83e\uddf9'),
+    button('admin_event_reset', 'Event zuruecksetzen', ButtonStyle.Secondary).setEmoji('🧹'),
     button('admin_bye_add', 'Freilos hinzufuegen', ButtonStyle.Secondary),
     button('admin_bye_remove', 'Freilos entfernen', ButtonStyle.Secondary)
   );
@@ -34,12 +34,14 @@ function buildAdminPanelPayload() {
     button('admin_format_lock', 'Format locken', ButtonStyle.Primary),
     button('admin_groups_draw', 'Gruppen ziehen', ButtonStyle.Primary),
     button('admin_group_release_current', 'Aktuellen Spieltag freigeben', ButtonStyle.Success),
-    button('admin_knockout_create', 'K.O. erstellen', ButtonStyle.Primary).setEmoji('\ud83c\udfc6')
+    button('admin_knockout_create', 'K.O. erstellen', ButtonStyle.Primary).setEmoji('🏆')
   );
 
   const teamsRow = new ActionRowBuilder().addComponents(
     button('admin_teams_list', 'Teams anzeigen', ButtonStyle.Secondary),
     button('admin_team_details', 'Teamdetails', ButtonStyle.Secondary),
+    button('admin_team_ban', 'Team sperren', ButtonStyle.Danger).setEmoji('🚫'),
+    button('admin_team_unban', 'Sperre entfernen', ButtonStyle.Success).setEmoji('✅'),
     button('admin_server_setup', 'Serverstruktur einrichten', ButtonStyle.Primary).setEmoji('🛠️')
   );
 
@@ -51,10 +53,10 @@ function buildAdminPanelPayload() {
   );
 
   const simulationRow = new ActionRowBuilder().addComponents(
-    button('admin_simulate_groups', 'Gruppenphase simulieren', ButtonStyle.Danger).setEmoji('\ud83e\uddea'),
-    button('admin_simulate_knockout', 'K.O.-Phase simulieren', ButtonStyle.Danger).setEmoji('\ud83e\uddea'),
-    button('admin_hof_test', 'Hall of Fame testen', ButtonStyle.Secondary).setEmoji('\ud83c\udfc6'),
-    button('admin_ceremony_post', 'Siegerehrung posten', ButtonStyle.Success).setEmoji('\ud83c\udfc6')
+    button('admin_simulate_groups', 'Gruppenphase simulieren', ButtonStyle.Danger).setEmoji('🧪'),
+    button('admin_simulate_knockout', 'K.O.-Phase simulieren', ButtonStyle.Danger).setEmoji('🧪'),
+    button('admin_hof_test', 'Hall of Fame testen', ButtonStyle.Secondary).setEmoji('🏆'),
+    button('admin_ceremony_post', 'Siegerehrung posten', ButtonStyle.Success).setEmoji('🏆')
   );
 
   return {
