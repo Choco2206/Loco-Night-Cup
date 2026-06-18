@@ -5,7 +5,10 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { listVisibleTeams } = require('./team-service');
 
-function chunkBlocks(blocks, maxLength = 1900) {
+const TEAM_LIST_CHUNK_LIMIT = 1850;
+const MISSING_MEMBER_LABEL = '⚠️ Nicht mehr auf dem Server';
+
+function chunkBlocks(blocks, maxLength = TEAM_LIST_CHUNK_LIMIT) {
   const chunks = [];
   let current = '';
 
@@ -25,36 +28,71 @@ function chunkBlocks(blocks, maxLength = 1900) {
 
 function buildHeaderEmbed(teams) {
   return new EmbedBuilder()
-    .setTitle('Registrierte Teams')
-    .setDescription(`Aktuell sichtbar: **${teams.length} Teams**`)
-    .setColor(0xff0000);
+    .setTitle('🏆 LOCO NIGHT CUP • REGISTRIERTE TEAMS')
+    .setDescription([
+      `Aktuell registriert: **${teams.length} Teams**`,
+      '',
+      'Teams sind alphabetisch sortiert.',
+      'Bei Rückfragen kannst du die VMs direkt anklicken.',
+    ].join('\n'))
+    .setColor(0xff0000)
+    .setFooter({ text: 'Loco Night Bot • Team-Übersicht' });
 }
 
-function buildTeamBlocks(teams) {
+function formatTeamNumber(index) {
+  return String(index + 1).padStart(2, '0');
+}
+
+function formatUser(userId, presentUserIds) {
+  if (!userId) return MISSING_MEMBER_LABEL;
+  return presentUserIds.has(String(userId)) ? `<@${userId}>` : MISSING_MEMBER_LABEL;
+}
+
+function formatCoManagers(team, presentUserIds) {
+  const coManagers = Array.isArray(team.coManagers) ? team.coManagers : [];
+  if (!coManagers.length) return 'Keine';
+  return coManagers
+    .map(coManager => formatUser(coManager?.userId, presentUserIds))
+    .join(', ');
+}
+
+function buildTeamBlocks(teams, presentUserIds) {
   return teams
     .slice()
     .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de', { sensitivity: 'base' }))
-    .map((team, index) => {
-      const manager = team.manager?.userId ? `<@${team.manager.userId}>` : 'Kein VM';
-      const coManagers = team.coManagers.length
-        ? team.coManagers.map(co => `<@${co.userId}>`).join(', ')
-        : 'Keine';
-      const flags = [];
-      if (team.status === 'leaderless') flags.push('führungslos');
-      if (team.registrationStatus === 'incomplete') flags.push('unvollständig');
-      const suffix = flags.length ? ` (${flags.join(', ')})` : '';
-
-      return [
-        `**${index + 1}. ${team.clubName}${suffix}**`,
-        `VM: ${manager}`,
-        `Co-VMs: ${coManagers}`,
-      ].join('\n');
-    });
+    .map((team, index) => [
+      `🔴 **${formatTeamNumber(index)} | ${team.clubName}**`,
+      `👑 **VM:** ${formatUser(team.manager?.userId, presentUserIds)}`,
+      `🤝 **Co-VM:** ${formatCoManagers(team, presentUserIds)}`,
+    ].join('\n'));
 }
 
 async function fetchMessage(channel, messageId) {
   if (!messageId) return null;
   return channel.messages.fetch(messageId).catch(() => null);
+}
+
+function collectTeamUserIds(teams) {
+  const userIds = new Set();
+  for (const team of teams) {
+    if (team.manager?.userId) userIds.add(String(team.manager.userId));
+    for (const coManager of team.coManagers || []) {
+      if (coManager?.userId) userIds.add(String(coManager.userId));
+    }
+  }
+  return [...userIds];
+}
+
+async function getPresentUserIds(guild, teams) {
+  const present = new Set();
+  if (!guild?.members?.fetch) return present;
+
+  for (const userId of collectTeamUserIds(teams)) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member) present.add(String(userId));
+  }
+
+  return present;
 }
 
 async function refreshRegisteredTeamsOverview(client) {
@@ -63,10 +101,14 @@ async function refreshRegisteredTeamsOverview(client) {
   if (!channelId) return false;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel) return false;
+  if (!channel?.send) {
+    console.warn(`[team-overview] Registered teams channel ${channelId} wurde nicht gefunden oder ist nicht beschreibbar.`);
+    return false;
+  }
 
   const teams = listVisibleTeams();
-  const chunks = chunkBlocks(buildTeamBlocks(teams));
+  const presentUserIds = await getPresentUserIds(channel.guild, teams);
+  const chunks = chunkBlocks(buildTeamBlocks(teams, presentUserIds));
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = messages.teams.registeredTeamsOverview;
 
