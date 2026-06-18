@@ -2,7 +2,7 @@
 
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createBansDefault } = require('../../storage/defaults');
-const { createTeamBanEntry, findActiveBanForTeamOrManagers } = require('../bans/ban-service');
+const { addTeamBan, findActiveBanForTeamOrManagers } = require('../bans/ban-service');
 
 function nowIso() {
   return new Date().toISOString();
@@ -87,18 +87,18 @@ function findActiveBanForTeamOrManagersLegacy(team, actorUserId, now = new Date(
 
 function createLateWithdrawalBan({ team, eventKey, actorUserId, settings, now = new Date() }) {
   const durationDays = Number(settings.bans?.durationsDays?.late_withdrawal || 7);
-  const ban = {
-    ...createTeamBanEntry(team, 'late_withdrawal', actorUserId, durationDays, now),
-    source: {
-      type: 'deadline_withdrawal',
-      eventKey,
-    },
-  };
+  const ban = addTeamBan(team, 'late_withdrawal', actorUserId, durationDays);
 
-  updateJson(FILES.bans, createBansDefault(), data => ({
-    ...data,
-    bans: [...(data.bans || []), ban],
-  }));
+  updateJson(FILES.bans, createBansDefault(), data => {
+    const target = (data.bans || []).find(entry => String(entry.id) === String(ban.id));
+    if (target) {
+      target.source = {
+        type: 'deadline_withdrawal',
+        eventKey,
+      };
+    }
+    return data;
+  });
 
   return ban;
 }
