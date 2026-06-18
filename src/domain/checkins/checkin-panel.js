@@ -5,6 +5,7 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { getPublicCheckinState } = require('./checkin-service');
 const { buildCheckinMessagePayload } = require('./checkin-components');
+const { getCheckinWindowState } = require('./checkin-schedule');
 
 async function fetchMessage(channel, messageId) {
   if (!messageId) return null;
@@ -33,6 +34,30 @@ function createEditPayload(payload) {
   };
 }
 
+async function deleteSummaryMessageIfOpen({ channel, state, eventKey, event, settings }) {
+  if (!state.summaryMessageId) return false;
+  const windowState = getCheckinWindowState(eventKey, event, settings);
+  if (!windowState.canJoin || !['regular', 'manual_open'].includes(windowState.phase)) return false;
+
+  const sameChannel = !state.channelId || String(state.channelId) === String(channel.id);
+  const message = sameChannel ? await fetchMessage(channel, state.summaryMessageId) : null;
+  if (message) {
+    await message.delete().catch(error => {
+      console.warn(`[checkin-panel] ${eventKey}: could not delete stale summary ${state.summaryMessageId}: ${error.message}`);
+      return null;
+    });
+  }
+
+  updateJson(FILES.messages, createMessagesDefault(), current => {
+    const currentState = getMessageState(current, eventKey);
+    currentState.summaryMessageId = null;
+    currentState.updatedAt = new Date().toISOString();
+    return current;
+  });
+  console.log(`[checkin-panel] ${eventKey}: removed stale summary message for open cycle`);
+  return true;
+}
+
 async function refreshCheckinMessage(eventKey, client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const channelId = settings.channels?.checkinChannelIds?.[eventKey];
@@ -52,6 +77,8 @@ async function refreshCheckinMessage(eventKey, client) {
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = getMessageState(messages, eventKey);
   const hasStaleChannelRef = state.channelId && String(state.channelId) !== String(channel.id);
+
+  await deleteSummaryMessageIfOpen({ channel, state, eventKey, event, settings });
 
   let message = hasStaleChannelRef ? null : await fetchMessage(channel, state.mainMessageId);
   if (message) {
