@@ -1,6 +1,7 @@
 'use strict';
 
 const { readEventData, updateEventData } = require('../events/event-repository');
+const { refreshLiveSchedule } = require('../live-schedule');
 const { buildKnockoutRounds } = require('./knockout-bracket');
 const { qualifyTeams } = require('./knockout-qualification');
 const { upsertKnockoutPost } = require('./knockout-posts');
@@ -109,6 +110,10 @@ async function createKnockoutPhase({ eventKey, actorUserId = null, client = null
       return event;
     });
   }
+
+  await refreshLiveSchedule(client, eventKey, readEventData(eventKey)).catch(error => {
+    console.warn(`[live-schedule] Refresh nach K.O.-Erstellung fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+  });
 
   return {
     ...result,
