@@ -70,6 +70,30 @@ function mergeMissingSettings(target, seed) {
   return changed;
 }
 
+function isConfiguredCheckinMap(map) {
+  return isPlainObject(map) && EVENT_KEYS.every(eventKey => typeof map[eventKey] === 'string' && map[eventKey].trim());
+}
+
+function repairCheckinChannelIdsFromSeed(settings, seed) {
+  const seedMap = seed?.channels?.checkinChannelIds;
+  if (!isConfiguredCheckinMap(seedMap)) return false;
+
+  settings.channels = settings.channels || {};
+  settings.channels.checkinChannelIds = settings.channels.checkinChannelIds || {};
+
+  const currentMap = settings.channels.checkinChannelIds;
+  const currentIds = EVENT_KEYS.map(eventKey => currentMap[eventKey]).filter(Boolean).map(String);
+  const hasMissing = EVENT_KEYS.some(eventKey => !currentMap[eventKey]);
+  const hasSharedLegacyChannel = currentIds.length > 1 && new Set(currentIds).size === 1;
+
+  if (!hasMissing && !hasSharedLegacyChannel) return false;
+
+  for (const eventKey of EVENT_KEYS) {
+    currentMap[eventKey] = String(seedMap[eventKey]);
+  }
+  return true;
+}
+
 function readSettingsSeed() {
   return fs.existsSync(FILES.settingsSeed)
     ? readJson(FILES.settingsSeed, createSettingsDefault())
@@ -118,7 +142,7 @@ function seedSettingsFile() {
   }
 
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const changed = mergeMissingSettings(settings, seed);
+  const changed = mergeMissingSettings(settings, seed) || repairCheckinChannelIdsFromSeed(settings, seed);
   if (changed) writeJsonAtomic(FILES.settings, settings);
   return settings;
 }
