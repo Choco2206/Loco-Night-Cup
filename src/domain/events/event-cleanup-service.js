@@ -4,6 +4,7 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createEventDefault, createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage } = require('../checkins/checkin-panel');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
+const { cleanupLiveScheduleForEvent } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
 const { EVENT_KEYS } = require('../../app/constants');
 
@@ -21,6 +22,7 @@ const KNOCKOUT_ROLE_NAMES = [
   'LNC K.O. Viertelfinale',
   'LNC K.O. Halbfinale',
   'LNC K.O. Finale',
+  'LNC K.O. Spiel um Platz 3',
   'LNC K.O. Platz 3',
 ];
 const autoCleanupTimers = new Map();
@@ -294,6 +296,10 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   await clearKnockoutRoleMembers(targetGuild, activeSettings, summary);
   await deleteGroupChannels(client, groupRefs, summary);
   await deleteKnockoutChannels(client, knockoutChannelIds, summary);
+  summary.liveScheduleCleaned = await cleanupLiveScheduleForEvent(client, eventKey).catch(error => {
+    console.warn(`Event cleanup could not clean live schedule for ${eventKey}: ${error.message}`);
+    return { cleaned: false, deletedMessageIds: [] };
+  });
 
   resetEventRuntime(eventKey, actorUserId);
   summary.eventReset = true;
