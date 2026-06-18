@@ -13,6 +13,7 @@ const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-se
 const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createKnockoutPhase } = require('../knockout');
 const { CEREMONY_DAY_LABELS, postHallOfFameCeremony, postHallOfFameTest } = require('../ceremony');
+const { ensureServerStructure } = require('../setup');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
@@ -39,6 +40,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_testdata_remove',
   'admin_simulate_groups',
   'admin_simulate_knockout',
+  'admin_server_setup',
 ]);
 const ADMIN_SELECT_IDS = new Set([
   'admin_bye_add_select',
@@ -162,6 +164,13 @@ function buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId) {
     .addOptions(Object.entries(CEREMONY_DAY_LABELS).map(([value, label]) => ({ label, value })));
 
   return new ActionRowBuilder().addComponents(select);
+}
+
+function summarizeSetupItems(items, label) {
+  if (!items.length) return `${label}: 0`;
+  const shown = items.slice(0, 8).map(item => item.name).join(', ');
+  const suffix = items.length > 8 ? `, +${items.length - 8} weitere` : '';
+  return `${label}: ${items.length} (${shown}${suffix})`;
 }
 
 function nextByeNumber(eventKey, byes) {
@@ -341,7 +350,6 @@ async function handleAdminSelect(interaction, client, settings) {
         `Erste Runde: ${result.knockout.firstRoundKey}`,
         result.post?.categoryId ? `Kategorie: ${result.post.categoryId}` : null,
         result.post?.overviewChannelId ? `Uebersicht: <#${result.post.overviewChannelId}>` : 'K.O.-Uebersicht konnte nicht erstellt/gepostet werden.',
-        result.post?.ceremonyChannelId ? `Siegerehrung: <#${result.post.ceremonyChannelId}>` : null,
         result.post?.roundPosts?.length ? `Rundenkanaele: ${result.post.roundPosts.length}` : null,
       ].filter(Boolean).join('\n'),
       components: [],
@@ -417,7 +425,9 @@ async function handleAdminSelect(interaction, client, settings) {
         result.placements?.secondTeamId ? `Platz 2: ${result.placements.second.displayName}` : null,
         result.placements?.thirdTeamId ? `Platz 3: ${result.placements.third.displayName}` : null,
         result.placements?.fourthTeamId ? `Platz 4: ${result.placements.fourth.displayName}` : null,
-        'Status: K.O. completed, Ceremony ist vorbereitet.',
+        result.ceremony?.posted
+          ? `Hall of Fame wurde automatisch in <#${result.ceremony.result.channelId}> gepostet.`
+          : 'Status: K.O. completed, Ceremony ist vorbereitet. Button Siegerehrung posten kann genutzt werden.',
       ].filter(Boolean).join('\n'),
       components: [],
     });
@@ -563,6 +573,28 @@ async function handleAdminInteraction(interaction, client) {
         content: 'Fuer welches Event soll die Siegerehrung gepostet werden?',
         components: [buildEventSelect('admin_ceremony_post_select', 'Event auswaehlen')],
         flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_server_setup') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      const result = await ensureServerStructure({
+        guild: interaction.guild,
+        actorUserId: interaction.user.id,
+      });
+      await interaction.editReply({
+        content: [
+          'Serverstruktur wurde geprueft und eingerichtet.',
+          summarizeSetupItems(result.roles.created, 'Rollen erstellt'),
+          summarizeSetupItems(result.roles.reused, 'Rollen wiederverwendet'),
+          summarizeSetupItems(result.categories.created, 'Kategorien erstellt'),
+          summarizeSetupItems(result.categories.reused, 'Kategorien wiederverwendet'),
+          summarizeSetupItems(result.channels.created, 'Kanaele erstellt'),
+          summarizeSetupItems(result.channels.reused, 'Kanaele wiederverwendet'),
+          result.roles.assigned.length ? 'Admin-Rolle wurde dir fuer dieses Setup zugewiesen.' : null,
+          'IDs wurden in settings.json gespeichert. Teams, Logos, Events und Check-ins wurden nicht geloescht oder zurueckgesetzt.',
+        ].filter(Boolean).join('\n'),
       });
       return true;
     }
