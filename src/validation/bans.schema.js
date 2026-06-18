@@ -10,14 +10,6 @@ const {
   requireSnowflakeOrNull,
 } = require('./common');
 
-const BAN_DURATIONS = {
-  late_withdrawal: 7,
-  no_show: 14,
-  left_tournament: 14,
-  disrespect: 14,
-  admin_other: 14,
-};
-
 function validateBans(data) {
   const errors = [];
   if (!requireObject(errors, data, 'bans root')) return errors;
@@ -39,10 +31,6 @@ function validateBans(data) {
     requireOneOf(errors, ban.reason, BAN_REASONS, `${path}.reason`);
     requireNonNegativeInteger(errors, ban.durationDays, `${path}.durationDays`);
 
-    if (BAN_DURATIONS[ban.reason] && ban.durationDays !== BAN_DURATIONS[ban.reason]) {
-      errors.push(`${path}.durationDays must be ${BAN_DURATIONS[ban.reason]} for ${ban.reason}`);
-    }
-
     if (requireObject(errors, ban.team, `${path}.team`)) {
       if (!ban.team.teamId || typeof ban.team.teamId !== 'string') errors.push(`${path}.team.teamId is required`);
       if (!ban.team.clubNameSnapshot || typeof ban.team.clubNameSnapshot !== 'string') {
@@ -56,7 +44,6 @@ function validateBans(data) {
     }
 
     if (requireArray(errors, ban.affectedUsers, `${path}.affectedUsers`)) {
-      if (ban.affectedUsers.length === 0) errors.push(`${path}.affectedUsers must not be empty`);
       ban.affectedUsers.forEach((user, userIndex) => {
         const userPath = `${path}.affectedUsers[${userIndex}]`;
         if (!requireObject(errors, user, userPath)) return;
