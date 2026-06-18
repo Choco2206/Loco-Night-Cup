@@ -1,6 +1,6 @@
 'use strict';
 
-const CHECKIN_EVENT_STATUSES = ['idle', 'checkin', 'cancelled', 'reset'];
+const CHECKIN_EVENT_STATUSES = ['idle', 'checkin', 'deadline_reached', 'draw_ready', 'cancelled', 'reset'];
 
 const EVENT_WEEKDAY_INDEX = {
   sunday: 0,
@@ -116,26 +116,29 @@ function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
     return { label: 'Geschlossen', phase: 'closed', canJoin: false, canLeave: false };
   }
 
+  const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
+  const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);
+  const isExplicitlyOpen = event.status === 'idle' ? true : event.checkin?.isOpen !== false;
+
+  if (lateWindowUntil) {
+    if (deadlineAt && now.getTime() <= deadlineAt.getTime()) {
+      const isOpen = isExplicitlyOpen;
+      return { label: isOpen ? 'Offen' : 'Geschlossen', phase: 'regular', canJoin: isOpen, canLeave: isOpen };
+    }
+
+    if (now.getTime() <= lateWindowUntil.getTime()) {
+      const isOpen = isExplicitlyOpen;
+      return { label: isOpen ? 'Late Window' : 'Geschlossen', phase: 'late', canJoin: isOpen, canLeave: isOpen };
+    }
+
+    return { label: 'Geschlossen', phase: 'closed_after_late', canJoin: false, canLeave: false };
+  }
+
   if (event.status === 'checkin' && event.checkin?.isOpen === true) {
     return { label: 'Offen', phase: 'manual_open', canJoin: true, canLeave: true };
   }
 
-  const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
-  const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);
-
-  if (lateWindowUntil) {
-    if (deadlineAt && now.getTime() <= deadlineAt.getTime()) {
-      return { label: 'Offen', phase: 'regular', canJoin: true, canLeave: true };
-    }
-
-    if (now.getTime() <= lateWindowUntil.getTime()) {
-      return { label: 'Late Window', phase: 'late', canJoin: true, canLeave: true };
-    }
-
-    return { label: 'Geschlossen', phase: 'closed_after_late', canJoin: false, canLeave: true };
-  }
-
-  return { label: 'Geschlossen', phase: 'closed', canJoin: false, canLeave: true };
+  return { label: 'Geschlossen', phase: 'closed', canJoin: false, canLeave: false };
 }
 
 function canAcceptCheckinActions(eventKey, event, settings, now = new Date()) {
