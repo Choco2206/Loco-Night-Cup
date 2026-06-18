@@ -4,13 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { AttachmentBuilder, ChannelType } = require('discord.js');
-const { FILES, ROOT_DIR, TEAM_LOGOS_DIR, updateJson } = require('../../storage');
-const { createMessagesDefault } = require('../../storage/defaults');
+const { FILES, ROOT_DIR, TEAM_LOGOS_DIR, readJson, updateJson } = require('../../storage');
+const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { getAutoCleanupScheduledAt, scheduleAutoCleanupForEvent } = require('../events/event-cleanup-service');
 const { findTeamById } = require('../teams/team-service');
 
-const HALL_OF_FAME_CHANNEL_ID = '1516915002957758616';
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
 
@@ -150,6 +149,20 @@ function getSelectedTeams({ firstTeamId, secondTeamId, thirdTeamId }) {
   return teams;
 }
 
+function readSettings() {
+  return readJson(FILES.settings, createSettingsDefault());
+}
+
+function saveHallOfFameChannelId(channelId) {
+  if (!channelId) return;
+  updateJson(FILES.settings, createSettingsDefault(), settings => {
+    settings.channels = settings.channels || {};
+    settings.channels.hallOfFameChannelId = String(channelId);
+    settings.meta = { ...(settings.meta || {}), updatedAt: new Date().toISOString() };
+    return settings;
+  });
+}
+
 async function renderHallOfFameTestImage({ dayKey, firstTeamId, secondTeamId, thirdTeamId }) {
   const bannerPath = resolveBannerPath(dayKey);
   const teams = getSelectedTeams({ firstTeamId, secondTeamId, thirdTeamId });
@@ -186,19 +199,26 @@ async function renderHallOfFameCeremonyImage({ dayKey, teams }) {
 }
 
 async function ensureHallOfFameChannel(guild) {
-  const configured = await guild.channels.fetch(HALL_OF_FAME_CHANNEL_ID).catch(() => null);
+  const settings = readSettings();
+  const configuredId = settings.channels?.hallOfFameChannelId || null;
+  const configured = configuredId ? await guild.channels.fetch(configuredId).catch(() => null) : null;
   if (configured?.type === ChannelType.GuildText) return configured;
 
   const existing = guild.channels.cache.find(channel => (
     channel.name === HALL_OF_FAME_CHANNEL_NAME && channel.type === ChannelType.GuildText
   ));
-  if (existing) return existing;
+  if (existing) {
+    saveHallOfFameChannelId(existing.id);
+    return existing;
+  }
 
-  return guild.channels.create({
+  const channel = await guild.channels.create({
     name: HALL_OF_FAME_CHANNEL_NAME,
     type: ChannelType.GuildText,
     reason: 'Loco Night Cup Hall of Fame',
   });
+  saveHallOfFameChannelId(channel.id);
+  return channel;
 }
 
 function getEventDayKey(eventKey, event) {
