@@ -1,13 +1,20 @@
 'use strict';
 
-const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const {
+  ActionRowBuilder,
+  ModalBuilder,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage, refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
-const { listVisibleTeams } = require('../teams/team-service');
+const { findTeamById, listVisibleTeams } = require('../teams/team-service');
+const { addTeamBan, listActiveBans, removeTeamBan } = require('../bans');
 const { resetEventForTesting } = require('../events/event-cleanup-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
@@ -29,6 +36,8 @@ const ADMIN_ACTIONS = new Set([
   'admin_knockout_create',
   'admin_teams_list',
   'admin_team_details',
+  'admin_team_ban',
+  'admin_team_unban',
   'admin_checkin_refresh',
   'admin_team_overview_refresh',
   'admin_ceremony_test',
@@ -54,12 +63,19 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_simulate_groups_select',
   'admin_simulate_knockout_select',
   'admin_ceremony_post_select',
+  'admin_team_ban_team_select',
+  'admin_team_unban_select',
 ]);
 const ADMIN_SELECT_PREFIXES = [
   'admin_hof_first_select',
   'admin_hof_second_select:',
   'admin_hof_third_select:',
   'admin_hof_day_select:',
+  'admin_team_ban_reason_select:',
+  'admin_team_ban_duration_select:',
+];
+const ADMIN_MODAL_PREFIXES = [
+  'admin_team_ban_manual_modal:',
 ];
 
 function readSettings() {
@@ -152,6 +168,83 @@ function buildTeamSelect(customId, placeholder, excludeTeamIds = []) {
       label: team.clubName.slice(0, 100),
       value: String(team.id),
       description: team.logo?.fileName ? `Logo: ${team.logo.fileName}`.slice(0, 100) : 'Logo fehlt',
+    })));
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+const BAN_REASON_OPTIONS = [
+  { label: 'Abmeldung nach Anmeldeschluss', value: 'late_withdrawal' },
+  { label: 'Nicht erschienen', value: 'no_show' },
+  { label: 'Turnier verlassen', value: 'left_tournament' },
+  { label: 'Ohne Abmeldung verlassen', value: 'left_tournament_no_notice' },
+  { label: 'Beleidigung/Respektlosigkeit', value: 'disrespect' },
+  { label: 'Sonstiger Regelverstoss', value: 'admin_other' },
+  { label: 'Manueller Grund', value: 'manual_reason' },
+];
+
+function buildBanReasonSelect(teamId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`admin_team_ban_reason_select:${teamId}`)
+      .setPlaceholder('Sperrgrund auswaehlen')
+      .addOptions(BAN_REASON_OPTIONS)
+  );
+}
+
+function buildBanDurationSelect(teamId, reason) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`admin_team_ban_duration_select:${teamId}:${reason}`)
+      .setPlaceholder('Dauer auswaehlen')
+      .addOptions([
+        { label: '7 Tage', value: '7' },
+        { label: '14 Tage', value: '14' },
+        { label: '30 Tage', value: '30' },
+        { label: 'Manuell', value: 'manual' },
+      ])
+  );
+}
+
+function buildBanManualModal(teamId, reason, durationValue) {
+  const modal = new ModalBuilder()
+    .setCustomId(`admin_team_ban_manual_modal:${teamId}:${reason}:${durationValue}`)
+    .setTitle('Team sperren');
+
+  const reasonInput = new TextInputBuilder()
+    .setCustomId('ban_reason')
+    .setLabel('Manueller Grund')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(reason === 'manual_reason')
+    .setMaxLength(120);
+
+  const daysInput = new TextInputBuilder()
+    .setCustomId('ban_days')
+    .setLabel('Dauer in Tagen')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(durationValue === 'manual')
+    .setMaxLength(3);
+
+  if (durationValue !== 'manual') daysInput.setValue(String(durationValue));
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(reasonInput),
+    new ActionRowBuilder().addComponents(daysInput)
+  );
+  return modal;
+}
+
+function buildActiveBanSelect() {
+  const activeBans = listActiveBans().filter(ban => ban.teamId || ban.team?.teamId || ban.targets?.teamId);
+  if (!activeBans.length) throw new Error('Aktuell gibt es keine aktiven Sperren.');
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('admin_team_unban_select')
+    .setPlaceholder('Sperre auswaehlen')
+    .addOptions(activeBans.slice(0, 25).map(ban => ({
+      label: String(ban.clubName || ban.team?.clubNameSnapshot || ban.teamId || 'Unbekanntes Team').slice(0, 100),
+      value: String(ban.teamId || ban.team?.teamId || ban.targets?.teamId),
+      description: String(ban.customReason || ban.reason || 'Sperre').slice(0, 100),
     })));
 
   return new ActionRowBuilder().addComponents(select);
@@ -278,6 +371,61 @@ async function handleAdminSelect(interaction, client, settings) {
         `2. ${result.teams.second.clubName}`,
         `3. ${result.teams.third.clubName}`,
       ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
+  if (interaction.customId === 'admin_team_ban_team_select') {
+    const teamId = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+    await interaction.update({
+      content: `Sperrgrund fuer **${team.clubName}** auswaehlen.`,
+      components: [buildBanReasonSelect(team.id)],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_ban_reason_select:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const reason = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+    await interaction.update({
+      content: `Sperrdauer fuer **${team.clubName}** auswaehlen.`,
+      components: [buildBanDurationSelect(team.id, reason)],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_ban_duration_select:')) {
+    const [, teamId, reason] = interaction.customId.split(':');
+    const durationValue = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+
+    if (durationValue === 'manual' || reason === 'manual_reason') {
+      await interaction.showModal(buildBanManualModal(team.id, reason, durationValue));
+      return true;
+    }
+
+    await interaction.deferUpdate();
+    const ban = addTeamBan(team, reason, interaction.user.id, Number(durationValue));
+    await interaction.editReply({
+      content: `Team **${team.clubName}** wurde bis ${new Date(ban.bannedUntilDate || ban.expiresAt).toLocaleString('de-DE')} gesperrt.`,
+      components: [],
+    });
+    return true;
+  }
+
+  if (interaction.customId === 'admin_team_unban_select') {
+    const teamId = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const removed = removeTeamBan(teamId, interaction.user.id, 'admin_removed');
+    if (!removed) throw new Error('Fuer dieses Team wurde keine aktive Sperre gefunden.');
+    await interaction.editReply({
+      content: `Sperre fuer **${removed.clubName || removed.team?.clubNameSnapshot || teamId}** wurde entfernt.`,
       components: [],
     });
     return true;
@@ -455,16 +603,46 @@ async function handleAdminSelect(interaction, client, settings) {
   throw new Error('Unbekannte Admin-Auswahl.');
 }
 
+async function handleAdminModal(interaction) {
+  if (interaction.customId.startsWith('admin_team_ban_manual_modal:')) {
+    const [, teamId, selectedReason, durationValue] = interaction.customId.split(':');
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+
+    const customReason = interaction.fields.getTextInputValue('ban_reason')?.trim();
+    const rawDays = interaction.fields.getTextInputValue('ban_days')?.trim();
+    const durationDays = Number(rawDays || durationValue || 14);
+    if (!Number.isInteger(durationDays) || durationDays <= 0 || durationDays > 365) {
+      throw new Error('Die Sperrdauer muss zwischen 1 und 365 Tagen liegen.');
+    }
+
+    const reason = selectedReason === 'manual_reason'
+      ? customReason
+      : (customReason || selectedReason);
+    const ban = addTeamBan(team, reason, interaction.user.id, durationDays);
+
+    await interaction.reply({
+      content: `Team **${team.clubName}** wurde bis ${new Date(ban.bannedUntilDate || ban.expiresAt).toLocaleString('de-DE')} gesperrt.`,
+      flags: EPHEMERAL,
+    });
+    return true;
+  }
+
+  return false;
+}
+
 async function handleAdminInteraction(interaction, client) {
   const isAdminButton = interaction.isButton?.() && ADMIN_ACTIONS.has(interaction.customId);
   const isAdminSelect = interaction.isStringSelectMenu?.() && isAdminSelectId(interaction.customId);
-  if (!isAdminButton && !isAdminSelect) return false;
+  const isAdminModal = interaction.isModalSubmit?.() && ADMIN_MODAL_PREFIXES.some(prefix => interaction.customId.startsWith(prefix));
+  if (!isAdminButton && !isAdminSelect && !isAdminModal) return false;
 
   const settings = readSettings();
 
   try {
     await requireAdminAccess(interaction, settings);
 
+    if (isAdminModal) return await handleAdminModal(interaction);
     if (isAdminSelect) return await handleAdminSelect(interaction, client, settings);
 
     if (interaction.customId === 'admin_bye_add') {
@@ -595,6 +773,24 @@ async function handleAdminInteraction(interaction, client) {
           result.roles.assigned.length ? 'Admin-Rolle wurde dir fuer dieses Setup zugewiesen.' : null,
           'IDs wurden in settings.json gespeichert. Teams, Logos, Events und Check-ins wurden nicht geloescht oder zurueckgesetzt.',
         ].filter(Boolean).join('\n'),
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_team_ban') {
+      await interaction.reply({
+        content: 'Welches Team soll gesperrt werden?',
+        components: [buildTeamSelect('admin_team_ban_team_select', 'Team auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_team_unban') {
+      await interaction.reply({
+        content: 'Welche aktive Sperre soll entfernt werden?',
+        components: [buildActiveBanSelect()],
+        flags: EPHEMERAL,
       });
       return true;
     }
