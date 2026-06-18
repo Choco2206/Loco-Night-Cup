@@ -17,7 +17,7 @@ function buildAdminPanelPayload() {
     .addFields(
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
-      { name: 'TEAMS', value: 'Teams anzeigen\nTeamdetails', inline: true },
+      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nServerstruktur einrichten', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen\nSiegerehrung posten', inline: true }
     )
     .setTimestamp(new Date());
@@ -39,7 +39,8 @@ function buildAdminPanelPayload() {
 
   const teamsRow = new ActionRowBuilder().addComponents(
     button('admin_teams_list', 'Teams anzeigen', ButtonStyle.Secondary),
-    button('admin_team_details', 'Teamdetails', ButtonStyle.Secondary)
+    button('admin_team_details', 'Teamdetails', ButtonStyle.Secondary),
+    button('admin_server_setup', 'Serverstruktur einrichten', ButtonStyle.Primary).setEmoji('🛠️')
   );
 
   const testsRow = new ActionRowBuilder().addComponents(
