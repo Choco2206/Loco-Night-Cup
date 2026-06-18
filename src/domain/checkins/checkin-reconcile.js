@@ -212,8 +212,12 @@ function markDrawReady(eventKey, now) {
 
 function finalizeAfterLate(eventKey, settings, now) {
   const current = readEventData(eventKey);
-  if (current.status === 'cancelled' || current.status === 'draw_ready' || current.format?.lockedAt) {
+  if (current.status === 'cancelled' || current.status === 'draw_ready') {
     return { changed: false, event: current, finalState: current.status };
+  }
+  if (current.format?.lockedAt) {
+    const ready = markDrawReady(eventKey, now);
+    return { changed: true, event: ready, finalState: 'draw_ready' };
   }
 
   updateEventData(eventKey, event => recalculateCheckinFormat(event, settings, now));
