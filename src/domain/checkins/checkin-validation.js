@@ -23,7 +23,7 @@ function assertEventSupportsPhaseThree(event) {
 function assertCheckinActionAllowed({ eventKey, event, settings, now = new Date() }) {
   assertEventSupportsPhaseThree(event);
   if (!canAcceptCheckinActions(eventKey, event, settings, now)) {
-    throw new Error('Der Check-in ist aktuell geschlossen.');
+    throw new Error('Die Anmeldung ist bereits geschlossen.');
   }
 }
 
