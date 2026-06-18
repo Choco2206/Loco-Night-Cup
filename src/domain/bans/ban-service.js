@@ -6,6 +6,7 @@ const { createBansDefault, createMessagesDefault, createSettingsDefault } = requ
 
 const DEFAULT_DURATION_DAYS = 14;
 const BERLIN_TIME_ZONE = 'Europe/Berlin';
+const VALID_REASONS = new Set(['late_withdrawal', 'no_show', 'left_tournament', 'disrespect', 'admin_other']);
 
 let activeClient = null;
 let cleanupTimer = null;
@@ -108,6 +109,18 @@ function isTeamOrUserBanned(input, now = new Date()) {
   return findActiveBanForTeamOrManagers(input, null, now);
 }
 
+function normalizeBanReason(reason) {
+  const raw = String(reason || '').trim();
+  if (raw === 'left_tournament_no_notice') {
+    return { reason: 'left_tournament', customReason: 'Gruppenphase oder K.O.-Phase ohne Abmeldung verlassen' };
+  }
+  if (VALID_REASONS.has(raw)) return { reason: raw, customReason: null };
+  return {
+    reason: 'admin_other',
+    customReason: raw || null,
+  };
+}
+
 function createTeamBanEntry(team, reason, bannedByUserId = null, durationDays = DEFAULT_DURATION_DAYS, now = new Date()) {
   if (!team?.id) throw new Error('Team fuer Sperre wurde nicht gefunden.');
   const timestamp = nowIso(now);
@@ -115,11 +128,13 @@ function createTeamBanEntry(team, reason, bannedByUserId = null, durationDays = 
   const managerId = getManagerId(team);
   const coManagerIds = getCoManagerIds(team);
   const affectedUsers = getAffectedUsers(team);
+  const normalizedReason = normalizeBanReason(reason);
 
   return {
     id: createBanId(),
     status: 'active',
-    reason: reason || 'admin_other',
+    reason: normalizedReason.reason,
+    customReason: normalizedReason.customReason,
     durationDays: Number(durationDays || DEFAULT_DURATION_DAYS),
     teamId: String(team.id),
     clubName: team.clubName || String(team.id),
@@ -164,7 +179,42 @@ function addTeamBan(team, reason, bannedByUserId = null, durationDays = DEFAULT_
     bans: [...(data.bans || []), ban],
   }));
   refreshBanlistMessage().catch(error => console.warn(`[ban-service] banlist refresh failed: ${error.message}`));
+  postLogMessage(`Team **${ban.clubName}** wurde gesperrt. Grund: ${getBanReasonText(ban)} | Bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`).catch(() => null);
   return ban;
+}
+
+function listActiveBans(now = new Date()) {
+  return readBansData().bans.filter(ban => isBanActive(ban, now));
+}
+
+function removeTeamBan(teamId, removedByUserId = null, reason = null) {
+  const id = String(teamId || '');
+  let removedBan = null;
+
+  updateJson(FILES.bans, createBansDefault(), data => {
+    const next = [];
+    for (const ban of data.bans || []) {
+      if (!removedBan && ban?.status === 'active' && String(getBanTeamId(ban)) === id) {
+        removedBan = {
+          ...ban,
+          status: 'revoked',
+          resolvedAt: nowIso(),
+          resolvedByUserId: removedByUserId ? String(removedByUserId) : null,
+          resolutionReason: reason || 'admin_removed',
+        };
+        continue;
+      }
+      next.push(ban);
+    }
+    return { ...data, bans: next };
+  });
+
+  if (removedBan) {
+    refreshBanlistMessage().catch(error => console.warn(`[ban-service] banlist refresh failed: ${error.message}`));
+    postLogMessage(`Sperre fuer **${removedBan.clubName || removedBan.team?.clubNameSnapshot || id}** wurde entfernt.`).catch(() => null);
+  }
+
+  return removedBan;
 }
 
 function formatDate(value) {
@@ -184,9 +234,13 @@ function formatReason(reason) {
     no_show: 'Eingecheckt, aber nicht erschienen',
     left_tournament: 'Turnier verlassen',
     disrespect: 'Beleidigung/Respektlosigkeit',
-    admin_other: 'Sonstiger Regelverstoss',
+    admin_other: 'Sonstiger Regelverstoß',
   };
   return labels[reason] || String(reason || 'Nicht angegeben');
+}
+
+function getBanReasonText(ban) {
+  return ban?.customReason || formatReason(ban?.reason);
 }
 
 function formatMentions(userIds) {
@@ -194,24 +248,34 @@ function formatMentions(userIds) {
   return ids.length ? ids.map(userId => `<@${userId}>`).join(', ') : '-';
 }
 
+async function postLogMessage(content) {
+  const settings = readSettings();
+  const channelId = settings.channels?.logChannelId;
+  if (!activeClient || !channelId) return false;
+  const channel = await activeClient.channels.fetch(channelId).catch(() => null);
+  if (!channel?.send) return false;
+  await channel.send({ content, allowedMentions: { parse: ['users'] } }).catch(() => null);
+  return true;
+}
+
 function buildBanInfoEmbed() {
   return new EmbedBuilder()
     .setTitle('🚫 LOCO NIGHT CUP | SPERRLISTE')
     .setColor(0xff0000)
     .setDescription([
-      'Hier landen Teams, die den Turnierabend kaputt machen, nicht auftauchen oder den Ablauf unnoetig bremsen.',
+      'Hier landen Teams, die den Turnierabend kaputt machen, nicht auftauchen oder den Ablauf unnötig bremsen.',
       '',
-      '**Gruende:**',
+      '**Gründe:**',
       '- Eingecheckt, aber nicht erschienen',
-      '- Waehrend laufendem Turnierbetrieb rausgegangen',
+      '- Während laufendem Turnierbetrieb rausgegangen',
       '- Gruppenphase oder K.O.-Phase ohne Abmeldung verlassen',
       '- Beleidigungen, Respektlosigkeit oder unsportliches Verhalten',
-      '- Sonstige schwere Regelverstoesse',
+      '- Sonstige schwere Regelverstöße',
       '',
       '**Dauer:**',
       '- Standardsperre 14 Tage',
       '- abgelaufene Sperren automatisch entfernen',
-      '- taegliche Pruefung um 00:00 Uhr',
+      '- tägliche Prüfung um 00:00 Uhr',
     ].join('\n'));
 }
 
@@ -224,13 +288,12 @@ function buildBanListContent(now = new Date()) {
   const blocks = activeBans.map((ban, index) => [
     `**${index + 1}. ${ban.clubName || ban.team?.clubNameSnapshot || getBanTeamId(ban) || 'Unbekanntes Team'}**`,
     `VM / Co-VM: ${formatMentions([ban.managerId, ...(ban.coManagerIds || []), ...getBanUserIds(ban)])}`,
-    `Grund: ${formatReason(ban.reason)}`,
+    `Grund: ${getBanReasonText(ban)}`,
     `Sperre ab: ${formatDate(ban.bannedAtDate || ban.startsAt || ban.createdAt)}`,
     `Sperre bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`,
   ].join('\n'));
 
-  const content = `## 🔴 Aktuell gesperrte Teams\n\n${blocks.join('\n\n')}`;
-  return content.length <= 2000 ? content : `${content.slice(0, 1900)}\n\n... weitere Sperren gekuerzt.`;
+  return `## 🔴 Aktuell gesperrte Teams\n\n${blocks.join('\n\n')}`;
 }
 
 async function fetchMessage(channel, messageId) {
@@ -246,7 +309,7 @@ async function refreshBanlistMessage(client = activeClient) {
     return false;
   }
   if (!client) {
-    console.warn('[ban-service] Kein Discord-Client verfuegbar. Sperrliste kann nicht gepostet werden.');
+    console.warn('[ban-service] Kein Discord-Client verfügbar. Sperrliste kann nicht gepostet werden.');
     return false;
   }
 
@@ -361,5 +424,7 @@ module.exports = {
   initBanService,
   isBanActive,
   isTeamOrUserBanned,
+  listActiveBans,
+  removeTeamBan,
   refreshBanlistMessage,
 };
