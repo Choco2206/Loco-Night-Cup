@@ -214,10 +214,12 @@ function createMessagesDefault() {
     liveSchedule: {
       channelId: null,
       currentEventKey: null,
+      cycleKey: null,
       phase: null,
       headerMessageId: null,
       groupMessageIds: {},
       knockoutMessageIds: {},
+      cleanupStatus: null,
       createdAt: null,
       updatedAt: null,
     },
