@@ -10,6 +10,7 @@ const { ensureGroupRolesAndMembers } = require('../groups/group-roles');
 const { ensureGroupChannel, getGroupUserIds } = require('../groups/group-channels');
 const { updateGroupMessageRefs, upsertGroupPosts } = require('../groups/group-posts');
 const { createInitialReleaseState, maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
+const { refreshLiveSchedule } = require('../live-schedule');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -252,6 +253,9 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
 
   await maybeReleaseNextSlot(client, eventKey, now);
   scheduleEvent(client, eventKey);
+  await refreshLiveSchedule(client, eventKey).catch(error => {
+    console.warn(`[live-schedule] Refresh nach Gruppenziehung fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+  });
 
   return {
     ...drawResult,
