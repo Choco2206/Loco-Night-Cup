@@ -11,16 +11,19 @@ const { refreshCheckinMessage } = require('./checkin-panel');
 const {
   getDeadlineAt,
   getDrawAt,
+  ensureEventCycle,
   getLateWindowUntil,
   getTournamentStartAt,
 } = require('./checkin-schedule');
 
-const RECONCILE_INTERVAL_MS = 60 * 1000;
+const SAFETY_RECONCILE_INTERVAL_MS = 5 * 60 * 1000;
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const RECONCILE_SKIP_STATUSES = new Set(['knockout', 'ceremony', 'completed', 'reset']);
 
-let reconcileTimer = null;
+let safetyReconcileTimer = null;
 let activeClient = null;
 let isRunning = false;
+const eventTimers = new Map();
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -101,6 +104,84 @@ function isBefore(date, now) {
 
 function isReached(date, now) {
   return date && now.getTime() >= date.getTime();
+}
+
+function clearEventTimer(eventKey) {
+  const timer = eventTimers.get(eventKey);
+  if (timer) clearTimeout(timer);
+  eventTimers.delete(eventKey);
+}
+
+function setEventTimer(client, eventKey, targetAt) {
+  clearEventTimer(eventKey);
+  if (!targetAt) return;
+
+  const delay = Math.max(0, new Date(targetAt).getTime() - Date.now());
+  const timer = setTimeout(async () => {
+    clearEventTimer(eventKey);
+    await reconcileCheckinEvent(eventKey, client).catch(error => {
+      console.warn(`[checkin-reconcile] ${eventKey}: scheduled reconcile failed: ${error.message}`);
+    });
+    scheduleCheckinEvent(client, eventKey);
+  }, Math.min(delay, MAX_TIMEOUT_MS));
+
+  if (typeof timer.unref === 'function') timer.unref();
+  eventTimers.set(eventKey, timer);
+}
+
+function getNextTarget(event, dates, now) {
+  const candidates = [];
+
+  if (['idle', 'checkin', 'checkin_open'].includes(event.status)) {
+    candidates.push(dates.deadlineAt);
+  }
+  if (['idle', 'checkin', 'checkin_open', 'deadline_reached', 'checkin_closed'].includes(event.status)) {
+    candidates.push(dates.lateWindowUntil, dates.drawAt);
+  }
+  if (['draw_ready', 'groups', 'groups_running'].includes(event.status)) {
+    candidates.push(dates.drawAt, dates.startAt);
+  }
+  candidates.push(dates.resetAt);
+
+  return candidates
+    .filter(date => date && date.getTime() > now.getTime())
+    .sort((a, b) => a.getTime() - b.getTime())[0] || null;
+}
+
+function repairEventCycle(eventKey, settings, now) {
+  let changed = false;
+  let eventAfter = null;
+
+  updateEventData(eventKey, event => {
+    changed = ensureEventCycle(eventKey, event, settings, now);
+    if (changed) event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
+    eventAfter = event;
+    return event;
+  });
+
+  if (changed) console.log(`[checkin-reconcile] ${eventKey} cycle_repaired`);
+  return eventAfter || readEventData(eventKey);
+}
+
+function scheduleCheckinEvent(client, eventKey, now = new Date()) {
+  const settings = readSettings();
+  const event = repairEventCycle(eventKey, settings, now);
+  if (RECONCILE_SKIP_STATUSES.has(event.status) || event.status === 'cancelled') {
+    clearEventTimer(eventKey);
+    return null;
+  }
+
+  const dates = {
+    deadlineAt: getDeadlineAt(eventKey, event, settings, now),
+    lateWindowUntil: getLateWindowUntil(eventKey, event, settings, now),
+    drawAt: getDrawAt(eventKey, event, settings, now),
+    startAt: getTournamentStartAt(eventKey, event, settings, now),
+    resetAt: event.schedule?.resetAt ? new Date(event.schedule.resetAt) : null,
+  };
+  const target = getNextTarget(event, dates, now);
+  setEventTimer(client, eventKey, target);
+  if (target) console.log(`[checkin-reconcile] ${eventKey} scheduled ${target.toISOString()}`);
+  return target;
 }
 
 function markCheckinOpen(eventKey, now) {
@@ -367,7 +448,7 @@ async function maybeStartGroups({ client, eventKey, event, startAt, now }) {
 
 async function reconcileCheckinEvent(eventKey, client = activeClient, now = new Date()) {
   const settings = readSettings();
-  const event = readEventData(eventKey);
+  const event = repairEventCycle(eventKey, settings, now);
   if (RECONCILE_SKIP_STATUSES.has(event.status) || event.status === 'cancelled') return { changed: false, event };
 
   const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
@@ -442,34 +523,46 @@ async function reconcileAllCheckins(client = activeClient, now = new Date()) {
   }
 }
 
+function scheduleAllCheckins(client = activeClient, now = new Date()) {
+  for (const eventKey of EVENT_KEYS) scheduleCheckinEvent(client, eventKey, now);
+}
+
 function startCheckinReconcile(client) {
   activeClient = client;
-  if (reconcileTimer) clearInterval(reconcileTimer);
+  if (safetyReconcileTimer) clearInterval(safetyReconcileTimer);
+  for (const eventKey of EVENT_KEYS) clearEventTimer(eventKey);
 
   reconcileAllCheckins(client).catch(error => {
     console.warn(`[checkin-reconcile] startup reconcile failed: ${error.message}`);
+  }).finally(() => {
+    scheduleAllCheckins(client);
   });
 
-  reconcileTimer = setInterval(() => {
+  safetyReconcileTimer = setInterval(() => {
     reconcileAllCheckins(client).catch(error => {
-      console.warn(`[checkin-reconcile] interval reconcile failed: ${error.message}`);
+      console.warn(`[checkin-reconcile] safety reconcile failed: ${error.message}`);
+    }).finally(() => {
+      scheduleAllCheckins(client);
     });
-  }, RECONCILE_INTERVAL_MS);
+  }, SAFETY_RECONCILE_INTERVAL_MS);
 
-  if (typeof reconcileTimer.unref === 'function') reconcileTimer.unref();
-  console.log(`[checkin-reconcile] started interval every ${RECONCILE_INTERVAL_MS / 1000}s`);
-  return reconcileTimer;
+  if (typeof safetyReconcileTimer.unref === 'function') safetyReconcileTimer.unref();
+  console.log(`[checkin-reconcile] started scheduled timers with safety every ${SAFETY_RECONCILE_INTERVAL_MS / 1000}s`);
+  return safetyReconcileTimer;
 }
 
 function stopCheckinReconcile() {
-  if (reconcileTimer) clearInterval(reconcileTimer);
-  reconcileTimer = null;
+  if (safetyReconcileTimer) clearInterval(safetyReconcileTimer);
+  safetyReconcileTimer = null;
+  for (const eventKey of EVENT_KEYS) clearEventTimer(eventKey);
 }
 
 module.exports = {
-  RECONCILE_INTERVAL_MS,
+  SAFETY_RECONCILE_INTERVAL_MS,
   reconcileAllCheckins,
   reconcileCheckinEvent,
+  scheduleAllCheckins,
+  scheduleCheckinEvent,
   startCheckinReconcile,
   stopCheckinReconcile,
 };
