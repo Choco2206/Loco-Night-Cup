@@ -36,21 +36,30 @@ function createEditPayload(payload) {
 async function refreshCheckinMessage(eventKey, client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const channelId = settings.channels?.checkinChannelIds?.[eventKey];
-  if (!channelId) return false;
+  if (!channelId) {
+    console.warn(`[checkin-panel] ${eventKey}: no check-in channel configured`);
+    return false;
+  }
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel) return false;
+  if (!channel?.send) {
+    console.warn(`[checkin-panel] ${eventKey}: check-in channel ${channelId} not found or not writable`);
+    return false;
+  }
 
   const { event } = getPublicCheckinState(eventKey);
   const payload = buildCheckinMessagePayload(eventKey, event, settings);
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = getMessageState(messages, eventKey);
+  const hasStaleChannelRef = state.channelId && String(state.channelId) !== String(channel.id);
 
-  let message = await fetchMessage(channel, state.mainMessageId);
+  let message = hasStaleChannelRef ? null : await fetchMessage(channel, state.mainMessageId);
   if (message) {
     await message.edit(createEditPayload(payload));
+    console.log(`[checkin-panel] ${eventKey}: refreshed message ${message.id} in channel ${channel.id}`);
   } else {
     message = await channel.send(payload);
+    console.log(`[checkin-panel] ${eventKey}: posted message ${message.id} in channel ${channel.id}`);
   }
 
   const timestamp = new Date().toISOString();
@@ -68,9 +77,12 @@ async function refreshCheckinMessage(eventKey, client) {
 
 async function refreshCheckinMessages(eventKeys, client) {
   const uniqueKeys = [...new Set(eventKeys || [])].filter(eventKey => EVENT_KEYS.includes(eventKey));
+  let refreshed = 0;
   for (const eventKey of uniqueKeys) {
-    await refreshCheckinMessage(eventKey, client);
+    if (await refreshCheckinMessage(eventKey, client)) refreshed += 1;
   }
+  console.log(`[checkin-panel] refreshed ${refreshed}/${uniqueKeys.length} check-in panels`);
+  return refreshed;
 }
 
 async function ensureAllCheckinMessages(client) {
