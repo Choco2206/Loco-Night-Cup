@@ -1,22 +1,23 @@
 {
   "version": 1,
   "guild": {
-    "guildId": "1516390719411982346"
+    "guildId": null
   },
   "roles": {
-    "adminRoleIds": ["1516427696526200902"],
-    "cupLeadRoleIds": ["1516427734136520918"],
-    "playerRoleId": "1516428987251953684",
-    "managerRoleId": "1516428922387169321",
+    "adminRoleIds": [],
+    "cupLeadRoleIds": [],
+    "playerRoleId": null,
+    "managerRoleId": null,
+    "coManagerRoleId": null,
     "groupRoleIds": {
-      "A": "1516429048874795093",
-      "B": "1516429089865597109",
-      "C": "1516429117178908842",
-      "D": "1516429139949654187",
-      "E": "1516429168676569269",
-      "F": "1516429198594674708",
-      "G": "1516429226264236082",
-      "H": "1516429256010240062"
+      "A": null,
+      "B": null,
+      "C": null,
+      "D": null,
+      "E": null,
+      "F": null,
+      "G": null,
+      "H": null
     },
     "knockoutRoleIds": {
       "round_of_16": null,
@@ -27,25 +28,34 @@
     }
   },
   "channels": {
-    "welcomeChannelId": "1516429491704955072",
-    "roleSelectChannelId": "1516543498113908866",
-    "teamRegistrationChannelId": "1516429663457775687",
-    "registeredTeamsChannelId": "1516429682843848935",
+    "welcomeChannelId": null,
+    "roleSelectChannelId": null,
+    "teamRegistrationChannelId": null,
+    "registeredTeamsChannelId": null,
     "rulesChannelId": null,
     "banlistChannelId": null,
-    "adminPanelChannelId": "1516429821524316251",
-    "announcementChannelId": "1516429491704955072",
-    "liveScheduleChannelId": "1516429776070508555",
+    "adminPanelChannelId": null,
+    "announcementChannelId": null,
+    "liveScheduleChannelId": null,
     "teamSearchChannelId": null,
     "helperSearchChannelId": null,
+    "hallOfFameChannelId": null,
+    "logChannelId": null,
+    "rulebookChannelId": null,
+    "chatChannelId": null,
+    "cooperationChannelId": null,
+    "feedbackChannelId": null,
+    "managerSupportChannelId": null,
+    "playerSearchChannelId": null,
+    "helperAvailableChannelId": null,
     "checkinChannelIds": {
-      "monday": "1516429727626170478",
-      "tuesday": "1516429727626170478",
-      "wednesday": "1516429727626170478",
-      "thursday": "1516429727626170478",
-      "friday": "1516429727626170478",
-      "saturday": "1516429727626170478",
-      "sunday": "1516429727626170478"
+      "monday": null,
+      "tuesday": null,
+      "wednesday": null,
+      "thursday": null,
+      "friday": null,
+      "saturday": null,
+      "sunday": null
     },
     "groupChannelIds": {
       "A": null,
@@ -57,6 +67,7 @@
       "G": null,
       "H": null
     },
+    "knockoutOverviewChannelId": null,
     "knockoutChannelIds": {
       "round_of_16": null,
       "quarter_final": null,
@@ -69,14 +80,23 @@
     "checkinBannerPath": "data/assets/check-in.png"
   },
   "categories": {
-    "checkinCategoryId": "1516390944268750890",
-    "groupCategoryId": "1516423873233424384",
+    "welcomeCategoryId": null,
+    "systemCategoryId": null,
+    "accessCategoryId": null,
+    "nightHubCategoryId": null,
+    "managerCategoryId": null,
+    "publicScheduleCategoryId": null,
+    "nightEventsCategoryId": null,
+    "searchCategoryId": null,
+    "groupsCategoryId": null,
+    "checkinCategoryId": null,
+    "groupCategoryId": null,
     "knockoutCategoryId": null,
     "archiveCategoryId": null
   },
   "permissions": {
-    "adminRoleIds": ["1516427696526200902"],
-    "cupLeadRoleIds": ["1516427734136520918"],
+    "adminRoleIds": [],
+    "cupLeadRoleIds": [],
     "adminActions": {
       "teamDetails": ["admin", "cup_lead"],
       "editTeam": ["admin", "cup_lead"],
@@ -107,7 +127,6 @@
         "lateWindowUntilTime": "22:15",
         "drawTime": "22:20",
         "tournamentStartTime": "22:30",
-        "resetTime": "07:00",
         "startIsNextDay": false
       },
       "weekend_night": {
@@ -115,7 +134,6 @@
         "lateWindowUntilTime": "23:45",
         "drawTime": "23:50",
         "tournamentStartTime": "00:00",
-        "resetTime": "07:00",
         "startIsNextDay": true
       }
     }
