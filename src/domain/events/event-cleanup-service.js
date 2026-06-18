@@ -2,6 +2,7 @@
 
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createEventDefault, createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
+const { ensureEventCycle } = require('../checkins/checkin-schedule');
 const { refreshCheckinMessage } = require('../checkins/checkin-panel');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { cleanupLiveScheduleForEvent } = require('../live-schedule');
@@ -196,6 +197,7 @@ function nextEventDate(eventKey, now = new Date()) {
 }
 
 function prepareNextCheckin(event, eventKey, timestamp) {
+  const settings = readJson(FILES.settings, createSettingsDefault());
   event.status = 'checkin';
   event.cycle = {
     ...(event.cycle || {}),
@@ -212,6 +214,7 @@ function prepareNextCheckin(event, eventKey, timestamp) {
     waitlistTeamIds: [],
     lateLeaveBans: [],
   };
+  ensureEventCycle(eventKey, event, settings, new Date(timestamp));
 }
 
 function resetEventRuntime(eventKey, actorUserId, { openNextCheckin = true } = {}) {
