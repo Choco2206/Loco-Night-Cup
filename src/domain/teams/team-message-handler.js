@@ -2,6 +2,7 @@
 
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
+const { setTeamManagerNickname } = require('../nicknames');
 const { saveLogoFromMessage } = require('./team-logos');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 
@@ -54,6 +55,10 @@ async function handleMessage(message, client) {
     }
 
     if (result.status !== 'saved') return false;
+
+    if (result.team?.manager?.userId) {
+      await setTeamManagerNickname(message.guild, result.team.manager.userId, result.team).catch(() => null);
+    }
 
     await refreshRegisteredTeamsOverview(client);
     await deleteInstructionMessage(message.channel, result.instructionMessageId);
