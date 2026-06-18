@@ -33,9 +33,12 @@ const KNOCKOUT_ROUNDS = [
 const EVENT_STATUSES = [
   'idle',
   'checkin',
+  'checkin_open',
   'deadline_reached',
+  'checkin_closed',
   'draw_ready',
   'groups',
+  'groups_running',
   'knockout',
   'ceremony',
   'completed',
