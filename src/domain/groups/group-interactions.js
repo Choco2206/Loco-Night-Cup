@@ -316,6 +316,7 @@ async function notifyAdminDecision(interaction, match) {
 }
 
 async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, selectedParticipantKey, client) {
+  await interaction.deferReply({ flags: EPHEMERAL });
   const decodedParticipantKey = decodeURIComponent(selectedParticipantKey);
   const outcome = submitTeamResult({
     eventKey,
@@ -338,13 +339,14 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
     : outcome.status === 'admin_decision_required'
       ? 'Ergebnis gespeichert. Es ist eine Admin-Entscheidung erforderlich.'
       : 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.';
-  await interaction.reply({ content: message, flags: EPHEMERAL });
+  await interaction.editReply({ content: message });
   return true;
 }
 
 async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, client) {
+  await interaction.deferReply({ flags: EPHEMERAL });
   if (!await isAdminAllowed(interaction)) {
-    await interaction.reply({ content: 'Du darfst kein Admin-Ergebnis setzen.', flags: EPHEMERAL });
+    await interaction.editReply({ content: 'Du darfst kein Admin-Ergebnis setzen.' });
     return true;
   }
 
@@ -359,9 +361,8 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
 
   await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
   await afterGroupResultConfirmed(client, eventKey);
-  await interaction.reply({
+  await interaction.editReply({
     content: 'Admin-Ergebnis gesetzt. Tabelle und Spielplan wurden aktualisiert.',
-    flags: EPHEMERAL,
   });
   return true;
 }

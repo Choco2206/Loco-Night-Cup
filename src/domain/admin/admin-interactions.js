@@ -2,6 +2,8 @@
 
 const {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ModalBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
@@ -71,12 +73,17 @@ const ADMIN_SELECT_PREFIXES = [
   'admin_hof_second_select:',
   'admin_hof_third_select:',
   'admin_hof_day_select:',
+  'admin_team_ban_team_select:',
   'admin_team_ban_reason_select:',
   'admin_team_ban_duration_select:',
+];
+const ADMIN_BUTTON_PREFIXES = [
+  'admin_team_ban_page:',
 ];
 const ADMIN_MODAL_PREFIXES = [
   'admin_team_ban_manual_modal:',
 ];
+const TEAM_BAN_PAGE_SIZE = 25;
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -171,6 +178,55 @@ function buildTeamSelect(customId, placeholder, excludeTeamIds = []) {
     })));
 
   return new ActionRowBuilder().addComponents(select);
+}
+
+function clampPage(page, totalPages) {
+  const parsed = Number(page);
+  if (!Number.isInteger(parsed)) return 0;
+  return Math.min(Math.max(parsed, 0), Math.max(totalPages - 1, 0));
+}
+
+function buildTeamBanSelectPayload(page = 0) {
+  const teams = sortedRegisteredTeams();
+  if (!teams.length) throw new Error('Es gibt keine auswaehlbaren Teams.');
+
+  const totalPages = Math.max(1, Math.ceil(teams.length / TEAM_BAN_PAGE_SIZE));
+  const currentPage = clampPage(page, totalPages);
+  const pageTeams = teams.slice(currentPage * TEAM_BAN_PAGE_SIZE, (currentPage + 1) * TEAM_BAN_PAGE_SIZE);
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`admin_team_ban_team_select:${currentPage}`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .addOptions(pageTeams.map(team => ({
+          label: team.clubName.slice(0, 100),
+          value: String(team.id),
+          description: team.logo?.fileName ? `Logo: ${team.logo.fileName}`.slice(0, 100) : 'Logo fehlt',
+        })))
+    ),
+  ];
+
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`admin_team_ban_page:${currentPage - 1}`)
+        .setLabel('Zurueck')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0),
+      new ButtonBuilder()
+        .setCustomId(`admin_team_ban_page:${currentPage + 1}`)
+        .setLabel('Weiter')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1)
+    ));
+  }
+
+  return {
+    content: totalPages === 1
+      ? 'Welches Team soll gesperrt werden?'
+      : `Welches Team soll gesperrt werden?\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+    components,
+  };
 }
 
 const BAN_REASON_OPTIONS = [
@@ -376,7 +432,7 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
-  if (interaction.customId === 'admin_team_ban_team_select') {
+  if (interaction.customId === 'admin_team_ban_team_select' || interaction.customId.startsWith('admin_team_ban_team_select:')) {
     const teamId = interaction.values?.[0];
     const team = findTeamById(teamId);
     if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
@@ -632,7 +688,8 @@ async function handleAdminModal(interaction) {
 }
 
 async function handleAdminInteraction(interaction, client) {
-  const isAdminButton = interaction.isButton?.() && ADMIN_ACTIONS.has(interaction.customId);
+  const isAdminButton = interaction.isButton?.()
+    && (ADMIN_ACTIONS.has(interaction.customId) || ADMIN_BUTTON_PREFIXES.some(prefix => interaction.customId.startsWith(prefix)));
   const isAdminSelect = interaction.isStringSelectMenu?.() && isAdminSelectId(interaction.customId);
   const isAdminModal = interaction.isModalSubmit?.() && ADMIN_MODAL_PREFIXES.some(prefix => interaction.customId.startsWith(prefix));
   if (!isAdminButton && !isAdminSelect && !isAdminModal) return false;
@@ -644,6 +701,12 @@ async function handleAdminInteraction(interaction, client) {
 
     if (isAdminModal) return await handleAdminModal(interaction);
     if (isAdminSelect) return await handleAdminSelect(interaction, client, settings);
+
+    if (interaction.customId.startsWith('admin_team_ban_page:')) {
+      const [, page] = interaction.customId.split(':');
+      await interaction.update(buildTeamBanSelectPayload(page));
+      return true;
+    }
 
     if (interaction.customId === 'admin_bye_add') {
       await interaction.reply({
@@ -779,8 +842,7 @@ async function handleAdminInteraction(interaction, client) {
 
     if (interaction.customId === 'admin_team_ban') {
       await interaction.reply({
-        content: 'Welches Team soll gesperrt werden?',
-        components: [buildTeamSelect('admin_team_ban_team_select', 'Team auswaehlen')],
+        ...buildTeamBanSelectPayload(0),
         flags: EPHEMERAL,
       });
       return true;

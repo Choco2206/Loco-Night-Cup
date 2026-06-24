@@ -211,6 +211,7 @@ async function postCeremonyIfReady(guild, eventKey) {
 }
 
 async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, selectedParticipantKey, client) {
+  await interaction.deferReply({ flags: EPHEMERAL });
   const outcome = submitTeamResult({
     eventKey,
     roundKey,
@@ -231,13 +232,14 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
     : outcome.status === 'admin_decision_required'
       ? 'Ergebnis gespeichert. Es ist eine Admin-Entscheidung erforderlich.'
       : 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.';
-  await interaction.reply({ content: message, flags: EPHEMERAL });
+  await interaction.editReply({ content: message });
   return true;
 }
 
 async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, client) {
+  await interaction.deferReply({ flags: EPHEMERAL });
   if (!await isAdminAllowed(interaction)) {
-    await interaction.reply({ content: 'Du darfst kein K.O.-Admin-Ergebnis setzen.', flags: EPHEMERAL });
+    await interaction.editReply({ content: 'Du darfst kein K.O.-Admin-Ergebnis setzen.' });
     return true;
   }
 
@@ -252,13 +254,12 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
 
   await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
   const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
-  await interaction.reply({
+  await interaction.editReply({
     content: ceremony.posted
       ? `K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
       : outcome.completed
       ? 'K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen und Ceremony ist vorbereitet.'
       : 'K.O.-Admin-Ergebnis gesetzt. Sieger und naechste Runde wurden aktualisiert.',
-    flags: EPHEMERAL,
   });
   return true;
 }

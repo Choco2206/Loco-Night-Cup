@@ -5,6 +5,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
+const { createKnockoutPhase } = require('../knockout/knockout-service');
 const { refreshGroupPosts } = require('./group-posts');
 const {
   getMatches,
@@ -472,6 +473,7 @@ async function applyAutoScores(client, eventKey, slot, now = new Date()) {
 
   if (changed && updatedEvent) await refreshAllGroups(client, eventKey, updatedEvent);
   if (!blockedByAdminDecision) await maybeReleaseNextSlot(client, eventKey, now);
+  if (!blockedByAdminDecision) await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
   scheduleEvent(client, eventKey);
 }
 
@@ -530,6 +532,26 @@ async function maybeReleaseNextSlot(client, eventKey, now = new Date()) {
   }
 
   await releaseSlot(client, eventKey, slot, now);
+}
+
+async function maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now = new Date()) {
+  const event = readEventData(eventKey);
+  if (event.groups?.status !== 'completed') return;
+  if (event.knockout?.status && event.knockout.status !== 'not_created') return;
+
+  try {
+    await createKnockoutPhase({
+      eventKey,
+      actorUserId: 'auto-groups-completed',
+      client,
+      now,
+    });
+    console.log(`[groups] ${eventKey}: K.O.-Phase automatisch nach Gruppenabschluss erstellt.`);
+  } catch (error) {
+    if (!String(error?.message || '').includes('bereits erstellt')) {
+      console.warn(`[groups] ${eventKey}: automatische K.O.-Erstellung fehlgeschlagen: ${error.message}`);
+    }
+  }
 }
 
 function clearTimer(key) {
@@ -603,12 +625,14 @@ function scheduleEvent(client, eventKey) {
 
 async function afterGroupResultConfirmed(client, eventKey, now = new Date()) {
   await maybeReleaseNextSlot(client, eventKey, now);
+  await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
 }
 
 async function initGroupReleases(client) {
   for (const eventKey of EVENT_KEYS) {
     scheduleEvent(client, eventKey);
     await maybeReleaseNextSlot(client, eventKey).catch(error => console.error('Gruppen-Spielfreigabe beim Start fehlgeschlagen:', error));
+    await maybeCreateKnockoutAfterGroupsComplete(client, eventKey).catch(error => console.error('K.O.-Auto-Erstellung beim Start fehlgeschlagen:', error));
   }
 }
 
