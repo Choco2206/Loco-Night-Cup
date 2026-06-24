@@ -17,7 +17,7 @@ const {
 } = require('./group-results');
 
 const INVITE_WINDOW_MINUTES = 5;
-const REMINDER_DELAY_MS = 20 * 60 * 1000;
+const REMINDER_DELAY_MS = 15 * 60 * 1000;
 const AUTO_SCORE_DELAY_MS = 25 * 60 * 1000;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
@@ -140,7 +140,11 @@ function normalizeSlotRelease(slot, release, firstPlannedAt) {
     : 'released';
   normalized.releaseMessageIds = normalized.releaseMessageIds || {};
   normalized.reminderMessageIds = normalized.reminderMessageIds || {};
-  normalized.reminderAt = normalized.reminderAt || new Date(releasedDate.getTime() + REMINDER_DELAY_MS).toISOString();
+  if (!normalized.reminderSentAt) {
+    normalized.reminderAt = new Date(releasedDate.getTime() + REMINDER_DELAY_MS).toISOString();
+  } else {
+    normalized.reminderAt = normalized.reminderAt || new Date(releasedDate.getTime() + REMINDER_DELAY_MS).toISOString();
+  }
   normalized.autoScoreAt = normalized.autoScoreAt || new Date(releasedDate.getTime() + AUTO_SCORE_DELAY_MS).toISOString();
   return normalized;
 }
@@ -371,11 +375,13 @@ async function postReminderMessage(client, eventKey, event, slot, now = new Date
     '',
     missingText,
     '',
-    'Bitte tragt eure Ergebnisse schnellstmoeglich ein.',
+    'Bitte tragt eure Ergebnisse ein bzw. bestaetigt offene Meldungen.',
     '',
-    'Ihr habt noch 5 Minuten Zeit.',
+    'Ihr habt noch maximal 5 Minuten Zeit, um das Ergebnis einzutragen bzw. zu bestaetigen.',
     '',
-    'Danach werden offene Spiele mit 0:0 gewertet, damit der Turnierfluss nicht blockiert wird.',
+    'Wenn bis dahin keine vollstaendige Bestaetigung erfolgt, gilt ohne Diskussion:',
+    'Falls ein Team bereits ein Ergebnis gemeldet hat, wird dieses Ergebnis uebernommen.',
+    'Falls kein Ergebnis gemeldet wurde, wird das Spiel mit 0:0 gewertet.',
     '',
     '\u2757 Bitte keine Diskussionen im Nachhinein.',
     '',

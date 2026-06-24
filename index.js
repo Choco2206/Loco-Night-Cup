@@ -66,6 +66,7 @@ async function main() {
       await roleSystem.init(client);
       await banSystem.initBanService(client);
       await groupSystem.init(client);
+      await knockoutSystem.initKnockoutReminders(client);
       await liveScheduleSystem.refreshLiveScheduleForActiveEvents(client);
       schedulePendingAutoCleanups(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
