@@ -3,6 +3,7 @@
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
+const { collectValidRealTeams } = require('../events/event-format');
 const { drawGroupsForEvent, lockEventFormat } = require('../events/event-lock-service');
 const { maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 const { recalculateCheckinFormat } = require('./checkin-format');
@@ -50,6 +51,18 @@ function currentFormatLabel(event) {
   return event.format?.size ? `${event.format.size}er Turnier` : 'noch kein gueltiges Format';
 }
 
+function getValidRealTeamCount(event, now = new Date()) {
+  return collectValidRealTeams(event, now).teams.length;
+}
+
+function getActiveTeamCount(event) {
+  return Array.isArray(event.checkin?.activeTeamIds) ? event.checkin.activeTeamIds.length : 0;
+}
+
+function getWaitlistOverflowCount(event) {
+  return Number(event.format?.waitlistCount || 0);
+}
+
 function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
   const lateDeadlineText = formatTime(getLateWindowUntil(eventKey, event, settings, now));
   const drawText = formatTime(getDrawAt(eventKey, event, settings, now));
@@ -79,22 +92,35 @@ function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
   ].join('\n');
 }
 
-function buildFinalCancelledMessage(event, settings) {
+function buildFinalCancelledMessage(event, settings, now = new Date()) {
+  const minimum = minimumTeams(settings, event);
+  const validTeamCount = getValidRealTeamCount(event, now);
+
   return [
-    '❌ **NightCup findet nicht statt**',
+    '❌ **Night Cup abgesagt**',
     '',
-    'Es wurden nicht genug Teams registriert.',
-    `Minimum sind ${minimumTeams(settings, event)} Teams.`,
+    'Nach Ende des Late-Check-ins sind leider nicht genug Teams fuer ein gueltiges Turnierformat zusammengekommen.',
+    '',
+    `Mindestanzahl: **${minimum} Teams**`,
+    `Aktuell gueltige Teams: **${validTeamCount}**`,
+    '',
+    'Der heutige Night Cup findet daher nicht statt.',
   ].join('\n');
 }
 
 function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
+  const waitlistCount = getWaitlistOverflowCount(event);
+
   return [
-    '✅ **NightCup findet statt**',
+    '✅ **Night Cup findet statt**',
     '',
-    `Format: ${currentFormatLabel(event)}`,
-    `Gruppenauslosung findet um ${formatTime(getDrawAt(eventKey, event, settings, now))} statt.`,
-    'Manager und Co-VMs werden automatisch in der jeweiligen Gruppe markiert.',
+    'Der Late-Check-in ist beendet.',
+    '',
+    `Finales Format: **${currentFormatLabel(event)}**`,
+    `Aktive Teams: **${getActiveTeamCount(event)}**`,
+    `Warteliste/Ueberschuss: **${waitlistCount}**`,
+    '',
+    'Die Gruppenauslosung startet in **5 Minuten**.',
   ].join('\n');
 }
 
@@ -253,6 +279,18 @@ async function upsertStatusMessage(client, eventKey, content) {
   return message;
 }
 
+function markFinalStatusMessagePosted(eventKey, finalState, now = new Date()) {
+  return updateEventData(eventKey, event => {
+    event.checkin = {
+      ...(event.checkin || {}),
+      finalStatusMessagePostedAt: nowIso(now),
+      finalStatusMessageState: finalState,
+    };
+    event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
+    return event;
+  });
+}
+
 function markDeadlineReached(eventKey, settings, now) {
   let changed = false;
   let eventAfter = null;
@@ -317,6 +355,7 @@ function cancelEventAfterLate(eventKey, settings, now) {
   let eventAfter = null;
   updateEventData(eventKey, event => {
     recalculateCheckinFormat(event, settings, now);
+    const validRealTeamCount = getValidRealTeamCount(event, now);
     event.status = 'cancelled';
     event.checkin = {
       ...(event.checkin || {}),
@@ -327,6 +366,9 @@ function cancelEventAfterLate(eventKey, settings, now) {
     };
     event.format = {
       ...(event.format || {}),
+      realTeamCount: validRealTeamCount,
+      activeRealTeamCount: 0,
+      waitlistCount: 0,
       lockedAt: null,
       lockedByUserId: null,
       participants: [],
@@ -367,6 +409,11 @@ function finalizeAfterLate(eventKey, settings, now) {
   const closed = markCheckinClosed(eventKey, settings, now);
   const afterClose = closed.event;
 
+  if (getValidRealTeamCount(afterClose, now) < minimumTeams(settings, afterClose)) {
+    const cancelled = cancelEventAfterLate(eventKey, settings, now);
+    return { changed: true, event: cancelled, finalState: 'cancelled' };
+  }
+
   if (afterClose.format?.lockedAt) {
     const ready = markDrawReady(eventKey, now);
     return { changed: true, event: ready, finalState: 'draw_ready' };
@@ -374,7 +421,7 @@ function finalizeAfterLate(eventKey, settings, now) {
 
   updateEventData(eventKey, event => recalculateCheckinFormat(event, settings, now));
   const recalculated = readEventData(eventKey);
-  if (!recalculated.format?.size) {
+  if (getValidRealTeamCount(recalculated, now) < minimumTeams(settings, recalculated) || !recalculated.format?.size) {
     const cancelled = cancelEventAfterLate(eventKey, settings, now);
     return { changed: true, event: cancelled, finalState: 'cancelled' };
   }
@@ -488,11 +535,15 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
     const final = finalizeAfterLate(eventKey, settings, now);
     latest = final.event;
     changed = changed || final.changed;
-    if (final.changed) {
+    if (final.changed || !latest.checkin?.finalStatusMessagePostedAt) {
       const message = final.finalState === 'cancelled'
-        ? buildFinalCancelledMessage(latest, settings)
+        ? buildFinalCancelledMessage(latest, settings, now)
         : buildFinalReadyMessage(eventKey, latest, settings, now);
-      await upsertStatusMessage(client, eventKey, message);
+      const posted = await upsertStatusMessage(client, eventKey, message);
+      if (posted) {
+        latest = markFinalStatusMessagePosted(eventKey, final.finalState, now);
+        changed = true;
+      }
     }
   }
 
