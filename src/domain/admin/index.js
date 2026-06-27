@@ -53,7 +53,14 @@ async function handleInteraction(interaction, client) {
     return true;
   }
 
-  if (!interaction.isButton() && !interaction.isStringSelectMenu()) return false;
+  if (
+    !interaction.isButton()
+    && !interaction.isStringSelectMenu()
+    && !interaction.isUserSelectMenu()
+    && !interaction.isModalSubmit()
+  ) {
+    return false;
+  }
   return handleAdminInteraction(interaction, client);
 }
 

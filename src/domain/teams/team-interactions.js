@@ -335,6 +335,7 @@ async function handleUserSelect(interaction, client) {
   const settings = getSettings();
   const [, teamId] = interaction.customId.split(':');
   const userId = interaction.values?.[0];
+  await interaction.deferUpdate();
   const selectedMember = await interaction.guild.members.fetch(userId).catch(() => null);
   if (!selectedMember) throw new Error('Dieser User ist nicht auf dem Server.');
   ensureUserIsNotBot(selectedMember.user);
@@ -343,7 +344,7 @@ async function handleUserSelect(interaction, client) {
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await setTeamCoManagerNickname(interaction.guild, userId, team).catch(() => null);
   await refreshRegisteredTeamsOverview(client);
-  await interaction.update({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });
+  await interaction.editReply({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
 }
 
@@ -354,10 +355,11 @@ async function handleStringSelect(interaction, client) {
   const settings = getSettings();
   const [, teamId] = interaction.customId.split(':');
   const userId = interaction.values?.[0];
+  await interaction.deferUpdate();
   removeCoManager({ teamId, userId, actorUserId: interaction.user.id });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await refreshRegisteredTeamsOverview(client);
-  await interaction.update({ content: `<@${userId}> wurde als Co-VM entfernt.`, components: [], allowedMentions: { parse: ['users'] } });
+  await interaction.editReply({ content: `<@${userId}> wurde als Co-VM entfernt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
 }
 
