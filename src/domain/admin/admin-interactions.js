@@ -4,19 +4,34 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   ModalBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
+  UserSelectMenuBuilder,
 } = require('discord.js');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage, refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
-const { updateEventData } = require('../checkins/checkin-repository');
+const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
+const { readAllEvents, updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
-const { findTeamById, listVisibleTeams } = require('../teams/team-service');
-const { addTeamBan, listActiveBans, removeTeamBan } = require('../bans');
+const {
+  adminAddCoManager,
+  adminChangeManager,
+  adminDeleteTeam,
+  adminRemoveCoManager,
+  adminUpdateTeamName,
+  findNonDeletedTeamByUserId,
+  findTeamById,
+  listVisibleTeams,
+} = require('../teams/team-service');
+const { syncTeamFunctionRolesForUser } = require('../teams/team-roles');
+const { clearTeamNickname, setTeamCoManagerNickname, setTeamManagerNickname } = require('../nicknames');
+const { ensureUserIsNotBot } = require('../teams/team-validation');
+const { addTeamBan, isTeamOrUserBanned, listActiveBans, removeTeamBan } = require('../bans');
 const { resetEventForTesting } = require('../events/event-cleanup-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
@@ -73,17 +88,40 @@ const ADMIN_SELECT_PREFIXES = [
   'admin_hof_second_select:',
   'admin_hof_third_select:',
   'admin_hof_day_select:',
+  'admin_team_details_select:',
+  'admin_team_remove_covm_select:',
   'admin_team_ban_team_select:',
   'admin_team_ban_reason_select:',
   'admin_team_ban_duration_select:',
 ];
+const ADMIN_USER_SELECT_PREFIXES = [
+  'admin_team_add_covm_user:',
+  'admin_team_change_vm_user:',
+];
 const ADMIN_BUTTON_PREFIXES = [
+  'admin_team_details_page:',
+  'admin_team_details_back:',
+  'admin_team_edit_name_open:',
+  'admin_team_add_covm_open:',
+  'admin_team_add_covm_manual_open:',
+  'admin_team_remove_covm_open:',
+  'admin_team_change_vm_open:',
+  'admin_team_change_vm_manual_open:',
+  'admin_team_ban_confirm:',
+  'admin_team_unban_confirm:',
+  'admin_team_delete_open:',
+  'admin_team_delete_confirm:',
+  'admin_team_delete_cancel:',
   'admin_team_ban_page:',
 ];
 const ADMIN_MODAL_PREFIXES = [
+  'admin_team_edit_name_modal:',
+  'admin_team_add_covm_manual_modal:',
+  'admin_team_change_vm_manual_modal:',
   'admin_team_ban_manual_modal:',
 ];
 const TEAM_BAN_PAGE_SIZE = 25;
+const TEAM_DETAILS_PAGE_SIZE = 25;
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -159,6 +197,7 @@ function isAdminSelectId(customId) {
 function sortedRegisteredTeams(excludeTeamIds = []) {
   const excluded = new Set(excludeTeamIds.filter(Boolean).map(String));
   return listVisibleTeams()
+    .filter(team => team.status === 'active')
     .filter(team => !excluded.has(String(team.id)))
     .slice()
     .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de', { sensitivity: 'base' }));
@@ -227,6 +266,377 @@ function buildTeamBanSelectPayload(page = 0) {
       : `Welches Team soll gesperrt werden?\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
     components,
   };
+}
+
+function buildTeamDetailsSelectPayload(page = 0) {
+  const teams = sortedRegisteredTeams();
+  if (!teams.length) throw new Error('Es gibt keine aktiven/registrierten Teams.');
+
+  const totalPages = Math.max(1, Math.ceil(teams.length / TEAM_DETAILS_PAGE_SIZE));
+  const currentPage = clampPage(page, totalPages);
+  const pageTeams = teams.slice(currentPage * TEAM_DETAILS_PAGE_SIZE, (currentPage + 1) * TEAM_DETAILS_PAGE_SIZE);
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`admin_team_details_select:${currentPage}`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .addOptions(pageTeams.map(team => ({
+          label: team.clubName.slice(0, 100),
+          value: String(team.id),
+          description: `ID: ${String(team.id).slice(0, 80)}`,
+        })))
+    ),
+  ];
+
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`admin_team_details_page:${currentPage - 1}`)
+        .setLabel('Zurueck')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0),
+      new ButtonBuilder()
+        .setCustomId(`admin_team_details_page:${currentPage + 1}`)
+        .setLabel('Weiter')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1)
+    ));
+  }
+
+  return {
+    content: totalPages === 1
+      ? 'Team fuer Details/Verwaltung auswaehlen.'
+      : `Team fuer Details/Verwaltung auswaehlen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+    components,
+  };
+}
+
+function formatDate(value) {
+  if (!value) return 'Nicht vorhanden';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Berlin' });
+}
+
+function mentionWithId(userId) {
+  return userId ? `<@${userId}> (${userId})` : 'Nicht eingetragen';
+}
+
+function formatTeamBanStatus(team) {
+  const ban = isTeamOrUserBanned(team);
+  if (!ban) return 'Keine aktive Sperre';
+  const reason = ban.customReason || ban.reason || 'Nicht angegeben';
+  return [`Aktiv`, `Grund: ${reason}`, `Bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`].join('\n');
+}
+
+function formatLogoStatus(team) {
+  if (team.logo?.fileName) return `Vorhanden: ${team.logo.fileName}`;
+  if (team.logoUpload?.expiresAt) return `Upload offen bis ${formatDate(team.logoUpload.expiresAt)}`;
+  return 'Fehlt';
+}
+
+function formatCheckinStatuses(teamId) {
+  const events = readAllEvents();
+  const lines = [];
+  for (const eventKey of EVENT_KEYS) {
+    const event = events[eventKey];
+    const entry = (event.checkin?.entries || []).find(item => String(item.teamId) === String(teamId));
+    const active = (event.checkin?.activeTeamIds || []).map(String).includes(String(teamId));
+    const waitlist = (event.checkin?.waitlistTeamIds || []).map(String).includes(String(teamId));
+    let status = 'Nicht eingecheckt';
+    if (active) status = 'Aktiv';
+    else if (waitlist) status = 'Warteliste';
+    else if (entry) status = 'Eingecheckt';
+    lines.push(`${EVENT_LABELS[eventKey] || eventKey}: ${status}${entry?.checkedInAt ? ` (${formatDate(entry.checkedInAt)})` : ''}`);
+  }
+  return lines.join('\n') || 'Keine Check-in-Daten';
+}
+
+function buildTeamDetailsEmbed(team) {
+  const coManagers = (team.coManagers || []).length
+    ? team.coManagers.map(co => mentionWithId(co.userId)).join('\n')
+    : 'Keine Co-VMs';
+
+  return new EmbedBuilder()
+    .setTitle(`Team verwalten: ${team.clubName}`)
+    .setColor(team.status === 'active' ? 0x00aa55 : 0xffaa00)
+    .addFields(
+      { name: 'Teamname', value: team.clubName || '-', inline: true },
+      { name: 'Team-ID', value: String(team.id), inline: true },
+      { name: 'Status', value: `${team.status || '-'} / ${team.registrationStatus || '-'}`, inline: true },
+      { name: 'VM', value: mentionWithId(team.manager?.userId), inline: false },
+      { name: `Co-VMs (${(team.coManagers || []).length})`, value: coManagers.slice(0, 1024), inline: false },
+      { name: 'Registrierung', value: formatDate(team.meta?.createdAt), inline: true },
+      { name: 'Sperrstatus', value: formatTeamBanStatus(team).slice(0, 1024), inline: true },
+      { name: 'Logo', value: formatLogoStatus(team).slice(0, 1024), inline: true },
+      { name: 'Check-ins', value: formatCheckinStatuses(team.id).slice(0, 1024), inline: false }
+    )
+    .setFooter({ text: `Admin-Aktionen laufen eindeutig ueber Team-ID ${team.id}` })
+    .setTimestamp(new Date());
+}
+
+function buildTeamDetailsButtons(team) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin_team_edit_name_open:${team.id}`).setLabel('Team bearbeiten').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`admin_team_add_covm_open:${team.id}`).setLabel('Co-VM hinzufuegen').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`admin_team_remove_covm_open:${team.id}`).setLabel('Co-VM entfernen').setStyle(ButtonStyle.Secondary).setDisabled(!(team.coManagers || []).length),
+      new ButtonBuilder().setCustomId(`admin_team_change_vm_open:${team.id}`).setLabel('VM aendern').setStyle(ButtonStyle.Primary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin_team_ban_confirm:${team.id}`).setLabel('Team sperren').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`admin_team_unban_confirm:${team.id}`).setLabel('Sperre entfernen').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`admin_team_delete_open:${team.id}`).setLabel('Team loeschen').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('admin_team_details_back:0').setLabel('Zurueck zur Team-Auswahl').setStyle(ButtonStyle.Secondary)
+    ),
+  ];
+}
+
+function buildTeamDetailsPayload(team) {
+  return {
+    content: null,
+    embeds: [buildTeamDetailsEmbed(team)],
+    components: buildTeamDetailsButtons(team),
+    allowedMentions: { parse: ['users'] },
+  };
+}
+
+function buildAdminTeamNameModal(team, settings) {
+  const modal = new ModalBuilder()
+    .setCustomId(`admin_team_edit_name_modal:${team.id}`)
+    .setTitle('Team bearbeiten');
+
+  const input = new TextInputBuilder()
+    .setCustomId('new_club_name')
+    .setLabel('Teamname')
+    .setStyle(TextInputStyle.Short)
+    .setMinLength(settings.teams.clubNameMinLength)
+    .setMaxLength(settings.teams.clubNameMaxLength)
+    .setRequired(true)
+    .setValue(team.clubName);
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  return modal;
+}
+
+function buildManualUserModal(customId, title) {
+  const modal = new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(title);
+
+  const input = new TextInputBuilder()
+    .setCustomId('user_id')
+    .setLabel('Discord User-ID')
+    .setStyle(TextInputStyle.Short)
+    .setMinLength(17)
+    .setMaxLength(25)
+    .setRequired(true);
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  return modal;
+}
+
+function buildAdminAddCoManagerPayload(team) {
+  return {
+    content: `Neuen Co-VM fuer **${team.clubName}** auswaehlen oder per User-ID eingeben.`,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new UserSelectMenuBuilder()
+          .setCustomId(`admin_team_add_covm_user:${team.id}`)
+          .setPlaceholder('Discord User auswaehlen')
+          .setMinValues(1)
+          .setMaxValues(1)
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`admin_team_add_covm_manual_open:${team.id}`)
+          .setLabel('User-ID eingeben')
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+
+function buildAdminChangeManagerPayload(team) {
+  return {
+    content: `Neuen VM fuer **${team.clubName}** auswaehlen oder per User-ID eingeben. Der alte VM wird entfernt.`,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new UserSelectMenuBuilder()
+          .setCustomId(`admin_team_change_vm_user:${team.id}`)
+          .setPlaceholder('Neuen VM auswaehlen')
+          .setMinValues(1)
+          .setMaxValues(1)
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`admin_team_change_vm_manual_open:${team.id}`)
+          .setLabel('User-ID eingeben')
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+
+function buildAdminRemoveCoManagerPayload(team) {
+  if (!(team.coManagers || []).length) throw new Error('Dieses Team hat keine Co-VMs.');
+  return {
+    content: `Co-VM aus **${team.clubName}** entfernen.`,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`admin_team_remove_covm_select:${team.id}`)
+          .setPlaceholder('Co-VM auswaehlen')
+          .addOptions(team.coManagers.slice(0, 25).map(co => ({
+            label: String(co.userId).slice(0, 100),
+            value: String(co.userId),
+            description: `User-ID: ${String(co.userId).slice(0, 90)}`,
+          })))
+      ),
+    ],
+  };
+}
+
+function buildAdminDeleteConfirmPayload(team) {
+  return {
+    content: `Team **${team.clubName}** wirklich loeschen? Check-ins werden entfernt, Rollen und Nicknames werden bereinigt.`,
+    embeds: [],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`admin_team_delete_confirm:${team.id}`).setLabel('Ja, Team loeschen').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`admin_team_delete_cancel:${team.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+
+async function resolveAdminSelectedMember(guild, userId) {
+  const member = await guild.members.fetch(String(userId)).catch(() => null);
+  if (!member) throw new Error('User nicht gefunden oder nicht auf dem Server.');
+  ensureUserIsNotBot(member.user);
+  return member;
+}
+
+function assertUserCanJoinTeam(userId, teamId) {
+  const existingTeam = findNonDeletedTeamByUserId(userId);
+  if (existingTeam && String(existingTeam.id) !== String(teamId)) {
+    throw new Error(`Dieser User ist bereits bei ${existingTeam.clubName} eingetragen.`);
+  }
+  if (isTeamOrUserBanned(String(userId))) {
+    throw new Error('Dieser User ist aktuell gesperrt.');
+  }
+}
+
+async function syncTeamNicknames(guild, team) {
+  const results = [];
+  if (team?.manager?.userId) results.push(await setTeamManagerNickname(guild, team.manager.userId, team));
+  for (const coManager of team?.coManagers || []) {
+    if (coManager?.userId) results.push(await setTeamCoManagerNickname(guild, coManager.userId, team));
+  }
+  return results;
+}
+
+function assertNicknameResults(results) {
+  const failed = (results || []).find(result => result && !result.ok && (
+    result.status === 'missing_permissions' || result.status === 'missing_access'
+  ));
+  if (failed) throw new Error('Daten gespeichert, aber Nickname konnte wegen fehlender Discord-Rechte nicht gesetzt/bereinigt werden.');
+}
+
+async function refreshTeamAdminSurfaces({ client, settings, affectedEventKeys = [] }) {
+  await refreshRegisteredTeamsOverview(client);
+  if (affectedEventKeys.length) await refreshCheckinMessages([...new Set(affectedEventKeys)], client);
+}
+
+function teamAppearsInCollection(value, teamId) {
+  const id = String(teamId);
+  if (!value) return false;
+  if (Array.isArray(value)) {
+    return value.some(entry => teamAppearsInCollection(entry, id));
+  }
+  if (typeof value === 'object') {
+    if (value.teamId && String(value.teamId) === id) return true;
+    if (value.id && String(value.id) === id) return true;
+    if (value.homeTeamId && String(value.homeTeamId) === id) return true;
+    if (value.awayTeamId && String(value.awayTeamId) === id) return true;
+    return Object.values(value).some(entry => teamAppearsInCollection(entry, id));
+  }
+  return String(value) === id;
+}
+
+function findRunningEventParticipation(teamId) {
+  const events = readAllEvents();
+  for (const eventKey of EVENT_KEYS) {
+    const event = events[eventKey];
+    const hasGroup = event.groups?.status && !['not_created', 'completed', 'reset'].includes(event.groups.status);
+    const hasKnockout = event.knockout?.status && !['not_created', 'completed', 'reset'].includes(event.knockout.status);
+    if ((hasGroup && teamAppearsInCollection(event.groups, teamId)) || (hasKnockout && teamAppearsInCollection(event.knockout, teamId))) {
+      return EVENT_LABELS[eventKey] || eventKey;
+    }
+  }
+  return null;
+}
+
+async function handleAdminAddCoManager({ interaction, client, settings, teamId, userId }) {
+  const team = findTeamById(teamId);
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  await resolveAdminSelectedMember(interaction.guild, userId);
+  assertUserCanJoinTeam(userId, team.id);
+
+  const updatedTeam = adminAddCoManager({ teamId: team.id, userId, actorUserId: interaction.user.id, settings });
+  await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+  const nicknameResults = [await setTeamCoManagerNickname(interaction.guild, userId, updatedTeam)];
+  assertNicknameResults(nicknameResults);
+  await refreshTeamAdminSurfaces({ client, settings });
+  return updatedTeam;
+}
+
+async function handleAdminRemoveCoManager({ interaction, client, settings, teamId, userId }) {
+  const team = findTeamById(teamId);
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  const updatedTeam = adminRemoveCoManager({ teamId: team.id, userId, actorUserId: interaction.user.id });
+  await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+  const nicknameResults = [await clearTeamNickname(interaction.guild, userId)];
+  assertNicknameResults(nicknameResults);
+  await refreshTeamAdminSurfaces({ client, settings });
+  return updatedTeam;
+}
+
+async function handleAdminChangeManager({ interaction, client, settings, teamId, userId }) {
+  const team = findTeamById(teamId);
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  await resolveAdminSelectedMember(interaction.guild, userId);
+  assertUserCanJoinTeam(userId, team.id);
+
+  const result = adminChangeManager({ teamId: team.id, newManagerUserId: userId, actorUserId: interaction.user.id });
+  await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+  if (result.oldManagerUserId) await syncTeamFunctionRolesForUser(interaction.guild, result.oldManagerUserId, settings);
+  const nicknameResults = [
+    await setTeamManagerNickname(interaction.guild, userId, result.team),
+    result.oldManagerUserId ? await clearTeamNickname(interaction.guild, result.oldManagerUserId) : null,
+  ].filter(Boolean);
+  assertNicknameResults(nicknameResults);
+  await refreshTeamAdminSurfaces({ client, settings });
+  return result;
+}
+
+async function handleAdminDeleteTeam({ interaction, client, settings, teamId }) {
+  const team = findTeamById(teamId);
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  const runningEventLabel = findRunningEventParticipation(team.id);
+  if (runningEventLabel) {
+    throw new Error(`Team ist noch in einem laufenden Event (${runningEventLabel}) eingetragen. Bitte zuerst im Event sauber ersetzen/entfernen.`);
+  }
+
+  const userIds = [team.manager?.userId, ...(team.coManagers || []).map(co => co.userId)].filter(Boolean).map(String);
+  adminDeleteTeam({ teamId: team.id, actorUserId: interaction.user.id });
+  const affectedEventKeys = removeTeamFromAllEvents({ teamId: team.id, settings });
+  for (const userId of userIds) {
+    await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+    await clearTeamNickname(interaction.guild, userId);
+  }
+  await refreshTeamAdminSurfaces({ client, settings, affectedEventKeys });
+  return { team, affectedEventKeys };
 }
 
 const BAN_REASON_OPTIONS = [
@@ -379,6 +789,28 @@ async function replyInteraction(interaction, content, extra = {}) {
 }
 
 async function handleAdminSelect(interaction, client, settings) {
+  if (interaction.customId.startsWith('admin_team_details_select:')) {
+    const teamId = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+    await interaction.update(buildTeamDetailsPayload(team));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_remove_covm_select:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const updatedTeam = await handleAdminRemoveCoManager({ interaction, client, settings, teamId, userId });
+    await interaction.editReply({
+      content: `<@${userId}> wurde als Co-VM bei **${updatedTeam.clubName}** entfernt.`,
+      embeds: [],
+      components: [],
+      allowedMentions: { parse: ['users'] },
+    });
+    return true;
+  }
+
   if (interaction.customId === 'admin_hof_first_select') {
     const firstTeamId = interaction.values?.[0];
     await interaction.update({
@@ -659,7 +1091,77 @@ async function handleAdminSelect(interaction, client, settings) {
   throw new Error('Unbekannte Admin-Auswahl.');
 }
 
-async function handleAdminModal(interaction) {
+async function handleAdminUserSelect(interaction, client, settings) {
+  if (interaction.customId.startsWith('admin_team_add_covm_user:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const team = await handleAdminAddCoManager({ interaction, client, settings, teamId, userId });
+    await interaction.editReply({
+      content: `<@${userId}> wurde als Co-VM bei **${team.clubName}** hinzugefuegt.`,
+      embeds: [],
+      components: [],
+      allowedMentions: { parse: ['users'] },
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_change_vm_user:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const result = await handleAdminChangeManager({ interaction, client, settings, teamId, userId });
+    await interaction.editReply({
+      content: `<@${userId}> ist jetzt VM von **${result.team.clubName}**. Alter VM wurde entfernt.`,
+      embeds: [],
+      components: [],
+      allowedMentions: { parse: ['users'] },
+    });
+    return true;
+  }
+
+  throw new Error('Unbekannte Admin-User-Auswahl.');
+}
+
+async function handleAdminModal(interaction, client, settings) {
+  if (interaction.customId.startsWith('admin_team_edit_name_modal:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const newClubName = interaction.fields.getTextInputValue('new_club_name');
+    const team = adminUpdateTeamName({ teamId, newClubName, actorUserId: interaction.user.id, settings });
+    const nicknameResults = await syncTeamNicknames(interaction.guild, team);
+    assertNicknameResults(nicknameResults);
+    await refreshTeamAdminSurfaces({ client, settings });
+    await interaction.reply({
+      content: `Teamname wurde auf **${team.clubName}** geaendert.`,
+      flags: EPHEMERAL,
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_add_covm_manual_modal:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.fields.getTextInputValue('user_id').trim();
+    const team = await handleAdminAddCoManager({ interaction, client, settings, teamId, userId });
+    await interaction.reply({
+      content: `<@${userId}> wurde als Co-VM bei **${team.clubName}** hinzugefuegt.`,
+      flags: EPHEMERAL,
+      allowedMentions: { parse: ['users'] },
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_change_vm_manual_modal:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.fields.getTextInputValue('user_id').trim();
+    const result = await handleAdminChangeManager({ interaction, client, settings, teamId, userId });
+    await interaction.reply({
+      content: `<@${userId}> ist jetzt VM von **${result.team.clubName}**. Alter VM wurde entfernt.`,
+      flags: EPHEMERAL,
+      allowedMentions: { parse: ['users'] },
+    });
+    return true;
+  }
+
   if (interaction.customId.startsWith('admin_team_ban_manual_modal:')) {
     const [, teamId, selectedReason, durationValue] = interaction.customId.split(':');
     const team = findTeamById(teamId);
@@ -691,16 +1193,132 @@ async function handleAdminInteraction(interaction, client) {
   const isAdminButton = interaction.isButton?.()
     && (ADMIN_ACTIONS.has(interaction.customId) || ADMIN_BUTTON_PREFIXES.some(prefix => interaction.customId.startsWith(prefix)));
   const isAdminSelect = interaction.isStringSelectMenu?.() && isAdminSelectId(interaction.customId);
+  const isAdminUserSelect = interaction.isUserSelectMenu?.() && ADMIN_USER_SELECT_PREFIXES.some(prefix => interaction.customId.startsWith(prefix));
   const isAdminModal = interaction.isModalSubmit?.() && ADMIN_MODAL_PREFIXES.some(prefix => interaction.customId.startsWith(prefix));
-  if (!isAdminButton && !isAdminSelect && !isAdminModal) return false;
+  if (!isAdminButton && !isAdminSelect && !isAdminUserSelect && !isAdminModal) return false;
 
   const settings = readSettings();
 
   try {
     await requireAdminAccess(interaction, settings);
 
-    if (isAdminModal) return await handleAdminModal(interaction);
+    if (isAdminModal) return await handleAdminModal(interaction, client, settings);
+    if (isAdminUserSelect) return await handleAdminUserSelect(interaction, client, settings);
     if (isAdminSelect) return await handleAdminSelect(interaction, client, settings);
+
+    if (interaction.customId.startsWith('admin_team_details_page:')) {
+      const [, page] = interaction.customId.split(':');
+      await interaction.update(buildTeamDetailsSelectPayload(page));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_details_back:')) {
+      const [, page] = interaction.customId.split(':');
+      await interaction.update({ ...buildTeamDetailsSelectPayload(page), embeds: [] });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_edit_name_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      await interaction.showModal(buildAdminTeamNameModal(team, settings));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_add_covm_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      if ((team.coManagers || []).length >= settings.teams.coManagerLimit) throw new Error('Dieses Team hat bereits das Co-VM-Limit erreicht.');
+      await interaction.reply({ ...buildAdminAddCoManagerPayload(team), flags: EPHEMERAL });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_add_covm_manual_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      await interaction.showModal(buildManualUserModal(`admin_team_add_covm_manual_modal:${team.id}`, 'Co-VM per User-ID'));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_remove_covm_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      await interaction.reply({ ...buildAdminRemoveCoManagerPayload(team), flags: EPHEMERAL });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_change_vm_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      await interaction.reply({ ...buildAdminChangeManagerPayload(team), flags: EPHEMERAL });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_change_vm_manual_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      await interaction.showModal(buildManualUserModal(`admin_team_change_vm_manual_modal:${team.id}`, 'VM per User-ID'));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_ban_confirm:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      const ban = addTeamBan(team, 'admin_other', interaction.user.id, 14);
+      await interaction.reply({
+        content: `Team **${team.clubName}** wurde gesperrt bis ${formatDate(ban.bannedUntilDate || ban.expiresAt)}.`,
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_unban_confirm:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      const removed = removeTeamBan(teamId, interaction.user.id, 'admin_removed');
+      if (!removed) throw new Error('Fuer dieses Team wurde keine aktive Sperre gefunden.');
+      await interaction.reply({
+        content: `Sperre fuer **${team?.clubName || removed.clubName || teamId}** wurde entfernt.`,
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_delete_open:')) {
+      const [, teamId] = interaction.customId.split(':');
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+      const runningEventLabel = findRunningEventParticipation(team.id);
+      if (runningEventLabel) {
+        throw new Error(`Team ist noch in einem laufenden Event (${runningEventLabel}) eingetragen. Bitte zuerst im Event sauber ersetzen/entfernen.`);
+      }
+      await interaction.reply({ ...buildAdminDeleteConfirmPayload(team), flags: EPHEMERAL });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_delete_confirm:')) {
+      const [, teamId] = interaction.customId.split(':');
+      await interaction.deferUpdate();
+      const result = await handleAdminDeleteTeam({ interaction, client, settings, teamId });
+      await interaction.editReply({
+        content: `Team **${result.team.clubName}** wurde geloescht. Entfernte Check-ins: ${result.affectedEventKeys.length ? result.affectedEventKeys.map(key => EVENT_LABELS[key] || key).join(', ') : 'keine'}.`,
+        embeds: [],
+        components: [],
+      });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_delete_cancel:')) {
+      await interaction.update({ content: 'Team-Loeschung abgebrochen.', embeds: [], components: [] });
+      return true;
+    }
 
     if (interaction.customId.startsWith('admin_team_ban_page:')) {
       const [, page] = interaction.customId.split(':');
@@ -885,6 +1503,14 @@ async function handleAdminInteraction(interaction, client) {
         content: formatTeamsList(),
         flags: EPHEMERAL,
         allowedMentions: { parse: ['users'] },
+      });
+      return true;
+    }
+
+    if (interaction.customId === 'admin_team_details') {
+      await interaction.reply({
+        ...buildTeamDetailsSelectPayload(0),
+        flags: EPHEMERAL,
       });
       return true;
     }

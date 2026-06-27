@@ -19,9 +19,37 @@ function userHasActiveTeamRole(userId) {
   return readTeamsData().teams.some(team => isActiveTeam(team) && isTeamMember(team, id));
 }
 
+function userIsActiveManager(userId) {
+  const id = String(userId);
+  return readTeamsData().teams.some(team => isActiveTeam(team) && String(team.manager?.userId) === id);
+}
+
+function userIsActiveCoManager(userId) {
+  const id = String(userId);
+  return readTeamsData().teams.some(team => (
+    isActiveTeam(team)
+    && Array.isArray(team.coManagers)
+    && team.coManagers.some(co => String(co.userId) === id)
+  ));
+}
+
 async function getRole(guild, roleId) {
   if (!guild || !roleId) return null;
   return guild.roles.cache.get(String(roleId)) || await guild.roles.fetch(String(roleId)).catch(() => null);
+}
+
+async function syncRoleMembership(member, role, shouldHave) {
+  if (!member || !role) return false;
+  const hasRole = member.roles.cache.has(role.id);
+  if (shouldHave && !hasRole) {
+    await member.roles.add(role.id);
+    return true;
+  }
+  if (!shouldHave && hasRole) {
+    await member.roles.remove(role.id);
+    return true;
+  }
+  return false;
 }
 
 async function syncManagerRoleForUser(guild, userId, settings, options = {}) {
@@ -66,11 +94,43 @@ async function syncManagerRoleForUser(guild, userId, settings, options = {}) {
   return changed;
 }
 
+async function syncTeamFunctionRolesForUser(guild, userId, settings, options = {}) {
+  const managerRoleId = settings.roles.managerRoleId;
+  const coManagerRoleId = settings.roles.coManagerRoleId;
+  const playerRoleId = settings.roles.playerRoleId;
+  const preserveManagerIntent = options.preserveManagerIntent === true;
+  if (!guild || !userId) return false;
+
+  const managerRole = await getRole(guild, managerRoleId);
+  const coManagerRole = await getRole(guild, coManagerRoleId);
+  const playerRole = await getRole(guild, playerRoleId);
+  const member = await guild.members.fetch(String(userId)).catch(() => null);
+  if (!member) return false;
+
+  const shouldHaveManager = userIsActiveManager(userId);
+  const shouldHaveCoManager = userIsActiveCoManager(userId);
+  const hasAnyTeamFunction = shouldHaveManager || shouldHaveCoManager;
+  let changed = false;
+
+  if (managerRole) {
+    changed = await syncRoleMembership(member, managerRole, hasAnyTeamFunction || (preserveManagerIntent && member.roles.cache.has(managerRole.id))) || changed;
+  }
+  if (coManagerRole) {
+    changed = await syncRoleMembership(member, coManagerRole, shouldHaveCoManager) || changed;
+  }
+  if (playerRole && hasAnyTeamFunction && member.roles.cache.has(playerRole.id)) {
+    await member.roles.remove(playerRole.id);
+    changed = true;
+  }
+
+  return changed;
+}
+
 async function syncManagerRolesForTeam(guild, team, settings) {
   if (!team) return;
 
   for (const userId of getTeamUserIds(team)) {
-    await syncManagerRoleForUser(guild, userId, settings);
+    await syncTeamFunctionRolesForUser(guild, userId, settings);
   }
 }
 
@@ -95,7 +155,7 @@ async function syncAllManagerRoles(guild, settings) {
   });
 
   for (const userId of userIds) {
-    await syncManagerRoleForUser(guild, userId, settings, { preserveManagerIntent: true });
+    await syncTeamFunctionRolesForUser(guild, userId, settings, { preserveManagerIntent: true });
   }
 }
 
@@ -104,5 +164,6 @@ module.exports = {
   syncAllManagerRoles,
   syncManagerRoleForUser,
   syncManagerRolesForTeam,
+  syncTeamFunctionRolesForUser,
   userHasActiveTeamRole,
 };

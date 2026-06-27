@@ -160,6 +160,32 @@ function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
   return updatedTeam;
 }
 
+function adminUpdateTeamName({ teamId, newClubName, actorUserId, settings }) {
+  const cleanName = String(newClubName || '').trim();
+  if (cleanName.length < settings.teams.clubNameMinLength || cleanName.length > settings.teams.clubNameMaxLength) {
+    throw new Error('Der Teamname hat eine ungueltige Laenge.');
+  }
+
+  let updatedTeam;
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+
+    assertClubNameAvailable(data.teams, cleanName, team.id);
+    team.clubName = cleanName;
+    team.normalizedClubName = normalizeClubName(cleanName);
+    team.meta = {
+      ...(team.meta || {}),
+      updatedAt: nowIso(),
+      updatedByUserId: actorUserId ? String(actorUserId) : team.meta?.updatedByUserId || null,
+    };
+    updatedTeam = team;
+    return data;
+  });
+
+  return updatedTeam;
+}
+
 function setTeamLogo({ teamId, logo, uploadedByUserId }) {
   let updatedTeam;
   updateTeamsData(data => {
@@ -299,6 +325,30 @@ function addCoManager({ teamId, userId, actorUserId, settings }) {
   return updatedTeam;
 }
 
+function adminAddCoManager({ teamId, userId, actorUserId, settings }) {
+  let updatedTeam;
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusaetzlich Co-VM sein.');
+    if (team.coManagers.length >= settings.teams.coManagerLimit) throw new Error('Das Co-VM-Limit ist erreicht.');
+    if (team.coManagers.some(co => String(co.userId) === String(userId))) throw new Error('Dieser User ist bereits Co-VM.');
+
+    assertUserAvailable(data.teams, userId, team.id);
+
+    team.coManagers.push({
+      userId: String(userId),
+      addedAt: nowIso(),
+      addedByUserId: String(actorUserId),
+    });
+    team.meta = { ...(team.meta || {}), updatedAt: nowIso(), updatedByUserId: String(actorUserId) };
+    updatedTeam = team;
+    return data;
+  });
+
+  return updatedTeam;
+}
+
 function removeCoManager({ teamId, userId, actorUserId }) {
   let updatedTeam;
   updateTeamsData(data => {
@@ -318,6 +368,54 @@ function removeCoManager({ teamId, userId, actorUserId }) {
   return updatedTeam;
 }
 
+function adminRemoveCoManager({ teamId, userId, actorUserId }) {
+  let updatedTeam;
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+
+    const before = team.coManagers.length;
+    team.coManagers = team.coManagers.filter(co => String(co.userId) !== String(userId));
+    if (team.coManagers.length === before) throw new Error('Dieser User ist kein Co-VM.');
+
+    team.meta = { ...(team.meta || {}), updatedAt: nowIso(), updatedByUserId: String(actorUserId) };
+    updatedTeam = team;
+    return data;
+  });
+
+  return updatedTeam;
+}
+
+function adminChangeManager({ teamId, newManagerUserId, actorUserId }) {
+  let updatedTeam;
+  let oldManagerUserId = null;
+
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+
+    const nextUserId = String(newManagerUserId);
+    if (team.manager?.userId && String(team.manager.userId) === nextUserId) {
+      throw new Error('Dieser User ist bereits VM dieses Teams.');
+    }
+
+    assertUserAvailable(data.teams, nextUserId, team.id);
+
+    oldManagerUserId = team.manager?.userId ? String(team.manager.userId) : null;
+    team.coManagers = (team.coManagers || []).filter(co => String(co.userId) !== nextUserId);
+    team.manager = {
+      userId: nextUserId,
+      addedAt: nowIso(),
+      addedByUserId: String(actorUserId),
+    };
+    team.meta = { ...(team.meta || {}), updatedAt: nowIso(), updatedByUserId: String(actorUserId) };
+    updatedTeam = team;
+    return data;
+  });
+
+  return { team: updatedTeam, oldManagerUserId };
+}
+
 function deleteTeam({ teamId, actorUserId }) {
   let deletedTeam;
   updateTeamsData(data => {
@@ -333,6 +431,29 @@ function deleteTeam({ teamId, actorUserId }) {
     team.meta.updatedAt = timestamp;
     team.meta.deletedAt = timestamp;
     team.meta.deletedByUserId = String(actorUserId);
+    deletedTeam = team;
+    return data;
+  });
+
+  return deletedTeam;
+}
+
+function adminDeleteTeam({ teamId, actorUserId, reason = 'admin_deleted' }) {
+  let deletedTeam;
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+
+    const timestamp = nowIso();
+    team.status = 'deleted';
+    team.logoUpload = null;
+    team.meta = {
+      ...(team.meta || {}),
+      updatedAt: timestamp,
+      deletedAt: timestamp,
+      deletedByUserId: String(actorUserId),
+      deleteReason: reason,
+    };
     deletedTeam = team;
     return data;
   });
@@ -470,6 +591,11 @@ function handleMemberRemoved({ userId }) {
 }
 
 module.exports = {
+  adminAddCoManager,
+  adminChangeManager,
+  adminDeleteTeam,
+  adminRemoveCoManager,
+  adminUpdateTeamName,
   addCoManager,
   clearExpiredLogoUploads,
   clearLogoUpload,

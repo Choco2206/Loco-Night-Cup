@@ -117,6 +117,45 @@ async function setTeamCoManagerNickname(guild, userId, team) {
   return setTeamNickname(guild, userId, team, 'CO-VM');
 }
 
+async function clearTeamNickname(guild, userId) {
+  const member = await fetchMember(guild, userId);
+  if (!member) {
+    return {
+      ok: false,
+      status: 'not_on_server',
+      userId: String(userId || ''),
+      nickname: null,
+      error: 'User ist nicht mehr auf dem Server.',
+    };
+  }
+
+  const current = cleanName(member.nickname || member.displayName);
+  const cleaned = stripExistingTeamPrefix(current);
+  const username = cleanName(member.user?.globalName || member.user?.username || '');
+  const nickname = cleaned && cleaned !== username ? cleaned : null;
+
+  try {
+    await member.setNickname(nickname, 'Loco Night Cup Team-Nickname-Cleanup');
+    return {
+      ok: true,
+      status: 'changed',
+      userId: String(userId),
+      nickname,
+      error: null,
+    };
+  } catch (error) {
+    const status = permissionErrorCode(error) || 'error';
+    console.warn(`[nickname-service] Nickname cleanup failed for user ${userId}: ${error.message}`);
+    return {
+      ok: false,
+      status,
+      userId: String(userId),
+      nickname,
+      error: error.message,
+    };
+  }
+}
+
 async function syncAllTeamNicknames(guild) {
   const results = [];
   const teams = listVisibleTeams()
@@ -172,6 +211,7 @@ function summarizeNicknameResults(results) {
 
 module.exports = {
   buildTeamNickname,
+  clearTeamNickname,
   setTeamCoManagerNickname,
   setTeamManagerNickname,
   stripExistingTeamPrefix,
