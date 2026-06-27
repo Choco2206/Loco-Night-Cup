@@ -213,8 +213,8 @@ function buildScheduleEmbed(group) {
   return new EmbedBuilder()
     .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Spielplan`)
     .setColor(0xf2c94c)
-    .setDescription(`${scheduleText}\n\n\u26a0\ufe0f Beide Teams muessen das Ergebnis eintragen.`)
-    .setFooter({ text: 'Freilose sind Platzhalter und erzeugen keine automatische Wertung.' })
+    .setDescription(`${scheduleText}\n\n\u26a0\ufe0f Beide Teams muessen das Ergebnis eintragen. Sobald alle Ergebnisse dieses Slots final bestaetigt sind, wird automatisch der naechste Slot freigegeben.`)
+    .setFooter({ text: 'Freilose sind Platzhalter und werden nicht als echtes Match gespielt.' })
     .setTimestamp(new Date());
 }
 

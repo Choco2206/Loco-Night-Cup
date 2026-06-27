@@ -2,6 +2,8 @@
 
 const {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ModalBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
@@ -16,6 +18,12 @@ const { findTeamById } = require('../teams/team-service');
 const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
 const {
+  getReplacementCandidates,
+  getReplaceableMatches,
+  participantLabel,
+  replaceKnockoutTeam,
+} = require('./knockout-replacements');
+const {
   getAdminSelectableMatches,
   getUserSelectableMatches,
   setAdminResult,
@@ -23,6 +31,7 @@ const {
 } = require('./knockout-results');
 
 const EPHEMERAL = 64;
+const REPLACEMENT_PAGE_SIZE = 25;
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -79,6 +88,86 @@ function buildMatchSelect(customId, entries) {
         description: matchDescription(entry.match),
       })))
   );
+}
+
+function clampPage(page, totalPages) {
+  const parsed = Number(page);
+  if (!Number.isInteger(parsed)) return 0;
+  return Math.min(Math.max(parsed, 0), Math.max(totalPages - 1, 0));
+}
+
+function buildReplacementMatchSelect(eventKey, roundKey, entries) {
+  return buildMatchSelect(`ko_replace_match_select:${eventKey}:${roundKey}`, entries.map(entry => ({
+    match: entry.match,
+    value: entry.value,
+  })));
+}
+
+function buildReplacementSideSelect(eventKey, roundKey, match) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`ko_replace_side_select:${eventKey}:${roundKey}:${match.id}`)
+      .setPlaceholder('Zu ersetzendes Team auswaehlen')
+      .addOptions([
+        {
+          label: `Team 1: ${participantLabel(match.home)}`.slice(0, 100),
+          value: 'home',
+          description: 'Team 1 ersetzen',
+        },
+        {
+          label: `Team 2: ${participantLabel(match.away)}`.slice(0, 100),
+          value: 'away',
+          description: 'Team 2 ersetzen',
+        },
+      ])
+  );
+}
+
+function buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page = 0 }) {
+  const candidates = getReplacementCandidates({ eventKey, roundKey, matchId, side });
+  if (!candidates.length) throw new Error('Kein verfuegbares Ersatzteam gefunden.');
+
+  const totalPages = Math.max(1, Math.ceil(candidates.length / REPLACEMENT_PAGE_SIZE));
+  const currentPage = clampPage(page, totalPages);
+  const pageCandidates = candidates.slice(
+    currentPage * REPLACEMENT_PAGE_SIZE,
+    (currentPage + 1) * REPLACEMENT_PAGE_SIZE
+  );
+
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`ko_replace_team_select:${eventKey}:${roundKey}:${matchId}:${side}:${currentPage}`)
+        .setPlaceholder(totalPages === 1 ? 'Ersatzteam auswaehlen' : `Ersatzteam auswaehlen (${currentPage + 1}/${totalPages})`)
+        .addOptions(pageCandidates.map(team => ({
+          label: team.label.slice(0, 100),
+          value: team.id,
+          description: team.description.slice(0, 100),
+        })))
+    ),
+  ];
+
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ko_replace_team_page:${eventKey}:${roundKey}:${matchId}:${side}:${currentPage - 1}`)
+        .setLabel('Zurueck')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0),
+      new ButtonBuilder()
+        .setCustomId(`ko_replace_team_page:${eventKey}:${roundKey}:${matchId}:${side}:${currentPage + 1}`)
+        .setLabel('Weiter')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1)
+    ));
+  }
+
+  return {
+    content: totalPages === 1
+      ? 'Waehle das Ersatzteam aus.'
+      : `Waehle das Ersatzteam aus.\nSeite ${currentPage + 1}/${totalPages} (${candidates.length} Teams)`,
+    components,
+  };
 }
 
 function createScoreModal({ customId, title, match }) {
@@ -236,6 +325,95 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
   return true;
 }
 
+async function handleOpenReplacement(interaction, eventKey, roundKey) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein K.O.-Team ersetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const entries = getReplaceableMatches(eventKey, roundKey);
+  if (!entries.length) {
+    await interaction.reply({ content: 'Keine ersetzbaren K.O.-Matches in dieser Runde gefunden.', flags: EPHEMERAL });
+    return true;
+  }
+
+  await interaction.reply({
+    content: 'Waehle die K.O.-Paarung aus, in der ein Team ersetzt werden soll.',
+    components: [buildReplacementMatchSelect(eventKey, roundKey, entries)],
+    flags: EPHEMERAL,
+  });
+  return true;
+}
+
+async function handleReplacementMatchSelect(interaction, eventKey, roundKey) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein K.O.-Team ersetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const matchId = interaction.values?.[0];
+  const { round } = getRoundFromEvent(eventKey, roundKey);
+  const match = (round.matches || []).find(entry => String(entry.id) === String(matchId));
+  if (!match) throw new Error('K.O.-Match wurde nicht gefunden.');
+
+  await interaction.update({
+    content: 'Welches Team soll ersetzt werden?',
+    components: [buildReplacementSideSelect(eventKey, roundKey, match)],
+  });
+  return true;
+}
+
+async function handleReplacementSideSelect(interaction, eventKey, roundKey, matchId) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein K.O.-Team ersetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const side = interaction.values?.[0];
+  await interaction.update(buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page: 0 }));
+  return true;
+}
+
+async function handleReplacementTeamPage(interaction, eventKey, roundKey, matchId, side, page) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein K.O.-Team ersetzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  await interaction.update(buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page }));
+  return true;
+}
+
+async function handleReplacementTeamSelect(interaction, eventKey, roundKey, matchId, side, client) {
+  await interaction.deferUpdate();
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.editReply({ content: 'Du darfst kein K.O.-Team ersetzen.', components: [] });
+    return true;
+  }
+
+  const replacementTeamId = interaction.values?.[0];
+  const outcome = replaceKnockoutTeam({
+    eventKey,
+    roundKey,
+    matchId,
+    side,
+    replacementTeamId,
+    adminUserId: interaction.user.id,
+  });
+
+  await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  await interaction.editReply({
+    content: [
+      'K.O.-Team ersetzt.',
+      `Alt: **${outcome.oldTeam?.clubName || participantLabel(outcome.oldParticipant)}**`,
+      `Neu: **${outcome.newTeam.clubName}**`,
+      'Ergebnis, offene Meldungen und Admin-Entscheidung fuer diese Paarung wurden zurueckgesetzt.',
+    ].join('\n'),
+    components: [],
+  });
+  return true;
+}
+
 async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   if (!await isAdminAllowed(interaction)) {
@@ -268,17 +446,22 @@ async function handleKnockoutInteraction(interaction, client) {
   const customId = interaction.customId || '';
 
   if (interaction.isButton?.()) {
-    const [action, eventKey, roundKey] = customId.split(':');
+    const [action, eventKey, roundKey, matchId, side, page] = customId.split(':');
     if (!EVENT_KEYS.includes(eventKey)) return false;
     if (action === 'ko_result_open') return handleOpenTeamResult(interaction, eventKey, roundKey);
     if (action === 'ko_admin_result_open') return handleOpenAdminResult(interaction, eventKey, roundKey);
+    if (action === 'ko_replace_open') return handleOpenReplacement(interaction, eventKey, roundKey);
+    if (action === 'ko_replace_team_page') return handleReplacementTeamPage(interaction, eventKey, roundKey, matchId, side, page);
   }
 
   if (interaction.isStringSelectMenu?.()) {
-    const [action, eventKey, roundKey] = customId.split(':');
+    const [action, eventKey, roundKey, matchId, side] = customId.split(':');
     if (!EVENT_KEYS.includes(eventKey)) return false;
     if (action === 'ko_result_select') return handleTeamResultSelect(interaction, eventKey, roundKey);
     if (action === 'ko_admin_result_select') return handleAdminResultSelect(interaction, eventKey, roundKey);
+    if (action === 'ko_replace_match_select') return handleReplacementMatchSelect(interaction, eventKey, roundKey);
+    if (action === 'ko_replace_side_select') return handleReplacementSideSelect(interaction, eventKey, roundKey, matchId);
+    if (action === 'ko_replace_team_select') return handleReplacementTeamSelect(interaction, eventKey, roundKey, matchId, side, client);
   }
 
   if (interaction.isModalSubmit?.()) {

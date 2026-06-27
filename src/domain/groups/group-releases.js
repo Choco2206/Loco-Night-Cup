@@ -12,13 +12,9 @@ const {
   getMatchSlot,
   isMatchReleased,
   isRealMatch,
-  recalculateGroupStandings,
-  updateGroupCompletion,
 } = require('./group-results');
 
 const INVITE_WINDOW_MINUTES = 5;
-const REMINDER_DELAY_MS = 15 * 60 * 1000;
-const AUTO_SCORE_DELAY_MS = 25 * 60 * 1000;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 const timers = new Map();
@@ -140,12 +136,8 @@ function normalizeSlotRelease(slot, release, firstPlannedAt) {
     : 'released';
   normalized.releaseMessageIds = normalized.releaseMessageIds || {};
   normalized.reminderMessageIds = normalized.reminderMessageIds || {};
-  if (!normalized.reminderSentAt) {
-    normalized.reminderAt = new Date(releasedDate.getTime() + REMINDER_DELAY_MS).toISOString();
-  } else {
-    normalized.reminderAt = normalized.reminderAt || new Date(releasedDate.getTime() + REMINDER_DELAY_MS).toISOString();
-  }
-  normalized.autoScoreAt = normalized.autoScoreAt || new Date(releasedDate.getTime() + AUTO_SCORE_DELAY_MS).toISOString();
+  normalized.reminderAt = null;
+  normalized.autoScoreAt = null;
   return normalized;
 }
 
@@ -205,8 +197,10 @@ function markSlotReleased(eventKey, event, slot, now = new Date()) {
   release.releasedAt = releasedAt;
   release.inviteStartAt = releasedAt;
   release.inviteEndAt = nowIso(addMinutes(now, INVITE_WINDOW_MINUTES));
-  release.reminderAt = new Date(now.getTime() + REMINDER_DELAY_MS).toISOString();
-  release.autoScoreAt = new Date(now.getTime() + AUTO_SCORE_DELAY_MS).toISOString();
+  release.reminderAt = null;
+  release.autoScoreAt = null;
+  release.reminderSentAt = null;
+  release.autoScoredAt = null;
   releases.currentSlot = slot;
 
   for (const { match } of getSlotMatches(event, slot)) {
@@ -223,29 +217,6 @@ function markSlotReleased(eventKey, event, slot, now = new Date()) {
 
   event.meta = { ...(event.meta || {}), updatedAt: releasedAt };
   return true;
-}
-
-function labelForParticipant(participant) {
-  if (!participant) return 'TBD';
-  if (participant.type === 'bye') return 'Freilos';
-  return participant.displayName || participant.teamId || 'Team';
-}
-
-function formatOpenMatchesByGroup(event, slot) {
-  const lines = [];
-  for (const group of Object.values(event.groups?.groups || {})) {
-    const missing = getMatches(group)
-      .filter(match => isRealMatch(match))
-      .filter(match => getMatchSlot(match) === Number(slot))
-      .filter(match => match.status !== 'confirmed')
-      .map(match => `${labelForParticipant(match.home)} vs ${labelForParticipant(match.away)}`);
-
-    if (!missing.length) continue;
-    lines.push(`${group.name || `Gruppe ${group.groupKey}`}`);
-    lines.push(...missing);
-    lines.push('');
-  }
-  return lines.join('\n').trim();
 }
 
 async function sendToActiveGroupChannels(client, event, content, idBucketName, slot) {
@@ -307,7 +278,7 @@ async function deleteStoredSlotPosts(client, eventKey, event, slot, now = new Da
     await deleteMessageFromGroup(client, groups[groupKey], messageId, `Freigabe-Post Spieltag ${slot}`);
   }
   for (const [groupKey, messageId] of Object.entries(reminderIds)) {
-    await deleteMessageFromGroup(client, groups[groupKey], messageId, `Reminder-Post Spieltag ${slot}`);
+    await deleteMessageFromGroup(client, groups[groupKey], messageId, `alter Hinweis-Post Spieltag ${slot}`);
   }
 
   updateEventData(eventKey, current => {
@@ -337,9 +308,9 @@ async function postReleaseMessage(client, eventKey, event, slot) {
     '',
     '\u26a0\ufe0f Beide Teams muessen das Ergebnis eintragen.',
     '',
-    'Bitte startet euer Spiel zeitnah und tragt das Ergebnis direkt nach Spielende ein.',
+    'Tragt eure Ergebnisse bitte direkt ein.',
     '',
-    'Verspaetungen verzoegern den gesamten Turnierablauf.',
+    'Sobald alle Ergebnisse dieses Slots final bestaetigt sind, wird automatisch der naechste Slot freigegeben.',
   ].join('\n');
 
   const messageIds = await sendToActiveGroupChannels(client, event, content, 'Freigabe-Post', slot);
@@ -354,132 +325,31 @@ async function postReleaseMessage(client, eventKey, event, slot) {
   });
 }
 
-async function postReminderMessage(client, eventKey, event, slot, now = new Date()) {
-  const release = event.groups?.releases?.slots?.[slotKey(slot)];
-  if (!release?.releasedAt || !release.reminderAt || release.reminderSentAt) return;
-
-  const missingText = formatOpenMatchesByGroup(event, slot);
-  if (!missingText) {
-    updateEventData(eventKey, current => {
-      ensureReleaseState(eventKey, current, now);
-      current.groups.releases.slots[slotKey(slot)].reminderSentAt = nowIso(now);
-      return current;
-    });
-    return;
-  }
-
-  const content = [
-    `\u26a0\ufe0f Noch offene Ergebnisse in Spieltag ${slot}`,
-    '',
-    'Aktuell fehlen noch folgende Ergebnisse:',
-    '',
-    missingText,
-    '',
-    'Bitte tragt eure Ergebnisse ein bzw. bestaetigt offene Meldungen.',
-    '',
-    'Ihr habt noch maximal 5 Minuten Zeit, um das Ergebnis einzutragen bzw. zu bestaetigen.',
-    '',
-    'Wenn bis dahin keine vollstaendige Bestaetigung erfolgt, gilt ohne Diskussion:',
-    'Falls ein Team bereits ein Ergebnis gemeldet hat, wird dieses Ergebnis uebernommen.',
-    'Falls kein Ergebnis gemeldet wurde, wird das Spiel mit 0:0 gewertet.',
-    '',
-    '\u2757 Bitte keine Diskussionen im Nachhinein.',
-    '',
-    'Es liegt in eurer Verantwortung, puenktlich einzuladen, zu spielen und das Ergebnis einzutragen.',
-    '',
-    'Technische Probleme, verspaetete Einladungen oder fehlende Ergebnismeldungen verhindern den Turnierablauf fuer alle anderen Teams.',
-  ].join('\n');
-
-  const messageIds = await sendToActiveGroupChannels(client, event, content, 'Reminder-Post', slot);
-  updateEventData(eventKey, current => {
-    ensureReleaseState(eventKey, current, now);
-    const currentRelease = current.groups.releases.slots[slotKey(slot)];
-    currentRelease.reminderSentAt = nowIso(now);
-    currentRelease.reminderMessageIds = {
-      ...(currentRelease.reminderMessageIds || {}),
-      ...messageIds,
-    };
-    return current;
-  });
-}
-
-function applyAutoScoreToMatch(match, now = new Date()) {
-  if (!isRealMatch(match)) return false;
-  if (match.status === 'confirmed') return false;
-  if (match.status === 'admin_decision_required') return false;
-
-  const reports = Array.isArray(match.reports) ? match.reports : [];
-  const firstReport = reports[0] || null;
-  const homeGoals = firstReport ? Number(firstReport.homeGoals) : 0;
-  const awayGoals = firstReport ? Number(firstReport.awayGoals) : 0;
-
-  match.status = 'confirmed';
-  match.result = {
-    homeGoals,
-    awayGoals,
-    confirmedAt: nowIso(now),
-    source: firstReport ? 'auto_single_report' : 'auto_no_report',
-  };
-  match.autoScore = {
-    appliedAt: nowIso(now),
-    reason: firstReport ? 'single_report' : 'no_report',
-  };
-  match.meta = { ...(match.meta || {}), updatedAt: nowIso(now) };
-  return true;
-}
-
 async function refreshAllGroups(client, eventKey, event) {
   if (!client) return;
   for (const group of Object.values(event.groups?.groups || {})) {
     await refreshGroupPosts({ client, eventKey, event, group }).catch(error => {
-      console.error(`Gruppe ${group.groupKey}: Posts konnten nach Auto-Wertung nicht aktualisiert werden.`, error);
+      console.error(`Gruppe ${group.groupKey}: Posts konnten nach Slot-Aktualisierung nicht aktualisiert werden.`, error);
     });
   }
 }
 
 async function applyAutoScores(client, eventKey, slot, now = new Date()) {
-  let updatedEvent = null;
-  let changed = false;
-  let blockedByAdminDecision = false;
-
   updateEventData(eventKey, event => {
     ensureReleaseState(eventKey, event, now);
     const release = event.groups.releases.slots[slotKey(slot)];
-    if (!release?.releasedAt || release.autoScoredAt) {
-      updatedEvent = event;
-      return event;
-    }
-
-    for (const group of Object.values(event.groups?.groups || {})) {
-      for (const match of getMatches(group)) {
-        if (!isRealMatch(match) || getMatchSlot(match) !== Number(slot)) continue;
-        if (match.status === 'admin_decision_required') {
-          blockedByAdminDecision = true;
-          continue;
-        }
-        if (applyAutoScoreToMatch(match, now)) changed = true;
-      }
-      recalculateGroupStandings(group);
-      updateGroupCompletion(event, group);
-    }
-
-    if (blockedByAdminDecision) {
-      release.status = 'admin_decision_required';
-      release.autoScoredAt = nowIso(now);
-    } else if (isSlotComplete(event, slot)) {
+    if (release?.releasedAt && isSlotComplete(event, slot)) {
       release.status = 'completed';
       release.completedAt = release.completedAt || nowIso(now);
-      release.autoScoredAt = nowIso(now);
     }
-
+    release.autoScoreAt = null;
+    release.autoScoredAt = null;
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
-    updatedEvent = event;
     return event;
   });
 
-  if (changed && updatedEvent) await refreshAllGroups(client, eventKey, updatedEvent);
-  if (!blockedByAdminDecision) await maybeReleaseNextSlot(client, eventKey, now);
-  if (!blockedByAdminDecision) await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
+  await maybeReleaseNextSlot(client, eventKey, now);
+  await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
   scheduleEvent(client, eventKey);
 }
 
@@ -608,24 +478,6 @@ function scheduleEvent(client, eventKey) {
   for (const slot of [1, 2, 3]) {
     const release = releases[slotKey(slot)];
     if (!release?.releasedAt) continue;
-
-    if (release.reminderAt && !release.reminderSentAt) {
-      setTimer(`${eventKey}:reminder:${slot}`, release.reminderAt, async () => {
-        const latest = readEventData(eventKey);
-        ensureReleaseState(eventKey, latest);
-        const latestRelease = latest.groups?.releases?.slots?.[slotKey(slot)];
-        if (latestRelease?.releasedAt) {
-          await postReminderMessage(client, eventKey, latest, slot).catch(error => console.error('Gruppen-Reminder fehlgeschlagen:', error));
-        }
-        scheduleEvent(client, eventKey);
-      });
-    }
-
-    if (release.autoScoreAt && !release.autoScoredAt) {
-      setTimer(`${eventKey}:autoscore:${slot}`, release.autoScoreAt, () => {
-        applyAutoScores(client, eventKey, slot).catch(error => console.error('Gruppen-Auto-Wertung fehlgeschlagen:', error));
-      });
-    }
   }
 }
 

@@ -383,7 +383,11 @@ function buildRoundButtons(eventKey, roundKey) {
       .setCustomId(`ko_admin_result_open:${eventKey}:${roundKey}`)
       .setLabel('Admin-Ergebnis')
       .setEmoji('🛠️')
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`ko_replace_open:${eventKey}:${roundKey}`)
+      .setLabel('Team ersetzen')
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
