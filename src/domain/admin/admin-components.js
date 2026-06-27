@@ -15,7 +15,7 @@ function buildAdminPanelPayload() {
     .setDescription('Zentrale Steuerung des Turniersystems.')
     .setColor(0xff0000)
     .addFields(
-      { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
+      { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nCheck-in verwalten\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
       { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nTeam sperren\nSperre entfernen\nServerstruktur einrichten\nNicknames synchronisieren', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen\nSiegerehrung posten', inline: true }
@@ -36,6 +36,8 @@ function buildAdminPanelPayload() {
     button('admin_group_release_current', 'Aktuellen Spieltag freigeben', ButtonStyle.Success),
     button('admin_knockout_create', 'K.O. erstellen', ButtonStyle.Primary).setEmoji('🏆')
   );
+
+  tournamentRow.addComponents(button('admin_checkin_manual', 'Check-in verwalten', ButtonStyle.Secondary));
 
   const teamsRow = new ActionRowBuilder().addComponents(
     button('admin_teams_list', 'Teams anzeigen', ButtonStyle.Secondary),

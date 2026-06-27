@@ -4,7 +4,7 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('./checkin-repository');
-const { recalculateCheckinFormat } = require('./checkin-format');
+const { isValidTournamentTeam, recalculateCheckinFormat } = require('./checkin-format');
 const { createLateWithdrawalBan } = require('./checkin-ban-integration');
 const {
   assertCheckinActionAllowed,
@@ -13,6 +13,7 @@ const {
   getEligibleTeamForUser,
 } = require('./checkin-validation');
 const { ensureEventCycle, getCheckinWindowState, isAfterDeadline } = require('./checkin-schedule');
+const { findTeamById } = require('../teams/team-service');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -24,6 +25,24 @@ function readSettings() {
 
 function hasTeamEntry(event, teamId) {
   return (event.checkin?.entries || []).some(entry => String(entry.teamId) === String(teamId));
+}
+
+function assertManualCheckinEventEditable(event) {
+  if (event.status === 'cancelled' || event.status === 'reset') {
+    throw new Error('Bei diesem Event kann der Check-in nicht manuell geaendert werden.');
+  }
+  if (['groups', 'groups_running', 'knockout', 'ceremony', 'completed'].includes(event.status)) {
+    throw new Error('Dieses Event ist bereits im Turnierlauf. Check-ins bitte nicht mehr manuell aendern.');
+  }
+}
+
+function getManualCheckinTeam(teamId, now = new Date()) {
+  const team = findTeamById(teamId);
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  if (!isValidTournamentTeam(team, now)) {
+    throw new Error('Team ist nicht aktiv/vollstaendig registriert oder aktuell gesperrt.');
+  }
+  return team;
 }
 
 function ensureCheckinShape(event) {
@@ -134,6 +153,73 @@ function withdrawTeam({ eventKey, userId, now = new Date() }) {
   return { changed: true, wasCheckedIn: true, lateWithdrawal: false, team, event: updatedEvent };
 }
 
+function adminCheckInTeam({ eventKey, teamId, actorUserId, now = new Date() }) {
+  const settings = readSettings();
+  const team = getManualCheckinTeam(teamId, now);
+  let result;
+
+  updateEventData(eventKey, event => {
+    ensureCheckinShape(event);
+    assertManualCheckinEventEditable(event);
+
+    if (hasTeamEntry(event, team.id)) {
+      recalculateCheckinFormat(event, settings, now);
+      result = { changed: false, alreadyCheckedIn: true, team, event };
+      return event;
+    }
+
+    const timestamp = nowIso(now);
+    event.checkin.entries.push({
+      teamId: String(team.id),
+      checkedInByUserId: String(actorUserId),
+      checkedInAt: timestamp,
+      checkedInByAdmin: true,
+    });
+    event.meta = { ...event.meta, updatedAt: timestamp };
+
+    recalculateCheckinFormat(event, settings, now);
+    result = { changed: true, alreadyCheckedIn: false, team, event };
+    return event;
+  });
+
+  return result;
+}
+
+function adminWithdrawTeam({ eventKey, teamId, actorUserId, now = new Date() }) {
+  const settings = readSettings();
+  const team = findTeamById(teamId);
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  let result;
+
+  updateEventData(eventKey, event => {
+    ensureCheckinShape(event);
+    assertManualCheckinEventEditable(event);
+
+    if (!hasTeamEntry(event, teamId)) {
+      recalculateCheckinFormat(event, settings, now);
+      result = { changed: false, wasCheckedIn: false, team, event };
+      return event;
+    }
+
+    removeTeamFromEvent(event, teamId);
+    event.meta = {
+      ...event.meta,
+      updatedAt: nowIso(now),
+      lastManualCheckinChange: {
+        action: 'withdraw',
+        teamId: String(teamId),
+        actorUserId: String(actorUserId),
+        changedAt: nowIso(now),
+      },
+    };
+    recalculateCheckinFormat(event, settings, now);
+    result = { changed: true, wasCheckedIn: true, team, event };
+    return event;
+  });
+
+  return result;
+}
+
 function removeTeamFromAllEvents({ teamId, settings = readSettings(), now = new Date() }) {
   const affectedEventKeys = [];
 
@@ -167,6 +253,8 @@ function getPublicCheckinState(eventKey) {
 }
 
 module.exports = {
+  adminCheckInTeam,
+  adminWithdrawTeam,
   checkInTeam,
   getPublicCheckinState,
   hasTeamEntry,

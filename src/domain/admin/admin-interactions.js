@@ -15,7 +15,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage, refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
-const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
+const { adminCheckInTeam, adminWithdrawTeam, removeTeamFromAllEvents } = require('../checkins/checkin-service');
 const { readAllEvents, updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const {
@@ -46,6 +46,7 @@ const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
   'admin_checkin_open',
   'admin_checkin_close',
+  'admin_checkin_manual',
   'admin_event_reset',
   'admin_format_lock',
   'admin_groups_draw',
@@ -82,8 +83,11 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_ceremony_post_select',
   'admin_team_ban_team_select',
   'admin_team_unban_select',
+  'admin_checkin_manual_action_select',
 ]);
 const ADMIN_SELECT_PREFIXES = [
+  'admin_checkin_manual_event_select:',
+  'admin_checkin_manual_team_select:',
   'admin_hof_first_select',
   'admin_hof_second_select:',
   'admin_hof_third_select:',
@@ -113,6 +117,7 @@ const ADMIN_BUTTON_PREFIXES = [
   'admin_team_delete_confirm:',
   'admin_team_delete_cancel:',
   'admin_team_ban_page:',
+  'admin_checkin_manual_page:',
 ];
 const ADMIN_MODAL_PREFIXES = [
   'admin_team_edit_name_modal:',
@@ -122,6 +127,7 @@ const ADMIN_MODAL_PREFIXES = [
 ];
 const TEAM_BAN_PAGE_SIZE = 25;
 const TEAM_DETAILS_PAGE_SIZE = 25;
+const MANUAL_CHECKIN_PAGE_SIZE = 25;
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -307,6 +313,103 @@ function buildTeamDetailsSelectPayload(page = 0) {
     content: totalPages === 1
       ? 'Team fuer Details/Verwaltung auswaehlen.'
       : `Team fuer Details/Verwaltung auswaehlen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+    components,
+  };
+}
+
+function normalizeManualCheckinAction(action) {
+  if (action === 'join' || action === 'leave') return action;
+  throw new Error('Check-in-Aktion nicht gefunden.');
+}
+
+function getManualCheckinActionLabel(action) {
+  return normalizeManualCheckinAction(action) === 'join' ? 'anmelden' : 'abmelden';
+}
+
+function buildManualCheckinActionSelect() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('admin_checkin_manual_action_select')
+      .setPlaceholder('Aktion auswaehlen')
+      .addOptions([
+        { label: 'Team anmelden', value: 'join', description: 'Team manuell in einen Check-in eintragen' },
+        { label: 'Team abmelden', value: 'leave', description: 'Team manuell aus einem Check-in entfernen' },
+      ])
+  );
+}
+
+function buildManualCheckinEventSelect(action) {
+  const normalizedAction = normalizeManualCheckinAction(action);
+  return buildEventSelect(
+    `admin_checkin_manual_event_select:${normalizedAction}`,
+    `Event zum ${getManualCheckinActionLabel(normalizedAction)} auswaehlen`
+  );
+}
+
+function getManualCheckinTeams(action, eventKey) {
+  const normalizedAction = normalizeManualCheckinAction(action);
+  const event = readAllEvents()[eventKey];
+  if (!event) throw new Error('Event nicht gefunden.');
+  const checkedInIds = new Set((event.checkin?.entries || []).map(entry => String(entry.teamId)));
+
+  if (normalizedAction === 'join') {
+    return sortedRegisteredTeams().filter(team => !checkedInIds.has(String(team.id)));
+  }
+
+  return (event.checkin?.entries || [])
+    .map(entry => findTeamById(entry.teamId))
+    .filter(team => team && team.status !== 'deleted')
+    .slice()
+    .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de', { sensitivity: 'base' }));
+}
+
+function buildManualCheckinTeamSelectPayload(action, eventKey, page = 0) {
+  const normalizedAction = normalizeManualCheckinAction(action);
+  if (!EVENT_KEYS.includes(eventKey)) throw new Error('Event nicht gefunden.');
+
+  const teams = getManualCheckinTeams(normalizedAction, eventKey);
+  if (!teams.length) {
+    throw new Error(normalizedAction === 'join'
+      ? 'Es gibt kein auswaehlbares Team fuer diesen Check-in.'
+      : 'In diesem Event ist kein Team eingecheckt.');
+  }
+
+  const totalPages = Math.max(1, Math.ceil(teams.length / MANUAL_CHECKIN_PAGE_SIZE));
+  const currentPage = clampPage(page, totalPages);
+  const pageTeams = teams.slice(currentPage * MANUAL_CHECKIN_PAGE_SIZE, (currentPage + 1) * MANUAL_CHECKIN_PAGE_SIZE);
+  const actionLabel = getManualCheckinActionLabel(normalizedAction);
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`admin_checkin_manual_team_select:${normalizedAction}:${eventKey}:${currentPage}`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .addOptions(pageTeams.map(team => ({
+          label: team.clubName.slice(0, 100),
+          value: String(team.id),
+          description: `ID: ${String(team.id).slice(0, 80)}`,
+        })))
+    ),
+  ];
+
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`admin_checkin_manual_page:${normalizedAction}:${eventKey}:${currentPage - 1}`)
+        .setLabel('Zurueck')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0),
+      new ButtonBuilder()
+        .setCustomId(`admin_checkin_manual_page:${normalizedAction}:${eventKey}:${currentPage + 1}`)
+        .setLabel('Weiter')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1)
+    ));
+  }
+
+  return {
+    content: totalPages === 1
+      ? `Team fuer ${EVENT_LABELS[eventKey] || eventKey} ${actionLabel}.`
+      : `Team fuer ${EVENT_LABELS[eventKey] || eventKey} ${actionLabel}.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
     components,
   };
 }
@@ -919,6 +1022,44 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_checkin_manual_action_select') {
+    const action = normalizeManualCheckinAction(interaction.values?.[0]);
+    await interaction.update({
+      content: `Fuer welches Event soll ein Team manuell ${getManualCheckinActionLabel(action)} werden?`,
+      components: [buildManualCheckinEventSelect(action)],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_checkin_manual_event_select:')) {
+    const [, action] = interaction.customId.split(':');
+    const eventKey = interaction.values?.[0];
+    await interaction.update(buildManualCheckinTeamSelectPayload(action, eventKey, 0));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_checkin_manual_team_select:')) {
+    const [, action, eventKey] = interaction.customId.split(':');
+    const teamId = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const normalizedAction = normalizeManualCheckinAction(action);
+    const result = normalizedAction === 'join'
+      ? adminCheckInTeam({ eventKey, teamId, actorUserId: interaction.user.id })
+      : adminWithdrawTeam({ eventKey, teamId, actorUserId: interaction.user.id });
+
+    await refreshCheckinMessage(eventKey, client);
+    await refreshRegisteredTeamsOverview(client).catch(() => null);
+    await interaction.editReply({
+      content: [
+        `Team **${result.team.clubName}** wurde fuer **${EVENT_LABELS[eventKey] || eventKey}** manuell ${getManualCheckinActionLabel(normalizedAction)}.`,
+        result.changed ? 'Status: geaendert.' : 'Status: war bereits so.',
+      ].join('\n'),
+      components: [],
+      embeds: [],
+    });
+    return true;
+  }
+
   const eventKey = interaction.values?.[0];
   if (!EVENT_KEYS.includes(eventKey)) throw new Error('Event nicht gefunden.');
 
@@ -1323,6 +1464,21 @@ async function handleAdminInteraction(interaction, client) {
     if (interaction.customId.startsWith('admin_team_ban_page:')) {
       const [, page] = interaction.customId.split(':');
       await interaction.update(buildTeamBanSelectPayload(page));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_checkin_manual_page:')) {
+      const [, action, eventKey, page] = interaction.customId.split(':');
+      await interaction.update(buildManualCheckinTeamSelectPayload(action, eventKey, page));
+      return true;
+    }
+
+    if (interaction.customId === 'admin_checkin_manual') {
+      await interaction.reply({
+        content: 'Soll ein Team manuell an- oder abgemeldet werden?',
+        components: [buildManualCheckinActionSelect()],
+        flags: EPHEMERAL,
+      });
       return true;
     }
 
