@@ -2,6 +2,8 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { findTeamById } = require('../teams/team-service');
+const { TOURNAMENT_FORMATS } = require('../../app/constants');
+const { rankGroupRows } = require('./group-ranking');
 
 const STATUS_LABELS = {
   not_released: 'Noch nicht freigegeben',
@@ -63,15 +65,7 @@ function buildTeamOverviewEmbed(group) {
 }
 
 function buildLiveTableEmbed(group) {
-  const rows = (group.standings || [])
-    .slice()
-    .sort((a, b) => (
-      b.points - a.points ||
-      b.goalDifference - a.goalDifference ||
-      b.goalsFor - a.goalsFor ||
-      a.goalsAgainst - b.goalsAgainst ||
-      String(a.displayName || '').localeCompare(String(b.displayName || ''), 'de', { sensitivity: 'base' })
-    ));
+  const rows = rankGroupRows(group);
 
   const byes = (group.slots || []).filter(slot => slot.type === 'bye');
   const tableRows = [
@@ -133,8 +127,12 @@ function formatByeRow(place) {
 }
 
 function getQualificationText(formatSize) {
-  if (Number(formatSize) === 24) {
-    return '\u{1f3c6} Weiterkommen: Platz 1 & 2 + die 4 besten Drittplatzierten';
+  const config = TOURNAMENT_FORMATS[Number(formatSize)];
+  if (config?.bestFourths) {
+    return `\u{1f3c6} Weiterkommen: Platz 1 & 2 + die ${config.bestThirds} besten Drittplatzierten + der beste Viertplatzierte`;
+  }
+  if (config?.bestThirds) {
+    return `\u{1f3c6} Weiterkommen: Platz 1 & 2 + die ${config.bestThirds} besten Drittplatzierten`;
   }
   return '\u{1f3c6} Weiterkommen: Platz 1 & 2';
 }

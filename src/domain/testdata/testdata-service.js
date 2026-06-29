@@ -25,6 +25,22 @@ const TEST_TEAM_NAMES = [
   'Atlas CF',
   'Vortex City',
   'Zenith Rovers',
+  'Aurora FC',
+  'Blizzard United',
+  'Cosmos CF',
+  'Dragon Squad',
+  'Eclipse City',
+  'Falcon Rovers',
+  'Galaxy FC',
+  'Horizon FC',
+  'Inferno United',
+  'Jupiter CF',
+  'Kraken Squad',
+  'Legacy City',
+  'Meteor Rovers',
+  'Neon FC',
+  'Orbit United',
+  'Pulse CF',
 ];
 
 function nowIso() {

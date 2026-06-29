@@ -2,6 +2,7 @@
 
 const { findTeamById } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
+const { TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
 
 function uniqueStrings(values) {
   const seen = new Set();
@@ -50,8 +51,8 @@ function getManualByeCount(event) {
 function getAllowedSizes(settings, event) {
   const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
     ? settings.tournament.allowedSizes
-    : event.format?.allowedSizes || [8, 16, 24, 32];
-  return [...allowedSizes].filter(size => [8, 16, 24, 32].includes(Number(size))).map(Number).sort((a, b) => a - b);
+    : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
+  return [...allowedSizes].filter(size => TOURNAMENT_FORMAT_SIZES.includes(Number(size))).map(Number).sort((a, b) => a - b);
 }
 
 function chooseFormatSize({ participantSlotCount, minimumParticipantSlots, allowedSizes }) {
@@ -70,7 +71,7 @@ function recalculateFormatBeforeLock(event, settings) {
   const byeCount = getManualByeCount(event);
   const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
   const allowedSizes = getAllowedSizes(settings, event);
-  const participantSlotCount = teamIds.length + byeCount;
+  const participantSlotCount = teamIds.length;
 
   const size = chooseFormatSize({
     participantSlotCount,
@@ -81,8 +82,8 @@ function recalculateFormatBeforeLock(event, settings) {
   const activeRealCount = size ? Math.min(teamIds.length, size) : teamIds.length;
   const activeTeamIds = teamIds.slice(0, activeRealCount);
   const waitlistTeamIds = teamIds.slice(activeRealCount);
-  const activeByeCount = size ? Math.min(byeCount, Math.max(0, size - activeRealCount)) : byeCount;
-  const waitlistByeCount = size ? Math.max(0, byeCount - activeByeCount) : 0;
+  const activeByeCount = 0;
+  const waitlistByeCount = byeCount;
 
   event.format = {
     ...event.format,
@@ -108,8 +109,8 @@ function preserveLockedFormat(event) {
   const waitlistSet = new Set(existingWaitlistIds);
   const byeCount = getManualByeCount(event);
   const lockedSize = Number(event.format?.size || 0);
-  const activeByeCount = lockedSize ? Math.min(byeCount, Math.max(0, lockedSize - activeTeamIds.length)) : byeCount;
-  const waitlistByeCount = lockedSize ? Math.max(0, byeCount - activeByeCount) : 0;
+  const activeByeCount = 0;
+  const waitlistByeCount = byeCount;
 
   for (const teamId of entryIds) {
     if (activeTeamIds.includes(teamId) || waitlistSet.has(teamId)) continue;

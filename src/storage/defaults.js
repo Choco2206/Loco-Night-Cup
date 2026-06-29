@@ -7,6 +7,8 @@ const {
   EVENT_PROFILE_BY_KEY,
   GROUP_KEYS,
   KNOCKOUT_ROUNDS,
+  TOURNAMENT_FORMAT_SIZES,
+  TOURNAMENT_FORMATS,
 } = require('../app/constants');
 
 function emptyTimestampMeta() {
@@ -72,7 +74,7 @@ function createEventDefault(eventKey) {
     schedule: createScheduleDefault(eventKey),
     format: {
       minimumRealTeams: 8,
-      allowedSizes: [8, 16, 24, 32],
+      allowedSizes: [...TOURNAMENT_FORMAT_SIZES],
       size: null,
       realTeamCount: 0,
       byeCount: 0,
@@ -341,7 +343,7 @@ function createSettingsDefault() {
     },
     tournament: {
       minimumRealTeams: 8,
-      allowedSizes: [8, 16, 24, 32],
+      allowedSizes: [...TOURNAMENT_FORMAT_SIZES],
       groupSize: 4,
       points: {
         win: 3,
@@ -349,10 +351,13 @@ function createSettingsDefault() {
         loss: 0,
       },
       qualificationRules: {
-        8: 'top2',
-        16: 'top2',
-        24: 'top2_plus_4_best_thirds',
-        32: 'top2',
+        8: TOURNAMENT_FORMATS[8].rule,
+        12: TOURNAMENT_FORMATS[12].rule,
+        16: TOURNAMENT_FORMATS[16].rule,
+        20: TOURNAMENT_FORMATS[20].rule,
+        24: TOURNAMENT_FORMATS[24].rule,
+        28: TOURNAMENT_FORMATS[28].rule,
+        32: TOURNAMENT_FORMATS[32].rule,
       },
       avoidSameGroupRematchesInFirstKoRound: true,
       thirdPlaceMatchRequired: true,

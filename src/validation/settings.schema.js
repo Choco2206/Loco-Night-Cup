@@ -6,6 +6,7 @@ const {
   EVENT_PROFILE_BY_KEY,
   GROUP_KEYS,
   KNOCKOUT_ROUNDS,
+  TOURNAMENT_FORMAT_SIZES,
 } = require('../app/constants');
 const {
   requireArray,
@@ -112,8 +113,8 @@ function validateSettings(data) {
 
   if (requireObject(errors, data.tournament, 'tournament')) {
     if (data.tournament.minimumRealTeams !== 8) errors.push('tournament.minimumRealTeams must be 8');
-    if (JSON.stringify(data.tournament.allowedSizes) !== JSON.stringify([8, 16, 24, 32])) {
-      errors.push('tournament.allowedSizes must be [8,16,24,32]');
+    if (JSON.stringify(data.tournament.allowedSizes) !== JSON.stringify(TOURNAMENT_FORMAT_SIZES)) {
+      errors.push(`tournament.allowedSizes must be [${TOURNAMENT_FORMAT_SIZES.join(',')}]`);
     }
     if (data.tournament.groupSize !== 4) errors.push('tournament.groupSize must be 4');
     if (data.tournament.thirdPlaceMatchRequired !== true) errors.push('tournament.thirdPlaceMatchRequired must be true');

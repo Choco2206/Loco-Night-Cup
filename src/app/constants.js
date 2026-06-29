@@ -21,6 +21,17 @@ const EVENT_LABELS = {
 };
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const TOURNAMENT_FORMAT_SIZES = [8, 12, 16, 20, 24, 28, 32];
+
+const TOURNAMENT_FORMATS = {
+  8: { groupCount: 2, qualifiedCount: 4, bestThirds: 0, firstRoundKey: 'semi_final', rule: 'top2' },
+  12: { groupCount: 3, qualifiedCount: 8, bestThirds: 2, firstRoundKey: 'quarter_final', rule: 'top2_plus_2_best_thirds' },
+  16: { groupCount: 4, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'top2' },
+  20: { groupCount: 5, qualifiedCount: 16, bestThirds: 5, bestFourths: 1, firstRoundKey: 'round_of_16', rule: 'top2_plus_5_best_thirds_plus_1_best_fourth' },
+  24: { groupCount: 6, qualifiedCount: 16, bestThirds: 4, firstRoundKey: 'round_of_16', rule: 'top2_plus_4_best_thirds' },
+  28: { groupCount: 7, qualifiedCount: 16, bestThirds: 2, firstRoundKey: 'round_of_16', rule: 'top2_plus_2_best_thirds' },
+  32: { groupCount: 8, qualifiedCount: 16, bestThirds: 0, firstRoundKey: 'round_of_16', rule: 'top2' },
+};
 
 const KNOCKOUT_ROUNDS = [
   'round_of_16',
@@ -81,4 +92,6 @@ module.exports = {
   KNOCKOUT_ROUNDS,
   REGISTRATION_STATUSES,
   TEAM_STATUSES,
+  TOURNAMENT_FORMAT_SIZES,
+  TOURNAMENT_FORMATS,
 };

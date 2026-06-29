@@ -1,17 +1,15 @@
 'use strict';
 
 const { findTeamById } = require('../teams/team-service');
+const { TOURNAMENT_FORMATS } = require('../../app/constants');
+const { compareThirdPlaceRows, rankGroupRows } = require('../groups/group-ranking');
 
-const QUALIFICATION_RULES = {
-  8: { rule: 'top2', qualifiedCount: 4 },
-  16: { rule: 'top2', qualifiedCount: 8 },
-  24: { rule: 'top2_plus_4_best_thirds', qualifiedCount: 16 },
-  32: { rule: 'top2', qualifiedCount: 16 },
-};
+const QUALIFICATION_RULES = TOURNAMENT_FORMATS;
 
 function groupKeysForFormat(formatSize) {
-  return Object.keys(QUALIFICATION_RULES).includes(String(formatSize))
-    ? Array.from({ length: Number(formatSize) / 4 }, (_, index) => String.fromCharCode(65 + index))
+  const config = QUALIFICATION_RULES[Number(formatSize)];
+  return config
+    ? Array.from({ length: config.groupCount }, (_, index) => String.fromCharCode(65 + index))
     : [];
 }
 
@@ -31,18 +29,6 @@ function assertGroupsCompleted(event) {
   }
 
   return groupKeys;
-}
-
-function compareRows(a, b) {
-  return (
-    Number(b.points || 0) - Number(a.points || 0) ||
-    Number(b.goalDifference || 0) - Number(a.goalDifference || 0) ||
-    Number(b.goalsFor || 0) - Number(a.goalsFor || 0) ||
-    Number(a.goalsAgainst || 0) - Number(b.goalsAgainst || 0) ||
-    String(a.displayName || '').localeCompare(String(b.displayName || ''), 'de', { sensitivity: 'base' }) ||
-    String(a.groupKey || '').localeCompare(String(b.groupKey || ''), 'de', { sensitivity: 'base' }) ||
-    String(a.teamId || '').localeCompare(String(b.teamId || ''), 'de', { sensitivity: 'base' })
-  );
 }
 
 function createQualifiedTeam(row, groupKey, groupRank, seedBucket, seedIndex) {
@@ -68,10 +54,7 @@ function createQualifiedTeam(row, groupKey, groupRank, seedBucket, seedIndex) {
 }
 
 function rankedGroupRows(group, groupKey) {
-  return (group.standings || [])
-    .filter(row => row.teamId)
-    .map(row => ({ ...row, groupKey }))
-    .sort(compareRows);
+  return rankGroupRows(group).map(row => ({ ...row, groupKey }));
 }
 
 function qualifyTeams(event) {
@@ -83,6 +66,7 @@ function qualifyTeams(event) {
   const winners = [];
   const runnersUp = [];
   const thirds = [];
+  const fourths = [];
 
   for (const groupKey of groupKeys) {
     const rows = rankedGroupRows(event.groups.groups[groupKey], groupKey);
@@ -91,19 +75,32 @@ function qualifyTeams(event) {
     winners.push(createQualifiedTeam(rows[0], groupKey, 1, 'winner', winners.length + 1));
     runnersUp.push(createQualifiedTeam(rows[1], groupKey, 2, 'runner_up', runnersUp.length + 1));
     if (rows[2]) thirds.push(createQualifiedTeam(rows[2], groupKey, 3, 'third', thirds.length + 1));
+    if (rows[3]) fourths.push(createQualifiedTeam(rows[3], groupKey, 4, 'fourth', fourths.length + 1));
   }
 
   let qualifiedTeams = [...winners, ...runnersUp];
-  if (config.rule === 'top2_plus_4_best_thirds') {
+  if (config.bestThirds > 0) {
     const bestThirds = thirds
       .slice()
-      .sort((a, b) => compareRows(
+      .sort((a, b) => compareThirdPlaceRows(
         { ...a.statsSnapshot, displayName: a.displayName, groupKey: a.groupKey, teamId: a.teamId },
         { ...b.statsSnapshot, displayName: b.displayName, groupKey: b.groupKey, teamId: b.teamId }
       ))
-      .slice(0, 4)
+      .slice(0, config.bestThirds)
       .map((team, index) => ({ ...team, seed: winners.length + runnersUp.length + index + 1 }));
     qualifiedTeams = [...qualifiedTeams, ...bestThirds];
+  }
+
+  if (config.bestFourths > 0) {
+    const bestFourths = fourths
+      .slice()
+      .sort((a, b) => compareThirdPlaceRows(
+        { ...a.statsSnapshot, displayName: a.displayName, groupKey: a.groupKey, teamId: a.teamId },
+        { ...b.statsSnapshot, displayName: b.displayName, groupKey: b.groupKey, teamId: b.teamId }
+      ))
+      .slice(0, config.bestFourths)
+      .map((team, index) => ({ ...team, seed: qualifiedTeams.length + index + 1 }));
+    qualifiedTeams = [...qualifiedTeams, ...bestFourths];
   }
 
   if (qualifiedTeams.length !== config.qualifiedCount) {
@@ -119,6 +116,6 @@ function qualifyTeams(event) {
 
 module.exports = {
   QUALIFICATION_RULES,
-  compareRows,
+  compareRows: compareThirdPlaceRows,
   qualifyTeams,
 };

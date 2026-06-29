@@ -4,6 +4,7 @@ const {
   EVENT_KEYS,
   EVENT_PROFILE_BY_KEY,
   EVENT_STATUSES,
+  TOURNAMENT_FORMAT_SIZES,
 } = require('../app/constants');
 const {
   hasNoDuplicates,
@@ -41,11 +42,11 @@ function validateEvent(data, expectedEventKey = null) {
 
   if (requireObject(errors, data.format, 'format')) {
     if (data.format.minimumRealTeams !== 8) errors.push('format.minimumRealTeams must be 8');
-    if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify([8, 16, 24, 32])) {
-      errors.push('format.allowedSizes must be [8,16,24,32]');
+    if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify(TOURNAMENT_FORMAT_SIZES)) {
+      errors.push(`format.allowedSizes must be [${TOURNAMENT_FORMAT_SIZES.join(',')}]`);
     }
-    if (data.format.size !== null && ![8, 16, 24, 32].includes(data.format.size)) {
-      errors.push('format.size must be null, 8, 16, 24, or 32');
+    if (data.format.size !== null && !TOURNAMENT_FORMAT_SIZES.includes(data.format.size)) {
+      errors.push(`format.size must be null or one of ${TOURNAMENT_FORMAT_SIZES.join(', ')}`);
     }
   }
 

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const { EVENT_LABELS } = require('../../app/constants');
+const { EVENT_LABELS, TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
 const { FILES, ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
 const {
@@ -23,7 +23,8 @@ const {
   getTournamentStartAt,
 } = require('./checkin-schedule');
 
-const TOURNAMENT_MILESTONES = [8, 16, 24, 32];
+const TOURNAMENT_MILESTONES = TOURNAMENT_FORMAT_SIZES;
+const MAX_DISPLAY_SLOTS = 32;
 
 function teamName(teamId) {
   const team = findTeamById(teamId);
@@ -69,20 +70,7 @@ function formatStatus(eventKey, event, settings, now = new Date()) {
 }
 
 function getParticipantSlotCount(event) {
-  return getEntryTeamIds(event).length + getManualByeCount(event);
-}
-
-function displaySizeForParticipantSlots(participantSlots) {
-  if (participantSlots >= 22) return 32;
-  if (participantSlots >= 14) return 24;
-  if (participantSlots >= 6) return 16;
-  return 8;
-}
-
-function getDisplaySlotCount(event) {
-  const thresholdSize = displaySizeForParticipantSlots(getParticipantSlotCount(event));
-  if (event.format?.lockedAt && event.format?.size) return Math.max(Number(event.format.size), thresholdSize);
-  return thresholdSize;
+  return getEntryTeamIds(event).length;
 }
 
 function getPlayableSlotCount(event, settings) {
@@ -115,6 +103,34 @@ function formatFormat(event, settings) {
   return `${playableSlotCount}er Turnier\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
 }
 
+function getNextFormatInfo(participantSlots, settings, event) {
+  const allowedSizes = getAllowedSizes(settings, event);
+  const currentSize = chooseFormatSize({
+    participantSlotCount: participantSlots,
+    minimumParticipantSlots: Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8),
+    allowedSizes,
+  });
+  const nextSize = allowedSizes.find(size => size > participantSlots) || null;
+  return {
+    currentSize,
+    nextSize,
+    missingForNext: nextSize ? Math.max(0, nextSize - participantSlots) : 0,
+  };
+}
+
+function formatCheckinSummary(event, settings, slotState) {
+  const { currentSize, nextSize, missingForNext } = getNextFormatInfo(slotState.participantSlotCount, settings, event);
+  return [
+    `Aktueller Stand: ${slotState.participantSlotCount} Teams`,
+    `Aktuell gueltig: ${currentSize ? `${currentSize}er Cup` : 'noch kein gueltiger Cup'}`,
+    `Naechster Schritt: ${nextSize ? `${nextSize}er Cup` : 'maximal erreicht'}`,
+    nextSize
+      ? `Es fehlen noch ${missingForNext} Team${missingForNext === 1 ? '' : 's'} fuer den ${nextSize}er Cup`
+      : 'Es fehlen noch 0 Teams',
+    `Warteliste aktuell: ${slotState.waitlistLabels.length} Teams`,
+  ].join('\n');
+}
+
 function getActiveTeamIds(event) {
   const entryIds = new Set(getEntryTeamIds(event));
   const activeTeamIds = uniqueStrings(event.checkin?.activeTeamIds || []).filter(teamId => entryIds.has(teamId));
@@ -129,13 +145,12 @@ function getWaitlistTeamIds(event) {
 
 function buildSlotState(event, settings) {
   const playableSlotCount = getPlayableSlotCount(event, settings);
-  const displaySlotCount = getDisplaySlotCount(event, settings);
+  const displaySlotCount = MAX_DISPLAY_SLOTS;
   const activeTeamIds = getActiveTeamIds(event);
   const waitlistTeamIds = getWaitlistTeamIds(event);
   const byeCount = getManualByeCount(event);
-  const activeCapacity = playableSlotCount || displaySlotCount;
-  const activeByeCount = Math.min(byeCount, Math.max(0, activeCapacity - activeTeamIds.length));
-  const waitlistByeCount = playableSlotCount ? Math.max(0, byeCount - activeByeCount) : 0;
+  const activeByeCount = 0;
+  const waitlistByeCount = byeCount;
 
   const activeLabels = [
     ...activeTeamIds.map(teamName),
@@ -164,12 +179,12 @@ function formatSlotLines(slotState) {
   const lines = [];
   const playableSlotCount = slotState.playableSlotCount;
 
-  for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
+  for (let slot = 1; slot <= MAX_DISPLAY_SLOTS; slot += 1) {
     const label = slotState.participantLabels[slot - 1];
     const isWaitlistSlot = Boolean(playableSlotCount && slot > playableSlotCount && label);
     lines.push(`${slot}. ${label ? `${label}${isWaitlistSlot ? ' (WL)' : ''}` : '—'}`);
 
-    if (TOURNAMENT_MILESTONES.includes(slot) && slot <= slotState.displaySlotCount) {
+    if (TOURNAMENT_MILESTONES.includes(slot)) {
       lines.push(formatMilestoneLine(slot));
     }
   }
@@ -237,6 +252,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
     nightHint,
     '',
     rulesLine,
+    formatCheckinSummary(event, settings, slotState),
     '─────────────',
     `🏆 Turnierformat: ${formatFormat(event, settings)}`,
     '─────────────',

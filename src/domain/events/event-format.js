@@ -2,6 +2,7 @@
 
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
+const { TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
 const { findTeamById } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('../checkins/checkin-ban-integration');
 
@@ -24,8 +25,8 @@ function getActiveManualByes(event) {
 function getAllowedSizes(settings, event) {
   const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
     ? settings.tournament.allowedSizes
-    : event.format?.allowedSizes || [8, 16, 24, 32];
-  return [...allowedSizes].filter(size => [8, 16, 24, 32].includes(size)).sort((a, b) => a - b);
+    : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
+  return [...allowedSizes].filter(size => TOURNAMENT_FORMAT_SIZES.includes(size)).sort((a, b) => a - b);
 }
 
 function groupCountForSize(size) {
@@ -60,17 +61,12 @@ function collectValidRealTeams(event, now = new Date()) {
 
 function choosePlayableFormat({ realTeamCount, byeCount, settings, event }) {
   const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
-  const participantSlotCount = realTeamCount + byeCount;
-  if (participantSlotCount < minimumParticipantSlots) return null;
+  if (realTeamCount < minimumParticipantSlots) return null;
 
   const allowedSizes = getAllowedSizes(settings, event).sort((a, b) => b - a);
 
   for (const size of allowedSizes) {
-    const activeTeamCount = Math.min(realTeamCount, size);
-    const neededByes = Math.max(0, size - activeTeamCount);
-    if (size > participantSlotCount) continue;
-    if (neededByes > byeCount) continue;
-    if (neededByes > groupCountForSize(size)) continue;
+    if (size > realTeamCount) continue;
     return size;
   }
 
@@ -92,15 +88,15 @@ function buildLockedParticipantField(event, now = new Date()) {
   });
 
   if (!size) {
-    throw new Error(`Format-Lock nicht moeglich: mindestens ${minimumParticipantSlots} gueltige Teilnehmerplaetze und ein spielbares Format aus 8, 16, 24 oder 32 Slots erforderlich.`);
+    throw new Error(`Format-Lock nicht moeglich: mindestens ${minimumParticipantSlots} gueltige Teams und ein spielbares Format aus ${getAllowedSizes(settings, event).join(', ')} Slots erforderlich.`);
   }
 
-  const activeRealCount = Math.min(teams.length, size);
-  const neededByeCount = size - activeRealCount;
+  const activeRealCount = size;
+  const neededByeCount = 0;
   const activeTeams = teams.slice(0, activeRealCount);
   const waitlistTeams = teams.slice(activeRealCount);
-  const activeByes = manualByes.slice(0, neededByeCount);
-  const waitlistByes = manualByes.slice(neededByeCount);
+  const activeByes = [];
+  const waitlistByes = manualByes;
   const groupCount = groupCountForSize(size);
 
   if (activeByes.length > groupCount) {

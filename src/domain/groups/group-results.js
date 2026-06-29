@@ -2,6 +2,7 @@
 
 const { updateEventData } = require('../events/event-repository');
 const { findTeamById, isTeamMember } = require('../teams/team-service');
+const { rankGroupRows } = require('./group-ranking');
 
 const REAL_MATCH_STATUSES = ['open', 'pending_confirmation', 'admin_decision_required', 'confirmed'];
 
@@ -201,6 +202,7 @@ function recalculateGroupStandings(group) {
   }
 
   group.standings = rows;
+  group.standings = rankGroupRows(group);
   return rows;
 }
 
