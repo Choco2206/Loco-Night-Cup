@@ -1,7 +1,12 @@
 'use strict';
 
 const fs = require('fs');
-const { EVENT_KEYS, KNOCKOUT_ROUNDS } = require('../app/constants');
+const {
+  EVENT_KEYS,
+  KNOCKOUT_ROUNDS,
+  TOURNAMENT_FORMAT_SIZES,
+  TOURNAMENT_FORMATS,
+} = require('../app/constants');
 const {
   BANS_DIR,
   DATA_ASSETS_DIR,
@@ -95,6 +100,47 @@ function repairCheckinChannelIdsFromSeed(settings, seed) {
   return true;
 }
 
+function arraysEqual(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => Number(value) === Number(right[index]));
+}
+
+function migrateAllowedSizes(container) {
+  if (!isPlainObject(container)) return false;
+  if (arraysEqual(container.allowedSizes, TOURNAMENT_FORMAT_SIZES)) return false;
+
+  container.allowedSizes = [...TOURNAMENT_FORMAT_SIZES];
+  return true;
+}
+
+function migrateQualificationRules(settings) {
+  if (!isPlainObject(settings?.tournament)) return false;
+
+  const expectedRules = Object.fromEntries(
+    TOURNAMENT_FORMAT_SIZES.map(size => [String(size), TOURNAMENT_FORMATS[size].rule])
+  );
+
+  if (JSON.stringify(settings.tournament.qualificationRules || {}) === JSON.stringify(expectedRules)) return false;
+  settings.tournament.qualificationRules = expectedRules;
+  return true;
+}
+
+function migrateTournamentFormatSettings(settings) {
+  if (!isPlainObject(settings)) return false;
+  settings.tournament = isPlainObject(settings.tournament) ? settings.tournament : {};
+  let changed = false;
+  changed = migrateAllowedSizes(settings.tournament) || changed;
+  changed = migrateQualificationRules(settings) || changed;
+  return changed;
+}
+
+function migrateEventFormat(event) {
+  if (!isPlainObject(event)) return false;
+  event.format = isPlainObject(event.format) ? event.format : {};
+  return migrateAllowedSizes(event.format);
+}
+
 function readSettingsSeed() {
   return fs.existsSync(FILES.settingsSeed)
     ? readJson(FILES.settingsSeed, createSettingsDefault())
@@ -136,6 +182,7 @@ function ensureKnockoutRounds(rounds) {
 
 function seedSettingsFile() {
   const seed = readSettingsSeed();
+  migrateTournamentFormatSettings(seed);
 
   if (!fs.existsSync(FILES.settings)) {
     writeJsonAtomic(FILES.settings, seed);
@@ -143,7 +190,10 @@ function seedSettingsFile() {
   }
 
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const changed = mergeMissingSettings(settings, seed) || repairCheckinChannelIdsFromSeed(settings, seed);
+  let changed = false;
+  changed = mergeMissingSettings(settings, seed) || changed;
+  changed = repairCheckinChannelIdsFromSeed(settings, seed) || changed;
+  changed = migrateTournamentFormatSettings(settings) || changed;
   if (changed) writeJsonAtomic(FILES.settings, settings);
   return settings;
 }
@@ -217,6 +267,8 @@ function normalizeEventFile(eventKey) {
     event.byes = [];
     changed = true;
   }
+
+  changed = migrateEventFormat(event) || changed;
 
   event.byes = event.byes.map((bye, index) => {
     const result = normalizeLegacyBye(bye, eventKey, index);
@@ -361,6 +413,8 @@ function initializeStorage() {
 module.exports = {
   initializeStorage,
   mergeMissingSettings,
+  migrateEventFormat,
+  migrateTournamentFormatSettings,
   normalizeEventFile,
   normalizeEventFiles,
   normalizeMessagesFile,
