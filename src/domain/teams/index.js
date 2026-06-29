@@ -7,6 +7,7 @@ const { refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { ensureTeamPanel } = require('./team-panel');
 const { handleInteraction } = require('./team-interactions');
 const { handleMessage } = require('./team-message-handler');
+const { ensureTeamAchievementsRankingMessage } = require('./team-achievements');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { cleanupTeamsWithoutLeadership, handleMemberRemoved } = require('./team-service');
 const { syncAllManagerRoles, syncManagerRoleForUser } = require('./team-roles');
@@ -26,6 +27,9 @@ async function init(client) {
   }
 
   await refreshRegisteredTeamsOverview(client);
+  await ensureTeamAchievementsRankingMessage({ client }).catch(error => {
+    console.warn(`[team-achievements] Basisnachricht konnte nicht initialisiert werden: ${error.message}`);
+  });
 
   for (const guild of client.guilds.cache.values()) {
     await syncAllManagerRoles(guild, settings);

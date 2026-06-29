@@ -163,7 +163,7 @@ function iconForRank(rank) {
 function rankingEntryText(entry) {
   return [
     `${iconForRank(entry.rank)} **#${entry.rank} ${entry.clubName}**`,
-    `🥇 Cup-Siege: ${entry.titles.gold} | 🥈 Platz 2: ${entry.titles.silver} | 🥉 Platz 3: ${entry.titles.bronze}`,
+    `🥇 ${entry.titles.gold}   🥈 ${entry.titles.silver}   🥉 ${entry.titles.bronze}`,
   ].join('\n');
 }
 
@@ -173,8 +173,17 @@ function createRankingMessageChunks(entries = getTeamAchievementRanking()) {
       [
         '🏆 **Loco Night Cup Team-Erfolge**',
         '',
-        'Noch keine Platzierungen vorhanden.',
-        'Nach dem ersten abgeschlossenen Cup erscheinen hier die Teams mit 🥇 🥈 🥉.',
+        'Hier werden alle Teams angezeigt, die bereits mindestens eine Platzierung im Loco Night Cup erreicht haben.',
+        '',
+        '━━━━━━━━━━━━━━━━━━━━',
+        '',
+        '🏅 Noch keine Team-Erfolge vorhanden.',
+        '',
+        'Nach dem ersten abgeschlossenen Turnier erscheint hier automatisch das Ranking aller Teams mit mindestens einer Platzierung.',
+        '',
+        '━━━━━━━━━━━━━━━━━━━━',
+        '',
+        '🔄 Diese Übersicht wird nach jedem abgeschlossenen Turnier automatisch aktualisiert.',
       ].join('\n'),
     ];
   }
@@ -195,7 +204,7 @@ function createRankingMessageChunks(entries = getTeamAchievementRanking()) {
     '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
-    '🔄 Aktualisiert nach jedem abgeschlossenen Turnier.',
+    '🔄 Diese Übersicht wird nach jedem abgeschlossenen Turnier automatisch aktualisiert.',
   ].join('\n');
 
   const chunks = [];
@@ -294,6 +303,10 @@ async function refreshTeamAchievementsRankingMessage({ client, guild, force = fa
   };
 }
 
+async function ensureTeamAchievementsRankingMessage({ client, guild }) {
+  return refreshTeamAchievementsRankingMessage({ client, guild, force: true });
+}
+
 module.exports = {
   TEAM_ACHIEVEMENTS_CHANNEL_ID,
   applyTeamAchievementsForEvent,
@@ -303,5 +316,6 @@ module.exports = {
   getTeamAchievementRank,
   getTeamAchievementRanking,
   getTeamTitles,
+  ensureTeamAchievementsRankingMessage,
   refreshTeamAchievementsRankingMessage,
 };
