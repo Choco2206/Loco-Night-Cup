@@ -49,7 +49,7 @@ function buildAdminPanelPayload() {
 
   const testsRow = new ActionRowBuilder().addComponents(
     button('admin_checkin_refresh', 'Check-in Refresh', ButtonStyle.Secondary),
-    button('admin_team_overview_refresh', 'Teamuebersicht Refresh', ButtonStyle.Secondary),
+    button('admin_team_achievement_manual', 'Team-Erfolg vergeben', ButtonStyle.Secondary).setEmoji('🏆'),
     button('admin_testdata_create', 'Testdaten erzeugen', ButtonStyle.Secondary),
     button('admin_testdata_remove', 'Testdaten entfernen', ButtonStyle.Danger),
     button('admin_nickname_sync', 'Nicknames synchronisieren', ButtonStyle.Secondary).setEmoji('🏷️')

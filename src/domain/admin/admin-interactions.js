@@ -19,6 +19,10 @@ const { adminCheckInTeam, adminWithdrawTeam, removeTeamFromAllEvents } = require
 const { readAllEvents, updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const {
+  incrementTeamAchievement,
+  refreshTeamAchievementsRankingMessage,
+} = require('../teams/team-achievements');
+const {
   adminAddCoManager,
   adminChangeManager,
   adminDeleteTeam,
@@ -29,7 +33,7 @@ const {
   listVisibleTeams,
 } = require('../teams/team-service');
 const { syncTeamFunctionRolesForUser } = require('../teams/team-roles');
-const { syncChampionRolesForUser, syncChampionRolesForUsers } = require('../teams/team-champion-roles');
+const { syncChampionRolesForTeam, syncChampionRolesForUser, syncChampionRolesForUsers } = require('../teams/team-champion-roles');
 const { clearTeamNickname, setTeamCoManagerNickname, setTeamManagerNickname } = require('../nicknames');
 const { ensureUserIsNotBot } = require('../teams/team-validation');
 const { addTeamBan, isTeamOrUserBanned, listActiveBans, removeTeamBan } = require('../bans');
@@ -63,6 +67,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_team_unban',
   'admin_checkin_refresh',
   'admin_team_overview_refresh',
+  'admin_team_achievement_manual',
   'admin_managers_without_team',
   'admin_ceremony_test',
   'admin_ceremony_post',
@@ -103,6 +108,8 @@ const ADMIN_SELECT_PREFIXES = [
   'admin_team_ban_team_select:',
   'admin_team_ban_reason_select:',
   'admin_team_ban_duration_select:',
+  'admin_team_achievement_team_select:',
+  'admin_team_achievement_title_select:',
 ];
 const ADMIN_USER_SELECT_PREFIXES = [
   'admin_team_add_covm_user:',
@@ -124,6 +131,9 @@ const ADMIN_BUTTON_PREFIXES = [
   'admin_team_delete_cancel:',
   'admin_team_ban_page:',
   'admin_checkin_manual_page:',
+  'admin_team_achievement_page:',
+  'admin_team_achievement_confirm:',
+  'admin_team_achievement_cancel:',
 ];
 const ADMIN_MODAL_PREFIXES = [
   'admin_team_edit_name_modal:',
@@ -134,6 +144,12 @@ const ADMIN_MODAL_PREFIXES = [
 const TEAM_BAN_PAGE_SIZE = 25;
 const TEAM_DETAILS_PAGE_SIZE = 25;
 const MANUAL_CHECKIN_PAGE_SIZE = 25;
+const TEAM_ACHIEVEMENT_PAGE_SIZE = 25;
+const TEAM_ACHIEVEMENT_TITLES = {
+  gold: { label: 'Cup-Sieg', emoji: '🥇' },
+  silver: { label: 'Platz 2', emoji: '🥈' },
+  bronze: { label: 'Platz 3', emoji: '🥉' },
+};
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -320,6 +336,84 @@ function buildTeamDetailsSelectPayload(page = 0) {
       ? 'Team fuer Details/Verwaltung auswaehlen.'
       : `Team fuer Details/Verwaltung auswaehlen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
     components,
+  };
+}
+
+function buildTeamAchievementSelectPayload(page = 0) {
+  const teams = sortedRegisteredTeams();
+  if (!teams.length) throw new Error('Es gibt keine aktiven Teams.');
+
+  const totalPages = Math.max(1, Math.ceil(teams.length / TEAM_ACHIEVEMENT_PAGE_SIZE));
+  const currentPage = clampPage(page, totalPages);
+  const pageTeams = teams.slice(currentPage * TEAM_ACHIEVEMENT_PAGE_SIZE, (currentPage + 1) * TEAM_ACHIEVEMENT_PAGE_SIZE);
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`admin_team_achievement_team_select:${currentPage}`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .addOptions(pageTeams.map(team => ({
+          label: team.clubName.slice(0, 100),
+          value: String(team.id),
+          description: `ID: ${String(team.id).slice(0, 80)}`,
+        })))
+    ),
+  ];
+
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`admin_team_achievement_page:${currentPage - 1}`)
+        .setLabel('Zurueck')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0),
+      new ButtonBuilder()
+        .setCustomId(`admin_team_achievement_page:${currentPage + 1}`)
+        .setLabel('Weiter')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1)
+    ));
+  }
+
+  return {
+    content: totalPages === 1
+      ? 'Welchem Team soll ein Erfolg vergeben werden?'
+      : `Welchem Team soll ein Erfolg vergeben werden?\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+    components,
+  };
+}
+
+function buildTeamAchievementTitleSelect(team) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`admin_team_achievement_title_select:${team.id}`)
+      .setPlaceholder('Erfolg auswaehlen')
+      .addOptions(Object.entries(TEAM_ACHIEVEMENT_TITLES).map(([key, definition]) => ({
+        label: `${definition.emoji} ${definition.label}`,
+        value: key,
+      })))
+  );
+}
+
+function buildTeamAchievementConfirmPayload(team, titleKey) {
+  const definition = TEAM_ACHIEVEMENT_TITLES[titleKey];
+  if (!definition) throw new Error('Dieser Team-Erfolg ist nicht bekannt.');
+
+  return {
+    content: `Wirklich **${team.clubName}** +1 ${definition.emoji} **${definition.label}** geben?`,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`admin_team_achievement_confirm:${team.id}:${titleKey}`)
+          .setLabel('Bestaetigen')
+          .setEmoji('✅')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`admin_team_achievement_cancel:${team.id}:${titleKey}`)
+          .setLabel('Abbrechen')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
   };
 }
 
@@ -905,6 +999,25 @@ async function replyInteraction(interaction, content, extra = {}) {
   }
 }
 
+async function postAdminLogMessage(client, settings, content) {
+  const channelId = settings.channels?.logChannelId;
+  if (!client?.channels?.fetch || !channelId) {
+    console.log(`[admin-log] ${content}`);
+    return false;
+  }
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.send) {
+    console.log(`[admin-log] ${content}`);
+    return false;
+  }
+
+  await channel.send({ content, allowedMentions: { parse: ['users'] } }).catch(error => {
+    console.warn(`[admin-log] ${error.message}`);
+  });
+  return true;
+}
+
 async function handleAdminSelect(interaction, client, settings) {
   if (interaction.customId.startsWith('admin_team_details_select:')) {
     const teamId = interaction.values?.[0];
@@ -978,6 +1091,26 @@ async function handleAdminSelect(interaction, client, settings) {
       ].join('\n'),
       components: [],
     });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_achievement_team_select:')) {
+    const teamId = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+    await interaction.update({
+      content: `Welchen Erfolg soll **${team.clubName}** erhalten?`,
+      components: [buildTeamAchievementTitleSelect(team)],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_achievement_title_select:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const titleKey = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+    await interaction.update(buildTeamAchievementConfirmPayload(team, titleKey));
     return true;
   }
 
@@ -1373,6 +1506,52 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
+    if (interaction.customId.startsWith('admin_team_achievement_page:')) {
+      const [, page] = interaction.customId.split(':');
+      await interaction.update(buildTeamAchievementSelectPayload(page));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_achievement_confirm:')) {
+      const [, teamId, titleKey] = interaction.customId.split(':');
+      const definition = TEAM_ACHIEVEMENT_TITLES[titleKey];
+      if (!definition) throw new Error('Dieser Team-Erfolg ist nicht bekannt.');
+
+      const team = findTeamById(teamId);
+      if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+
+      await interaction.deferUpdate();
+      const updatedTeam = incrementTeamAchievement({
+        teamId,
+        titleKey,
+        actorUserId: interaction.user.id,
+      });
+
+      await refreshTeamAchievementsRankingMessage({ client, guild: interaction.guild, force: true });
+      if (titleKey === 'gold') {
+        await syncChampionRolesForTeam(interaction.guild, updatedTeam, settings);
+      }
+
+      await postAdminLogMessage(
+        client,
+        settings,
+        `Admin <@${interaction.user.id}> hat ${updatedTeam.clubName} manuell +1 ${definition.emoji} ${definition.label} vergeben.`
+      );
+
+      await interaction.editReply({
+        content: `✅ **${updatedTeam.clubName}** hat +1 ${definition.emoji} **${definition.label}** erhalten. Team-Erfolge wurden aktualisiert.`,
+        embeds: [],
+        components: [],
+        allowedMentions: { parse: [] },
+      });
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_team_achievement_cancel:')) {
+      await interaction.update({ content: '❌ Vorgang abgebrochen.', embeds: [], components: [] });
+      return true;
+    }
+
     if (interaction.customId.startsWith('admin_team_edit_name_open:')) {
       const [, teamId] = interaction.customId.split(':');
       const team = findTeamById(teamId);
@@ -1676,6 +1855,14 @@ async function handleAdminInteraction(interaction, client) {
         `Betroffene Manager: ${result.affectedCount}`,
         `Nachrichten: ${result.messageIds.length}`,
       ].join('\n'));
+      return true;
+    }
+
+    if (interaction.customId === 'admin_team_achievement_manual') {
+      await interaction.reply({
+        ...buildTeamAchievementSelectPayload(0),
+        flags: EPHEMERAL,
+      });
       return true;
     }
 

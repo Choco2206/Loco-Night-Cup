@@ -153,6 +153,29 @@ function applyTeamAchievementsForEvent(eventKey) {
   return { applied: true, placementTeamIds, appliedTeams, state };
 }
 
+function incrementTeamAchievement({ teamId, titleKey, actorUserId = null }) {
+  if (!['gold', 'silver', 'bronze'].includes(titleKey)) throw new Error('Dieser Team-Erfolg ist nicht bekannt.');
+
+  const timestamp = nowIso();
+  let updatedTeam = null;
+  updateTeamsData(data => {
+    const team = (Array.isArray(data.teams) ? data.teams : []).find(entry => String(entry.id) === String(teamId));
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+
+    ensureTeamHistory(team);
+    team.history.titles[titleKey] += 1;
+    team.meta = {
+      ...(team.meta || {}),
+      updatedAt: timestamp,
+      updatedByUserId: actorUserId ? String(actorUserId) : team.meta?.updatedByUserId || null,
+    };
+    updatedTeam = team;
+    return data;
+  });
+
+  return updatedTeam;
+}
+
 function iconForRank(rank) {
   if (rank === 1) return '👑';
   if (rank === 2) return '💎';
@@ -316,6 +339,7 @@ module.exports = {
   getTeamAchievementRank,
   getTeamAchievementRanking,
   getTeamTitles,
+  incrementTeamAchievement,
   ensureTeamAchievementsRankingMessage,
   refreshTeamAchievementsRankingMessage,
 };
