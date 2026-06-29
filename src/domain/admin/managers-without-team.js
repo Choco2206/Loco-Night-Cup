@@ -15,13 +15,20 @@ function getManagerRoleId(settings) {
   return settings.roles?.managerRoleId ? String(settings.roles.managerRoleId) : null;
 }
 
-function getManagerTeamUserIds() {
-  return new Set(
-    listVisibleTeams()
-      .map(team => team.manager?.userId)
-      .filter(Boolean)
-      .map(String)
-  );
+function getAssignedTeamUserIds() {
+  const userIds = new Set();
+
+  for (const team of listVisibleTeams()) {
+    if (team.status !== 'active') continue;
+
+    if (team.manager?.userId) userIds.add(String(team.manager.userId));
+
+    for (const coManager of team.coManagers || []) {
+      if (coManager?.userId) userIds.add(String(coManager.userId));
+    }
+  }
+
+  return userIds;
 }
 
 async function fetchManagerMembers(guild, managerRoleId) {
@@ -41,35 +48,56 @@ async function fetchManagerMembers(guild, managerRoleId) {
 async function collectManagersWithoutTeam(guild, settings = readJson(FILES.settings, createSettingsDefault())) {
   const managerRoleId = getManagerRoleId(settings);
   const members = await fetchManagerMembers(guild, managerRoleId);
-  const managerTeamUserIds = getManagerTeamUserIds();
-  return members.filter(member => !managerTeamUserIds.has(String(member.id)));
+  const assignedTeamUserIds = getAssignedTeamUserIds();
+  return members.filter(member => !assignedTeamUserIds.has(String(member.id)));
 }
 
 function createMessageChunks(members) {
-  if (!members.length) return ['Aktuell haben alle Manager ein registriertes Team. ✅'];
+  if (!members.length) {
+    return [
+      [
+        '✅ **Alles sauber!**',
+        '',
+        'Aktuell haben alle Manager entweder ein eigenes Team oder sind als Co-VM bei einem Team eingetragen.',
+      ].join('\n'),
+    ];
+  }
 
-  const header = [
-    'Folgende User haben die Manager Rolle, aber kein Team registriert.',
-    'Warum?! Die Manager Rolle ist dafür da, um ein Team zu registrieren und sich dann, wenn möglich, für einen Cup einzuchecken.',
+  const intro = [
+    '🚨 **Manager ohne Team gefunden** 🚨',
     '',
-    'Folgende Manager sind betroffen:',
+    'Folgende User haben die **Manager-Rolle**, sind aber aktuell in **keinem Team** als VM oder Co-VM eingetragen.',
+    '',
+    'Die Manager-Rolle ist dafür da, ein Team zu registrieren oder als Co-VM bei einem Team mitzuwirken.',
+    'Wenn du aktuell kein Team hast, registriere bitte ein Team oder kläre deine Rolle mit der Turnierleitung.',
+    '',
+    '👀 **Betroffene Manager:**',
+    '',
+  ].join('\n');
+  const footer = [
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    '✅ Sobald ein betroffener Manager ein Team registriert oder als Co-VM eingetragen wird, wird diese Liste automatisch aktualisiert.',
   ].join('\n');
 
   const chunks = [];
-  let current = header;
+  let current = intro;
 
-  for (const member of members) {
-    const line = `<@${member.id}>`;
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index];
+    const line = `${index + 1}. <@${member.id}>`;
     const next = `${current}\n${line}`;
-    if (next.length > DISCORD_MESSAGE_LIMIT) {
-      chunks.push(current);
-      current = line;
+
+    if (`${next}${footer}`.length > DISCORD_MESSAGE_LIMIT && current !== intro) {
+      chunks.push(`${current}${footer}`);
+      current = ['👀 **Betroffene Manager (Fortsetzung):**', '', line].join('\n');
     } else {
       current = next;
     }
   }
 
-  if (current) chunks.push(current);
+  if (current) chunks.push(`${current}${footer}`);
   return chunks;
 }
 

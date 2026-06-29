@@ -348,6 +348,7 @@ async function handleUserSelect(interaction, client) {
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await setTeamCoManagerNickname(interaction.guild, userId, team).catch(() => null);
   await refreshRegisteredTeamsOverview(client);
+  await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   await interaction.editReply({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
 }
@@ -363,6 +364,7 @@ async function handleStringSelect(interaction, client) {
   removeCoManager({ teamId, userId, actorUserId: interaction.user.id });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await refreshRegisteredTeamsOverview(client);
+  await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   await interaction.editReply({ content: `<@${userId}> wurde als Co-VM entfernt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
 }

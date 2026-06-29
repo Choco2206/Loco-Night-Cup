@@ -696,6 +696,7 @@ async function handleAdminAddCoManager({ interaction, client, settings, teamId, 
   const nicknameResults = [await setTeamCoManagerNickname(interaction.guild, userId, updatedTeam)];
   assertNicknameResults(nicknameResults);
   await refreshTeamAdminSurfaces({ client, settings });
+  await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   return updatedTeam;
 }
 
@@ -707,6 +708,7 @@ async function handleAdminRemoveCoManager({ interaction, client, settings, teamI
   const nicknameResults = [await clearTeamNickname(interaction.guild, userId)];
   assertNicknameResults(nicknameResults);
   await refreshTeamAdminSurfaces({ client, settings });
+  await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   return updatedTeam;
 }
 
