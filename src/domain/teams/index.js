@@ -8,6 +8,7 @@ const { ensureTeamPanel } = require('./team-panel');
 const { handleInteraction } = require('./team-interactions');
 const { handleMessage } = require('./team-message-handler');
 const { ensureTeamAchievementsRankingMessage } = require('./team-achievements');
+const { syncAllChampionRoles, syncChampionRolesForUsers } = require('./team-champion-roles');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { cleanupTeamsWithoutLeadership, handleMemberRemoved } = require('./team-service');
 const { syncAllManagerRoles, syncManagerRoleForUser } = require('./team-roles');
@@ -33,6 +34,7 @@ async function init(client) {
 
   for (const guild of client.guilds.cache.values()) {
     await syncAllManagerRoles(guild, settings);
+    await syncAllChampionRoles(guild, settings);
   }
 }
 
@@ -57,6 +59,7 @@ async function handleGuildMemberRemove(member, client) {
   }
 
   await refreshRegisteredTeamsOverview(client);
+  await syncChampionRolesForUsers(member.guild, result.affectedUserIds, settings);
   return true;
 }
 

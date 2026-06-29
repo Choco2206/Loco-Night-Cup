@@ -19,6 +19,7 @@ const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
 } = require('../teams/team-achievements');
+const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
 const {
@@ -310,6 +311,9 @@ async function applyAchievementsIfCompleted({ client, guild, eventKey, completed
   if (result.applied) {
     await refreshTeamAchievementsRankingMessage({ client, guild, force: true }).catch(error => {
       console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`);
+    });
+    await syncChampionRolesForTeam(guild, result.placementTeamIds.gold).catch(error => {
+      console.warn(`[champion-roles] Gewinnerteam konnte nicht synchronisiert werden: ${error.message}`);
     });
   }
   return result;

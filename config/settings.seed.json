@@ -9,6 +9,13 @@
     "playerRoleId": "1516428987251953684",
     "managerRoleId": "1516428922387169321",
     "coManagerRoleId": null,
+    "championRoleIds": {
+      "champion": null,
+      "elite": null,
+      "master": null,
+      "legend": null,
+      "immortal": null
+    },
     "groupRoleIds": {
       "A": "1516429048874795093",
       "B": "1516429089865597109",

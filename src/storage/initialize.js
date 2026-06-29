@@ -183,6 +183,7 @@ function ensureKnockoutRounds(rounds) {
 function seedSettingsFile() {
   const seed = readSettingsSeed();
   migrateTournamentFormatSettings(seed);
+  ensureChampionRoleIds(seed);
 
   if (!fs.existsSync(FILES.settings)) {
     writeJsonAtomic(FILES.settings, seed);
@@ -194,8 +195,26 @@ function seedSettingsFile() {
   changed = mergeMissingSettings(settings, seed) || changed;
   changed = repairCheckinChannelIdsFromSeed(settings, seed) || changed;
   changed = migrateTournamentFormatSettings(settings) || changed;
+  changed = ensureChampionRoleIds(settings) || changed;
   if (changed) writeJsonAtomic(FILES.settings, settings);
   return settings;
+}
+
+function ensureChampionRoleIds(settings) {
+  settings.roles = settings.roles || {};
+  const hadInvalidMap = !isPlainObject(settings.roles.championRoleIds);
+  settings.roles.championRoleIds = hadInvalidMap ? {} : settings.roles.championRoleIds;
+  const keys = ['champion', 'elite', 'master', 'legend', 'immortal'];
+  let changed = hadInvalidMap;
+
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(settings.roles.championRoleIds, key)) {
+      settings.roles.championRoleIds[key] = null;
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 function removeLegacyResetTimeFromSettings(settings) {

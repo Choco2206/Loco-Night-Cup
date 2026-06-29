@@ -29,6 +29,7 @@ const {
   listVisibleTeams,
 } = require('../teams/team-service');
 const { syncTeamFunctionRolesForUser } = require('../teams/team-roles');
+const { syncChampionRolesForUser, syncChampionRolesForUsers } = require('../teams/team-champion-roles');
 const { clearTeamNickname, setTeamCoManagerNickname, setTeamManagerNickname } = require('../nicknames');
 const { ensureUserIsNotBot } = require('../teams/team-validation');
 const { addTeamBan, isTeamOrUserBanned, listActiveBans, removeTeamBan } = require('../bans');
@@ -693,6 +694,7 @@ async function handleAdminAddCoManager({ interaction, client, settings, teamId, 
 
   const updatedTeam = adminAddCoManager({ teamId: team.id, userId, actorUserId: interaction.user.id, settings });
   await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+  await syncChampionRolesForUser(interaction.guild, userId, settings);
   const nicknameResults = [await setTeamCoManagerNickname(interaction.guild, userId, updatedTeam)];
   assertNicknameResults(nicknameResults);
   await refreshTeamAdminSurfaces({ client, settings });
@@ -705,6 +707,7 @@ async function handleAdminRemoveCoManager({ interaction, client, settings, teamI
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   const updatedTeam = adminRemoveCoManager({ teamId: team.id, userId, actorUserId: interaction.user.id });
   await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+  await syncChampionRolesForUser(interaction.guild, userId, settings);
   const nicknameResults = [await clearTeamNickname(interaction.guild, userId)];
   assertNicknameResults(nicknameResults);
   await refreshTeamAdminSurfaces({ client, settings });
@@ -721,6 +724,7 @@ async function handleAdminChangeManager({ interaction, client, settings, teamId,
   const result = adminChangeManager({ teamId: team.id, newManagerUserId: userId, actorUserId: interaction.user.id });
   await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
   if (result.oldManagerUserId) await syncTeamFunctionRolesForUser(interaction.guild, result.oldManagerUserId, settings);
+  await syncChampionRolesForUsers(interaction.guild, [userId, result.oldManagerUserId], settings);
   const nicknameResults = [
     await setTeamManagerNickname(interaction.guild, userId, result.team),
     result.oldManagerUserId ? await clearTeamNickname(interaction.guild, result.oldManagerUserId) : null,
@@ -744,6 +748,7 @@ async function handleAdminDeleteTeam({ interaction, client, settings, teamId }) 
   const affectedEventKeys = removeTeamFromAllEvents({ teamId: team.id, settings });
   for (const userId of userIds) {
     await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+    await syncChampionRolesForUser(interaction.guild, userId, settings);
     await clearTeamNickname(interaction.guild, userId);
   }
   await refreshTeamAdminSurfaces({ client, settings, affectedEventKeys });

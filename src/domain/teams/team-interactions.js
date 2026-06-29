@@ -29,6 +29,7 @@ const {
   updateTeamName,
 } = require('./team-service');
 const { syncManagerRoleForUser, syncManagerRolesForTeam } = require('./team-roles');
+const { syncChampionRolesForUser, syncChampionRolesForUsers } = require('./team-champion-roles');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 const { refreshManagersWithoutTeamMessageIfTracked } = require('../admin/managers-without-team');
@@ -271,6 +272,7 @@ async function handleButton(interaction, client) {
     const updated = leaveTeam({ teamId, userId: beforeUserId });
     await syncManagerRoleForUser(interaction.guild, beforeUserId, settings);
     await syncManagerRolesForTeam(interaction.guild, updated, settings);
+    await syncChampionRolesForUsers(interaction.guild, [beforeUserId, ...(updated?.coManagers || []).map(co => co.userId), updated?.manager?.userId], settings);
     await cleanupInvalidTeamCheckins({ team: updated, settings, client });
     await refreshRegisteredTeamsOverview(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
@@ -284,6 +286,7 @@ async function handleButton(interaction, client) {
     deleteTeam({ teamId, actorUserId: interaction.user.id });
     await removeTeamCheckinsAndRefresh({ teamId, settings, client });
     for (const userId of userIds) await syncManagerRoleForUser(interaction.guild, userId, settings);
+    await syncChampionRolesForUsers(interaction.guild, userIds, settings);
     await refreshRegisteredTeamsOverview(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.update({ content: 'Team wurde geloescht. Statistiken bleiben erhalten.', components: [], embeds: [] });
@@ -346,6 +349,7 @@ async function handleUserSelect(interaction, client) {
 
   const team = addCoManager({ teamId, userId, actorUserId: interaction.user.id, settings });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
+  await syncChampionRolesForUser(interaction.guild, userId, settings);
   await setTeamCoManagerNickname(interaction.guild, userId, team).catch(() => null);
   await refreshRegisteredTeamsOverview(client);
   await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
@@ -363,6 +367,7 @@ async function handleStringSelect(interaction, client) {
   await interaction.deferUpdate();
   removeCoManager({ teamId, userId, actorUserId: interaction.user.id });
   await syncManagerRoleForUser(interaction.guild, userId, settings);
+  await syncChampionRolesForUser(interaction.guild, userId, settings);
   await refreshRegisteredTeamsOverview(client);
   await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   await interaction.editReply({ content: `<@${userId}> wurde als Co-VM entfernt.`, components: [], allowedMentions: { parse: ['users'] } });

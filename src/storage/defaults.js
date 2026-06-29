@@ -288,6 +288,13 @@ function createSettingsDefault() {
       playerRoleId: null,
       managerRoleId: null,
       coManagerRoleId: null,
+      championRoleIds: {
+        champion: null,
+        elite: null,
+        master: null,
+        legend: null,
+        immortal: null,
+      },
       groupRoleIds: groupIds,
       knockoutRoleIds: knockoutIds,
     },

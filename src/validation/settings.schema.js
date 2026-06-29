@@ -15,6 +15,8 @@ const {
   requireSnowflakeOrNull,
 } = require('./common');
 
+const CHAMPION_ROLE_KEYS = ['champion', 'elite', 'master', 'legend', 'immortal'];
+
 function validateIdMap(errors, object, keys, path) {
   if (!requireObject(errors, object, path)) return;
 
@@ -39,6 +41,7 @@ function validateSettings(data) {
     requireSnowflakeOrNull(errors, data.roles.playerRoleId, 'roles.playerRoleId');
     requireSnowflakeOrNull(errors, data.roles.managerRoleId, 'roles.managerRoleId');
     requireSnowflakeOrNull(errors, data.roles.coManagerRoleId, 'roles.coManagerRoleId');
+    validateIdMap(errors, data.roles.championRoleIds, CHAMPION_ROLE_KEYS, 'roles.championRoleIds');
     validateIdMap(errors, data.roles.groupRoleIds, GROUP_KEYS, 'roles.groupRoleIds');
     validateIdMap(errors, data.roles.knockoutRoleIds, KNOCKOUT_ROUNDS, 'roles.knockoutRoleIds');
   }

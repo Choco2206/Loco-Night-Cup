@@ -14,6 +14,7 @@ const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
 } = require('../teams/team-achievements');
+const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const KNOCKOUT_ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 
@@ -288,6 +289,9 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
   if (achievements.applied) {
     await refreshTeamAchievementsRankingMessage({ client, guild, force: true }).catch(error => {
       console.warn(`K.O.-Simulation: Team-Erfolge konnten nicht aktualisiert werden: ${error.message}`);
+    });
+    await syncChampionRolesForTeam(guild, achievements.placementTeamIds.gold).catch(error => {
+      console.warn(`K.O.-Simulation: Champion-Rollen konnten nicht synchronisiert werden: ${error.message}`);
     });
   }
   const ceremony = await maybePostHallOfFameCeremony({ guild, eventKey }).catch(error => {

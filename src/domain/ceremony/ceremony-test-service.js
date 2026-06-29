@@ -13,6 +13,7 @@ const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
 } = require('../teams/team-achievements');
+const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
@@ -398,6 +399,9 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
   if (achievements.applied) {
     await refreshTeamAchievementsRankingMessage({ client: guild.client, guild, force: true }).catch(error => {
       console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`);
+    });
+    await syncChampionRolesForTeam(guild, achievements.placementTeamIds.gold).catch(error => {
+      console.warn(`[champion-roles] Gewinnerteam konnte nicht synchronisiert werden: ${error.message}`);
     });
   }
   scheduleAutoCleanupForEvent({
