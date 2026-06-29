@@ -14,6 +14,7 @@ const {
   UserSelectMenuBuilder,
 } = require('discord.js');
 const { TEAM_LOGOS_DIR } = require('../../storage');
+const { getTeamAchievementRank, getTeamTitles } = require('./team-achievements');
 
 function buildTeamPanelPayload() {
   const embed = new EmbedBuilder()
@@ -98,6 +99,15 @@ function buildTeamEmbed(team, logoAttachment) {
   const logoLine = team.logo?.fileName
     ? `Logo: ${team.logo.fileName}${logoAttachment ? '' : ' (Datei nicht gefunden)'}`
     : 'Logo: fehlt';
+  const titles = getTeamTitles(team);
+  const rank = getTeamAchievementRank(team.id);
+  const achievementLines = [
+    '🏆 **Team-Erfolge**',
+    `🥇 Cup-Siege: ${titles.gold}`,
+    `🥈 Platz 2: ${titles.silver}`,
+    `🥉 Platz 3: ${titles.bronze}`,
+    `🌍 Aktuelles Ranking: ${rank ? `#${rank}` : 'noch keine Platzierung'}`,
+  ];
 
   const embed = new EmbedBuilder()
     .setTitle(team.clubName)
@@ -111,6 +121,8 @@ function buildTeamEmbed(team, logoAttachment) {
       coManagers,
       '',
       logoLine,
+      '',
+      ...achievementLines,
     ].join('\n'))
     .setColor(team.registrationStatus === 'complete' ? 0x00aa55 : 0xffaa00);
 

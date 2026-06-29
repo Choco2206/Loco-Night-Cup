@@ -15,6 +15,10 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
 const { refreshLiveSchedule } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
+const {
+  applyTeamAchievementsForEvent,
+  refreshTeamAchievementsRankingMessage,
+} = require('../teams/team-achievements');
 const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
 const {
@@ -299,6 +303,18 @@ async function postCeremonyIfReady(guild, eventKey) {
   }
 }
 
+async function applyAchievementsIfCompleted({ client, guild, eventKey, completed }) {
+  if (!completed) return { applied: false, reason: 'not_completed' };
+
+  const result = applyTeamAchievementsForEvent(eventKey);
+  if (result.applied) {
+    await refreshTeamAchievementsRankingMessage({ client, guild, force: true }).catch(error => {
+      console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`);
+    });
+  }
+  return result;
+}
+
 async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, selectedParticipantKey, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const outcome = submitTeamResult({
@@ -312,6 +328,7 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
   });
 
   await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  await applyAchievementsIfCompleted({ client, guild: interaction.guild, eventKey, completed: outcome.completed });
   const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
   await notifyAdminDecision(interaction, outcome.match);
   const message = outcome.status === 'confirmed'
@@ -431,6 +448,7 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
   });
 
   await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  await applyAchievementsIfCompleted({ client, guild: interaction.guild, eventKey, completed: outcome.completed });
   const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
   await interaction.editReply({
     content: ceremony.posted

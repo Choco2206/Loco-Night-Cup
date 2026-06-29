@@ -86,6 +86,9 @@ function validateEvent(data, expectedEventKey = null) {
 
   if (requireObject(errors, data.ceremony, 'ceremony')) {
     requireIsoDateOrNull(errors, data.ceremony.postedAt, 'ceremony.postedAt');
+    if (data.ceremony.teamAchievements !== undefined && requireObject(errors, data.ceremony.teamAchievements, 'ceremony.teamAchievements')) {
+      requireIsoDateOrNull(errors, data.ceremony.teamAchievements.appliedAt, 'ceremony.teamAchievements.appliedAt');
+    }
   }
 
   if (requireObject(errors, data.reset, 'reset')) {

@@ -1,6 +1,7 @@
 'use strict';
 
 const { readTeamsData, updateTeamsData } = require('./team-repository');
+const { createEmptyHistory } = require('./team-achievements');
 
 function nowIso() {
   return new Date().toISOString();
@@ -118,6 +119,7 @@ function createTeam({ clubName, managerUserId, settings }) {
         addedAt: timestamp,
       },
       coManagers: [],
+      history: createEmptyHistory(),
       stats: createEmptyStats(),
       meta: {
         createdAt: timestamp,

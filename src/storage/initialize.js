@@ -270,6 +270,27 @@ function normalizeEventFile(eventKey) {
 
   changed = migrateEventFormat(event) || changed;
 
+  event.ceremony = isPlainObject(event.ceremony) ? event.ceremony : createEventDefault(eventKey).ceremony;
+  if (!isPlainObject(event.ceremony.teamAchievements)) {
+    event.ceremony.teamAchievements = {
+      appliedAt: null,
+      placements: {
+        gold: null,
+        silver: null,
+        bronze: null,
+      },
+    };
+    changed = true;
+  }
+  if (!isPlainObject(event.ceremony.teamAchievements.placements)) {
+    event.ceremony.teamAchievements.placements = {
+      gold: null,
+      silver: null,
+      bronze: null,
+    };
+    changed = true;
+  }
+
   event.byes = event.byes.map((bye, index) => {
     const result = normalizeLegacyBye(bye, eventKey, index);
     changed = result.changed || changed;
@@ -327,6 +348,22 @@ function normalizeMessagesFile() {
 
   if (!Array.isArray(messages.admin.managersWithoutTeam.messageIds)) {
     messages.admin.managersWithoutTeam.messageIds = [];
+    changed = true;
+  }
+
+  messages.teams = messages.teams || {};
+  if (!messages.teams.teamAchievements) {
+    messages.teams.teamAchievements = {
+      channelId: null,
+      messageIds: [],
+      createdAt: null,
+      updatedAt: null,
+    };
+    changed = true;
+  }
+
+  if (!Array.isArray(messages.teams.teamAchievements.messageIds)) {
+    messages.teams.teamAchievements.messageIds = [];
     changed = true;
   }
 

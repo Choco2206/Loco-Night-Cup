@@ -34,6 +34,16 @@ function createTeamsDefault() {
   };
 }
 
+function createTeamHistoryDefault() {
+  return {
+    titles: {
+      gold: 0,
+      silver: 0,
+      bronze: 0,
+    },
+  };
+}
+
 function createBansDefault() {
   return {
     version: DATA_VERSION,
@@ -112,6 +122,14 @@ function createEventDefault(eventKey) {
         firstTeamId: null,
         secondTeamId: null,
         thirdTeamId: null,
+      },
+      teamAchievements: {
+        appliedAt: null,
+        placements: {
+          gold: null,
+          silver: null,
+          bronze: null,
+        },
       },
       postedAt: null,
       postedMessageIds: [],
@@ -208,6 +226,12 @@ function createMessagesDefault() {
         channelId: null,
         headerMessageId: null,
         listMessageIds: [],
+        createdAt: null,
+        updatedAt: null,
+      },
+      teamAchievements: {
+        channelId: null,
+        messageIds: [],
         createdAt: null,
         updatedAt: null,
       },
@@ -436,5 +460,6 @@ module.exports = {
   createEventDefault,
   createMessagesDefault,
   createSettingsDefault,
+  createTeamHistoryDefault,
   createTeamsDefault,
 };

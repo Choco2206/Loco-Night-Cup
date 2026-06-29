@@ -2,6 +2,7 @@
 
 const { EVENT_KEYS } = require('../../app/constants');
 const { updateTeamsData } = require('../teams/team-repository');
+const { createEmptyHistory } = require('../teams/team-achievements');
 const { normalizeClubName } = require('../teams/team-service');
 const { updateEventData } = require('../checkins/checkin-repository');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
@@ -90,6 +91,7 @@ function createTestTeam(id, name, actorUserId, timestamp) {
       addedAt: timestamp,
     },
     coManagers: [],
+    history: createEmptyHistory(),
     stats: createEmptyStats(),
     meta: {
       createdAt: timestamp,

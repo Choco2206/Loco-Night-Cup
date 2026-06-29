@@ -5,7 +5,8 @@
   "roles": { "roleSelect": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null } },
   "teams": {
     "registrationPanel": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null },
-    "registeredTeamsOverview": { "channelId": null, "headerMessageId": null, "listMessageIds": [], "createdAt": null, "updatedAt": null }
+    "registeredTeamsOverview": { "channelId": null, "headerMessageId": null, "listMessageIds": [], "createdAt": null, "updatedAt": null },
+    "teamAchievements": { "channelId": null, "messageIds": [], "createdAt": null, "updatedAt": null }
   },
   "checkins": {
     "monday": { "channelId": null, "mainMessageId": null, "teamsListMessageIds": [], "waitlistMessageIds": [], "warningMessageId": null, "summaryMessageId": null, "createdAt": null, "updatedAt": null },

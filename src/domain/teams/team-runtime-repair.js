@@ -3,6 +3,7 @@
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, updateJson } = require('../../storage');
 const { createEventDefault, createTeamsDefault } = require('../../storage/defaults');
+const { ensureTeamHistory } = require('./team-achievements');
 
 function nowIso() {
   return new Date().toISOString();
@@ -88,6 +89,7 @@ function repairTeam(team) {
   }
 
   if (!Array.isArray(team.coManagers)) team.coManagers = [];
+  ensureTeamHistory(team);
   if (team.logo === undefined) team.logo = null;
   if (team.logoUpload === undefined) team.logoUpload = null;
   team.meta = team.meta && typeof team.meta === 'object' && !Array.isArray(team.meta) ? team.meta : {};

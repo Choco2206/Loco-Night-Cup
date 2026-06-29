@@ -9,6 +9,10 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { getAutoCleanupScheduledAt, scheduleAutoCleanupForEvent } = require('../events/event-cleanup-service');
 const { findTeamById } = require('../teams/team-service');
+const {
+  applyTeamAchievementsForEvent,
+  refreshTeamAchievementsRankingMessage,
+} = require('../teams/team-achievements');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
@@ -390,6 +394,12 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     textMessageId: textMessage.id,
     timestamp,
   });
+  const achievements = applyTeamAchievementsForEvent(eventKey);
+  if (achievements.applied) {
+    await refreshTeamAchievementsRankingMessage({ client: guild.client, guild, force: true }).catch(error => {
+      console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`);
+    });
+  }
   scheduleAutoCleanupForEvent({
     eventKey,
     guild,

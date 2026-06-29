@@ -114,6 +114,14 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
     }
   }
 
+  if (requireObject(errors, team.history, `${path}.history`)) {
+    if (requireObject(errors, team.history.titles, `${path}.history.titles`)) {
+      ['gold', 'silver', 'bronze'].forEach(field => {
+        requireNonNegativeInteger(errors, team.history.titles[field], `${path}.history.titles.${field}`);
+      });
+    }
+  }
+
   if (requireObject(errors, team.meta, `${path}.meta`)) {
     requireIsoDateOrNull(errors, team.meta.createdAt, `${path}.meta.createdAt`);
     requireSnowflakeOrNull(errors, team.meta.createdByUserId, `${path}.meta.createdByUserId`);

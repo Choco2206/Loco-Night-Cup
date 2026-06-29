@@ -41,6 +41,11 @@ function validateMessages(data) {
     requireArray(errors, data.teams.registeredTeamsOverview.listMessageIds, 'teams.registeredTeamsOverview.listMessageIds');
   }
 
+  if (requireObject(errors, data.teams?.teamAchievements, 'teams.teamAchievements')) {
+    requireSnowflakeOrNull(errors, data.teams.teamAchievements.channelId, 'teams.teamAchievements.channelId');
+    requireArray(errors, data.teams.teamAchievements.messageIds, 'teams.teamAchievements.messageIds');
+  }
+
   if (validateEventMap(errors, data.checkins, 'checkins')) {
     EVENT_KEYS.forEach(eventKey => {
       const ref = data.checkins[eventKey];
