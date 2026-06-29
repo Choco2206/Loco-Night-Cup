@@ -298,6 +298,7 @@ function normalizeEventFile(eventKey) {
         silver: null,
         bronze: null,
       },
+      championPromotion: null,
     };
     changed = true;
   }
@@ -307,6 +308,26 @@ function normalizeEventFile(eventKey) {
       silver: null,
       bronze: null,
     };
+    changed = true;
+  }
+  if (!Object.prototype.hasOwnProperty.call(event.ceremony.teamAchievements, 'championPromotion')) {
+    event.ceremony.teamAchievements.championPromotion = null;
+    changed = true;
+  }
+  if (!isPlainObject(event.ceremony.teamStats)) {
+    event.ceremony.teamStats = {
+      appliedAt: null,
+      participantTeamIds: [],
+      matchCount: 0,
+    };
+    changed = true;
+  }
+  if (!Array.isArray(event.ceremony.teamStats.participantTeamIds)) {
+    event.ceremony.teamStats.participantTeamIds = [];
+    changed = true;
+  }
+  if (!Number.isInteger(event.ceremony.teamStats.matchCount) || event.ceremony.teamStats.matchCount < 0) {
+    event.ceremony.teamStats.matchCount = 0;
     changed = true;
   }
 

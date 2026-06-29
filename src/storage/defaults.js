@@ -130,6 +130,12 @@ function createEventDefault(eventKey) {
           silver: null,
           bronze: null,
         },
+        championPromotion: null,
+      },
+      teamStats: {
+        appliedAt: null,
+        participantTeamIds: [],
+        matchCount: 0,
       },
       postedAt: null,
       postedMessageIds: [],

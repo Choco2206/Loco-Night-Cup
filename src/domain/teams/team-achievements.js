@@ -4,6 +4,7 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { readTeamsData, updateTeamsData } = require('./team-repository');
+const { getChampionPromotion } = require('./champion-ranks');
 
 const TEAM_ACHIEVEMENTS_CHANNEL_ID = '1521094531833925764';
 const DISCORD_MESSAGE_LIMIT = 2000;
@@ -18,6 +19,15 @@ function createEmptyHistory() {
       gold: 0,
       silver: 0,
       bronze: 0,
+    },
+    cupsPlayed: 0,
+    matches: {
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
     },
   };
 }
@@ -37,6 +47,16 @@ function ensureTeamHistory(team) {
   team.history.titles.gold = normalizeNonNegativeInteger(team.history.titles.gold);
   team.history.titles.silver = normalizeNonNegativeInteger(team.history.titles.silver);
   team.history.titles.bronze = normalizeNonNegativeInteger(team.history.titles.bronze);
+  team.history.cupsPlayed = normalizeNonNegativeInteger(team.history.cupsPlayed);
+  team.history.matches = team.history.matches && typeof team.history.matches === 'object' && !Array.isArray(team.history.matches)
+    ? team.history.matches
+    : {};
+  team.history.matches.played = normalizeNonNegativeInteger(team.history.matches.played);
+  team.history.matches.wins = normalizeNonNegativeInteger(team.history.matches.wins);
+  team.history.matches.draws = normalizeNonNegativeInteger(team.history.matches.draws);
+  team.history.matches.losses = normalizeNonNegativeInteger(team.history.matches.losses);
+  team.history.matches.goalsFor = normalizeNonNegativeInteger(team.history.matches.goalsFor);
+  team.history.matches.goalsAgainst = normalizeNonNegativeInteger(team.history.matches.goalsAgainst);
   return before !== JSON.stringify(team.history);
 }
 
@@ -46,6 +66,22 @@ function getTeamTitles(team) {
     gold: normalizeNonNegativeInteger(titles.gold),
     silver: normalizeNonNegativeInteger(titles.silver),
     bronze: normalizeNonNegativeInteger(titles.bronze),
+  };
+}
+
+function getTeamHistoryStats(team) {
+  const history = team?.history || {};
+  const matches = history.matches || {};
+  return {
+    cupsPlayed: normalizeNonNegativeInteger(history.cupsPlayed),
+    matches: {
+      played: normalizeNonNegativeInteger(matches.played),
+      wins: normalizeNonNegativeInteger(matches.wins),
+      draws: normalizeNonNegativeInteger(matches.draws),
+      losses: normalizeNonNegativeInteger(matches.losses),
+      goalsFor: normalizeNonNegativeInteger(matches.goalsFor),
+      goalsAgainst: normalizeNonNegativeInteger(matches.goalsAgainst),
+    },
   };
 }
 
@@ -115,6 +151,7 @@ function applyTeamAchievementsForEvent(eventKey) {
     ['bronze', placementTeamIds.bronze],
   ];
   const appliedTeams = [];
+  let championPromotion = null;
 
   updateTeamsData(data => {
     const teamsById = new Map((Array.isArray(data.teams) ? data.teams : []).map(team => [String(team.id), team]));
@@ -125,7 +162,11 @@ function applyTeamAchievementsForEvent(eventKey) {
     for (const [placement, teamId] of placementPairs) {
       const team = teamsById.get(teamId);
       ensureTeamHistory(team);
+      const previousGold = team.history.titles.gold;
       team.history.titles[placement] += 1;
+      if (placement === 'gold') {
+        championPromotion = getChampionPromotion(previousGold, team.history.titles.gold);
+      }
       team.meta = { ...(team.meta || {}), updatedAt: timestamp };
       appliedTeams.push({ placement, teamId, clubName: team.clubName });
     }
@@ -144,13 +185,14 @@ function applyTeamAchievementsForEvent(eventKey) {
     storedEvent.ceremony.teamAchievements = {
       appliedAt: timestamp,
       placements: placementTeamIds,
+      championPromotion,
     };
     storedEvent.meta = { ...(storedEvent.meta || {}), updatedAt: timestamp };
     state = storedEvent.ceremony.teamAchievements;
     return storedEvent;
   });
 
-  return { applied: true, placementTeamIds, appliedTeams, state };
+  return { applied: true, placementTeamIds, appliedTeams, championPromotion, state };
 }
 
 function incrementTeamAchievement({ teamId, titleKey, actorUserId = null }) {
@@ -338,6 +380,7 @@ module.exports = {
   ensureTeamHistory,
   getTeamAchievementRank,
   getTeamAchievementRanking,
+  getTeamHistoryStats,
   getTeamTitles,
   incrementTeamAchievement,
   ensureTeamAchievementsRankingMessage,

@@ -13,6 +13,7 @@ const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
 } = require('../teams/team-achievements');
+const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
@@ -275,7 +276,16 @@ function getTeamPings(team) {
   return uniqueUserIds.length ? uniqueUserIds.map(userId => `<@${userId}>`).join('\n') : '-';
 }
 
-function buildCeremonyText({ dayKey, teams }) {
+function buildPromotionBlock(promotion) {
+  if (!promotion?.name) return [];
+  return [
+    '',
+    '🔥 **Aufstieg freigeschaltet!**',
+    `${promotion.teamName || 'Das Siegerteam'} erreicht den Rang: **${promotion.name}**`,
+  ];
+}
+
+function buildCeremonyText({ dayKey, teams, promotion = null }) {
   const dayLabel = (CEREMONY_DAY_LABELS[dayKey] || dayKey).toUpperCase();
   return [
     `🏆 SIEGEREHRUNG • ${dayLabel}`,
@@ -285,6 +295,7 @@ function buildCeremonyText({ dayKey, teams }) {
     `🥇 1. Platz: ${teams.first.clubName}`,
     '👑 Manager / Co-Manager:',
     getTeamPings(teams.first),
+    ...buildPromotionBlock(promotion),
     '',
     'Verdient den Titel geholt und ueber das gesamte Turnier hinweg ueberzeugt. Herzlichen Glueckwunsch zum Turniersieg! 🏆',
     '',
@@ -314,6 +325,15 @@ function buildCeremonyText({ dayKey, teams }) {
     '',
     'Bis zum naechsten Mal! 🏆🐺',
   ].join('\n');
+}
+
+function getStoredChampionPromotion(event, teams) {
+  const promotion = event?.ceremony?.teamAchievements?.championPromotion || null;
+  if (!promotion?.name) return null;
+  return {
+    ...promotion,
+    teamName: teams.first?.clubName || promotion.teamName || null,
+  };
 }
 
 function updateCeremonyMessageRefs(eventKey, { event, channelId, imageMessageId, textMessageId, timestamp }) {
@@ -354,6 +374,13 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
 
   const dayKey = getEventDayKey(eventKey, event);
   const teams = getCeremonyTeams(event);
+  const stats = applyTeamStatsForEvent(eventKey);
+  if (stats.applied) {
+    console.log(`[team-stats] ${eventKey}: ${stats.appliedTeams.length} Teams final aktualisiert.`);
+  }
+  const achievements = applyTeamAchievementsForEvent(eventKey);
+  const eventWithAchievements = readEventData(eventKey);
+  const promotion = getStoredChampionPromotion(eventWithAchievements, teams);
   const { buffer } = await renderHallOfFameCeremonyImage({ dayKey, teams });
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
@@ -367,7 +394,7 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     allowedMentions: { parse: ['everyone'] },
   });
   const textMessage = await channel.send({
-    content: buildCeremonyText({ dayKey, teams }),
+    content: buildCeremonyText({ dayKey, teams, promotion }),
     allowedMentions: { parse: ['users'] },
   });
 
@@ -395,7 +422,6 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     textMessageId: textMessage.id,
     timestamp,
   });
-  const achievements = applyTeamAchievementsForEvent(eventKey);
   if (achievements.applied) {
     await refreshTeamAchievementsRankingMessage({ client: guild.client, guild, force: true }).catch(error => {
       console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`);

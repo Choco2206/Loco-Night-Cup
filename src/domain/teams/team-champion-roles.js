@@ -4,19 +4,12 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readTeamsData } = require('./team-repository');
 const { getTeamTitles } = require('./team-achievements');
+const { CHAMPION_ROLE_LEVELS, getChampionLevelForGold } = require('./champion-ranks');
 
 const CHAMPION_ELIGIBLE_ROLE_IDS = [
   '1516428922387169321',
   '1516428950992064642',
   '1517040800817610792',
-];
-
-const CHAMPION_ROLE_LEVELS = [
-  { key: 'champion', threshold: 1, name: '🥇 Loco Night Champion', color: 0xf1c40f },
-  { key: 'elite', threshold: 3, name: '🏆 Loco Night Elite', color: 0xe67e22 },
-  { key: 'master', threshold: 5, name: '👑 Loco Night Master', color: 0x992d22 },
-  { key: 'legend', threshold: 10, name: '💎 Loco Night Legend', color: 0x9b59b6 },
-  { key: 'immortal', threshold: 25, name: '🌟 Loco Night Immortal', color: 0xecf0f1 },
 ];
 
 function createChampionRoleIdMap() {
@@ -29,11 +22,6 @@ function normalizeChampionRoleIdMap(value = {}) {
     level.key,
     source[level.key] ? String(source[level.key]) : null,
   ]));
-}
-
-function getChampionLevelForGold(goldCount) {
-  const count = Number.isInteger(goldCount) ? goldCount : 0;
-  return [...CHAMPION_ROLE_LEVELS].reverse().find(level => count >= level.threshold) || null;
 }
 
 function getTeamUserIds(team) {

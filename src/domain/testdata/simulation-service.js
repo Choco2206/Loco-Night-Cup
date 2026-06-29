@@ -14,6 +14,7 @@ const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
 } = require('../teams/team-achievements');
+const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const KNOCKOUT_ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
@@ -285,6 +286,10 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
   });
 
   const post = await upsertKnockoutPost({ client, guild, eventKey, event: outcome.event });
+  const stats = applyTeamStatsForEvent(eventKey);
+  if (stats.applied) {
+    console.log(`K.O.-Simulation: Teamstatistik fuer ${stats.appliedTeams.length} Teams aktualisiert.`);
+  }
   const achievements = applyTeamAchievementsForEvent(eventKey);
   if (achievements.applied) {
     await refreshTeamAchievementsRankingMessage({ client, guild, force: true }).catch(error => {

@@ -14,7 +14,8 @@ const {
   UserSelectMenuBuilder,
 } = require('discord.js');
 const { TEAM_LOGOS_DIR } = require('../../storage');
-const { getTeamAchievementRank, getTeamTitles } = require('./team-achievements');
+const { getTeamAchievementRank, getTeamHistoryStats, getTeamTitles } = require('./team-achievements');
+const { getChampionLevelForGold } = require('./champion-ranks');
 
 function buildTeamPanelPayload() {
   const embed = new EmbedBuilder()
@@ -91,6 +92,10 @@ function getLogoAttachment(team) {
   };
 }
 
+function formatPercent(value) {
+  return `${value.toFixed(1).replace('.', ',')} %`;
+}
+
 function buildTeamEmbed(team, logoAttachment) {
   const coManagers = team.coManagers.length
     ? team.coManagers.map(co => `• ${mention(co.userId)}`).join('\n')
@@ -100,13 +105,29 @@ function buildTeamEmbed(team, logoAttachment) {
     ? `Logo: ${team.logo.fileName}${logoAttachment ? '' : ' (Datei nicht gefunden)'}`
     : 'Logo: fehlt';
   const titles = getTeamTitles(team);
+  const historyStats = getTeamHistoryStats(team);
+  const matchStats = historyStats.matches;
+  const winRate = matchStats.played > 0 ? (matchStats.wins / matchStats.played) * 100 : 0;
+  const championLevel = getChampionLevelForGold(titles.gold);
   const rank = getTeamAchievementRank(team.id);
   const achievementLines = [
     '🏆 **Team-Erfolge**',
     `🥇 Cup-Siege: ${titles.gold}`,
     `🥈 Platz 2: ${titles.silver}`,
     `🥉 Platz 3: ${titles.bronze}`,
-    `🌍 Aktuelles Ranking: ${rank ? `#${rank}` : 'noch keine Platzierung'}`,
+    `🌍 Ranking: ${rank ? `#${rank}` : 'noch keine Platzierung'}`,
+    `🎮 Cups gespielt: ${historyStats.cupsPlayed}`,
+    `👑 Champion-Rang: ${championLevel?.name || 'noch keiner'}`,
+  ];
+  const statisticLines = [
+    '📊 **Teamstatistik**',
+    `🎮 Spiele: ${matchStats.played}`,
+    `✅ Siege: ${matchStats.wins}`,
+    `➖ Unentschieden: ${matchStats.draws}`,
+    `❌ Niederlagen: ${matchStats.losses}`,
+    `⚽ Tore: ${matchStats.goalsFor}`,
+    `🥅 Gegentore: ${matchStats.goalsAgainst}`,
+    `📈 Siegquote: ${formatPercent(winRate)}`,
   ];
 
   const embed = new EmbedBuilder()
@@ -123,6 +144,8 @@ function buildTeamEmbed(team, logoAttachment) {
       logoLine,
       '',
       ...achievementLines,
+      '',
+      ...statisticLines,
     ].join('\n'))
     .setColor(team.registrationStatus === 'complete' ? 0x00aa55 : 0xffaa00);
 

@@ -19,6 +19,7 @@ const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
 } = require('../teams/team-achievements');
+const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
@@ -306,6 +307,11 @@ async function postCeremonyIfReady(guild, eventKey) {
 
 async function applyAchievementsIfCompleted({ client, guild, eventKey, completed }) {
   if (!completed) return { applied: false, reason: 'not_completed' };
+
+  const stats = applyTeamStatsForEvent(eventKey);
+  if (stats.applied) {
+    console.log(`[team-stats] ${eventKey}: ${stats.appliedTeams.length} Teams final aktualisiert.`);
+  }
 
   const result = applyTeamAchievementsForEvent(eventKey);
   if (result.applied) {

@@ -24,6 +24,15 @@ const STAT_FIELDS = [
   'thirdPlaceFinishes',
 ];
 
+const HISTORY_MATCH_FIELDS = [
+  'played',
+  'wins',
+  'draws',
+  'losses',
+  'goalsFor',
+  'goalsAgainst',
+];
+
 function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers, errors) {
   const path = `teams[${index}]`;
   if (!requireObject(errors, team, path)) return;
@@ -118,6 +127,12 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
     if (requireObject(errors, team.history.titles, `${path}.history.titles`)) {
       ['gold', 'silver', 'bronze'].forEach(field => {
         requireNonNegativeInteger(errors, team.history.titles[field], `${path}.history.titles.${field}`);
+      });
+    }
+    requireNonNegativeInteger(errors, team.history.cupsPlayed, `${path}.history.cupsPlayed`);
+    if (requireObject(errors, team.history.matches, `${path}.history.matches`)) {
+      HISTORY_MATCH_FIELDS.forEach(field => {
+        requireNonNegativeInteger(errors, team.history.matches[field], `${path}.history.matches.${field}`);
       });
     }
   }

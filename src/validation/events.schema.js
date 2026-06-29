@@ -10,6 +10,7 @@ const {
   hasNoDuplicates,
   requireArray,
   requireIsoDateOrNull,
+  requireNonNegativeInteger,
   requireObject,
   requireOneOf,
 } = require('./common');
@@ -88,6 +89,11 @@ function validateEvent(data, expectedEventKey = null) {
     requireIsoDateOrNull(errors, data.ceremony.postedAt, 'ceremony.postedAt');
     if (data.ceremony.teamAchievements !== undefined && requireObject(errors, data.ceremony.teamAchievements, 'ceremony.teamAchievements')) {
       requireIsoDateOrNull(errors, data.ceremony.teamAchievements.appliedAt, 'ceremony.teamAchievements.appliedAt');
+    }
+    if (data.ceremony.teamStats !== undefined && requireObject(errors, data.ceremony.teamStats, 'ceremony.teamStats')) {
+      requireIsoDateOrNull(errors, data.ceremony.teamStats.appliedAt, 'ceremony.teamStats.appliedAt');
+      requireArray(errors, data.ceremony.teamStats.participantTeamIds, 'ceremony.teamStats.participantTeamIds');
+      requireNonNegativeInteger(errors, data.ceremony.teamStats.matchCount, 'ceremony.teamStats.matchCount');
     }
   }
 
