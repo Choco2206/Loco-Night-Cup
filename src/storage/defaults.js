@@ -236,6 +236,12 @@ function createMessagesDefault() {
     },
     admin: {
       panel: emptyPanelMessage(),
+      managersWithoutTeam: {
+        channelId: null,
+        messageIds: [],
+        createdAt: null,
+        updatedAt: null,
+      },
     },
     ceremony: createEventMap(() => emptyCeremonyMessages()),
     meta: emptyTimestampMeta(),

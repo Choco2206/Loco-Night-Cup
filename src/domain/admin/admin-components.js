@@ -17,7 +17,7 @@ function buildAdminPanelPayload() {
     .addFields(
       { name: 'EVENT', value: 'Check-in oeffnen\nCheck-in schliessen\nCheck-in verwalten\nEvent zuruecksetzen\nFreilos hinzufuegen\nFreilos entfernen', inline: true },
       { name: 'TURNIER', value: 'Format locken\nGruppen ziehen\nAktuellen Spieltag freigeben\nK.O. erstellen', inline: true },
-      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nTeam sperren\nSperre entfernen\nServerstruktur einrichten\nNicknames synchronisieren', inline: true },
+      { name: 'TEAMS / SETUP', value: 'Teams anzeigen\nTeamdetails\nManager ohne Team\nTeam sperren\nSperre entfernen\nServerstruktur einrichten\nNicknames synchronisieren', inline: true },
       { name: 'TESTS', value: 'Check-in Refresh\nTeamuebersicht Refresh\nTestdaten erzeugen\nTestdaten entfernen\nGruppenphase simulieren\nK.O.-Phase simulieren\nHall of Fame testen\nSiegerehrung posten', inline: true }
     )
     .setTimestamp(new Date());
@@ -61,6 +61,8 @@ function buildAdminPanelPayload() {
     button('admin_hof_test', 'Hall of Fame testen', ButtonStyle.Secondary).setEmoji('🏆'),
     button('admin_ceremony_post', 'Siegerehrung posten', ButtonStyle.Success).setEmoji('🏆')
   );
+
+  simulationRow.addComponents(button('admin_managers_without_team', 'Manager ohne Team', ButtonStyle.Secondary));
 
   return {
     embeds: [embed],

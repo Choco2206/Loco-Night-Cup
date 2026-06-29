@@ -97,6 +97,10 @@ function validateMessages(data) {
   }
 
   validateMessageRef(errors, data.admin?.panel, 'admin.panel');
+  if (requireObject(errors, data.admin?.managersWithoutTeam, 'admin.managersWithoutTeam')) {
+    requireSnowflakeOrNull(errors, data.admin.managersWithoutTeam.channelId, 'admin.managersWithoutTeam.channelId');
+    requireArray(errors, data.admin.managersWithoutTeam.messageIds, 'admin.managersWithoutTeam.messageIds');
+  }
 
   if (validateEventMap(errors, data.ceremony, 'ceremony')) {
     EVENT_KEYS.forEach(eventKey => {

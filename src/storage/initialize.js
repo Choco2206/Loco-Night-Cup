@@ -315,6 +315,21 @@ function normalizeMessagesFile() {
     changed = true;
   }
 
+  if (!messages.admin.managersWithoutTeam) {
+    messages.admin.managersWithoutTeam = {
+      channelId: null,
+      messageIds: [],
+      createdAt: null,
+      updatedAt: null,
+    };
+    changed = true;
+  }
+
+  if (!Array.isArray(messages.admin.managersWithoutTeam.messageIds)) {
+    messages.admin.managersWithoutTeam.messageIds = [];
+    changed = true;
+  }
+
   if (!messages.checkins) {
     messages.checkins = {};
     changed = true;

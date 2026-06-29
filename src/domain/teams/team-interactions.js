@@ -31,6 +31,7 @@ const {
 const { syncManagerRoleForUser, syncManagerRolesForTeam } = require('./team-roles');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
+const { refreshManagersWithoutTeamMessageIfTracked } = require('../admin/managers-without-team');
 
 const EPHEMERAL = 64;
 const LOGO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
@@ -272,6 +273,7 @@ async function handleButton(interaction, client) {
     await syncManagerRolesForTeam(interaction.guild, updated, settings);
     await cleanupInvalidTeamCheckins({ team: updated, settings, client });
     await refreshRegisteredTeamsOverview(client);
+    await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.update({ content: 'Team verlassen.', components: [], embeds: [] });
     return true;
   }
@@ -283,6 +285,7 @@ async function handleButton(interaction, client) {
     await removeTeamCheckinsAndRefresh({ teamId, settings, client });
     for (const userId of userIds) await syncManagerRoleForUser(interaction.guild, userId, settings);
     await refreshRegisteredTeamsOverview(client);
+    await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.update({ content: 'Team wurde geloescht. Statistiken bleiben erhalten.', components: [], embeds: [] });
     return true;
   }
@@ -306,6 +309,7 @@ async function handleModal(interaction, client) {
     await syncManagerRoleForUser(interaction.guild, interaction.user.id, settings);
     await openLogoUpload({ interaction, client, team, settings });
     await refreshRegisteredTeamsOverview(client);
+    await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.editReply({
       content: `Team **${team.clubName}** wurde angelegt. Bitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
       components: [],

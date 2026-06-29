@@ -41,6 +41,10 @@ const { ensureServerStructure } = require('../setup');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
+const {
+  refreshManagersWithoutTeamMessage,
+  refreshManagersWithoutTeamMessageIfTracked,
+} = require('./managers-without-team');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -58,6 +62,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_team_unban',
   'admin_checkin_refresh',
   'admin_team_overview_refresh',
+  'admin_managers_without_team',
   'admin_ceremony_test',
   'admin_ceremony_post',
   'admin_hof_test',
@@ -720,6 +725,7 @@ async function handleAdminChangeManager({ interaction, client, settings, teamId,
   ].filter(Boolean);
   assertNicknameResults(nicknameResults);
   await refreshTeamAdminSurfaces({ client, settings });
+  await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   return result;
 }
 
@@ -739,6 +745,7 @@ async function handleAdminDeleteTeam({ interaction, client, settings, teamId }) 
     await clearTeamNickname(interaction.guild, userId);
   }
   await refreshTeamAdminSurfaces({ client, settings, affectedEventKeys });
+  await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   return { team, affectedEventKeys };
 }
 
@@ -1651,6 +1658,17 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.deferReply({ flags: EPHEMERAL });
       await refreshRegisteredTeamsOverview(client);
       await interaction.editReply('Teamuebersicht wurde aktualisiert.');
+      return true;
+    }
+
+    if (interaction.customId === 'admin_managers_without_team') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      const result = await refreshManagersWithoutTeamMessage({ client, guild: interaction.guild, force: true });
+      await interaction.editReply([
+        'Manager-ohne-Team-Liste wurde aktualisiert.',
+        `Betroffene Manager: ${result.affectedCount}`,
+        `Nachrichten: ${result.messageIds.length}`,
+      ].join('\n'));
       return true;
     }
 

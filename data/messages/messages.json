@@ -36,7 +36,10 @@
     "sunday": { "cycleKey": null, "rounds": { "round_of_16": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "quarter_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "semi_final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "third_place": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null }, "final": { "channelId": null, "messageId": null, "releaseMessageId": null, "reminderMessageIds": [], "createdAt": null, "updatedAt": null } } }
   },
   "banlist": { "channelId": null, "infoMessageId": null, "listMessageId": null, "createdAt": null, "updatedAt": null },
-  "admin": { "panel": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null } },
+  "admin": {
+    "panel": { "channelId": null, "messageId": null, "createdAt": null, "updatedAt": null },
+    "managersWithoutTeam": { "channelId": null, "messageIds": [], "createdAt": null, "updatedAt": null }
+  },
   "ceremony": {
     "monday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
     "tuesday": { "cycleKey": null, "channelId": null, "imageMessageId": null, "textMessageId": null, "testMessageIds": [], "postedAt": null, "updatedAt": null },
