@@ -1,6 +1,6 @@
 'use strict';
 
-const { EVENT_KEYS, EVENT_PROFILE_BY_KEY } = require('../../app/constants');
+const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
@@ -40,10 +40,6 @@ function formatHm(date) {
   }).format(date);
 }
 
-function isWeekendNightEvent(eventKey) {
-  return EVENT_PROFILE_BY_KEY[eventKey] === 'weekend_night';
-}
-
 function berlinOffsetForDate(date) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Europe/Berlin',
@@ -80,7 +76,7 @@ function getFirstSlotStart(eventKey, event, now = new Date(), { useExistingPlann
     day: '2-digit',
   });
   const datePart = formatter.format(now);
-  const timePart = isWeekendNightEvent(eventKey) ? '00:00:00' : '22:30:00';
+  const timePart = '00:00:00';
   const offset = berlinOffsetForDate(new Date(`${datePart}T12:00:00Z`));
   return new Date(`${datePart}T${timePart}${offset}`);
 }

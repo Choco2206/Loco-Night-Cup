@@ -4,7 +4,7 @@
   "label": "Montag",
   "status": "idle",
   "cycle": { "cycleKey": null, "eventDate": null, "timezone": "Europe/Berlin" },
-  "schedule": { "profile": "early", "deadlineTime": "22:00", "lateWindowUntilTime": "22:15", "drawTime": "22:20", "tournamentStartTime": "22:30", "checkinOpenAt": null, "deadlineAt": null, "lateWindowUntil": null, "drawAt": null, "tournamentStartAt": null, "resetAt": null },
+  "schedule": { "profile": "weekend_night", "deadlineTime": "23:30", "lateWindowUntilTime": "23:45", "drawTime": "23:50", "tournamentStartTime": "00:00", "checkinOpenAt": null, "deadlineAt": null, "lateWindowUntil": null, "drawAt": null, "tournamentStartAt": null, "resetAt": null },
   "format": { "minimumRealTeams": 8, "allowedSizes": [8, 12, 16, 20, 24, 28, 32], "size": null, "realTeamCount": 0, "byeCount": 0, "waitlistCount": 0, "lockedAt": null },
   "checkin": { "isOpen": false, "openedAt": null, "closedAt": null, "entries": [], "activeTeamIds": [], "waitlistTeamIds": [], "lateLeaveBans": [] },
   "byes": [],

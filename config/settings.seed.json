@@ -120,21 +120,21 @@
   "timeProfiles": {
     "timezone": "Europe/Berlin",
     "eventProfiles": {
-      "monday": "early",
-      "tuesday": "early",
-      "wednesday": "early",
-      "thursday": "early",
+      "monday": "weekend_night",
+      "tuesday": "weekend_night",
+      "wednesday": "weekend_night",
+      "thursday": "weekend_night",
       "friday": "weekend_night",
       "saturday": "weekend_night",
-      "sunday": "early"
+      "sunday": "weekend_night"
     },
     "profiles": {
       "early": {
-        "deadlineTime": "22:00",
-        "lateWindowUntilTime": "22:15",
-        "drawTime": "22:20",
-        "tournamentStartTime": "22:30",
-        "startIsNextDay": false
+        "deadlineTime": "23:30",
+        "lateWindowUntilTime": "23:45",
+        "drawTime": "23:50",
+        "tournamentStartTime": "00:00",
+        "startIsNextDay": true
       },
       "weekend_night": {
         "deadlineTime": "23:30",
@@ -147,7 +147,7 @@
   },
   "tournament": {
     "minimumRealTeams": 8,
-    "allowedSizes": [8, 16, 24, 32],
+    "allowedSizes": [8, 12, 16, 20, 24, 28, 32],
     "groupSize": 4,
     "points": {
       "win": 3,
@@ -156,8 +156,11 @@
     },
     "qualificationRules": {
       "8": "top2",
+      "12": "top2_plus_2_best_thirds",
       "16": "top2",
+      "20": "top2_plus_5_best_thirds_plus_1_best_fourth",
       "24": "top2_plus_4_best_thirds",
+      "28": "top2_plus_2_best_thirds",
       "32": "top2"
     },
     "avoidSameGroupRematchesInFirstKoRound": true,

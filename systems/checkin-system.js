@@ -305,26 +305,23 @@ const CHECKIN_DAY_CONFIGS = {
 };
 
 function getDaySchedule(type) {
-  const earlyDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'sunday'];
-  const isEarlyDay = earlyDays.includes(type);
-
   return {
-    deadlineHour: isEarlyDay ? 22 : 23,
-    deadlineMinute: isEarlyDay ? 0 : 30,
+    deadlineHour: 23,
+    deadlineMinute: 30,
 
-    lateDeadlineHour: isEarlyDay ? 22 : 23,
-    lateDeadlineMinute: isEarlyDay ? 15 : 45,
+    lateDeadlineHour: 23,
+    lateDeadlineMinute: 45,
 
-    drawHour: isEarlyDay ? 22 : 23,
-    drawMinute: isEarlyDay ? 20 : 50,
+    drawHour: 23,
+    drawMinute: 50,
 
-    startHour: isEarlyDay ? 22 : 0,
-    startMinute: isEarlyDay ? 30 : 0,
+    startHour: 0,
+    startMinute: 0,
 
-    deadlineText: isEarlyDay ? '22:00' : '23:30',
-    lateDeadlineText: isEarlyDay ? '22:15' : '23:45',
-    drawText: isEarlyDay ? '22:20' : '23:50',
-    startText: isEarlyDay ? '22:30' : '00:00',
+    deadlineText: '23:30',
+    lateDeadlineText: '23:45',
+    drawText: '23:50',
+    startText: '00:00',
   };
 }
 

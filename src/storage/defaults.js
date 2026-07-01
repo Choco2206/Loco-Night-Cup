@@ -53,14 +53,13 @@ function createBansDefault() {
 
 function createScheduleDefault(eventKey) {
   const profile = EVENT_PROFILE_BY_KEY[eventKey];
-  const early = profile === 'early';
 
   return {
     profile,
-    deadlineTime: early ? '22:00' : '23:30',
-    lateWindowUntilTime: early ? '22:15' : '23:45',
-    drawTime: early ? '22:20' : '23:50',
-    tournamentStartTime: early ? '22:30' : '00:00',
+    deadlineTime: '23:30',
+    lateWindowUntilTime: '23:45',
+    drawTime: '23:50',
+    tournamentStartTime: '00:00',
     checkinOpenAt: null,
     deadlineAt: null,
     lateWindowUntil: null,
@@ -369,11 +368,11 @@ function createSettingsDefault() {
       eventProfiles: { ...EVENT_PROFILE_BY_KEY },
       profiles: {
         early: {
-          deadlineTime: '22:00',
-          lateWindowUntilTime: '22:15',
-          drawTime: '22:20',
-          tournamentStartTime: '22:30',
-          startIsNextDay: false,
+          deadlineTime: '23:30',
+          lateWindowUntilTime: '23:45',
+          drawTime: '23:50',
+          tournamentStartTime: '00:00',
+          startIsNextDay: true,
         },
         weekend_night: {
           deadlineTime: '23:30',

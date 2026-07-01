@@ -69,13 +69,13 @@ const BAN_REASONS = [
 ];
 
 const EVENT_PROFILE_BY_KEY = {
-  monday: 'early',
-  tuesday: 'early',
-  wednesday: 'early',
-  thursday: 'early',
+  monday: 'weekend_night',
+  tuesday: 'weekend_night',
+  wednesday: 'weekend_night',
+  thursday: 'weekend_night',
   friday: 'weekend_night',
   saturday: 'weekend_night',
-  sunday: 'early',
+  sunday: 'weekend_night',
 };
 
 const DATA_VERSION = 1;

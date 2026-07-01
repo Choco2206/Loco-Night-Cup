@@ -28,6 +28,14 @@ const {
 const { ensureDir, ensureJsonFile, readJson, writeJsonAtomic } = require('./json-store');
 const { ensureEventCycle } = require('../domain/checkins/checkin-schedule');
 
+const UNIFIED_NIGHT_PROFILE = {
+  deadlineTime: '23:30',
+  lateWindowUntilTime: '23:45',
+  drawTime: '23:50',
+  tournamentStartTime: '00:00',
+  startIsNextDay: true,
+};
+
 function emptyPanelMessage() {
   return {
     channelId: null,
@@ -135,6 +143,45 @@ function migrateTournamentFormatSettings(settings) {
   return changed;
 }
 
+function migrateUnifiedNightScheduleSettings(settings) {
+  if (!isPlainObject(settings)) return false;
+
+  settings.timeProfiles = isPlainObject(settings.timeProfiles) ? settings.timeProfiles : {};
+  settings.timeProfiles.eventProfiles = isPlainObject(settings.timeProfiles.eventProfiles)
+    ? settings.timeProfiles.eventProfiles
+    : {};
+  settings.timeProfiles.profiles = isPlainObject(settings.timeProfiles.profiles)
+    ? settings.timeProfiles.profiles
+    : {};
+
+  let changed = false;
+
+  for (const eventKey of EVENT_KEYS) {
+    const expectedProfile = 'weekend_night';
+    if (settings.timeProfiles.eventProfiles[eventKey] !== expectedProfile) {
+      settings.timeProfiles.eventProfiles[eventKey] = expectedProfile;
+      changed = true;
+    }
+  }
+
+  for (const profileKey of ['early', 'weekend_night']) {
+    const profile = isPlainObject(settings.timeProfiles.profiles[profileKey])
+      ? settings.timeProfiles.profiles[profileKey]
+      : {};
+
+    for (const [field, value] of Object.entries(UNIFIED_NIGHT_PROFILE)) {
+      if (profile[field] !== value) {
+        profile[field] = value;
+        changed = true;
+      }
+    }
+
+    settings.timeProfiles.profiles[profileKey] = profile;
+  }
+
+  return changed;
+}
+
 function migrateEventFormat(event) {
   if (!isPlainObject(event)) return false;
   event.format = isPlainObject(event.format) ? event.format : {};
@@ -194,6 +241,7 @@ function seedSettingsFile() {
   let changed = false;
   changed = mergeMissingSettings(settings, seed) || changed;
   changed = repairCheckinChannelIdsFromSeed(settings, seed) || changed;
+  changed = migrateUnifiedNightScheduleSettings(settings) || changed;
   changed = migrateTournamentFormatSettings(settings) || changed;
   changed = ensureChampionRoleIds(settings) || changed;
   if (changed) writeJsonAtomic(FILES.settings, settings);
@@ -232,8 +280,34 @@ function removeLegacyResetTimeFromSettings(settings) {
 
 function removeLegacyResetTimeFromSettingsFile() {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const changed = removeLegacyResetTimeFromSettings(settings);
+  let changed = false;
+  changed = removeLegacyResetTimeFromSettings(settings) || changed;
+  changed = migrateUnifiedNightScheduleSettings(settings) || changed;
   if (changed) writeJsonAtomic(FILES.settings, settings);
+  return changed;
+}
+
+function migrateEventScheduleDefaults(eventKey, event) {
+  if (!isPlainObject(event)) return false;
+
+  event.schedule = isPlainObject(event.schedule) ? event.schedule : {};
+  let changed = false;
+
+  const expected = {
+    profile: EVENT_PROFILE_BY_KEY[eventKey],
+    deadlineTime: UNIFIED_NIGHT_PROFILE.deadlineTime,
+    lateWindowUntilTime: UNIFIED_NIGHT_PROFILE.lateWindowUntilTime,
+    drawTime: UNIFIED_NIGHT_PROFILE.drawTime,
+    tournamentStartTime: UNIFIED_NIGHT_PROFILE.tournamentStartTime,
+  };
+
+  for (const [field, value] of Object.entries(expected)) {
+    if (event.schedule[field] !== value) {
+      event.schedule[field] = value;
+      changed = true;
+    }
+  }
+
   return changed;
 }
 
@@ -281,6 +355,8 @@ function normalizeEventFile(eventKey) {
     delete event.schedule.resetTime;
     changed = true;
   }
+
+  changed = migrateEventScheduleDefaults(eventKey, event) || changed;
 
   if (!Array.isArray(event.byes)) {
     event.byes = [];
@@ -506,6 +582,7 @@ module.exports = {
   initializeStorage,
   mergeMissingSettings,
   migrateEventFormat,
+  migrateUnifiedNightScheduleSettings,
   migrateTournamentFormatSettings,
   normalizeEventFile,
   normalizeEventFiles,
