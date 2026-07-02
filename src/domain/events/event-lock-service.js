@@ -203,7 +203,7 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
       drawnAt: timestamp,
       drawnBy: actorUserId ? String(actorUserId) : null,
       groups,
-      releases: createInitialReleaseState(eventKey, event, now),
+      releases: createInitialReleaseState(eventKey, { ...event, groups: { ...(event.groups || {}), groups } }, now),
     };
     event.meta = {
       ...event.meta,

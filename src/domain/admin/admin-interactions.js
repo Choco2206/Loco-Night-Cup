@@ -1253,8 +1253,11 @@ async function handleAdminSelect(interaction, client, settings) {
 
   if (interaction.customId === 'admin_group_release_current_select') {
     const result = await forceReleaseNextSlot(client, eventKey);
+    const groupsText = (result.groups || [])
+      .map(entry => `Gruppe ${entry.groupKey}: Spieltag ${entry.slot}`)
+      .join(', ');
     await interaction.editReply({
-      content: `Spieltag ${result.slot} fuer ${EVENT_LABELS[eventKey]} wurde sofort freigegeben.`,
+      content: `${EVENT_LABELS[eventKey]}: ${groupsText || 'kein Spieltag'} wurde sofort freigegeben.`,
       components: [],
     });
     return true;

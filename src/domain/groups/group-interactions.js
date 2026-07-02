@@ -331,7 +331,7 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
   await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
   await notifyAdminDecision(interaction, outcome.match);
   if (outcome.status === 'confirmed') {
-    await afterGroupResultConfirmed(client, eventKey);
+    await afterGroupResultConfirmed(client, eventKey, groupKey);
   }
 
   const message = outcome.status === 'confirmed'
@@ -360,7 +360,7 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
   });
 
   await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
-  await afterGroupResultConfirmed(client, eventKey);
+  await afterGroupResultConfirmed(client, eventKey, groupKey);
   await interaction.editReply({
     content: 'Admin-Ergebnis gesetzt. Tabelle und Spielplan wurden aktualisiert.',
   });

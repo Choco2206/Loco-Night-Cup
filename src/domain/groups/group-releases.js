@@ -16,6 +16,7 @@ const {
 
 const INVITE_WINDOW_MINUTES = 5;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+const GROUP_SLOTS = [1, 2, 3];
 
 const timers = new Map();
 
@@ -54,10 +55,30 @@ function berlinOffsetForDate(date) {
   return `${sign}${hours}:${minutes}`;
 }
 
+function groupEntries(event) {
+  return Object.entries(event.groups?.groups || {})
+    .filter(([, group]) => group && typeof group === 'object');
+}
+
+function groupKeys(event) {
+  return groupEntries(event).map(([groupKey]) => groupKey);
+}
+
+function getGroup(event, groupKey) {
+  return event.groups?.groups?.[groupKey] || null;
+}
+
 function getFirstSlotStart(eventKey, event, now = new Date(), { useExistingPlanned = true } = {}) {
-  if (useExistingPlanned && event.groups?.releases?.slots?.[1]?.plannedAt) {
-    const planned = new Date(event.groups.releases.slots[1].plannedAt);
-    if (!Number.isNaN(planned.getTime())) return planned;
+  if (useExistingPlanned) {
+    const groupRelease = Object.values(event.groups?.releases?.groups || {})
+      .find(release => release?.slots?.[1]?.plannedAt || release?.slots?.['1']?.plannedAt);
+    const plannedValue = groupRelease?.slots?.[1]?.plannedAt || groupRelease?.slots?.['1']?.plannedAt;
+    const planned = plannedValue ? new Date(plannedValue) : null;
+    if (planned && !Number.isNaN(planned.getTime())) return planned;
+
+    const legacyPlanned = event.groups?.releases?.slots?.[1]?.plannedAt || event.groups?.releases?.slots?.['1']?.plannedAt;
+    const legacy = legacyPlanned ? new Date(legacyPlanned) : null;
+    if (legacy && !Number.isNaN(legacy.getTime())) return legacy;
   }
 
   if (event.schedule?.tournamentStartAt) {
@@ -76,9 +97,8 @@ function getFirstSlotStart(eventKey, event, now = new Date(), { useExistingPlann
     day: '2-digit',
   });
   const datePart = formatter.format(now);
-  const timePart = '00:00:00';
   const offset = berlinOffsetForDate(new Date(`${datePart}T12:00:00Z`));
-  return new Date(`${datePart}T${timePart}${offset}`);
+  return new Date(`${datePart}T00:00:00${offset}`);
 }
 
 function createEmptySlotRelease(slot, firstPlannedAt = null) {
@@ -97,15 +117,35 @@ function createEmptySlotRelease(slot, firstPlannedAt = null) {
   };
 }
 
+function createEmptyGroupRelease(firstPlannedAt = null) {
+  return {
+    currentSlot: null,
+    slots: Object.fromEntries(GROUP_SLOTS.map(slot => [slotKey(slot), createEmptySlotRelease(slot, firstPlannedAt)])),
+  };
+}
+
 function createInitialReleaseState(eventKey, event, now = new Date()) {
   const firstPlannedAt = getFirstSlotStart(eventKey, event, now, { useExistingPlanned: false }).toISOString();
   return {
-    currentSlot: null,
-    slots: {
-      1: createEmptySlotRelease(1, firstPlannedAt),
-      2: createEmptySlotRelease(2, firstPlannedAt),
-      3: createEmptySlotRelease(3, firstPlannedAt),
-    },
+    groups: Object.fromEntries(groupKeys(event).map(groupKey => [groupKey, createEmptyGroupRelease(firstPlannedAt)])),
+  };
+}
+
+function cloneJson(value) {
+  if (!value || typeof value !== 'object') return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function legacySlotForGroup(legacySlots, groupKey, slot) {
+  const legacy = legacySlots?.[slotKey(slot)] || legacySlots?.[slot];
+  if (!legacy) return null;
+
+  const releaseIds = legacy.releaseMessageIds || {};
+  const reminderIds = legacy.reminderMessageIds || {};
+  return {
+    ...cloneJson(legacy),
+    releaseMessageIds: releaseIds[groupKey] ? { [groupKey]: releaseIds[groupKey] } : {},
+    reminderMessageIds: reminderIds[groupKey] ? { [groupKey]: reminderIds[groupKey] } : {},
   };
 }
 
@@ -115,6 +155,10 @@ function normalizeSlotRelease(slot, release, firstPlannedAt) {
     ...base,
     ...(release || {}),
   };
+
+  if (slot === 1 && !normalized.plannedAt) normalized.plannedAt = firstPlannedAt;
+  normalized.releaseMessageIds = normalized.releaseMessageIds || {};
+  normalized.reminderMessageIds = normalized.reminderMessageIds || {};
 
   const releasedDate = normalized.releasedAt ? new Date(normalized.releasedAt) : null;
   if (!normalized.releasedAt || Number.isNaN(releasedDate.getTime())) {
@@ -130,8 +174,6 @@ function normalizeSlotRelease(slot, release, firstPlannedAt) {
   normalized.status = normalized.status && normalized.status !== 'not_released'
     ? normalized.status
     : 'released';
-  normalized.releaseMessageIds = normalized.releaseMessageIds || {};
-  normalized.reminderMessageIds = normalized.reminderMessageIds || {};
   normalized.reminderAt = null;
   normalized.autoScoreAt = null;
   return normalized;
@@ -140,53 +182,73 @@ function normalizeSlotRelease(slot, release, firstPlannedAt) {
 function ensureReleaseState(eventKey, event, now = new Date()) {
   event.groups = event.groups || {};
   const previous = event.groups.releases || {};
-  const slots = previous.slots || {};
   const firstPlannedAt = getFirstSlotStart(eventKey, event, now).toISOString();
+  const releasesByGroup = {};
 
-  for (const slot of [1, 2, 3]) {
-    const key = slotKey(slot);
-    slots[key] = normalizeSlotRelease(slot, slots[key], firstPlannedAt);
+  for (const groupKey of groupKeys(event)) {
+    const previousGroup = previous.groups?.[groupKey] || {};
+    const slots = {};
+
+    for (const slot of GROUP_SLOTS) {
+      const key = slotKey(slot);
+      const groupSlot = previousGroup.slots?.[key] || previousGroup.slots?.[slot];
+      slots[key] = normalizeSlotRelease(slot, groupSlot || legacySlotForGroup(previous.slots, groupKey, slot), firstPlannedAt);
+    }
+
+    releasesByGroup[groupKey] = {
+      currentSlot: previousGroup.currentSlot || null,
+      slots,
+    };
   }
 
   event.groups.releases = {
-    currentSlot: previous.currentSlot || null,
-    slots,
+    groups: releasesByGroup,
   };
 
   return event.groups.releases;
 }
 
-function getSlotMatches(event, slot) {
-  return Object.values(event.groups?.groups || {})
-    .flatMap(group => getMatches(group)
-      .filter(match => isRealMatch(match) && getMatchSlot(match) === Number(slot))
-      .map(match => ({ group, match })));
+function getGroupRelease(event, groupKey) {
+  return event.groups?.releases?.groups?.[groupKey] || null;
 }
 
-function isSlotComplete(event, slot) {
-  const slotMatches = getSlotMatches(event, slot);
+function getSlotRelease(event, groupKey, slot) {
+  return getGroupRelease(event, groupKey)?.slots?.[slotKey(slot)] || null;
+}
+
+function getSlotMatches(event, groupKey, slot) {
+  const group = getGroup(event, groupKey);
+  if (!group) return [];
+  return getMatches(group)
+    .filter(match => isRealMatch(match) && getMatchSlot(match) === Number(slot))
+    .map(match => ({ group, groupKey, match }));
+}
+
+function isSlotComplete(event, groupKey, slot) {
+  const slotMatches = getSlotMatches(event, groupKey, slot);
   return slotMatches.every(entry => entry.match.status === 'confirmed');
 }
 
-function nextReleasableSlot(event) {
-  const releases = event.groups?.releases;
-  if (!releases) return null;
+function nextReleasableSlot(event, groupKey) {
+  const group = getGroup(event, groupKey);
+  const releases = getGroupRelease(event, groupKey);
+  if (!group || group.status === 'completed' || !releases) return null;
 
-  for (const slot of [1, 2, 3]) {
+  for (const slot of GROUP_SLOTS) {
     const release = releases.slots?.[slotKey(slot)];
     if (release?.releasedAt) continue;
     if (slot === 1) return 1;
-    if (isSlotComplete(event, slot - 1)) return slot;
+    if (isSlotComplete(event, groupKey, slot - 1)) return slot;
     return null;
   }
 
   return null;
 }
 
-function markSlotReleased(eventKey, event, slot, now = new Date()) {
-  const releases = ensureReleaseState(eventKey, event, now);
-  const release = releases.slots[slotKey(slot)];
-  if (release.releasedAt) return false;
+function markGroupSlotReleased(eventKey, event, groupKey, slot, now = new Date()) {
+  ensureReleaseState(eventKey, event, now);
+  const release = getSlotRelease(event, groupKey, slot);
+  if (!release || release.releasedAt) return false;
 
   const releasedAt = nowIso(now);
   release.status = 'released';
@@ -197,9 +259,9 @@ function markSlotReleased(eventKey, event, slot, now = new Date()) {
   release.autoScoreAt = null;
   release.reminderSentAt = null;
   release.autoScoredAt = null;
-  releases.currentSlot = slot;
+  getGroupRelease(event, groupKey).currentSlot = slot;
 
-  for (const { match } of getSlotMatches(event, slot)) {
+  for (const { match } of getSlotMatches(event, groupKey, slot)) {
     match.status = match.status === 'not_released' ? 'open' : match.status;
     if (!['open', 'pending_confirmation', 'admin_decision_required', 'confirmed'].includes(match.status)) {
       match.status = 'open';
@@ -215,25 +277,19 @@ function markSlotReleased(eventKey, event, slot, now = new Date()) {
   return true;
 }
 
-async function sendToActiveGroupChannels(client, event, content, idBucketName, slot) {
-  if (!client) return {};
-  const messageIds = {};
+async function sendToGroupChannel(client, group, content, idBucketName, slot) {
+  if (!client || !group?.channelId) return null;
+  const channel = await client.channels.fetch(group.channelId).catch(() => null);
+  if (!channel) return null;
 
-  for (const group of Object.values(event.groups?.groups || {})) {
-    if (!group.channelId) continue;
-    const channel = await client.channels.fetch(group.channelId).catch(() => null);
-    if (!channel) continue;
-    const message = await channel.send({
-      content,
-      allowedMentions: { parse: [] },
-    }).catch(error => {
-      console.error(`Gruppe ${group.groupKey}: ${idBucketName} fuer Spieltag ${slot} konnte nicht gesendet werden.`, error);
-      return null;
-    });
-    if (message?.id) messageIds[group.groupKey] = message.id;
-  }
-
-  return messageIds;
+  const message = await channel.send({
+    content,
+    allowedMentions: { parse: [] },
+  }).catch(error => {
+    console.error(`Gruppe ${group.groupKey}: ${idBucketName} fuer Spieltag ${slot} konnte nicht gesendet werden.`, error);
+    return null;
+  });
+  return message?.id || null;
 }
 
 async function deleteMessageFromGroup(client, group, messageId, label) {
@@ -261,44 +317,43 @@ async function deleteMessageFromGroup(client, group, messageId, label) {
   return true;
 }
 
-async function deleteStoredSlotPosts(client, eventKey, event, slot, now = new Date()) {
-  const release = event.groups?.releases?.slots?.[slotKey(slot)];
+async function deleteStoredSlotPosts(client, eventKey, event, groupKey, slot, now = new Date()) {
+  const release = getSlotRelease(event, groupKey, slot);
   if (!release) return;
 
-  const releaseIds = release.releaseMessageIds || {};
-  const reminderIds = release.reminderMessageIds || {};
-  if (!Object.keys(releaseIds).length && !Object.keys(reminderIds).length) return;
+  const group = getGroup(event, groupKey);
+  const releaseMessageId = release.releaseMessageIds?.[groupKey];
+  const reminderMessageId = release.reminderMessageIds?.[groupKey];
+  if (!releaseMessageId && !reminderMessageId) return;
 
-  const groups = event.groups?.groups || {};
-  for (const [groupKey, messageId] of Object.entries(releaseIds)) {
-    await deleteMessageFromGroup(client, groups[groupKey], messageId, `Freigabe-Post Spieltag ${slot}`);
-  }
-  for (const [groupKey, messageId] of Object.entries(reminderIds)) {
-    await deleteMessageFromGroup(client, groups[groupKey], messageId, `alter Hinweis-Post Spieltag ${slot}`);
-  }
+  await deleteMessageFromGroup(client, group, releaseMessageId, `Freigabe-Post Spieltag ${slot}`);
+  await deleteMessageFromGroup(client, group, reminderMessageId, `alter Hinweis-Post Spieltag ${slot}`);
 
   updateEventData(eventKey, current => {
     ensureReleaseState(eventKey, current, now);
-    const currentRelease = current.groups.releases.slots[slotKey(slot)];
-    currentRelease.releaseMessageIds = {};
-    currentRelease.reminderMessageIds = {};
-    currentRelease.cleanedAt = nowIso(now);
+    const currentRelease = getSlotRelease(current, groupKey, slot);
+    if (currentRelease) {
+      delete currentRelease.releaseMessageIds[groupKey];
+      delete currentRelease.reminderMessageIds[groupKey];
+      currentRelease.cleanedAt = nowIso(now);
+    }
     return current;
   });
 }
 
-async function deletePreviousSlotPosts(client, eventKey, event, slot, now = new Date()) {
+async function deletePreviousSlotPosts(client, eventKey, event, groupKey, slot, now = new Date()) {
   const previousSlot = Number(slot) - 1;
   if (previousSlot < 1) return;
-  await deleteStoredSlotPosts(client, eventKey, event, previousSlot, now);
+  await deleteStoredSlotPosts(client, eventKey, event, groupKey, previousSlot, now);
 }
 
-async function postReleaseMessage(client, eventKey, event, slot) {
-  const release = event.groups?.releases?.slots?.[slotKey(slot)];
-  if (!release?.releasedAt || Object.keys(release.releaseMessageIds || {}).length) return;
+async function postReleaseMessage(client, eventKey, event, groupKey, slot) {
+  const release = getSlotRelease(event, groupKey, slot);
+  const group = getGroup(event, groupKey);
+  if (!release?.releasedAt || !group || release.releaseMessageIds?.[groupKey]) return;
 
   const content = [
-    `\u2705 Spieltag ${slot} ist freigegeben`,
+    `\u2705 Gruppe ${groupKey}: Spieltag ${slot} ist freigegeben`,
     '',
     `Einladezeit: ${formatHm(new Date(release.inviteStartAt))} - ${formatHm(new Date(release.inviteEndAt))} Uhr`,
     '',
@@ -306,67 +361,95 @@ async function postReleaseMessage(client, eventKey, event, slot) {
     '',
     'Tragt eure Ergebnisse bitte direkt ein.',
     '',
-    'Sobald alle Ergebnisse dieses Slots final bestaetigt sind, wird automatisch der naechste Slot freigegeben.',
+    'Sobald alle Ergebnisse dieses Spieltags in dieser Gruppe final bestaetigt sind, wird automatisch nur in dieser Gruppe der naechste Spieltag freigegeben.',
   ].join('\n');
 
-  const messageIds = await sendToActiveGroupChannels(client, event, content, 'Freigabe-Post', slot);
+  const messageId = await sendToGroupChannel(client, group, content, 'Freigabe-Post', slot);
+  if (!messageId) return;
+
   updateEventData(eventKey, current => {
     ensureReleaseState(eventKey, current);
-    const currentRelease = current.groups.releases.slots[slotKey(slot)];
-    currentRelease.releaseMessageIds = {
-      ...(currentRelease.releaseMessageIds || {}),
-      ...messageIds,
-    };
+    const currentRelease = getSlotRelease(current, groupKey, slot);
+    if (currentRelease) {
+      currentRelease.releaseMessageIds = {
+        ...(currentRelease.releaseMessageIds || {}),
+        [groupKey]: messageId,
+      };
+    }
     return current;
   });
 }
 
-async function refreshAllGroups(client, eventKey, event) {
+async function refreshGroup(client, eventKey, event, groupKey) {
   if (!client) return;
-  for (const group of Object.values(event.groups?.groups || {})) {
-    await refreshGroupPosts({ client, eventKey, event, group }).catch(error => {
-      console.error(`Gruppe ${group.groupKey}: Posts konnten nach Slot-Aktualisierung nicht aktualisiert werden.`, error);
-    });
-  }
+  const group = getGroup(event, groupKey);
+  if (!group) return;
+  await refreshGroupPosts({ client, eventKey, event, group }).catch(error => {
+    console.error(`Gruppe ${group.groupKey}: Posts konnten nach Slot-Aktualisierung nicht aktualisiert werden.`, error);
+  });
 }
 
-async function applyAutoScores(client, eventKey, slot, now = new Date()) {
+async function applyAutoScores(client, eventKey, groupKeyOrSlot, slotOrNow, maybeNow) {
+  const legacyCall = typeof groupKeyOrSlot === 'number';
+  const groupKey = legacyCall ? null : groupKeyOrSlot;
+  const slot = legacyCall ? groupKeyOrSlot : slotOrNow;
+  const now = legacyCall ? (slotOrNow || new Date()) : (maybeNow || new Date());
+
   updateEventData(eventKey, event => {
     ensureReleaseState(eventKey, event, now);
-    const release = event.groups.releases.slots[slotKey(slot)];
-    if (release?.releasedAt && isSlotComplete(event, slot)) {
-      release.status = 'completed';
-      release.completedAt = release.completedAt || nowIso(now);
+    const targetGroups = groupKey ? [groupKey] : groupKeys(event);
+    for (const key of targetGroups) {
+      const release = getSlotRelease(event, key, slot);
+      if (!release) continue;
+      if (release.releasedAt && isSlotComplete(event, key, slot)) {
+        release.status = 'completed';
+        release.completedAt = release.completedAt || nowIso(now);
+      }
+      release.autoScoreAt = null;
+      release.autoScoredAt = null;
     }
-    release.autoScoreAt = null;
-    release.autoScoredAt = null;
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     return event;
   });
 
-  await maybeReleaseNextSlot(client, eventKey, now);
+  await maybeReleaseNextSlot(client, eventKey, groupKey, now);
   await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
   scheduleEvent(client, eventKey);
 }
 
-async function releaseSlot(client, eventKey, slot, now = new Date()) {
+async function releaseGroupSlot(client, eventKey, groupKey, slot, now = new Date()) {
   let releasedEvent = null;
   let didRelease = false;
 
   updateEventData(eventKey, event => {
     ensureReleaseState(eventKey, event, now);
-    didRelease = markSlotReleased(eventKey, event, slot, now);
+    didRelease = markGroupSlotReleased(eventKey, event, groupKey, slot, now);
     releasedEvent = event;
     return event;
   });
 
   if (didRelease && releasedEvent) {
-    await deletePreviousSlotPosts(client, eventKey, releasedEvent, slot, now);
-    await postReleaseMessage(client, eventKey, releasedEvent, slot);
-    await refreshAllGroups(client, eventKey, releasedEvent);
+    await deletePreviousSlotPosts(client, eventKey, releasedEvent, groupKey, slot, now);
+    await postReleaseMessage(client, eventKey, releasedEvent, groupKey, slot);
+    await refreshGroup(client, eventKey, releasedEvent, groupKey);
   }
 
   scheduleEvent(client, eventKey);
+  return didRelease;
+}
+
+async function releaseSlot(client, eventKey, slot, now = new Date()) {
+  const event = readEventData(eventKey);
+  const released = [];
+  ensureReleaseState(eventKey, event, now);
+
+  for (const groupKey of groupKeys(event)) {
+    if (nextReleasableSlot(event, groupKey) !== Number(slot)) continue;
+    const didRelease = await releaseGroupSlot(client, eventKey, groupKey, slot, now);
+    if (didRelease) released.push({ groupKey, slot: Number(slot) });
+  }
+
+  return released;
 }
 
 async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
@@ -379,31 +462,53 @@ async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
   }
 
   ensureReleaseState(eventKey, event, now);
-  const slot = nextReleasableSlot(event);
-  if (!slot) {
-    throw new Error('Aktuell kann kein weiterer Spieltag freigegeben werden.');
+  const candidates = groupKeys(event)
+    .map(groupKey => ({ groupKey, slot: nextReleasableSlot(event, groupKey) }))
+    .filter(entry => entry.slot);
+
+  if (!candidates.length) {
+    throw new Error('Aktuell kann in keiner Gruppe ein weiterer Spieltag freigegeben werden.');
   }
 
-  await releaseSlot(client, eventKey, slot, now);
-  return { slot };
+  const released = [];
+  for (const entry of candidates) {
+    const didRelease = await releaseGroupSlot(client, eventKey, entry.groupKey, entry.slot, now);
+    if (didRelease) released.push(entry);
+  }
+
+  return {
+    slot: released.length ? Math.min(...released.map(entry => entry.slot)) : null,
+    groups: released,
+  };
 }
 
-async function maybeReleaseNextSlot(client, eventKey, now = new Date()) {
+async function maybeReleaseNextSlot(client, eventKey, groupKeyOrNow = null, maybeNow = new Date()) {
+  const groupKey = typeof groupKeyOrNow === 'string' ? groupKeyOrNow : null;
+  const now = typeof groupKeyOrNow === 'string' ? maybeNow : (groupKeyOrNow || maybeNow || new Date());
   const event = readEventData(eventKey);
-  if (event.groups?.status === 'completed') return;
-  ensureReleaseState(eventKey, event, now);
-  const slot = nextReleasableSlot(event);
-  if (!slot) return;
+  if (event.groups?.status === 'completed') return [];
 
-  if (slot === 1) {
-    const planned = new Date(event.groups.releases.slots[1].plannedAt);
-    if (planned.getTime() > now.getTime()) {
-      scheduleEvent(client, eventKey);
-      return;
+  ensureReleaseState(eventKey, event, now);
+  const targets = groupKey ? [groupKey] : groupKeys(event);
+  const released = [];
+
+  for (const key of targets) {
+    const slot = nextReleasableSlot(event, key);
+    if (!slot) continue;
+
+    if (slot === 1) {
+      const planned = new Date(getSlotRelease(event, key, 1)?.plannedAt);
+      if (planned.getTime() > now.getTime()) {
+        scheduleEvent(client, eventKey);
+        continue;
+      }
     }
+
+    const didRelease = await releaseGroupSlot(client, eventKey, key, slot, now);
+    if (didRelease) released.push({ groupKey: key, slot });
   }
 
-  await releaseSlot(client, eventKey, slot, now);
+  return released;
 }
 
 async function maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now = new Date()) {
@@ -433,10 +538,12 @@ function clearTimer(key) {
 }
 
 function clearEventTimers(eventKey) {
-  for (const slot of [1, 2, 3]) {
-    clearTimer(`${eventKey}:release:${slot}`);
-    clearTimer(`${eventKey}:reminder:${slot}`);
-    clearTimer(`${eventKey}:autoscore:${slot}`);
+  for (const groupKey of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+    for (const slot of GROUP_SLOTS) {
+      clearTimer(`${eventKey}:${groupKey}:release:${slot}`);
+      clearTimer(`${eventKey}:${groupKey}:reminder:${slot}`);
+      clearTimer(`${eventKey}:${groupKey}:autoscore:${slot}`);
+    }
   }
 }
 
@@ -460,25 +567,24 @@ function scheduleEvent(client, eventKey) {
   });
 
   const current = readEventData(eventKey);
-  const releases = current.groups?.releases?.slots || {};
+  for (const groupKey of groupKeys(current)) {
+    const nextSlot = nextReleasableSlot(current, groupKey);
+    if (!nextSlot) continue;
 
-  const nextSlot = nextReleasableSlot(current);
-  if (nextSlot) {
-    const release = releases[slotKey(nextSlot)];
+    const release = getSlotRelease(current, groupKey, nextSlot);
     const targetAt = nextSlot === 1 && release?.plannedAt ? release.plannedAt : nowIso();
-    setTimer(`${eventKey}:release:${nextSlot}`, targetAt, () => {
-      maybeReleaseNextSlot(client, eventKey).catch(error => console.error('Gruppen-Spielfreigabe fehlgeschlagen:', error));
+    setTimer(`${eventKey}:${groupKey}:release:${nextSlot}`, targetAt, () => {
+      maybeReleaseNextSlot(client, eventKey, groupKey).catch(error => {
+        console.error(`Gruppen-Spielfreigabe fuer ${eventKey} Gruppe ${groupKey} fehlgeschlagen:`, error);
+      });
     });
-  }
-
-  for (const slot of [1, 2, 3]) {
-    const release = releases[slotKey(slot)];
-    if (!release?.releasedAt) continue;
   }
 }
 
-async function afterGroupResultConfirmed(client, eventKey, now = new Date()) {
-  await maybeReleaseNextSlot(client, eventKey, now);
+async function afterGroupResultConfirmed(client, eventKey, groupKeyOrNow = null, maybeNow = new Date()) {
+  const groupKey = typeof groupKeyOrNow === 'string' ? groupKeyOrNow : null;
+  const now = typeof groupKeyOrNow === 'string' ? maybeNow : (groupKeyOrNow || maybeNow || new Date());
+  await maybeReleaseNextSlot(client, eventKey, groupKey, now);
   await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
 }
 
