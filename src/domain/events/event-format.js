@@ -61,12 +61,13 @@ function collectValidRealTeams(event, now = new Date()) {
 
 function choosePlayableFormat({ realTeamCount, byeCount, settings, event }) {
   const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
-  if (realTeamCount < minimumParticipantSlots) return null;
+  const participantSlotCount = realTeamCount + byeCount;
+  if (participantSlotCount < minimumParticipantSlots) return null;
 
   const allowedSizes = getAllowedSizes(settings, event).sort((a, b) => b - a);
 
   for (const size of allowedSizes) {
-    if (size > realTeamCount) continue;
+    if (size > participantSlotCount) continue;
     return size;
   }
 
@@ -91,12 +92,12 @@ function buildLockedParticipantField(event, now = new Date()) {
     throw new Error(`Format-Lock nicht moeglich: mindestens ${minimumParticipantSlots} gueltige Teams und ein spielbares Format aus ${getAllowedSizes(settings, event).join(', ')} Slots erforderlich.`);
   }
 
-  const activeRealCount = size;
-  const neededByeCount = 0;
+  const activeRealCount = Math.min(teams.length, size);
+  const activeManualByeCount = Math.min(manualByes.length, Math.max(0, size - activeRealCount));
   const activeTeams = teams.slice(0, activeRealCount);
   const waitlistTeams = teams.slice(activeRealCount);
-  const activeByes = [];
-  const waitlistByes = manualByes;
+  const activeByes = manualByes.slice(0, activeManualByeCount);
+  const waitlistByes = manualByes.slice(activeManualByeCount);
   const groupCount = groupCountForSize(size);
 
   if (activeByes.length > groupCount) {
@@ -116,6 +117,10 @@ function buildLockedParticipantField(event, now = new Date()) {
       displayName: bye.displayName || bye.label || 'Freilos',
     })),
   ];
+
+  if (participants.length !== size) {
+    throw new Error('Format-Lock nicht moeglich: Teilnehmerliste enthaelt nicht genug Teams oder manuell gesetzte Freilose.');
+  }
 
   return {
     allowedSizes,

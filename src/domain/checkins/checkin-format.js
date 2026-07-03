@@ -71,7 +71,7 @@ function recalculateFormatBeforeLock(event, settings) {
   const byeCount = getManualByeCount(event);
   const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
   const allowedSizes = getAllowedSizes(settings, event);
-  const participantSlotCount = teamIds.length;
+  const participantSlotCount = teamIds.length + byeCount;
 
   const size = chooseFormatSize({
     participantSlotCount,
@@ -82,8 +82,8 @@ function recalculateFormatBeforeLock(event, settings) {
   const activeRealCount = size ? Math.min(teamIds.length, size) : teamIds.length;
   const activeTeamIds = teamIds.slice(0, activeRealCount);
   const waitlistTeamIds = teamIds.slice(activeRealCount);
-  const activeByeCount = 0;
-  const waitlistByeCount = byeCount;
+  const activeByeCount = size ? Math.min(byeCount, Math.max(0, size - activeRealCount)) : 0;
+  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   event.format = {
     ...event.format,

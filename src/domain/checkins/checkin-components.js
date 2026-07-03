@@ -70,7 +70,7 @@ function formatStatus(eventKey, event, settings, now = new Date()) {
 }
 
 function getParticipantSlotCount(event) {
-  return getEntryTeamIds(event).length;
+  return getEntryTeamIds(event).length + getManualByeCount(event);
 }
 
 function getPlayableSlotCount(event, settings) {
@@ -149,8 +149,10 @@ function buildSlotState(event, settings) {
   const activeTeamIds = getActiveTeamIds(event);
   const waitlistTeamIds = getWaitlistTeamIds(event);
   const byeCount = getManualByeCount(event);
-  const activeByeCount = 0;
-  const waitlistByeCount = byeCount;
+  const activeByeCount = event.format?.lockedAt
+    ? Number(event.format?.activeByeCount || 0)
+    : Math.min(byeCount, Math.max(0, Number(playableSlotCount || 0) - activeTeamIds.length));
+  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   const activeLabels = [
     ...activeTeamIds.map(teamName),
