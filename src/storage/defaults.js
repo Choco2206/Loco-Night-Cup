@@ -227,6 +227,7 @@ function createMessagesDefault() {
     },
     teams: {
       registrationPanel: emptyPanelMessage(),
+      myTeamPanel: emptyPanelMessage(),
       registeredTeamsOverview: {
         channelId: null,
         headerMessageId: null,

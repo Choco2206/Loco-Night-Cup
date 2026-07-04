@@ -2,7 +2,9 @@
 
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
-const { buildTeamPanelPayload } = require('./team-components');
+const { buildMyTeamPanelPayload, buildTeamPanelPayload } = require('./team-components');
+
+const MY_TEAM_PANEL_CHANNEL_ID = '1522775227703103589';
 
 async function fetchMessage(channel, messageId) {
   if (!messageId) return null;
@@ -41,6 +43,36 @@ async function ensureTeamPanel(client) {
   return true;
 }
 
+async function ensureMyTeamPanel(client) {
+  const channel = await client.channels.fetch(MY_TEAM_PANEL_CHANNEL_ID).catch(() => null);
+  if (!channel) return false;
+
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const state = messages.teams.myTeamPanel || {};
+  const payload = buildMyTeamPanelPayload();
+
+  let panel = await fetchMessage(channel, state.messageId);
+  if (panel) {
+    await panel.edit(payload);
+  } else {
+    panel = await channel.send(payload);
+  }
+
+  updateJson(FILES.messages, createMessagesDefault(), current => {
+    current.teams.myTeamPanel = current.teams.myTeamPanel || {};
+    current.teams.myTeamPanel.channelId = channel.id;
+    current.teams.myTeamPanel.messageId = panel.id;
+    current.teams.myTeamPanel.updatedAt = new Date().toISOString();
+    if (!current.teams.myTeamPanel.createdAt) {
+      current.teams.myTeamPanel.createdAt = new Date().toISOString();
+    }
+    return current;
+  });
+
+  return true;
+}
+
 module.exports = {
+  ensureMyTeamPanel,
   ensureTeamPanel,
 };

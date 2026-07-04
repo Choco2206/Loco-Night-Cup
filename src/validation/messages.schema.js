@@ -34,6 +34,7 @@ function validateMessages(data) {
     validateMessageRef(errors, data.roles.roleSelectPanel, 'roles.roleSelectPanel');
   }
   validateMessageRef(errors, data.teams?.registrationPanel, 'teams.registrationPanel');
+  validateMessageRef(errors, data.teams?.myTeamPanel, 'teams.myTeamPanel');
 
   if (requireObject(errors, data.teams?.registeredTeamsOverview, 'teams.registeredTeamsOverview')) {
     requireSnowflakeOrNull(errors, data.teams.registeredTeamsOverview.channelId, 'teams.registeredTeamsOverview.channelId');

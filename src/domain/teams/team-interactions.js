@@ -141,6 +141,14 @@ async function syncTeamNicknames(guild, team) {
   return results;
 }
 
+async function showMyTeam(interaction) {
+  requireGuild(interaction);
+  const team = findNonDeletedTeamByUserId(interaction.user.id);
+  if (!team) throw new Error('Du bist aktuell keinem Team zugeordnet.');
+  await interaction.reply({ ...buildMyTeamPayload(team, interaction.user.id), flags: EPHEMERAL });
+  return true;
+}
+
 async function deleteInstructionMessage(client, channelId, messageId) {
   if (!channelId || !messageId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -216,11 +224,7 @@ async function handleButton(interaction, client) {
   }
 
   if (interaction.customId === 'team_show_mine') {
-    requireGuild(interaction);
-    const team = findNonDeletedTeamByUserId(interaction.user.id);
-    if (!team) throw new Error('Du bist aktuell keinem Team zugeordnet.');
-    await interaction.reply({ ...buildMyTeamPayload(team, interaction.user.id), flags: EPHEMERAL });
-    return true;
+    return showMyTeam(interaction);
   }
 
   const [action, teamId] = interaction.customId.split(':');

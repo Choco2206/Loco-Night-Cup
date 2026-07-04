@@ -4,7 +4,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
 const { refreshCheckinMessages } = require('../checkins/checkin-panel');
-const { ensureTeamPanel } = require('./team-panel');
+const { ensureMyTeamPanel, ensureTeamPanel } = require('./team-panel');
 const { handleInteraction } = require('./team-interactions');
 const { handleMessage } = require('./team-message-handler');
 const { ensureTeamAchievementsRankingMessage } = require('./team-achievements');
@@ -17,6 +17,7 @@ async function init(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
 
   await ensureTeamPanel(client);
+  await ensureMyTeamPanel(client);
 
   const deletedTeamIds = cleanupTeamsWithoutLeadership();
   const affectedEventKeys = [];

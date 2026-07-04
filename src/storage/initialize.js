@@ -469,6 +469,16 @@ function normalizeMessagesFile() {
   }
 
   messages.teams = messages.teams || {};
+  if (!messages.teams.registrationPanel) {
+    messages.teams.registrationPanel = emptyPanelMessage();
+    changed = true;
+  }
+
+  if (!messages.teams.myTeamPanel) {
+    messages.teams.myTeamPanel = emptyPanelMessage();
+    changed = true;
+  }
+
   if (!messages.teams.teamAchievements) {
     messages.teams.teamAchievements = {
       channelId: null,

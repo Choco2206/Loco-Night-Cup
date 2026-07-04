@@ -27,10 +27,25 @@ function buildTeamPanelPayload() {
     new ButtonBuilder()
       .setCustomId('team_register_open')
       .setLabel('Team registrieren')
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Success)
+  );
+
+  return {
+    embeds: [embed],
+    components: [row],
+  };
+}
+
+function buildMyTeamPanelPayload() {
+  const embed = new EmbedBuilder()
+    .setTitle('Mein Team')
+    .setDescription('Oeffne deine private Teamuebersicht.')
+    .setColor(0xff0000);
+
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('team_show_mine')
-      .setLabel('Mein Team')
+      .setLabel('Mein Team anzeigen')
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -257,6 +272,7 @@ module.exports = {
   buildConfirmPayload,
   buildEditNameModal,
   buildMyTeamPayload,
+  buildMyTeamPanelPayload,
   buildRegisterModal,
   buildRemoveCoManagerPayload,
   buildTeamPanelPayload,
