@@ -232,6 +232,8 @@ function rankingEntryText(entry) {
   ].join('\n');
 }
 
+const RANKING_ENTRY_SEPARATOR = '\u2500'.repeat(12);
+
 function createRankingMessageChunks(entries = getTeamAchievementRanking()) {
   if (!entries.length) {
     return [
@@ -276,7 +278,7 @@ function createRankingMessageChunks(entries = getTeamAchievementRanking()) {
   let current = header;
 
   for (const entry of entries) {
-    const block = ['', rankingEntryText(entry)].join('\n');
+    const block = ['', rankingEntryText(entry), '', RANKING_ENTRY_SEPARATOR].join('\n');
     const next = `${current}${block}`;
     if (`${next}${footer}`.length > DISCORD_MESSAGE_LIMIT && current !== header) {
       chunks.push(`${current}${footer}`);

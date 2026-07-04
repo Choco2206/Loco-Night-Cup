@@ -7,6 +7,7 @@ module.exports = {
   ...require('./group-service'),
   ...require('./group-draw'),
   ...require('./group-embeds'),
+  ...require('./group-access-sync'),
   ...require('./group-interactions'),
   ...require('./group-matches'),
   ...require('./group-message-cleanup'),

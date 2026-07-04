@@ -33,6 +33,7 @@ const { syncChampionRolesForUser, syncChampionRolesForUsers } = require('./team-
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 const { refreshManagersWithoutTeamMessageIfTracked } = require('../admin/managers-without-team');
+const { syncTeamGroupAccess } = require('../groups/group-access-sync');
 
 const EPHEMERAL = 64;
 const LOGO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
@@ -106,6 +107,13 @@ async function requireStrictManagerRegistrationRole(interaction, settings) {
 function requireTeamAccess(team, userId) {
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   if (!isTeamMember(team, userId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
+}
+
+function requireTeamManager(team, userId) {
+  if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+  if (!team.manager?.userId || String(team.manager.userId) !== String(userId)) {
+    throw new Error('Nur der VM darf diese Aktion ausfuehren.');
+  }
 }
 
 async function removeTeamCheckinsAndRefresh({ teamId, settings, client }) {
@@ -211,7 +219,7 @@ async function handleButton(interaction, client) {
     requireGuild(interaction);
     const team = findNonDeletedTeamByUserId(interaction.user.id);
     if (!team) throw new Error('Du bist aktuell keinem Team zugeordnet.');
-    await interaction.reply({ ...buildMyTeamPayload(team), flags: EPHEMERAL });
+    await interaction.reply({ ...buildMyTeamPayload(team, interaction.user.id), flags: EPHEMERAL });
     return true;
   }
 
@@ -245,7 +253,7 @@ async function handleButton(interaction, client) {
   }
 
   if (action === 'team_remove_covm_open') {
-    requireTeamAccess(team, interaction.user.id);
+    requireTeamManager(team, interaction.user.id);
     if (!team.coManagers.length) throw new Error('Dieses Team hat keine Co-VMs.');
     await interaction.reply({ ...buildRemoveCoManagerPayload(team), flags: EPHEMERAL });
     return true;
@@ -351,6 +359,7 @@ async function handleUserSelect(interaction, client) {
   await syncManagerRoleForUser(interaction.guild, userId, settings);
   await syncChampionRolesForUser(interaction.guild, userId, settings);
   await setTeamCoManagerNickname(interaction.guild, userId, team).catch(() => null);
+  await syncTeamGroupAccess({ client, guild: interaction.guild, teamId: team.id, settings });
   await refreshRegisteredTeamsOverview(client);
   await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   await interaction.editReply({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });

@@ -156,8 +156,9 @@ function buildTeamEmbed(team, logoAttachment) {
   return embed;
 }
 
-function buildMyTeamPayload(team) {
+function buildMyTeamPayload(team, viewerUserId = null) {
   const logoAttachment = getLogoAttachment(team);
+  const isManager = viewerUserId && team.manager?.userId && String(team.manager.userId) === String(viewerUserId);
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`team_edit_name_open:${team.id}`)
@@ -178,7 +179,7 @@ function buildMyTeamPayload(team) {
       .setCustomId(`team_remove_covm_open:${team.id}`)
       .setLabel('Co-VM entfernen')
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(team.coManagers.length === 0),
+      .setDisabled(!isManager || team.coManagers.length === 0),
     new ButtonBuilder()
       .setCustomId(`team_leave_open:${team.id}`)
       .setLabel('Team verlassen')

@@ -8,10 +8,8 @@ const {
   EmbedBuilder,
   PermissionFlagsBits,
 } = require('discord.js');
-const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
-const { readEventData } = require('../events/event-repository');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
@@ -34,8 +32,6 @@ const ROUND_ROLE_NAMES = {
 };
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const INVITE_WINDOW_MINUTES = 5;
-const REMINDER_DELAY_MS = 15 * 60 * 1000;
-const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const STATUS_LABELS = {
   open: '⏳ Offen',
   pending_confirmation: '🕐 Wartet auf Bestaetigung',
@@ -46,8 +42,6 @@ const STATUS_LABELS = {
   confirmed: '✅ Bestaetigt',
 };
 const DIVIDER = '━━━━━━━━━━━━━━';
-
-const reminderTimers = new Map();
 
 function nowIso() {
   return new Date().toISOString();
@@ -528,13 +522,6 @@ function getRoundReleaseAt(round) {
   return releaseTimes[0] || null;
 }
 
-function formatOpenKnockoutMatches(round) {
-  return (round?.matches || [])
-    .filter(isOpenKnockoutMatch)
-    .map(match => `M${match.matchIndex}: ${participantName(match.home)} vs ${participantName(match.away)} - ${formatMatchStatus(match)}`)
-    .join('\n');
-}
-
 function readRoundMessageState(eventKey, roundKey) {
   const messages = readJson(FILES.messages, createMessagesDefault());
   return messages.knockout?.[eventKey]?.rounds?.[roundKey] || {};
@@ -584,78 +571,11 @@ async function postRoundReleaseMessage(channel, eventKey, roundKey, releasedAt) 
   return message.id;
 }
 
-async function postRoundReminderMessage(client, eventKey, roundKey) {
-  const event = readEventData(eventKey);
-  const round = event.knockout?.rounds?.[roundKey];
-  const openMatches = formatOpenKnockoutMatches(round);
-  if (!openMatches) return null;
-
-  const channelId = round?.channelId || readRoundMessageState(eventKey, roundKey).channelId;
-  if (!channelId) return null;
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.send) return null;
-
-  const label = ROUND_LABELS[roundKey] || roundKey;
-  const message = await channel.send({
-    content: [
-      `${label}: Ergebnis-Reminder`,
-      '',
-      'Bitte tragt eure Ergebnisse ein bzw. bestaetigt die offenen Ergebnisse.',
-      '',
-      'Noch offen:',
-      openMatches,
-      '',
-      'Keine automatische Wertung in der K.O.-Phase.',
-      'Admin/Turnierleitung entscheidet offene Faelle manuell.',
-    ].join('\n'),
-    allowedMentions: { parse: [] },
-  }).catch(error => {
-    console.error(`K.O.-Reminder fuer ${eventKey}/${roundKey} konnte nicht gesendet werden.`, error);
-    return null;
-  });
-
-  if (!message?.id) return null;
-  updateRoundMessageState(eventKey, roundKey, current => ({
-    ...current,
-    reminderMessageIds: [...(Array.isArray(current.reminderMessageIds) ? current.reminderMessageIds : []), message.id],
-    updatedAt: nowIso(),
-  }));
-  return message.id;
-}
-
-function clearRoundReminderTimer(eventKey, roundKey) {
-  const key = `${eventKey}:${roundKey}:reminder`;
-  const timer = reminderTimers.get(key);
-  if (timer) clearTimeout(timer);
-  reminderTimers.delete(key);
-}
-
-function scheduleRoundReminder(client, eventKey, roundKey, releasedAt) {
-  clearRoundReminderTimer(eventKey, roundKey);
-  const state = readRoundMessageState(eventKey, roundKey);
-  if (Array.isArray(state.reminderMessageIds) && state.reminderMessageIds.length) return;
-
-  const targetAt = new Date(releasedAt.getTime() + REMINDER_DELAY_MS);
-  const delay = Math.max(0, targetAt.getTime() - Date.now());
-  const key = `${eventKey}:${roundKey}:reminder`;
-  const timer = setTimeout(() => {
-    postRoundReminderMessage(client, eventKey, roundKey)
-      .catch(error => console.error(`K.O.-Reminder fuer ${eventKey}/${roundKey} fehlgeschlagen:`, error))
-      .finally(() => reminderTimers.delete(key));
-  }, Math.min(delay, MAX_TIMEOUT_MS));
-  if (typeof timer.unref === 'function') timer.unref();
-  reminderTimers.set(key, timer);
-}
-
-async function ensureRoundReleaseAndReminder({ client, channel, eventKey, roundKey, round }) {
+async function ensureRoundReleaseMessage({ channel, eventKey, roundKey, round }) {
   const releasedAt = getRoundReleaseAt(round);
-  if (!releasedAt) {
-    clearRoundReminderTimer(eventKey, roundKey);
-    return;
-  }
+  if (!releasedAt) return;
 
   await postRoundReleaseMessage(channel, eventKey, roundKey, releasedAt);
-  scheduleRoundReminder(client, eventKey, roundKey, releasedAt);
 }
 
 function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts }) {
@@ -744,8 +664,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
   for (const roundKey of activeRoundKeys(event)) {
     const channel = roundChannelObjects[roundKey];
     if (!channel) continue;
-    await ensureRoundReleaseAndReminder({
-      client,
+    await ensureRoundReleaseMessage({
       channel,
       eventKey,
       roundKey,
@@ -761,17 +680,6 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
   };
 }
 
-async function initKnockoutReminders(client) {
-  if (!client) return;
-  for (const eventKey of EVENT_KEYS) {
-    const event = readEventData(eventKey);
-    if (!event.knockout?.rounds || ['not_created', 'completed'].includes(event.knockout.status)) continue;
-    await upsertKnockoutPost({ client, eventKey, event }).catch(error => {
-      console.error(`K.O.-Reminder-Init fuer ${eventKey} fehlgeschlagen:`, error);
-    });
-  }
-}
-
 module.exports = {
   KNOCKOUT_CATEGORY_NAME,
   KNOCKOUT_OVERVIEW_CHANNEL_NAME,
@@ -780,6 +688,5 @@ module.exports = {
   buildOverviewEmbed,
   buildRoundButtons,
   buildRoundEmbed,
-  initKnockoutReminders,
   upsertKnockoutPost,
 };

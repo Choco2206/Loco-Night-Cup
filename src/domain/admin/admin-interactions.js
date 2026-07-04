@@ -39,6 +39,7 @@ const { ensureUserIsNotBot } = require('../teams/team-validation');
 const { addTeamBan, isTeamOrUserBanned, listActiveBans, removeTeamBan } = require('../bans');
 const { resetEventForTesting } = require('../events/event-cleanup-service');
 const { lockEventFormat, drawGroupsForEvent } = require('../events/event-lock-service');
+const { syncTeamGroupAccess } = require('../groups/group-access-sync');
 const { forceReleaseNextSlot } = require('../groups/group-releases');
 const { createKnockoutPhase } = require('../knockout');
 const { CEREMONY_DAY_LABELS, postHallOfFameCeremony, postHallOfFameTest } = require('../ceremony');
@@ -791,6 +792,7 @@ async function handleAdminAddCoManager({ interaction, client, settings, teamId, 
   await syncChampionRolesForUser(interaction.guild, userId, settings);
   const nicknameResults = [await setTeamCoManagerNickname(interaction.guild, userId, updatedTeam)];
   assertNicknameResults(nicknameResults);
+  await syncTeamGroupAccess({ client, guild: interaction.guild, teamId: updatedTeam.id, settings });
   await refreshTeamAdminSurfaces({ client, settings });
   await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
   return updatedTeam;

@@ -356,7 +356,9 @@ function removeCoManager({ teamId, userId, actorUserId }) {
   updateTeamsData(data => {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
-    if (!isTeamMember(team, actorUserId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
+    if (!team.manager?.userId || String(team.manager.userId) !== String(actorUserId)) {
+      throw new Error('Nur der VM darf Co-VMs entfernen.');
+    }
 
     const before = team.coManagers.length;
     team.coManagers = team.coManagers.filter(co => String(co.userId) !== String(userId));

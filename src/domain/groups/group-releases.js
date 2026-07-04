@@ -13,6 +13,7 @@ const {
   isMatchReleased,
   isRealMatch,
 } = require('./group-results');
+const { deleteUserMessagesFromGroupChannel } = require('./group-message-cleanup');
 
 const INVITE_WINDOW_MINUTES = 5;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
@@ -292,61 +293,6 @@ async function sendToGroupChannel(client, group, content, idBucketName, slot) {
   return message?.id || null;
 }
 
-async function deleteMessageFromGroup(client, group, messageId, label) {
-  if (!client || !group?.channelId || !messageId) return false;
-
-  const channel = await client.channels.fetch(group.channelId).catch(error => {
-    console.error(`Gruppe ${group.groupKey}: Kanal fuer ${label} konnte nicht geladen werden.`, error);
-    return null;
-  });
-  if (!channel) return false;
-
-  const message = await channel.messages.fetch(messageId).catch(error => {
-    if (error?.code !== 10008) {
-      console.error(`Gruppe ${group.groupKey}: ${label} konnte nicht geladen werden.`, error);
-    }
-    return null;
-  });
-  if (!message) return false;
-
-  await message.delete().catch(error => {
-    if (error?.code !== 10008) {
-      console.error(`Gruppe ${group.groupKey}: ${label} konnte nicht geloescht werden.`, error);
-    }
-  });
-  return true;
-}
-
-async function deleteStoredSlotPosts(client, eventKey, event, groupKey, slot, now = new Date()) {
-  const release = getSlotRelease(event, groupKey, slot);
-  if (!release) return;
-
-  const group = getGroup(event, groupKey);
-  const releaseMessageId = release.releaseMessageIds?.[groupKey];
-  const reminderMessageId = release.reminderMessageIds?.[groupKey];
-  if (!releaseMessageId && !reminderMessageId) return;
-
-  await deleteMessageFromGroup(client, group, releaseMessageId, `Freigabe-Post Spieltag ${slot}`);
-  await deleteMessageFromGroup(client, group, reminderMessageId, `alter Hinweis-Post Spieltag ${slot}`);
-
-  updateEventData(eventKey, current => {
-    ensureReleaseState(eventKey, current, now);
-    const currentRelease = getSlotRelease(current, groupKey, slot);
-    if (currentRelease) {
-      delete currentRelease.releaseMessageIds[groupKey];
-      delete currentRelease.reminderMessageIds[groupKey];
-      currentRelease.cleanedAt = nowIso(now);
-    }
-    return current;
-  });
-}
-
-async function deletePreviousSlotPosts(client, eventKey, event, groupKey, slot, now = new Date()) {
-  const previousSlot = Number(slot) - 1;
-  if (previousSlot < 1) return;
-  await deleteStoredSlotPosts(client, eventKey, event, groupKey, previousSlot, now);
-}
-
 async function postReleaseMessage(client, eventKey, event, groupKey, slot) {
   const release = getSlotRelease(event, groupKey, slot);
   const group = getGroup(event, groupKey);
@@ -429,7 +375,7 @@ async function releaseGroupSlot(client, eventKey, groupKey, slot, now = new Date
   });
 
   if (didRelease && releasedEvent) {
-    await deletePreviousSlotPosts(client, eventKey, releasedEvent, groupKey, slot, now);
+    await deleteUserMessagesFromGroupChannel(client, getGroup(releasedEvent, groupKey));
     await postReleaseMessage(client, eventKey, releasedEvent, groupKey, slot);
     await refreshGroup(client, eventKey, releasedEvent, groupKey);
   }

@@ -34,6 +34,43 @@ async function handleGroupMessage(message) {
   return false;
 }
 
+async function deleteUserMessagesFromGroupChannel(client, group, limit = 500) {
+  if (!client || !group?.channelId) return { deleted: 0, scanned: 0 };
+  const channel = await client.channels.fetch(group.channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return { deleted: 0, scanned: 0 };
+
+  let before;
+  let deleted = 0;
+  let scanned = 0;
+
+  while (scanned < limit) {
+    const remaining = Math.min(100, limit - scanned);
+    const messages = await channel.messages.fetch({ limit: remaining, before }).catch(error => {
+      console.error(`Gruppe ${group.groupKey}: Usernachrichten konnten nicht geladen werden:`, error);
+      return null;
+    });
+    if (!messages?.size) break;
+
+    for (const message of messages.values()) {
+      scanned += 1;
+      before = message.id;
+      if (message.author?.bot) continue;
+      await message.delete().then(() => {
+        deleted += 1;
+      }).catch(error => {
+        if (error?.code !== 10008) {
+          console.error(`Gruppe ${group.groupKey}: Usernachricht konnte nicht geloescht werden:`, error);
+        }
+      });
+    }
+
+    if (messages.size < remaining) break;
+  }
+
+  return { deleted, scanned };
+}
+
 module.exports = {
+  deleteUserMessagesFromGroupChannel,
   handleGroupMessage,
 };
