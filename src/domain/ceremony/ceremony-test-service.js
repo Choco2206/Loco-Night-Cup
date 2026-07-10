@@ -17,6 +17,7 @@ const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
+const HALL_OF_FAME_TEST_CHANNEL_ID = '1525035287971889173';
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
 
 const CEREMONY_DAY_LABELS = {
@@ -224,6 +225,14 @@ async function ensureHallOfFameChannel(guild) {
     reason: 'Loco Night Cup Hall of Fame',
   });
   saveHallOfFameChannelId(channel.id);
+  return channel;
+}
+
+async function getHallOfFameTestChannel(guild) {
+  const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
+  if (!channel || channel.type !== ChannelType.GuildText) {
+    throw new Error(`Hall-of-Fame-Testkanal nicht gefunden: ${HALL_OF_FAME_TEST_CHANNEL_ID}`);
+  }
   return channel;
 }
 
@@ -459,24 +468,24 @@ async function maybePostHallOfFameCeremony({ guild, eventKey }) {
 async function postHallOfFameTest({ guild, dayKey, firstTeamId, secondTeamId, thirdTeamId }) {
   if (!guild) throw new Error('Hall-of-Fame-Test ist nur auf dem Server nutzbar.');
   const { buffer, teams } = await renderHallOfFameTestImage({ dayKey, firstTeamId, secondTeamId, thirdTeamId });
-  const channel = await ensureHallOfFameChannel(guild);
+  const channel = await getHallOfFameTestChannel(guild);
   const fileName = `hall-of-fame-test-${dayKey}-${Date.now()}.png`;
   const attachment = new AttachmentBuilder(buffer, { name: fileName });
 
-  await channel.send({
-    content: [
-      'Hall of Fame Test',
-      '',
-      `🥇 ${teams.first.clubName}`,
-      `🥈 ${teams.second.clubName}`,
-      `🥉 ${teams.third.clubName}`,
-    ].join('\n'),
+  const imageMessage = await channel.send({
+    content: '@everyone',
     files: [attachment],
-    allowedMentions: { parse: [] },
+    allowedMentions: { parse: ['everyone'] },
+  });
+  const textMessage = await channel.send({
+    content: buildCeremonyText({ dayKey, teams }),
+    allowedMentions: { parse: ['users'] },
   });
 
   return {
     channelId: channel.id,
+    imageMessageId: imageMessage.id,
+    textMessageId: textMessage.id,
     dayKey,
     dayLabel: CEREMONY_DAY_LABELS[dayKey],
     teams,
@@ -488,6 +497,7 @@ module.exports = {
   CEREMONY_DAY_LABELS,
   CEREMONY_LOGO_POSITIONS,
   HALL_OF_FAME_CHANNEL_NAME,
+  HALL_OF_FAME_TEST_CHANNEL_ID,
   buildCeremonyText,
   isCeremonyReady,
   maybePostHallOfFameCeremony,
@@ -496,3 +506,4 @@ module.exports = {
   renderHallOfFameCeremonyImage,
   renderHallOfFameTestImage,
 };
+
