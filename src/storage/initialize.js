@@ -34,7 +34,27 @@ const UNIFIED_NIGHT_PROFILE = {
   lateWindowUntilTime: '23:45',
   drawTime: '23:50',
   tournamentStartTime: '00:00',
+  deadlineIsNextDay: false,
+  lateWindowIsNextDay: false,
+  drawIsNextDay: false,
   startIsNextDay: true,
+};
+
+const WEEKEND_LATE_NIGHT_PROFILE = {
+  deadlineTime: '23:45',
+  lateWindowUntilTime: '00:00',
+  drawTime: '00:05',
+  tournamentStartTime: '00:15',
+  deadlineIsNextDay: false,
+  lateWindowIsNextDay: true,
+  drawIsNextDay: true,
+  startIsNextDay: true,
+};
+
+const SCHEDULE_PROFILE_DEFAULTS = {
+  early: UNIFIED_NIGHT_PROFILE,
+  weekend_night: UNIFIED_NIGHT_PROFILE,
+  weekend_late_night: WEEKEND_LATE_NIGHT_PROFILE,
 };
 
 function emptyPanelMessage() {
@@ -158,19 +178,19 @@ function migrateUnifiedNightScheduleSettings(settings) {
   let changed = false;
 
   for (const eventKey of EVENT_KEYS) {
-    const expectedProfile = 'weekend_night';
+    const expectedProfile = EVENT_PROFILE_BY_KEY[eventKey];
     if (settings.timeProfiles.eventProfiles[eventKey] !== expectedProfile) {
       settings.timeProfiles.eventProfiles[eventKey] = expectedProfile;
       changed = true;
     }
   }
 
-  for (const profileKey of ['early', 'weekend_night']) {
+  for (const [profileKey, expectedValues] of Object.entries(SCHEDULE_PROFILE_DEFAULTS)) {
     const profile = isPlainObject(settings.timeProfiles.profiles[profileKey])
       ? settings.timeProfiles.profiles[profileKey]
       : {};
 
-    for (const [field, value] of Object.entries(UNIFIED_NIGHT_PROFILE)) {
+    for (const [field, value] of Object.entries(expectedValues)) {
       if (profile[field] !== value) {
         profile[field] = value;
         changed = true;
@@ -294,12 +314,11 @@ function migrateEventScheduleDefaults(eventKey, event) {
   event.schedule = isPlainObject(event.schedule) ? event.schedule : {};
   let changed = false;
 
+  const profileKey = EVENT_PROFILE_BY_KEY[eventKey];
+  const profileDefaults = SCHEDULE_PROFILE_DEFAULTS[profileKey] || UNIFIED_NIGHT_PROFILE;
   const expected = {
-    profile: EVENT_PROFILE_BY_KEY[eventKey],
-    deadlineTime: UNIFIED_NIGHT_PROFILE.deadlineTime,
-    lateWindowUntilTime: UNIFIED_NIGHT_PROFILE.lateWindowUntilTime,
-    drawTime: UNIFIED_NIGHT_PROFILE.drawTime,
-    tournamentStartTime: UNIFIED_NIGHT_PROFILE.tournamentStartTime,
+    profile: profileKey,
+    ...profileDefaults,
   };
 
   for (const [field, value] of Object.entries(expected)) {
