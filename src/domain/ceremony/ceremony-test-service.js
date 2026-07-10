@@ -58,41 +58,41 @@ function createDefaultLogoPositions() {
 
 const CEREMONY_LOGO_POSITIONS = {
   monday: {
-    first: { x: 628, y: 752, width: 356, height: 136 },
-    second: { x: 295, y: 776, width: 317, height: 99 },
+    first: { x: 663, y: 752, width: 356, height: 136 },
+    second: { x: 330, y: 761, width: 317, height: 99 },
     third: { x: 1046, y: 776, width: 317, height: 99 },
   },
   tuesday: {
-    first: { x: 728, y: 798, width: 216, height: 82 },
-    second: { x: 306, y: 812, width: 214, height: 66 },
-    third: { x: 1148, y: 812, width: 214, height: 66 },
+    first: { x: 658, y: 771, width: 356, height: 136 },
+    second: { x: 255, y: 796, width: 317, height: 99 },
+    third: { x: 1097, y: 796, width: 317, height: 99 },
   },
   wednesday: {
-    first: { x: 703, y: 824, width: 216, height: 82 },
-    second: { x: 256, y: 836, width: 214, height: 66 },
-    third: { x: 1128, y: 836, width: 214, height: 66 },
+    first: { x: 633, y: 797, width: 356, height: 136 },
+    second: { x: 205, y: 820, width: 317, height: 99 },
+    third: { x: 1077, y: 820, width: 317, height: 99 },
   },
   thursday: {
-    first: { x: 728, y: 790, width: 216, height: 82 },
-    second: { x: 326, y: 806, width: 214, height: 66 },
-    third: { x: 1128, y: 806, width: 214, height: 66 },
+    first: { x: 658, y: 763, width: 356, height: 136 },
+    second: { x: 275, y: 790, width: 317, height: 99 },
+    third: { x: 1077, y: 790, width: 317, height: 99 },
   },
   friday: {
-    first: { x: 718, y: 810, width: 216, height: 82 },
-    second: { x: 306, y: 814, width: 214, height: 66 },
-    third: { x: 1148, y: 814, width: 214, height: 66 },
+    first: { x: 648, y: 783, width: 356, height: 136 },
+    second: { x: 255, y: 798, width: 317, height: 99 },
+    third: { x: 1097, y: 798, width: 317, height: 99 },
   },
   saturday: {
-    first: { x: 728, y: 810, width: 216, height: 82 },
-    second: { x: 286, y: 824, width: 214, height: 66 },
-    third: { x: 1158, y: 824, width: 214, height: 66 },
+    first: { x: 658, y: 783, width: 356, height: 136 },
+    second: { x: 235, y: 808, width: 317, height: 99 },
+    third: { x: 1107, y: 808, width: 317, height: 99 },
   },
   sunday: {
-    first: { x: 728, y: 836, width: 216, height: 82 },
-    second: { x: 336, y: 840, width: 214, height: 66 },
-    third: { x: 1118, y: 840, width: 214, height: 66 },
+    first: { x: 658, y: 809, width: 356, height: 136 },
+    second: { x: 285, y: 824, width: 317, height: 99 },
+    third: { x: 1067, y: 824, width: 317, height: 99 },
   },
-};
+}
 
 function assertDay(dayKey) {
   if (!CEREMONY_BANNERS[dayKey]) throw new Error('Dieser Wochentag ist nicht bekannt.');
