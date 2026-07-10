@@ -73,8 +73,8 @@ const EVENT_PROFILE_BY_KEY = {
   tuesday: 'weekend_night',
   wednesday: 'weekend_night',
   thursday: 'weekend_night',
-  friday: 'weekend_night',
-  saturday: 'weekend_night',
+  friday: 'weekend_late_night',
+  saturday: 'weekend_late_night',
   sunday: 'weekend_night',
 };
 
