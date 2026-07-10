@@ -53,13 +53,18 @@ function createBansDefault() {
 
 function createScheduleDefault(eventKey) {
   const profile = EVENT_PROFILE_BY_KEY[eventKey];
+  const isLateWeekendNight = profile === 'weekend_late_night';
 
   return {
     profile,
-    deadlineTime: '23:30',
-    lateWindowUntilTime: '23:45',
-    drawTime: '23:50',
-    tournamentStartTime: '00:00',
+    deadlineTime: isLateWeekendNight ? '23:45' : '23:30',
+    lateWindowUntilTime: isLateWeekendNight ? '00:00' : '23:45',
+    drawTime: isLateWeekendNight ? '00:05' : '23:50',
+    tournamentStartTime: isLateWeekendNight ? '00:15' : '00:00',
+    deadlineIsNextDay: false,
+    lateWindowIsNextDay: isLateWeekendNight,
+    drawIsNextDay: isLateWeekendNight,
+    startIsNextDay: true,
     checkinOpenAt: null,
     deadlineAt: null,
     lateWindowUntil: null,
@@ -373,6 +378,9 @@ function createSettingsDefault() {
           lateWindowUntilTime: '23:45',
           drawTime: '23:50',
           tournamentStartTime: '00:00',
+          deadlineIsNextDay: false,
+          lateWindowIsNextDay: false,
+          drawIsNextDay: false,
           startIsNextDay: true,
         },
         weekend_night: {
@@ -380,6 +388,19 @@ function createSettingsDefault() {
           lateWindowUntilTime: '23:45',
           drawTime: '23:50',
           tournamentStartTime: '00:00',
+          deadlineIsNextDay: false,
+          lateWindowIsNextDay: false,
+          drawIsNextDay: false,
+          startIsNextDay: true,
+        },
+        weekend_late_night: {
+          deadlineTime: '23:45',
+          lateWindowUntilTime: '00:00',
+          drawTime: '00:05',
+          tournamentStartTime: '00:15',
+          deadlineIsNextDay: false,
+          lateWindowIsNextDay: true,
+          drawIsNextDay: true,
           startIsNextDay: true,
         },
       },
