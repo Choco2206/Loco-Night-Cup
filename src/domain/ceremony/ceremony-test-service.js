@@ -58,9 +58,9 @@ function createDefaultLogoPositions() {
 
 const CEREMONY_LOGO_POSITIONS = {
   monday: {
-    first: { x: 674, y: 769, width: 264, height: 101 },
-    second: { x: 336, y: 789, width: 235, height: 73 },
-    third: { x: 1087, y: 789, width: 235, height: 73 },
+    first: { x: 628, y: 752, width: 356, height: 136 },
+    second: { x: 295, y: 776, width: 317, height: 99 },
+    third: { x: 1046, y: 776, width: 317, height: 99 },
   },
   tuesday: {
     first: { x: 728, y: 798, width: 216, height: 82 },
