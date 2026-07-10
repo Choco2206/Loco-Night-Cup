@@ -135,6 +135,9 @@ const ADMIN_BUTTON_PREFIXES = [
   'admin_team_achievement_page:',
   'admin_team_achievement_confirm:',
   'admin_team_achievement_cancel:',
+  'admin_hof_first_page:',
+  'admin_hof_second_page:',
+  'admin_hof_third_page:',
 ];
 const ADMIN_MODAL_PREFIXES = [
   'admin_team_edit_name_modal:',
@@ -146,6 +149,7 @@ const TEAM_BAN_PAGE_SIZE = 25;
 const TEAM_DETAILS_PAGE_SIZE = 25;
 const MANUAL_CHECKIN_PAGE_SIZE = 25;
 const TEAM_ACHIEVEMENT_PAGE_SIZE = 25;
+const HALL_OF_FAME_TEAM_PAGE_SIZE = 25;
 const TEAM_ACHIEVEMENT_TITLES = {
   gold: { label: 'Cup-Sieg', emoji: '🥇' },
   silver: { label: 'Platz 2', emoji: '🥈' },
@@ -252,6 +256,80 @@ function clampPage(page, totalPages) {
   const parsed = Number(page);
   if (!Number.isInteger(parsed)) return 0;
   return Math.min(Math.max(parsed, 0), Math.max(totalPages - 1, 0));
+}
+
+function buildHallOfFameTeamSelectPayload({
+  placement,
+  firstTeamId = null,
+  secondTeamId = null,
+  page = 0,
+}) {
+  const placementLabels = { first: 'Platz 1', second: 'Platz 2', third: 'Platz 3' };
+  const placementLabel = placementLabels[placement];
+  if (!placementLabel) throw new Error('Unbekannte Hall-of-Fame-Platzierung.');
+
+  const excludeTeamIds = [firstTeamId, secondTeamId].filter(Boolean);
+  const teams = sortedRegisteredTeams(excludeTeamIds);
+  if (!teams.length) throw new Error('Es gibt keine auswaehlbaren Teams.');
+
+  const totalPages = Math.max(1, Math.ceil(teams.length / HALL_OF_FAME_TEAM_PAGE_SIZE));
+  const currentPage = clampPage(page, totalPages);
+  const pageTeams = teams.slice(
+    currentPage * HALL_OF_FAME_TEAM_PAGE_SIZE,
+    (currentPage + 1) * HALL_OF_FAME_TEAM_PAGE_SIZE
+  );
+
+  let selectCustomId;
+  let previousPageCustomId;
+  let nextPageCustomId;
+  if (placement === 'first') {
+    selectCustomId = `admin_hof_first_select:${currentPage}`;
+    previousPageCustomId = `admin_hof_first_page:${currentPage - 1}`;
+    nextPageCustomId = `admin_hof_first_page:${currentPage + 1}`;
+  } else if (placement === 'second') {
+    selectCustomId = `admin_hof_second_select:${firstTeamId}:${currentPage}`;
+    previousPageCustomId = `admin_hof_second_page:${firstTeamId}:${currentPage - 1}`;
+    nextPageCustomId = `admin_hof_second_page:${firstTeamId}:${currentPage + 1}`;
+  } else {
+    selectCustomId = `admin_hof_third_select:${firstTeamId}:${secondTeamId}:${currentPage}`;
+    previousPageCustomId = `admin_hof_third_page:${firstTeamId}:${secondTeamId}:${currentPage - 1}`;
+    nextPageCustomId = `admin_hof_third_page:${firstTeamId}:${secondTeamId}:${currentPage + 1}`;
+  }
+
+  const components = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(selectCustomId)
+        .setPlaceholder(totalPages === 1 ? `${placementLabel} auswaehlen` : `${placementLabel} auswaehlen (${currentPage + 1}/${totalPages})`)
+        .addOptions(pageTeams.map(team => ({
+          label: team.clubName.slice(0, 100),
+          value: String(team.id),
+          description: team.logo?.fileName ? `Logo: ${team.logo.fileName}`.slice(0, 100) : 'Logo fehlt',
+        })))
+    ),
+  ];
+
+  if (totalPages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(previousPageCustomId)
+        .setLabel('Zurueck')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0),
+      new ButtonBuilder()
+        .setCustomId(nextPageCustomId)
+        .setLabel('Weiter')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1)
+    ));
+  }
+
+  return {
+    content: totalPages === 1
+      ? `${placementLabel} auswaehlen.`
+      : `${placementLabel} auswaehlen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+    components,
+  };
 }
 
 function buildTeamBanSelectPayload(page = 0) {
@@ -1043,22 +1121,23 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
-  if (interaction.customId === 'admin_hof_first_select') {
+  if (interaction.customId.startsWith('admin_hof_first_select')) {
     const firstTeamId = interaction.values?.[0];
-    await interaction.update({
-      content: 'Platz 2 auswaehlen.',
-      components: [buildTeamSelect(`admin_hof_second_select:${firstTeamId}`, 'Platz 2 auswaehlen', [firstTeamId])],
-    });
+    await interaction.update(buildHallOfFameTeamSelectPayload({
+      placement: 'second',
+      firstTeamId,
+    }));
     return true;
   }
 
   if (interaction.customId.startsWith('admin_hof_second_select:')) {
     const [, firstTeamId] = interaction.customId.split(':');
     const secondTeamId = interaction.values?.[0];
-    await interaction.update({
-      content: 'Platz 3 auswaehlen.',
-      components: [buildTeamSelect(`admin_hof_third_select:${firstTeamId}:${secondTeamId}`, 'Platz 3 auswaehlen', [firstTeamId, secondTeamId])],
-    });
+    await interaction.update(buildHallOfFameTeamSelectPayload({
+      placement: 'third',
+      firstTeamId,
+      secondTeamId,
+    }));
     return true;
   }
 
@@ -1770,12 +1849,34 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
+    if (interaction.customId.startsWith('admin_hof_first_page:')) {
+      const [, page] = interaction.customId.split(':');
+      await interaction.update(buildHallOfFameTeamSelectPayload({ placement: 'first', page }));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_hof_second_page:')) {
+      const [, firstTeamId, page] = interaction.customId.split(':');
+      await interaction.update(buildHallOfFameTeamSelectPayload({ placement: 'second', firstTeamId, page }));
+      return true;
+    }
+
+    if (interaction.customId.startsWith('admin_hof_third_page:')) {
+      const [, firstTeamId, secondTeamId, page] = interaction.customId.split(':');
+      await interaction.update(buildHallOfFameTeamSelectPayload({
+        placement: 'third',
+        firstTeamId,
+        secondTeamId,
+        page,
+      }));
+      return true;
+    }
+
     if (interaction.customId === 'admin_hof_test') {
       const teams = sortedRegisteredTeams();
       if (teams.length < 3) throw new Error('Fuer den Hall-of-Fame-Test werden mindestens drei registrierte Teams benoetigt.');
       await interaction.reply({
-        content: 'Platz 1 auswaehlen.',
-        components: [buildTeamSelect('admin_hof_first_select', 'Platz 1 auswaehlen')],
+        ...buildHallOfFameTeamSelectPayload({ placement: 'first' }),
         flags: EPHEMERAL,
       });
       return true;
