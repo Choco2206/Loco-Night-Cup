@@ -128,7 +128,16 @@ function getCycleResetAt(eventDate, timeZone = DEFAULT_TIMEZONE) {
   return parseDateTime(eventDate, '07:00', true, timeZone);
 }
 
-function getScheduleDate(eventKey, event, settings, explicitField, profileField, scheduleField, addDayField = false, now = new Date()) {
+function getScheduleDate(
+  eventKey,
+  event,
+  settings,
+  explicitField,
+  profileField,
+  scheduleField,
+  nextDayField = null,
+  now = new Date()
+) {
   if (event.schedule?.[explicitField]) {
     const explicit = new Date(event.schedule[explicitField]);
     if (!Number.isNaN(explicit.getTime())) return explicit;
@@ -137,7 +146,8 @@ function getScheduleDate(eventKey, event, settings, explicitField, profileField,
   const profile = getProfileForEvent(eventKey, settings, event);
   const dateValue = getEventDateValue(eventKey, event, now, settings);
   const timeValue = profile?.[profileField] || event.schedule?.[scheduleField];
-  const addDay = addDayField && profile?.startIsNextDay === true;
+  const addDay = Boolean(nextDayField)
+    && (profile?.[nextDayField] === true || event.schedule?.[nextDayField] === true);
   return parseDateTime(dateValue, timeValue, addDay, getTimeZone(settings, event));
 }
 
@@ -149,13 +159,28 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
   const profile = getProfileForEvent(eventKey, settings, event);
   const eventDate = getEventDateValue(eventKey, event, now, settings);
   const timeZone = getTimeZone(settings, event);
-  const deadlineAt = parseDateTime(eventDate, profile?.deadlineTime || event.schedule?.deadlineTime, false, timeZone);
-  const lateWindowUntil = parseDateTime(eventDate, profile?.lateWindowUntilTime || event.schedule?.lateWindowUntilTime, false, timeZone);
-  const drawAt = parseDateTime(eventDate, profile?.drawTime || event.schedule?.drawTime, false, timeZone);
+  const deadlineAt = parseDateTime(
+    eventDate,
+    profile?.deadlineTime || event.schedule?.deadlineTime,
+    profile?.deadlineIsNextDay === true || event.schedule?.deadlineIsNextDay === true,
+    timeZone
+  );
+  const lateWindowUntil = parseDateTime(
+    eventDate,
+    profile?.lateWindowUntilTime || event.schedule?.lateWindowUntilTime,
+    profile?.lateWindowIsNextDay === true || event.schedule?.lateWindowIsNextDay === true,
+    timeZone
+  );
+  const drawAt = parseDateTime(
+    eventDate,
+    profile?.drawTime || event.schedule?.drawTime,
+    profile?.drawIsNextDay === true || event.schedule?.drawIsNextDay === true,
+    timeZone
+  );
   const tournamentStartAt = parseDateTime(
     eventDate,
     profile?.tournamentStartTime || event.schedule?.tournamentStartTime,
-    profile?.startIsNextDay === true,
+    profile?.startIsNextDay === true || event.schedule?.startIsNextDay === true,
     timeZone
   );
   const resetAt = getCycleResetAt(eventDate, timeZone);
@@ -270,7 +295,7 @@ function resetToOpenCheckinCycle(event) {
 }
 
 function getDeadlineAt(eventKey, event, settings, now = new Date()) {
-  return getScheduleDate(eventKey, event, settings, 'deadlineAt', 'deadlineTime', 'deadlineTime', false, now);
+  return getScheduleDate(eventKey, event, settings, 'deadlineAt', 'deadlineTime', 'deadlineTime', 'deadlineIsNextDay', now);
 }
 
 function getLateWindowUntil(eventKey, event, settings, now = new Date()) {
@@ -281,13 +306,13 @@ function getLateWindowUntil(eventKey, event, settings, now = new Date()) {
     'lateWindowUntil',
     'lateWindowUntilTime',
     'lateWindowUntilTime',
-    false,
+    'lateWindowIsNextDay',
     now
   );
 }
 
 function getDrawAt(eventKey, event, settings, now = new Date()) {
-  return getScheduleDate(eventKey, event, settings, 'drawAt', 'drawTime', 'drawTime', false, now);
+  return getScheduleDate(eventKey, event, settings, 'drawAt', 'drawTime', 'drawTime', 'drawIsNextDay', now);
 }
 
 function getTournamentStartAt(eventKey, event, settings, now = new Date()) {
@@ -298,7 +323,7 @@ function getTournamentStartAt(eventKey, event, settings, now = new Date()) {
     'tournamentStartAt',
     'tournamentStartTime',
     'tournamentStartTime',
-    true,
+    'startIsNextDay',
     now
   );
 }
