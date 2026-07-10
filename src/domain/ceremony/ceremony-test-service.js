@@ -18,7 +18,8 @@ const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const HALL_OF_FAME_TEST_CHANNEL_ID = '1525035287971889173';
-const CEREMONY_LOGO_SCALE = 1.5;
+const CEREMONY_LOGO_SCALE = 1.75;
+const CEREMONY_LOGO_Y_OFFSET = -50;
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
 
 const CEREMONY_DAY_LABELS = {
@@ -128,7 +129,7 @@ function scaleLogoSlot(slot) {
   const height = Math.round(slot.height * CEREMONY_LOGO_SCALE);
   return {
     x: Math.round(slot.x - (width - slot.width) / 2),
-    y: Math.round(slot.y - (height - slot.height) / 2),
+    y: Math.round(slot.y - (height - slot.height) / 2 + CEREMONY_LOGO_Y_OFFSET),
     width,
     height,
   };
@@ -512,6 +513,7 @@ module.exports = {
   HALL_OF_FAME_CHANNEL_NAME,
   HALL_OF_FAME_TEST_CHANNEL_ID,
   CEREMONY_LOGO_SCALE,
+  CEREMONY_LOGO_Y_OFFSET,
   buildCeremonyText,
   isCeremonyReady,
   maybePostHallOfFameCeremony,
