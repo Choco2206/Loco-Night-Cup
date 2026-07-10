@@ -18,6 +18,7 @@ const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const HALL_OF_FAME_TEST_CHANNEL_ID = '1525035287971889173';
+const CEREMONY_LOGO_SCALE = 1.5;
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
 
 const CEREMONY_DAY_LABELS = {
@@ -122,11 +123,23 @@ function resolveTeamLogoPath(team, { optional = false } = {}) {
   return logoPath;
 }
 
+function scaleLogoSlot(slot) {
+  const width = Math.round(slot.width * CEREMONY_LOGO_SCALE);
+  const height = Math.round(slot.height * CEREMONY_LOGO_SCALE);
+  return {
+    x: Math.round(slot.x - (width - slot.width) / 2),
+    y: Math.round(slot.y - (height - slot.height) / 2),
+    width,
+    height,
+  };
+}
+
 async function buildLogoOverlay(team, slot, { optionalLogo = false } = {}) {
   const logoPath = resolveTeamLogoPath(team, { optional: optionalLogo });
   if (!logoPath) return null;
+  const scaledSlot = scaleLogoSlot(slot);
   const resized = await sharp(logoPath)
-    .resize(slot.width, slot.height, {
+    .resize(scaledSlot.width, scaledSlot.height, {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 },
       withoutEnlargement: true,
@@ -137,8 +150,8 @@ async function buildLogoOverlay(team, slot, { optionalLogo = false } = {}) {
 
   return {
     input: resized,
-    left: Math.round(slot.x + (slot.width - metadata.width) / 2),
-    top: Math.round(slot.y + (slot.height - metadata.height) / 2),
+    left: Math.round(scaledSlot.x + (scaledSlot.width - metadata.width) / 2),
+    top: Math.round(scaledSlot.y + (scaledSlot.height - metadata.height) / 2),
   };
 }
 
@@ -498,6 +511,7 @@ module.exports = {
   CEREMONY_LOGO_POSITIONS,
   HALL_OF_FAME_CHANNEL_NAME,
   HALL_OF_FAME_TEST_CHANNEL_ID,
+  CEREMONY_LOGO_SCALE,
   buildCeremonyText,
   isCeremonyReady,
   maybePostHallOfFameCeremony,
