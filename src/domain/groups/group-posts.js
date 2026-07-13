@@ -13,6 +13,8 @@ const {
 } = require('./group-embeds');
 const { generateLiveTableImage } = require('../../../utils/generateLiveTableImage');
 const { generateGroupScheduleImage } = require('../../../utils/generateGroupScheduleImage');
+const { EVENT_KEYS } = require('../../app/constants');
+const { readEventData } = require('../events/event-repository');
 
 function nowIso() {
   return new Date().toISOString();
@@ -209,6 +211,23 @@ async function refreshGroupPosts({ client, eventKey, event, group }) {
   return messageRefs;
 }
 
+async function refreshGroupPostsForTeam(client, teamId) {
+  if (!client || !teamId) return [];
+  const refreshed = [];
+  for (const eventKey of EVENT_KEYS) {
+    const event = readEventData(eventKey);
+    for (const group of Object.values(event.groups?.groups || {})) {
+      const containsTeam = (group.slots || []).some(slot => (
+        slot?.type === 'team' && String(slot.teamId) === String(teamId)
+      ));
+      if (!containsTeam) continue;
+      await refreshGroupPosts({ client, eventKey, event, group });
+      refreshed.push({ eventKey, groupKey: group.groupKey });
+    }
+  }
+  return refreshed;
+}
+
 function updateGroupMessageRefs(eventKey, event, groupUpdates) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     messages.groups = messages.groups || {};
@@ -244,6 +263,7 @@ module.exports = {
   buildHeaderPayload,
   buildScheduleButtons,
   refreshGroupPosts,
+  refreshGroupPostsForTeam,
   updateGroupMessageRefs,
   upsertGroupPosts,
 };

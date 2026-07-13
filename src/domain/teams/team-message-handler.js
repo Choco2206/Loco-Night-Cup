@@ -6,6 +6,7 @@ const { setTeamManagerNickname } = require('../nicknames');
 const { saveLogoFromMessage } = require('./team-logos');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { MY_TEAM_PANEL_CHANNEL_ID } = require('./team-panel');
+const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 
 const TEMP_MESSAGE_MS = 8000;
 
@@ -65,6 +66,9 @@ async function handleMessage(message, client) {
     }
 
     await refreshRegisteredTeamsOverview(client);
+    await refreshGroupPostsForTeam(client, result.team.id).catch(error => {
+      console.warn(`[group-schedule] Gruppen konnten nach Logoaenderung nicht aktualisiert werden: ${error.message}`);
+    });
     await deleteInstructionMessage(message.channel, result.instructionMessageId);
     await message.delete().catch(() => {});
     await sendTemporary(

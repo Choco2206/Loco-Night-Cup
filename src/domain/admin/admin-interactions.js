@@ -52,6 +52,7 @@ const {
   refreshManagersWithoutTeamMessageIfTracked,
 } = require('./managers-without-team');
 const { buildAdminPanelPayload } = require('./admin-components');
+const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -1562,6 +1563,9 @@ async function handleAdminModal(interaction, client, settings) {
     const nicknameResults = await syncTeamNicknames(interaction.guild, team);
     assertNicknameResults(nicknameResults);
     await refreshTeamAdminSurfaces({ client, settings });
+    await refreshGroupPostsForTeam(client, team.id).catch(error => {
+      console.warn(`[group-schedule] Gruppen konnten nach Teamnamenaenderung nicht aktualisiert werden: ${error.message}`);
+    });
     await interaction.reply({
       content: `Teamname wurde auf **${team.clubName}** geaendert.`,
       flags: EPHEMERAL,
