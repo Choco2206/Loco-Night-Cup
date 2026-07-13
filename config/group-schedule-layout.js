@@ -4,7 +4,7 @@ const row = centerY => Object.freeze({
   centerY,
   leftLogo: Object.freeze({ centerX: 104, centerY, width: 72, height: 72 }),
   leftName: Object.freeze({ x: 158, y: centerY, maxWidth: 250, align: 'left' }),
-  score: Object.freeze({ x: 512, y: centerY - 14, maxWidth: 150 }),
+  score: Object.freeze({ x: 512, y: centerY, maxWidth: 150 }),
   status: Object.freeze({ x: 512, y: centerY + 63, maxWidth: 360 }),
   rightName: Object.freeze({ x: 866, y: centerY, maxWidth: 250, align: 'right' }),
   rightLogo: Object.freeze({ centerX: 920, centerY, width: 72, height: 72 }),

@@ -75,21 +75,30 @@ function isByeMatch(match) {
   return match?.status === 'bye' || match?.home?.type === 'bye' || match?.away?.type === 'bye';
 }
 
+function normalizedScore(value) {
+  if (!value) return null;
+  const homeGoals = value.homeGoals ?? value.homeScore ?? value.score?.home ?? value.goals?.home;
+  const awayGoals = value.awayGoals ?? value.awayScore ?? value.score?.away ?? value.goals?.away;
+  if (!Number.isFinite(Number(homeGoals)) || !Number.isFinite(Number(awayGoals))) return null;
+  return { homeGoals: Number(homeGoals), awayGoals: Number(awayGoals) };
+}
+
 function hasScore(value) {
-  return value && Number.isFinite(Number(value.homeGoals)) && Number.isFinite(Number(value.awayGoals));
+  return Boolean(normalizedScore(value));
 }
 
 function scoreText(value) {
-  return hasScore(value) ? `${Number(value.homeGoals)} : ${Number(value.awayGoals)}` : '';
+  const score = normalizedScore(value);
+  return score ? `${score.homeGoals} : ${score.awayGoals}` : '';
 }
 
 function getMatchPresentation(match) {
   if (isByeMatch(match)) return { score: '', status: '', color: LAYOUT.colors.bye };
-  if (!match?.release?.releasedAt) return { score: '', status: '', color: LAYOUT.colors.notReleased };
   if (match.status === 'confirmed' && hasScore(match.result)) {
     const admin = match.result.source === 'admin' || Boolean(match.adminDecision?.setByUserId);
     return { score: scoreText(match.result), status: '', color: admin ? LAYOUT.colors.admin : LAYOUT.colors.confirmed };
   }
+  if (!match?.release?.releasedAt) return { score: '', status: '', color: LAYOUT.colors.notReleased };
   if (match.status === 'admin_decision_required') return { score: '', status: 'ERGEBNISSE WEICHEN AB', color: LAYOUT.colors.conflict };
   const reports = Array.isArray(match.reports) ? match.reports : [];
   if (reports.length === 1) {

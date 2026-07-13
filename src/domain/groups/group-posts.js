@@ -100,10 +100,7 @@ async function buildScheduleImagePayload(group) {
     debug: process.env.GROUP_SCHEDULE_DEBUG === 'true',
   });
   return {
-    content: [
-      'Beide Teams muessen das Ergebnis eintragen. Sobald alle Ergebnisse eines Spieltags bestaetigt sind, wird automatisch der naechste Slot freigegeben.',
-      'Freilose sind Platzhalter und werden nicht als echtes Match gespielt.',
-    ].join('\n'),
+    content: null,
     embeds: [new EmbedBuilder().setImage(`attachment://${image.fileName}`)],
     attachments: [],
     files: [{ attachment: image.buffer, name: image.fileName }],
@@ -118,7 +115,14 @@ async function upsertGroupPosts(channel, group, refs = {}) {
     eventKey: group.eventKey || refs.eventKey,
   };
 
-  const header = await upsertMessage(channel, refs.headerMessageId || refs.messageId || group.messageId, buildHeaderPayload(group), `${group.groupKey} Header`);
+  const headerMessageId = refs.headerMessageId || refs.messageId || group.headerMessageId || group.messageId || null;
+  const teamsMessageId = refs.teamsMessageId || group.teamsMessageId || null;
+  if (headerMessageId && String(headerMessageId) !== String(teamsMessageId || '')) {
+    const header = await channel.messages.fetch(headerMessageId).catch(() => null);
+    if (header) await header.delete().catch(error => {
+      console.warn(`[group-posts] Alte Kopf-Nachricht fuer Gruppe ${group.groupKey} konnte nicht geloescht werden: ${error.message}`);
+    });
+  }
   const teams = await upsertMessage(channel, refs.teamsMessageId || group.teamsMessageId, {
     embeds: [buildTeamOverviewEmbed(group)],
     allowedMentions: { parse: ['users'] },
@@ -187,8 +191,8 @@ async function upsertGroupPosts(channel, group, refs = {}) {
   }
 
   return {
-    headerMessageId: header.id,
-    messageId: header.id,
+    headerMessageId: null,
+    messageId: teams.id,
     teamsMessageId: teams.id,
     tableMessageId: table?.id || existingTableMessageId,
     scheduleMessageId: schedule.id,
@@ -262,8 +266,8 @@ function updateGroupMessageRefs(eventKey, event, groupUpdates) {
         ...previous,
         channelId: update.channelId,
         roleId: update.roleId,
-        messageId: update.messageId || update.headerMessageId,
-        headerMessageId: update.headerMessageId || update.messageId,
+        messageId: update.messageId || update.teamsMessageId,
+        headerMessageId: update.headerMessageId || null,
         teamsMessageId: update.teamsMessageId,
         tableMessageId: update.tableMessageId,
         scheduleMessageId: update.scheduleMessageId,
