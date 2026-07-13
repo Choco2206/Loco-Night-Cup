@@ -128,8 +128,7 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
       await drawParticipant(ctx, match.away, slot.away, scaleX, scaleY);
       const score = officialScore(match);
       if (score) {
-        drawScore(ctx, score.home, slot.score.home, scaleX, scaleY);
-        drawScore(ctx, score.away, slot.score.away, scaleX, scaleY);
+        drawScore(ctx, `${score.home}:${score.away}`, slot.score, scaleX, scaleY);
       }
     }
   }
@@ -145,3 +144,4 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
 }
 
 module.exports = { getKoLayout, getKoTemplate, officialScore, renderKoImage };
+
