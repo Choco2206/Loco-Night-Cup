@@ -163,15 +163,16 @@ function ensureTestTeams(actorUserId) {
 function addTestCheckins(eventKey, teamIds) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Testdaten können nicht in ein bereits gelocktes Event eingefügt werden. Entferne zuerst Testdaten oder resette das Event.');
-
     event.checkin = event.checkin || {};
     event.checkin.entries = Array.isArray(event.checkin.entries) ? event.checkin.entries : [];
     const existing = new Set(event.checkin.entries.map(entry => String(entry.teamId)));
+    const missingTeamIds = teamIds.filter(teamId => !existing.has(String(teamId)));
+    if (event.format?.lockedAt && missingTeamIds.length) {
+      throw new Error('Testdaten können nicht in ein bereits gelocktes Event eingefügt werden. Entferne zuerst Testdaten oder resette das Event.');
+    }
     const timestamp = nowIso();
 
-    for (const teamId of teamIds) {
-      if (existing.has(String(teamId))) continue;
+    for (const teamId of missingTeamIds) {
       event.checkin.entries.push({
         teamId: String(teamId),
         checkedInByUserId: null,

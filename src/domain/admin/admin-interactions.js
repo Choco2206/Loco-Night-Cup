@@ -1412,10 +1412,27 @@ async function handleAdminSelect(interaction, client, settings) {
 
   if (interaction.customId === 'admin_testdata_create_select') {
     const result = createTestDataForEvent({ eventKey, actorUserId: interaction.user.id });
+    let event = readAllEvents()[eventKey];
+    let groupCount = Object.keys(event.groups?.groups || {}).length;
+    if (!groupCount) {
+      if (!event.format?.lockedAt) lockEventFormat(eventKey, interaction.user.id);
+      const draw = await drawGroupsForEvent({
+        eventKey,
+        actorUserId: interaction.user.id,
+        client,
+        guild: interaction.guild,
+      });
+      groupCount = Object.keys(draw.groups || {}).length;
+      event = draw.event;
+    }
     await refreshRegisteredTeamsOverview(client).catch(() => null);
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
-      content: `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} Testteams eingecheckt.`,
+      content: [
+        `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} Testteams eingecheckt.`,
+        `${groupCount} Gruppen wurden ueber den normalen Turnierstart persistent erzeugt.`,
+        'Die Ergebnisbuttons koennen jetzt direkt zum Testen der Live-Tabelle verwendet werden.',
+      ].join('\n'),
       components: [],
     });
     return true;
