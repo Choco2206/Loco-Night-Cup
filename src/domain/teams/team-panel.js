@@ -73,6 +73,7 @@ async function ensureMyTeamPanel(client) {
 }
 
 module.exports = {
+  MY_TEAM_PANEL_CHANNEL_ID,
   ensureMyTeamPanel,
   ensureTeamPanel,
 };

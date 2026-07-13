@@ -5,6 +5,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { setTeamManagerNickname } = require('../nicknames');
 const { saveLogoFromMessage } = require('./team-logos');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
+const { MY_TEAM_PANEL_CHANNEL_ID } = require('./team-panel');
 
 const TEMP_MESSAGE_MS = 8000;
 
@@ -31,8 +32,11 @@ async function handleMessage(message, client) {
   if (!message.attachments || message.attachments.size === 0) return false;
 
   const settings = readJson(FILES.settings, createSettingsDefault());
-  if (!settings.channels.teamRegistrationChannelId) return false;
-  if (message.channel.id !== settings.channels.teamRegistrationChannelId) return false;
+  const logoUploadChannelIds = new Set([
+    settings.channels.teamRegistrationChannelId,
+    MY_TEAM_PANEL_CHANNEL_ID,
+  ].filter(Boolean).map(String));
+  if (!logoUploadChannelIds.has(String(message.channel.id))) return false;
 
   try {
     const result = await saveLogoFromMessage(message, settings);

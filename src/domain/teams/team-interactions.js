@@ -31,6 +31,7 @@ const {
 const { syncManagerRoleForUser, syncManagerRolesForTeam } = require('./team-roles');
 const { syncChampionRolesForUser, syncChampionRolesForUsers } = require('./team-champion-roles');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
+const { MY_TEAM_PANEL_CHANNEL_ID } = require('./team-panel');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 const { refreshManagersWithoutTeamMessageIfTracked } = require('../admin/managers-without-team');
 const { syncTeamGroupAccess } = require('../groups/group-access-sync');
@@ -177,15 +178,14 @@ function scheduleExpiredLogoCleanup(client) {
   if (typeof timeout.unref === 'function') timeout.unref();
 }
 
-async function openLogoUpload({ interaction, client, team, settings }) {
-  const channelId = settings.channels.teamRegistrationChannelId;
-  if (!channelId) throw new Error('Teamregistrierungskanal ist nicht konfiguriert.');
+async function openLogoUpload({ interaction, client, team, settings, channelId }) {
+  if (!channelId) throw new Error('Logo-Upload-Kanal ist nicht konfiguriert.');
 
   const expiredUploads = clearExpiredLogoUploads(new Date());
   await deleteInstructionMessages(client, expiredUploads);
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.send) throw new Error('Teamregistrierungskanal wurde nicht gefunden.');
+  if (!channel?.send) throw new Error('Logo-Upload-Kanal wurde nicht gefunden.');
 
   const expiresAt = new Date(Date.now() + LOGO_UPLOAD_TIMEOUT_MS).toISOString();
   const { replacedInstructionMessageId } = requestLogoUpload({
@@ -241,9 +241,9 @@ async function handleButton(interaction, client) {
   if (action === 'team_logo_update_open') {
     requireTeamAccess(team, interaction.user.id);
     await interaction.deferReply({ flags: EPHEMERAL });
-    await openLogoUpload({ interaction, client, team, settings });
+    await openLogoUpload({ interaction, client, team, settings, channelId: MY_TEAM_PANEL_CHANNEL_ID });
     await interaction.editReply({
-      content: `Logo-Upload fuer **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch.`,
+      content: `Logo-Upload fuer **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im <#${MY_TEAM_PANEL_CHANNEL_ID}> hoch.`,
       components: [],
       embeds: [],
     });
@@ -322,7 +322,7 @@ async function handleModal(interaction, client) {
     const clubName = interaction.fields.getTextInputValue('club_name');
     const team = createTeam({ clubName, managerUserId: interaction.user.id, settings });
     await syncManagerRoleForUser(interaction.guild, interaction.user.id, settings);
-    await openLogoUpload({ interaction, client, team, settings });
+    await openLogoUpload({ interaction, client, team, settings, channelId: settings.channels.teamRegistrationChannelId });
     await refreshRegisteredTeamsOverview(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.editReply({
