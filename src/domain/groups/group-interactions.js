@@ -507,13 +507,17 @@ async function handleGroupInteraction(interaction, client) {
   }
 
   if (interaction.isModalSubmit?.()) {
-    const [action, parsedEventKey, parsedGroupKey, matchId, selectedParticipantKey] = customId.split(':');
+    const parts = customId.split(':');
+    const [action, parsedEventKey, parsedGroupKey] = parts;
     if (!['group_result_modal', 'group_admin_result_modal'].includes(action)) return false;
     const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_modal') {
+      const selectedParticipantKey = parts.at(-1);
+      const matchId = parts.slice(3, -1).join(':');
       return handleTeamResultModal(interaction, eventKey, groupKey, matchId, selectedParticipantKey, client);
     }
     if (action === 'group_admin_result_modal') {
+      const matchId = parts.slice(3).join(':');
       return handleAdminResultModal(interaction, eventKey, groupKey, matchId, client);
     }
   }
