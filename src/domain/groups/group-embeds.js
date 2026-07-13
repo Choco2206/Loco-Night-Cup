@@ -191,16 +191,16 @@ function formatPendingMatch(match, homeName, awayName) {
 }
 
 function formatMatch(match) {
-  if (isByeMatch(match)) return formatByeMatch(match);
-
   const homeName = formatParticipant(match.home);
   const awayName = formatParticipant(match.away);
+  if (match.status === 'confirmed') return formatConfirmedMatch(match, homeName, awayName);
+  if (isByeMatch(match)) return formatByeMatch(match);
+
   const released = Boolean(match.release?.releasedAt);
   const effectiveStatus = match.home?.type === 'team' && match.away?.type === 'team' && !released
     ? 'not_released'
     : match.status;
 
-  if (effectiveStatus === 'confirmed') return formatConfirmedMatch(match, homeName, awayName);
   if (effectiveStatus === 'pending_confirmation') return formatPendingMatch(match, homeName, awayName);
   if (effectiveStatus === 'admin_decision_required') return `${'\ud83d\udea8'} ${homeName} vs ${awayName} \u2014 Admin-Entscheidung erforderlich`;
   if (effectiveStatus === 'not_released') return `${'\ud83d\udd12'} ${homeName} vs ${awayName} \u2014 Noch nicht freigegeben`;
