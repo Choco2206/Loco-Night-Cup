@@ -5,31 +5,28 @@ const qualificationSlot = (logoX, nameX, centerY, logoWidth, logoHeight, nameWid
   teamName: Object.freeze({ x: nameX, y: centerY, width: nameWidth, height: logoHeight, align: 'left', fontSize }),
 });
 
-const roundMatch = ({ centerY, homeLogoX, homeNameX, homeNameWidth, awayNameX, awayNameWidth, awayLogoX, logoWidth, logoHeight, homeScoreX, awayScoreX, scoreWidth }) => Object.freeze({
+const roundMatch = ({ centerY, homeLogoX, homeNameX, homeNameWidth, awayNameX, awayNameWidth, awayLogoX, logoWidth, logoHeight, scoreX, scoreWidth }) => Object.freeze({
   home: Object.freeze({
     logo: Object.freeze({ centerX: homeLogoX, centerY, width: logoWidth, height: logoHeight }),
-    teamName: Object.freeze({ x: homeNameX, y: centerY, width: homeNameWidth, height: logoHeight, align: 'left' }),
+    teamName: Object.freeze({ x: homeNameX + (homeNameWidth / 2), y: centerY, width: homeNameWidth, height: logoHeight, align: 'center' }),
   }),
   away: Object.freeze({
     logo: Object.freeze({ centerX: awayLogoX, centerY, width: logoWidth, height: logoHeight }),
-    teamName: Object.freeze({ x: awayNameX, y: centerY, width: awayNameWidth, height: logoHeight, align: 'right' }),
+    teamName: Object.freeze({ x: awayNameX - (awayNameWidth / 2), y: centerY, width: awayNameWidth, height: logoHeight, align: 'center' }),
   }),
-  score: Object.freeze({
-    home: Object.freeze({ x: homeScoreX, y: centerY, width: scoreWidth, height: logoHeight }),
-    away: Object.freeze({ x: awayScoreX, y: centerY, width: scoreWidth, height: logoHeight }),
-  }),
+  score: Object.freeze({ x: scoreX, y: centerY, width: scoreWidth, height: logoHeight }),
 });
 
 const portrait1024 = centerY => roundMatch({
   centerY, homeLogoX: 72, homeNameX: 126, homeNameWidth: 302,
   awayNameX: 898, awayNameWidth: 302, awayLogoX: 950,
-  logoWidth: 76, logoHeight: 82, homeScoreX: 482, awayScoreX: 542, scoreWidth: 48,
+  logoWidth: 76, logoHeight: 82, scoreX: 512, scoreWidth: 122,
 });
 
 const portrait1086 = centerY => roundMatch({
   centerY, homeLogoX: 78, homeNameX: 145, homeNameWidth: 320,
   awayNameX: 941, awayNameWidth: 320, awayLogoX: 1007,
-  logoWidth: 92, logoHeight: 96, homeScoreX: 511, awayScoreX: 575, scoreWidth: 52,
+  logoWidth: 92, logoHeight: 96, scoreX: 543, scoreWidth: 128,
 });
 
 module.exports = Object.freeze({
@@ -78,3 +75,4 @@ module.exports = Object.freeze({
   }),
   colors: Object.freeze({ text: '#ffffff' }),
 });
+
