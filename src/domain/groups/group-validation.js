@@ -15,15 +15,29 @@ function assertCanLockEvent(event) {
 }
 
 function assertGroupsHaveFourSlots(groups) {
-  for (const group of Object.values(groups || {})) {
+  const groupList = Object.values(groups || {});
+  const byeCounts = [];
+
+  for (const group of groupList) {
     if (!Array.isArray(group.slots) || group.slots.length !== 4) {
       throw new Error(`Gruppe ${group.groupKey} muss genau 4 Slots haben.`);
     }
 
-    const byeCount = group.slots.filter(slot => slot.type === 'bye').length;
-    if (byeCount > 1) {
-      throw new Error(`Gruppe ${group.groupKey} hat mehr als ein Freilos.`);
-    }
+    byeCounts.push(group.slots.filter(slot => slot.type === 'bye').length);
+  }
+
+  if (!byeCounts.length) return;
+
+  const totalByeCount = byeCounts.reduce((sum, count) => sum + count, 0);
+  const minimumByeCount = Math.min(...byeCounts);
+  const maximumByeCount = Math.max(...byeCounts);
+
+  if (totalByeCount <= groupList.length && maximumByeCount > 1) {
+    throw new Error('Freilose muessen auf unterschiedliche Gruppen verteilt werden.');
+  }
+
+  if (maximumByeCount - minimumByeCount > 1) {
+    throw new Error('Freilose muessen moeglichst gleichmaessig auf die Gruppen verteilt werden.');
   }
 }
 
