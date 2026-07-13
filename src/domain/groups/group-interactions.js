@@ -149,7 +149,7 @@ async function handleOpenAdminResult(interaction, eventKey, groupKey) {
   }));
 
   if (!entries.length) {
-    await interaction.reply({ content: 'Keine echten Gruppenspiele gefunden.', flags: EPHEMERAL });
+    await interaction.reply({ content: 'Keine wertbaren Gruppenspiele gefunden.', flags: EPHEMERAL });
     return true;
   }
 
