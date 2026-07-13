@@ -34,7 +34,7 @@ const {
 } = require('../teams/team-service');
 const { syncTeamFunctionRolesForUser } = require('../teams/team-roles');
 const { syncChampionRolesForTeam, syncChampionRolesForUser, syncChampionRolesForUsers } = require('../teams/team-champion-roles');
-const { clearTeamNickname, setTeamCoManagerNickname, setTeamManagerNickname } = require('../nicknames');
+const { clearTeamNickname, setTeamCoManagerNickname, setTeamManagerNickname, syncAllTeamNicknames } = require('../nicknames');
 const { ensureUserIsNotBot } = require('../teams/team-validation');
 const { addTeamBan, isTeamOrUserBanned, listActiveBans, removeTeamBan } = require('../bans');
 const { resetEventForTesting } = require('../events/event-cleanup-service');
@@ -55,6 +55,7 @@ const { buildAdminPanelPayload } = require('./admin-components');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
+  'admin_nickname_sync',
   'admin_checkin_open',
   'admin_checkin_close',
   'admin_checkin_manual',
@@ -118,6 +119,7 @@ const ADMIN_USER_SELECT_PREFIXES = [
   'admin_team_change_vm_user:',
 ];
 const ADMIN_BUTTON_PREFIXES = [
+  'admin_panel_category:',
   'admin_team_details_page:',
   'admin_team_details_back:',
   'admin_team_edit_name_open:',
@@ -156,6 +158,30 @@ const TEAM_ACHIEVEMENT_TITLES = {
   silver: { label: 'Platz 2', emoji: '🥈' },
   bronze: { label: 'Platz 3', emoji: '🥉' },
 };
+
+function asAdminButtonInteraction(interaction, customId) {
+  return new Proxy(interaction, {
+    get(target, property, receiver) {
+      if (property === 'customId') return customId;
+      if (property === 'isButton') return () => true;
+      if (property === 'isStringSelectMenu') return () => false;
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+function summarizeNicknameSync(summary) {
+  return [
+    'Nicknames wurden synchronisiert.',
+    `Erfolgreich geaendert: ${summary.changed}`,
+    `Bereits korrekt: ${summary.alreadyCorrect}`,
+    `Uebersprungen: ${summary.skipped}`,
+    `Fehlende Rechte/Hierarchie: ${summary.missingPermissions}`,
+    `User nicht mehr auf Server: ${summary.notOnServer}`,
+    `Andere Fehler: ${summary.errors}`,
+  ].join('\n');
+}
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -1106,6 +1132,12 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_panel_action_select') {
+    const action = interaction.values?.[0];
+    if (!ADMIN_ACTIONS.has(action)) throw new Error('Admin-Aktion wurde nicht gefunden.');
+    return handleAdminInteraction(asAdminButtonInteraction(interaction, action), client);
+  }
+
   if (interaction.customId.startsWith('admin_team_details_select:')) {
     const teamId = interaction.values?.[0];
     const team = findTeamById(teamId);
@@ -1581,9 +1613,22 @@ async function handleAdminInteraction(interaction, client) {
   try {
     await requireAdminAccess(interaction, settings);
 
+    if (interaction.customId.startsWith('admin_panel_category:')) {
+      const category = interaction.customId.split(':')[1];
+      await interaction.update(buildAdminPanelPayload(category));
+      return true;
+    }
+
     if (isAdminModal) return await handleAdminModal(interaction, client, settings);
     if (isAdminUserSelect) return await handleAdminUserSelect(interaction, client, settings);
     if (isAdminSelect) return await handleAdminSelect(interaction, client, settings);
+
+    if (interaction.customId === 'admin_nickname_sync') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      const result = await syncAllTeamNicknames(interaction.guild);
+      await interaction.editReply(summarizeNicknameSync(result.summary));
+      return true;
+    }
 
     if (interaction.customId.startsWith('admin_team_details_page:')) {
       const [, page] = interaction.customId.split(':');
