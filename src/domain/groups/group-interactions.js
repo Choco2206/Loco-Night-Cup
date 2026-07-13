@@ -402,6 +402,21 @@ function logMissingGroup(interaction, parsedEventKey, parsedGroupKey, candidates
 
 function resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey) {
   const candidates = collectGroupCandidates();
+  console.info('[group-interactions] Gruppeninteraktion wird aufgeloest.', {
+    customId: interaction.customId || null,
+    channelId: interaction.channelId || interaction.channel?.id || null,
+    messageId: interaction.message?.id || null,
+    extractedGroupId: parsedGroupKey || null,
+    extractedWeekday: parsedEventKey || null,
+    eventFile: FILES.events?.[parsedEventKey] || null,
+    existingGroupIds: candidates
+      .filter(candidate => candidate.eventKey === parsedEventKey)
+      .map(candidate => candidate.groupKey),
+    existingChannelIds: candidates
+      .filter(candidate => candidate.eventKey === parsedEventKey)
+      .map(candidate => candidate.channelId)
+      .filter(Boolean),
+  });
   const exact = candidates.find(candidate => (
     candidate.eventKey === parsedEventKey && candidate.groupKey === parsedGroupKey
   ));
@@ -421,11 +436,11 @@ function resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroup
   const messageMatches = messageId
     ? candidates.filter(candidate => candidate.messageIds.includes(messageId))
     : [];
-  const resolved = messageMatches.length === 1
-    ? messageMatches[0]
-    : channelMatches.length === 1
+  const resolved = channelMatches.length === 1
       ? channelMatches[0]
-      : null;
+      : messageMatches.length === 1
+        ? messageMatches[0]
+        : null;
 
   if (resolved) {
     console.warn('[group-interactions] Gruppe ueber gespeicherte Discord-Zuordnung aufgeloest.', {

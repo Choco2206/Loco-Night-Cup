@@ -1426,6 +1426,7 @@ async function handleAdminSelect(interaction, client, settings) {
       eventKey,
       actorUserId: interaction.user.id,
       client,
+      guild: interaction.guild,
     });
     await interaction.editReply({
       content: [

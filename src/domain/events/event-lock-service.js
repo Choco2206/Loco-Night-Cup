@@ -160,6 +160,16 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
     group.tableMessageId = messageRefs.tableMessageId;
     group.scheduleMessageId = messageRefs.scheduleMessageId;
 
+    // Sobald die sichtbaren Discord-Posts existieren, muss auch das vollstaendige
+    // normal erzeugte Gruppenobjekt in derselben Eventdatei auffindbar sein.
+    updateEventData(eventKey, persistedEvent => {
+      persistedEvent.groups = persistedEvent.groups || {};
+      persistedEvent.groups.groups = persistedEvent.groups.groups || {};
+      persistedEvent.groups.groups[group.groupKey] = JSON.parse(JSON.stringify(group));
+      persistedEvent.meta = { ...(persistedEvent.meta || {}), updatedAt: nowIso() };
+      return persistedEvent;
+    });
+
     updates.push({
       groupKey: group.groupKey,
       roleId: group.roleId || null,
@@ -214,6 +224,19 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
     return event;
   });
 
+  console.info('[groups] Gruppen persistent erzeugt.', {
+    selectedEvent: eventKey,
+    normalizedWeekday: eventKey,
+    eventId: drawResult.event?.id || drawResult.event?.eventId || eventKey,
+    eventFile: FILES.events[eventKey],
+    formatSize: drawResult.event?.format?.size,
+    storedGroupCount: Object.keys(drawResult.groups || {}).length,
+    groups: Object.values(drawResult.groups || {}).map(group => ({
+      groupId: String(group.groupKey),
+      channelId: group.channelId || null,
+    })),
+  });
+
   let targetGuild = guild || null;
   if (!targetGuild && client) {
     targetGuild = settings.guild?.guildId
@@ -250,6 +273,19 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
       return event;
     });
   }
+
+  const persistedEvent = readEventData(eventKey);
+  console.info('[groups] Discord-Zuordnung persistent gespeichert.', {
+    selectedEvent: eventKey,
+    normalizedWeekday: eventKey,
+    eventId: persistedEvent?.id || persistedEvent?.eventId || eventKey,
+    eventFile: FILES.events[eventKey],
+    storedGroupCount: Object.keys(persistedEvent.groups?.groups || {}).length,
+    groups: Object.values(persistedEvent.groups?.groups || {}).map(group => ({
+      groupId: String(group.groupKey),
+      channelId: group.channelId || null,
+    })),
+  });
 
   await maybeReleaseNextSlot(client, eventKey, now);
   scheduleEvent(client, eventKey);

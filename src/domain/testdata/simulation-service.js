@@ -1,6 +1,8 @@
 'use strict';
 
-const { updateEventData } = require('../events/event-repository');
+const { FILES } = require('../../storage');
+const { readEventData, updateEventData } = require('../events/event-repository');
+const { drawGroupsForEvent, lockEventFormat } = require('../events/event-lock-service');
 const { refreshGroupPosts } = require('../groups/group-posts');
 const {
   getMatches,
@@ -102,13 +104,50 @@ async function refreshGroups(client, eventKey, event) {
   }
 }
 
-async function simulateGroupPhase({ eventKey, actorUserId, client }) {
+function eventGroupDebug(eventKey, event) {
+  const groups = Object.values(event.groups?.groups || {});
+  return {
+    selectedEvent: eventKey,
+    normalizedWeekday: eventKey,
+    eventId: event?.id || event?.eventId || eventKey,
+    eventFile: FILES.events[eventKey],
+    storedGroupCount: groups.length,
+    groups: groups.map(group => ({
+      groupId: String(group.groupKey),
+      channelId: group.channelId || null,
+    })),
+  };
+}
+
+function hasTestCheckins(event) {
+  return (event.checkin?.entries || []).some(entry => String(entry.teamId || '').startsWith('test_team_'));
+}
+
+async function ensureGroupsForTestSimulation({ eventKey, actorUserId, client, guild }) {
+  let event = readEventData(eventKey);
+  console.info('[groups-simulation] Event vor Simulation geladen.', eventGroupDebug(eventKey, event));
+  if (Object.keys(event.groups?.groups || {}).length) return event;
+  if (!hasTestCheckins(event)) {
+    throw new Error('Fuer dieses Event existieren keine Gruppen. Erzeuge zuerst Testdaten oder starte die Gruppen regulaer.');
+  }
+
+  if (!event.format?.lockedAt) lockEventFormat(eventKey, actorUserId);
+  await drawGroupsForEvent({ eventKey, actorUserId, client, guild });
+  event = readEventData(eventKey);
+  console.info('[groups-simulation] Testgruppen ueber normalen Gruppenstart erzeugt.', eventGroupDebug(eventKey, event));
+  return event;
+}
+
+async function simulateGroupPhase({ eventKey, actorUserId, client, guild = null }) {
   let outcome;
   const timestamp = nowIso();
+
+  await ensureGroupsForTestSimulation({ eventKey, actorUserId, client, guild });
 
   updateEventData(eventKey, event => {
     const groups = event.groups?.groups || {};
     const groupList = Object.values(groups);
+    console.info('[groups-simulation] Persistierte Gruppen werden simuliert.', eventGroupDebug(eventKey, event));
     if (!groupList.length) throw new Error('Fuer dieses Event existieren keine Gruppen.');
 
     let simulatedMatches = 0;
