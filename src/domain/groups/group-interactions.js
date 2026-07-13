@@ -9,7 +9,7 @@ const {
 } = require('discord.js');
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
-const { createSettingsDefault } = require('../../storage/defaults');
+const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { refreshGroupPosts } = require('./group-posts');
@@ -343,6 +343,108 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
   return true;
 }
 
+function groupMessageIds(group, refs) {
+  return [
+    group?.messageId,
+    group?.headerMessageId,
+    group?.teamsMessageId,
+    group?.tableMessageId,
+    group?.scheduleMessageId,
+    refs?.messageId,
+    refs?.headerMessageId,
+    refs?.teamsMessageId,
+    refs?.tableMessageId,
+    refs?.scheduleMessageId,
+  ].filter(Boolean).map(String);
+}
+
+function collectGroupCandidates() {
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const candidates = [];
+  for (const eventKey of EVENT_KEYS) {
+    const event = readEventData(eventKey);
+    for (const [groupKey, group] of Object.entries(event.groups?.groups || {})) {
+      const refs = messages.groups?.[eventKey]?.groups?.[groupKey] || {};
+      candidates.push({
+        eventKey,
+        groupKey,
+        event,
+        group,
+        channelId: String(group.channelId || refs.channelId || ''),
+        messageIds: groupMessageIds(group, refs),
+        liveTableMessageId: group.tableMessageId || refs.tableMessageId || null,
+      });
+    }
+  }
+  return candidates;
+}
+
+function logMissingGroup(interaction, parsedEventKey, parsedGroupKey, candidates) {
+  console.error('[group-interactions] Gruppe wurde nicht gefunden.', {
+    customId: interaction.customId || null,
+    channelId: interaction.channelId || interaction.channel?.id || null,
+    messageId: interaction.message?.id || null,
+    recognizedGroupId: parsedGroupKey || null,
+    eventId: parsedEventKey || null,
+    events: EVENT_KEYS.map(eventKey => ({
+      eventId: eventKey,
+      existingGroupIds: candidates.filter(candidate => candidate.eventKey === eventKey).map(candidate => candidate.groupKey),
+      groups: candidates
+        .filter(candidate => candidate.eventKey === eventKey)
+        .map(candidate => ({
+          groupId: candidate.groupKey,
+          storedChannelId: candidate.channelId || null,
+          liveTableMessageId: candidate.liveTableMessageId,
+        })),
+    })),
+  });
+}
+
+function resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey) {
+  const candidates = collectGroupCandidates();
+  const exact = candidates.find(candidate => (
+    candidate.eventKey === parsedEventKey && candidate.groupKey === parsedGroupKey
+  ));
+  if (exact) return exact;
+
+  const caseInsensitive = candidates.find(candidate => (
+    candidate.eventKey === parsedEventKey
+    && candidate.groupKey.toLowerCase() === String(parsedGroupKey || '').toLowerCase()
+  ));
+  if (caseInsensitive) return caseInsensitive;
+
+  const channelId = String(interaction.channelId || interaction.channel?.id || '');
+  const messageId = String(interaction.message?.id || '');
+  const channelMatches = channelId
+    ? candidates.filter(candidate => candidate.channelId === channelId)
+    : [];
+  const messageMatches = messageId
+    ? candidates.filter(candidate => candidate.messageIds.includes(messageId))
+    : [];
+  const resolved = messageMatches.length === 1
+    ? messageMatches[0]
+    : channelMatches.length === 1
+      ? channelMatches[0]
+      : null;
+
+  if (resolved) {
+    console.warn('[group-interactions] Gruppe ueber gespeicherte Discord-Zuordnung aufgeloest.', {
+      customId: interaction.customId || null,
+      channelId: channelId || null,
+      messageId: messageId || null,
+      parsedEventId: parsedEventKey || null,
+      parsedGroupId: parsedGroupKey || null,
+      resolvedEventId: resolved.eventKey,
+      resolvedGroupId: resolved.groupKey,
+      liveTableMessageId: resolved.liveTableMessageId,
+    });
+    return resolved;
+  }
+
+  logMissingGroup(interaction, parsedEventKey, parsedGroupKey, candidates);
+  throw new Error('Gruppe wurde nicht gefunden.');
+}
+
 async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   if (!await isAdminAllowed(interaction)) {
@@ -371,16 +473,18 @@ async function handleGroupInteraction(interaction, client) {
   const customId = interaction.customId || '';
 
   if (interaction.isButton?.()) {
-    const [action, eventKey, groupKey] = customId.split(':');
-    if (!EVENT_KEYS.includes(eventKey)) return false;
+    const [action, parsedEventKey, parsedGroupKey] = customId.split(':');
+    if (!['group_result_open', 'group_admin_result_open', 'group_replacement_open'].includes(action)) return false;
+    const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_open') return handleOpenTeamResult(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_open') return handleOpenAdminResult(interaction, eventKey, groupKey);
     if (action === 'group_replacement_open') return handleOpenReplacement(interaction, eventKey, groupKey);
   }
 
   if (interaction.isStringSelectMenu?.()) {
-    const [action, eventKey, groupKey, encodedParticipantKey] = customId.split(':');
-    if (!EVENT_KEYS.includes(eventKey)) return false;
+    const [action, parsedEventKey, parsedGroupKey, encodedParticipantKey] = customId.split(':');
+    if (!['group_result_select', 'group_admin_result_select', 'group_replacement_target', 'group_replacement_team'].includes(action)) return false;
+    const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_select') return handleTeamResultSelect(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_select') return handleAdminResultSelect(interaction, eventKey, groupKey);
     if (action === 'group_replacement_target') return handleReplacementTargetSelect(interaction, eventKey, groupKey);
@@ -388,8 +492,9 @@ async function handleGroupInteraction(interaction, client) {
   }
 
   if (interaction.isModalSubmit?.()) {
-    const [action, eventKey, groupKey, matchId, selectedParticipantKey] = customId.split(':');
-    if (!EVENT_KEYS.includes(eventKey)) return false;
+    const [action, parsedEventKey, parsedGroupKey, matchId, selectedParticipantKey] = customId.split(':');
+    if (!['group_result_modal', 'group_admin_result_modal'].includes(action)) return false;
+    const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_modal') {
       return handleTeamResultModal(interaction, eventKey, groupKey, matchId, selectedParticipantKey, client);
     }

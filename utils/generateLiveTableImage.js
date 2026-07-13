@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 
 const CANVAS_SIZE = Object.freeze({ width: 1600, height: 900 });
 const TEMPLATE_SIZE = Object.freeze({ width: 1672, height: 941 });
@@ -29,15 +30,20 @@ const TABLE_LAYOUT = Object.freeze({
     scaleY((636 + 733) / 2),
     scaleY((733 + 830) / 2),
   ]),
-  qualificationX: scaleX(91),
-  qualificationY: scaleY((860 + 941) / 2),
-  qualificationMaxWidth: scaleX(1116 - 91),
+  qualification: Object.freeze({
+    x: scaleX(100),
+    y: scaleY(345),
+    maxWidth: scaleX(620 - 100),
+    maxFontSize: 24,
+    minFontSize: 14,
+  }),
 });
 
 const ASSETS = Object.freeze({
   background: path.resolve(__dirname, '..', 'assets', 'tables', 'live-table.png'),
   oxanium: path.resolve(__dirname, '..', 'assets', 'fonts', 'Oxanium-VariableFont_wght.ttf'),
   odibee: path.resolve(__dirname, '..', 'assets', 'fonts', 'OdibeeSans-Regular.ttf'),
+  openSans: path.resolve(__dirname, '..', 'assets', 'fonts', 'OpenSans-VariableFont_wdth,wght.ttf'),
 });
 
 let canvasApi = null;
@@ -52,8 +58,23 @@ function getCanvasApi() {
 function ensureFontsRegistered() {
   if (fontsRegistered) return;
   const { registerFont } = getCanvasApi();
-  registerFont(ASSETS.oxanium, { family: 'Oxanium', weight: '700' });
-  registerFont(ASSETS.odibee, { family: 'Odibee Sans', weight: '400' });
+  const fonts = [
+    [ASSETS.oxanium, { family: 'Oxanium', weight: '700' }],
+    [ASSETS.odibee, { family: 'Odibee Sans', weight: '400' }],
+    [ASSETS.openSans, { family: 'Open Sans', weight: '600' }],
+  ];
+  for (const [file, definition] of fonts) {
+    if (!fs.existsSync(file)) {
+      console.error(`[live-table] Fontdatei fehlt: ${file}`);
+      throw new Error(`Live-Table-Font fehlt: ${path.basename(file)}`);
+    }
+    try {
+      registerFont(file, definition);
+    } catch (error) {
+      console.error(`[live-table] Font konnte nicht registriert werden: ${file}`, error);
+      throw error;
+    }
+  }
   fontsRegistered = true;
 }
 
@@ -90,9 +111,12 @@ function formatGoalDifference(value) {
 
 function normalizeQualificationText(value) {
   const qualification = String(value || '')
-    .replace(/^\s*ðŸ†\s*/, '')
+    .replace(/^\s*\u{1f3c6}\s*/u, '')
     .replace(/^Weiterkommen:\s*/i, '')
-    .replace(/Platz 1\s*&\s*2/i, 'Platz 1â€“2')
+    .replace(/Platz 1\s*&\s*2/i, 'Platz 1-2')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u00e2\u20ac[\u201c\u201d]/g, '-')
+    .replace(/\s+qualifizieren\s+sich\.?\s*$/i, '')
     .toUpperCase();
   return qualification ? `${qualification} QUALIFIZIEREN SICH` : '';
 }
@@ -115,13 +139,18 @@ function wrapWords(ctx, text, maxWidth) {
 }
 
 function fitQualification(ctx, text) {
-  for (let size = 34; size >= 8; size -= 1) {
-    setFont(ctx, size, 'Oxanium', '700');
-    const lines = wrapWords(ctx, text, TABLE_LAYOUT.qualificationMaxWidth);
+  const layout = TABLE_LAYOUT.qualification;
+  for (let size = layout.maxFontSize; size >= layout.minFontSize; size -= 1) {
+    setFont(ctx, size, 'Open Sans', '600');
+    if (ctx.measureText(text).width <= layout.maxWidth) return { size, lines: [text] };
+  }
+  for (let size = layout.maxFontSize; size >= layout.minFontSize; size -= 1) {
+    setFont(ctx, size, 'Open Sans', '600');
+    const lines = wrapWords(ctx, text, layout.maxWidth);
     if (lines.length <= 2) return { size, lines };
   }
-  setFont(ctx, 8, 'Oxanium', '700');
-  return { size: 8, lines: wrapWords(ctx, text, TABLE_LAYOUT.qualificationMaxWidth) };
+  setFont(ctx, layout.minFontSize, 'Open Sans', '600');
+  return { size: layout.minFontSize, lines: wrapWords(ctx, text, layout.maxWidth) };
 }
 
 function drawGroupTitle(ctx, groupKey) {
@@ -186,17 +215,18 @@ function drawStandings(ctx, rows) {
 function drawQualification(ctx, qualificationText) {
   const text = normalizeQualificationText(qualificationText);
   if (!text) return;
+  const layout = TABLE_LAYOUT.qualification;
   const { size, lines } = fitQualification(ctx, text);
-  setFont(ctx, size, 'Oxanium', '700');
+  setFont(ctx, size, 'Open Sans', '600');
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(156, 70, 255, 0.9)';
-  ctx.shadowBlur = 12;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 3;
   const lineHeight = size * 1.18;
-  const firstY = TABLE_LAYOUT.qualificationY - ((lines.length - 1) * lineHeight / 2);
+  const firstY = layout.y - ((lines.length - 1) * lineHeight / 2);
   lines.forEach((line, index) => {
-    ctx.fillText(line, TABLE_LAYOUT.qualificationX, firstY + index * lineHeight);
+    ctx.fillText(line, layout.x, firstY + index * lineHeight);
   });
   ctx.shadowBlur = 0;
 }
@@ -218,4 +248,3 @@ module.exports = {
   TABLE_LAYOUT,
   generateLiveTableImage,
 };
-
