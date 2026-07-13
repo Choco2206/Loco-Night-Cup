@@ -114,9 +114,16 @@ function buildAdminPanelPayload(selectedCategory = null) {
   const category = ADMIN_CATEGORIES[selectedCategory] || null;
   const embed = new EmbedBuilder()
     .setTitle('Loco Night Cup Admin Panel')
-    .setDescription(category
-      ? `${category.emoji} **${category.label}**\nWaehle die gewuenschte Aktion im Menue unter den Kategorien.`
-      : 'Waehle zuerst eine der Hauptkategorien. Danach erscheint darunter das passende Aktionsmenue.')
+    .setDescription([
+      'Waehle zuerst eine Hauptkategorie und danach die gewuenschte Aktion im Menue.',
+      '',
+      '**📅 Event:** Check-in oeffnen/schliessen/verwalten, Event-Reset und Freilose',
+      '**🏆 Turnier:** Format, Gruppenauslosung, Spieltag-Freigabe und K.O.-Phase',
+      '**👥 Teams:** Teamliste, Teamdetails sowie Sperren',
+      '**🛠️ Verwaltung:** Serverstruktur, Nicknames und Manager ohne Team',
+      '**🧪 Tests:** Refreshs, Testdaten, Simulationen und Siegerehrung',
+      '**🏅 Erfolge:** Team-Erfolge manuell vergeben',
+    ].join('\n'))
     .setColor(0xff0000)
     .setFooter({ text: 'Alle Aktionen sind weiterhin nur fuer berechtigte Admins und Cup-Leads nutzbar.' })
     .setTimestamp(new Date());

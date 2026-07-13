@@ -159,18 +159,6 @@ const TEAM_ACHIEVEMENT_TITLES = {
   bronze: { label: 'Platz 3', emoji: '🥉' },
 };
 
-function asAdminButtonInteraction(interaction, customId) {
-  return new Proxy(interaction, {
-    get(target, property, receiver) {
-      if (property === 'customId') return customId;
-      if (property === 'isButton') return () => true;
-      if (property === 'isStringSelectMenu') return () => false;
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-}
-
 function summarizeNicknameSync(summary) {
   return [
     'Nicknames wurden synchronisiert.',
@@ -1132,12 +1120,6 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
-  if (interaction.customId === 'admin_panel_action_select') {
-    const action = interaction.values?.[0];
-    if (!ADMIN_ACTIONS.has(action)) throw new Error('Admin-Aktion wurde nicht gefunden.');
-    return handleAdminInteraction(asAdminButtonInteraction(interaction, action), client);
-  }
-
   if (interaction.customId.startsWith('admin_team_details_select:')) {
     const teamId = interaction.values?.[0];
     const team = findTeamById(teamId);
@@ -1601,11 +1583,22 @@ async function handleAdminModal(interaction, client, settings) {
 }
 
 async function handleAdminInteraction(interaction, client) {
-  const isAdminButton = interaction.isButton?.()
-    && (ADMIN_ACTIONS.has(interaction.customId) || ADMIN_BUTTON_PREFIXES.some(prefix => interaction.customId.startsWith(prefix)));
-  const isAdminSelect = interaction.isStringSelectMenu?.() && isAdminSelectId(interaction.customId);
-  const isAdminUserSelect = interaction.isUserSelectMenu?.() && ADMIN_USER_SELECT_PREFIXES.some(prefix => interaction.customId.startsWith(prefix));
-  const isAdminModal = interaction.isModalSubmit?.() && ADMIN_MODAL_PREFIXES.some(prefix => interaction.customId.startsWith(prefix));
+  const selectedPanelAction = interaction.isStringSelectMenu?.()
+    && interaction.customId === 'admin_panel_action_select'
+    ? interaction.values?.[0]
+    : null;
+  const actionCustomId = selectedPanelAction || interaction.customId;
+  const isAdminButton = selectedPanelAction
+    ? ADMIN_ACTIONS.has(actionCustomId)
+    : interaction.isButton?.()
+      && (ADMIN_ACTIONS.has(actionCustomId) || ADMIN_BUTTON_PREFIXES.some(prefix => actionCustomId.startsWith(prefix)));
+  const isAdminSelect = !selectedPanelAction
+    && interaction.isStringSelectMenu?.()
+    && isAdminSelectId(actionCustomId);
+  const isAdminUserSelect = interaction.isUserSelectMenu?.()
+    && ADMIN_USER_SELECT_PREFIXES.some(prefix => actionCustomId.startsWith(prefix));
+  const isAdminModal = interaction.isModalSubmit?.()
+    && ADMIN_MODAL_PREFIXES.some(prefix => actionCustomId.startsWith(prefix));
   if (!isAdminButton && !isAdminSelect && !isAdminUserSelect && !isAdminModal) return false;
 
   const settings = readSettings();
@@ -1613,8 +1606,8 @@ async function handleAdminInteraction(interaction, client) {
   try {
     await requireAdminAccess(interaction, settings);
 
-    if (interaction.customId.startsWith('admin_panel_category:')) {
-      const category = interaction.customId.split(':')[1];
+    if (actionCustomId.startsWith('admin_panel_category:')) {
+      const category = actionCustomId.split(':')[1];
       await interaction.update(buildAdminPanelPayload(category));
       return true;
     }
@@ -1623,33 +1616,33 @@ async function handleAdminInteraction(interaction, client) {
     if (isAdminUserSelect) return await handleAdminUserSelect(interaction, client, settings);
     if (isAdminSelect) return await handleAdminSelect(interaction, client, settings);
 
-    if (interaction.customId === 'admin_nickname_sync') {
+    if (actionCustomId === 'admin_nickname_sync') {
       await interaction.deferReply({ flags: EPHEMERAL });
       const result = await syncAllTeamNicknames(interaction.guild);
       await interaction.editReply(summarizeNicknameSync(result.summary));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_details_page:')) {
-      const [, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_details_page:')) {
+      const [, page] = actionCustomId.split(':');
       await interaction.update(buildTeamDetailsSelectPayload(page));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_details_back:')) {
-      const [, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_details_back:')) {
+      const [, page] = actionCustomId.split(':');
       await interaction.update({ ...buildTeamDetailsSelectPayload(page), embeds: [] });
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_achievement_page:')) {
-      const [, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_achievement_page:')) {
+      const [, page] = actionCustomId.split(':');
       await interaction.update(buildTeamAchievementSelectPayload(page));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_achievement_confirm:')) {
-      const [, teamId, titleKey] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_achievement_confirm:')) {
+      const [, teamId, titleKey] = actionCustomId.split(':');
       const definition = TEAM_ACHIEVEMENT_TITLES[titleKey];
       if (!definition) throw new Error('Dieser Team-Erfolg ist nicht bekannt.');
 
@@ -1683,21 +1676,21 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_achievement_cancel:')) {
+    if (actionCustomId.startsWith('admin_team_achievement_cancel:')) {
       await interaction.update({ content: '❌ Vorgang abgebrochen.', embeds: [], components: [] });
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_edit_name_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_edit_name_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       await interaction.showModal(buildAdminTeamNameModal(team, settings));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_add_covm_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_add_covm_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       if ((team.coManagers || []).length >= settings.teams.coManagerLimit) throw new Error('Dieses Team hat bereits das Co-VM-Limit erreicht.');
@@ -1705,40 +1698,40 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_add_covm_manual_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_add_covm_manual_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       await interaction.showModal(buildManualUserModal(`admin_team_add_covm_manual_modal:${team.id}`, 'Co-VM per User-ID'));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_remove_covm_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_remove_covm_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       await interaction.reply({ ...buildAdminRemoveCoManagerPayload(team), flags: EPHEMERAL });
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_change_vm_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_change_vm_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       await interaction.reply({ ...buildAdminChangeManagerPayload(team), flags: EPHEMERAL });
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_change_vm_manual_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_change_vm_manual_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       await interaction.showModal(buildManualUserModal(`admin_team_change_vm_manual_modal:${team.id}`, 'VM per User-ID'));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_ban_confirm:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_ban_confirm:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       const ban = addTeamBan(team, 'admin_other', interaction.user.id, 14);
@@ -1749,8 +1742,8 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_unban_confirm:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_unban_confirm:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       const removed = removeTeamBan(teamId, interaction.user.id, 'admin_removed');
       if (!removed) throw new Error('Fuer dieses Team wurde keine aktive Sperre gefunden.');
@@ -1761,8 +1754,8 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_delete_open:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_delete_open:')) {
+      const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
       const runningEventLabel = findRunningEventParticipation(team.id);
@@ -1773,8 +1766,8 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_delete_confirm:')) {
-      const [, teamId] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_delete_confirm:')) {
+      const [, teamId] = actionCustomId.split(':');
       await interaction.deferUpdate();
       const result = await handleAdminDeleteTeam({ interaction, client, settings, teamId });
       await interaction.editReply({
@@ -1785,24 +1778,24 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_delete_cancel:')) {
+    if (actionCustomId.startsWith('admin_team_delete_cancel:')) {
       await interaction.update({ content: 'Team-Loeschung abgebrochen.', embeds: [], components: [] });
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_team_ban_page:')) {
-      const [, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_team_ban_page:')) {
+      const [, page] = actionCustomId.split(':');
       await interaction.update(buildTeamBanSelectPayload(page));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_checkin_manual_page:')) {
-      const [, action, eventKey, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_checkin_manual_page:')) {
+      const [, action, eventKey, page] = actionCustomId.split(':');
       await interaction.update(buildManualCheckinTeamSelectPayload(action, eventKey, page));
       return true;
     }
 
-    if (interaction.customId === 'admin_checkin_manual') {
+    if (actionCustomId === 'admin_checkin_manual') {
       await interaction.reply({
         content: 'Soll ein Team manuell an- oder abgemeldet werden?',
         components: [buildManualCheckinActionSelect()],
@@ -1811,7 +1804,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_bye_add') {
+    if (actionCustomId === 'admin_bye_add') {
       await interaction.reply({
         content: 'Fuer welches Event soll ein Freilos hinzugefuegt werden?',
         components: [buildEventSelect('admin_bye_add_select', 'Event auswaehlen')],
@@ -1820,7 +1813,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_bye_remove') {
+    if (actionCustomId === 'admin_bye_remove') {
       await interaction.reply({
         content: 'Fuer welches Event soll ein Freilos entfernt werden?',
         components: [buildEventSelect('admin_bye_remove_select', 'Event auswaehlen')],
@@ -1829,7 +1822,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_format_lock') {
+    if (actionCustomId === 'admin_format_lock') {
       await interaction.reply({
         content: 'Fuer welches Event soll das Format gelockt werden?',
         components: [buildEventSelect('admin_format_lock_select', 'Event auswaehlen')],
@@ -1838,7 +1831,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_groups_draw') {
+    if (actionCustomId === 'admin_groups_draw') {
       await interaction.reply({
         content: 'Fuer welches Event sollen Gruppen gezogen werden?',
         components: [buildEventSelect('admin_groups_draw_select', 'Event auswaehlen')],
@@ -1847,7 +1840,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_group_release_current') {
+    if (actionCustomId === 'admin_group_release_current') {
       await interaction.reply({
         content: 'Fuer welches Event soll der aktuelle Spieltag sofort freigegeben werden?',
         components: [buildEventSelect('admin_group_release_current_select', 'Event auswaehlen')],
@@ -1856,7 +1849,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_knockout_create') {
+    if (actionCustomId === 'admin_knockout_create') {
       await interaction.reply({
         content: 'Fuer welches Event soll die K.O.-Phase erstellt werden?',
         components: [buildEventSelect('admin_knockout_create_select', 'Event auswaehlen')],
@@ -1865,7 +1858,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_event_reset') {
+    if (actionCustomId === 'admin_event_reset') {
       await interaction.reply({
         content: 'Fuer welches Event soll der Reset vorbereitet werden?',
         components: [buildEventSelect('admin_event_reset_select', 'Event auswaehlen')],
@@ -1874,7 +1867,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_testdata_create') {
+    if (actionCustomId === 'admin_testdata_create') {
       await interaction.reply({
         content: 'Fuer welches Event sollen Testdaten erzeugt und eingecheckt werden?',
         components: [buildEventSelect('admin_testdata_create_select', 'Event auswaehlen')],
@@ -1883,7 +1876,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_simulate_groups') {
+    if (actionCustomId === 'admin_simulate_groups') {
       await interaction.reply({
         content: 'Fuer welches Event soll die Gruppenphase simuliert werden?',
         components: [buildEventSelect('admin_simulate_groups_select', 'Event auswaehlen')],
@@ -1892,7 +1885,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_simulate_knockout') {
+    if (actionCustomId === 'admin_simulate_knockout') {
       await interaction.reply({
         content: 'Fuer welches Event soll die K.O.-Phase simuliert werden?',
         components: [buildEventSelect('admin_simulate_knockout_select', 'Event auswaehlen')],
@@ -1901,20 +1894,20 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_hof_first_page:')) {
-      const [, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_hof_first_page:')) {
+      const [, page] = actionCustomId.split(':');
       await interaction.update(buildHallOfFameTeamSelectPayload({ placement: 'first', page }));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_hof_second_page:')) {
-      const [, firstTeamId, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_hof_second_page:')) {
+      const [, firstTeamId, page] = actionCustomId.split(':');
       await interaction.update(buildHallOfFameTeamSelectPayload({ placement: 'second', firstTeamId, page }));
       return true;
     }
 
-    if (interaction.customId.startsWith('admin_hof_third_page:')) {
-      const [, firstTeamId, secondTeamId, page] = interaction.customId.split(':');
+    if (actionCustomId.startsWith('admin_hof_third_page:')) {
+      const [, firstTeamId, secondTeamId, page] = actionCustomId.split(':');
       await interaction.update(buildHallOfFameTeamSelectPayload({
         placement: 'third',
         firstTeamId,
@@ -1924,7 +1917,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_hof_test') {
+    if (actionCustomId === 'admin_hof_test') {
       const teams = sortedRegisteredTeams();
       if (teams.length < 3) throw new Error('Fuer den Hall-of-Fame-Test werden mindestens drei registrierte Teams benoetigt.');
       await interaction.reply({
@@ -1934,7 +1927,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_ceremony_post') {
+    if (actionCustomId === 'admin_ceremony_post') {
       await interaction.reply({
         content: 'Fuer welches Event soll die Siegerehrung gepostet werden?',
         components: [buildEventSelect('admin_ceremony_post_select', 'Event auswaehlen')],
@@ -1943,7 +1936,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_server_setup') {
+    if (actionCustomId === 'admin_server_setup') {
       await interaction.deferReply({ flags: EPHEMERAL });
       const result = await ensureServerStructure({
         guild: interaction.guild,
@@ -1965,7 +1958,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_team_ban') {
+    if (actionCustomId === 'admin_team_ban') {
       await interaction.reply({
         ...buildTeamBanSelectPayload(0),
         flags: EPHEMERAL,
@@ -1973,7 +1966,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_team_unban') {
+    if (actionCustomId === 'admin_team_unban') {
       await interaction.reply({
         content: 'Welche aktive Sperre soll entfernt werden?',
         components: [buildActiveBanSelect()],
@@ -1982,7 +1975,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_testdata_remove') {
+    if (actionCustomId === 'admin_testdata_remove') {
       await interaction.deferReply({ flags: EPHEMERAL });
       const result = removeTestData();
       await refreshRegisteredTeamsOverview(client).catch(() => null);
@@ -1991,21 +1984,21 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_checkin_refresh') {
+    if (actionCustomId === 'admin_checkin_refresh') {
       await interaction.deferReply({ flags: EPHEMERAL });
       await refreshCheckinMessages(EVENT_KEYS, client);
       await interaction.editReply('Alle Check-in Panels wurden aktualisiert.');
       return true;
     }
 
-    if (interaction.customId === 'admin_team_overview_refresh') {
+    if (actionCustomId === 'admin_team_overview_refresh') {
       await interaction.deferReply({ flags: EPHEMERAL });
       await refreshRegisteredTeamsOverview(client);
       await interaction.editReply('Teamuebersicht wurde aktualisiert.');
       return true;
     }
 
-    if (interaction.customId === 'admin_managers_without_team') {
+    if (actionCustomId === 'admin_managers_without_team') {
       await interaction.deferReply({ flags: EPHEMERAL });
       const result = await refreshManagersWithoutTeamMessage({ client, guild: interaction.guild, force: true });
       await interaction.editReply([
@@ -2016,7 +2009,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_team_achievement_manual') {
+    if (actionCustomId === 'admin_team_achievement_manual') {
       await interaction.reply({
         ...buildTeamAchievementSelectPayload(0),
         flags: EPHEMERAL,
@@ -2024,7 +2017,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_teams_list') {
+    if (actionCustomId === 'admin_teams_list') {
       await interaction.reply({
         content: formatTeamsList(),
         flags: EPHEMERAL,
@@ -2033,7 +2026,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_team_details') {
+    if (actionCustomId === 'admin_team_details') {
       await interaction.reply({
         ...buildTeamDetailsSelectPayload(0),
         flags: EPHEMERAL,
@@ -2041,7 +2034,7 @@ async function handleAdminInteraction(interaction, client) {
       return true;
     }
 
-    if (interaction.customId === 'admin_ceremony_test') {
+    if (actionCustomId === 'admin_ceremony_test') {
       await interaction.reply({ content: 'Ceremony-Test wird in spaeterer Phase implementiert.', flags: EPHEMERAL });
       return true;
     }
