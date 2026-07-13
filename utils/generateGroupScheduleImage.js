@@ -9,6 +9,7 @@ const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts')
 const TEMPLATE_PATH = path.resolve(__dirname, '..', 'assets', 'templates', 'group-schedule.png');
 let canvasApi = null;
 let templatePromise = null;
+let renderSequence = 0;
 
 function getCanvasApi() {
   if (!canvasApi) canvasApi = require('canvas');
@@ -155,6 +156,7 @@ function orderedMatches(group) {
 }
 
 async function generateGroupScheduleImage({ group, debug = false, version = Date.now() }) {
+  renderSequence = (renderSequence + 1) % 1000000;
   const template = await loadTemplate();
   const width = template.naturalWidth || template.width;
   const height = template.naturalHeight || template.height;
@@ -202,7 +204,7 @@ async function generateGroupScheduleImage({ group, debug = false, version = Date
   ctx.shadowBlur = 0;
   return {
     buffer: canvas.toBuffer('image/png'),
-    fileName: `group-schedule-${String(group.groupKey || 'group').toLowerCase()}-${version}.png`,
+    fileName: `group-schedule-${String(group.groupKey || 'group').toLowerCase()}-${version}-${renderSequence}.png`,
     width, height,
   };
 }

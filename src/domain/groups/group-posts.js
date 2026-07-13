@@ -1,6 +1,6 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
 const { refreshLiveSchedule } = require('../live-schedule');
@@ -104,7 +104,7 @@ async function buildScheduleImagePayload(group) {
       'Beide Teams muessen das Ergebnis eintragen. Sobald alle Ergebnisse eines Spieltags bestaetigt sind, wird automatisch der naechste Slot freigegeben.',
       'Freilose sind Platzhalter und werden nicht als echtes Match gespielt.',
     ].join('\n'),
-    embeds: [],
+    embeds: [new EmbedBuilder().setImage(`attachment://${image.fileName}`)],
     attachments: [],
     files: [{ attachment: image.buffer, name: image.fileName }],
     components: [buildScheduleButtons(group)],
@@ -150,6 +150,19 @@ async function upsertGroupPosts(channel, group, refs = {}) {
   const existingScheduleMessageId = refs.scheduleMessageId || group.scheduleMessageId || null;
   let schedule;
   try {
+    const matches = (groupWithEvent.matchdays || []).flatMap(matchday => matchday.matches || []);
+    console.info('[group-schedule] Spielplan wird aktualisiert.', {
+      eventKey: groupWithEvent.eventKey,
+      groupKey: groupWithEvent.groupKey,
+      scheduleMessageId: existingScheduleMessageId,
+      matches: matches.map(match => ({
+        matchId: match.id,
+        status: match.status,
+        releasedAt: match.release?.releasedAt || null,
+        result: match.result ? `${match.result.homeGoals}:${match.result.awayGoals}` : null,
+        reports: Array.isArray(match.reports) ? match.reports.length : 0,
+      })),
+    });
     schedule = await upsertMessage(
       channel,
       existingScheduleMessageId,
@@ -157,6 +170,11 @@ async function upsertGroupPosts(channel, group, refs = {}) {
       `${group.groupKey} Spielplan`,
       { sendIfMissing: !existingScheduleMessageId }
     );
+    console.info('[group-schedule] Spielplan-Nachricht wurde erfolgreich editiert.', {
+      eventKey: groupWithEvent.eventKey,
+      groupKey: groupWithEvent.groupKey,
+      scheduleMessageId: schedule.id,
+    });
   } catch (error) {
     console.error(`[group-schedule] Bild/Discord-Update fuer Gruppe ${group.groupKey} fehlgeschlagen.`, error);
     schedule = await upsertMessage(channel, existingScheduleMessageId, {
@@ -180,31 +198,34 @@ async function upsertGroupPosts(channel, group, refs = {}) {
 async function refreshGroupPosts({ client, eventKey, event, group }) {
   if (!client || !group) return null;
 
+  const persistedEvent = readEventData(eventKey);
+  const persistedGroup = persistedEvent.groups?.groups?.[group.groupKey] || group;
+  const eventForRefresh = persistedEvent.groups?.groups?.[group.groupKey] ? persistedEvent : event;
   const messages = readJson(FILES.messages, createMessagesDefault());
   const refs = messages.groups?.[eventKey]?.groups?.[group.groupKey] || {};
-  const channelId = group.channelId || refs.channelId;
+  const channelId = persistedGroup.channelId || refs.channelId;
   if (!channelId) return null;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) return null;
 
   const messageRefs = await upsertGroupPosts(channel, {
-    ...group,
+    ...persistedGroup,
     eventKey,
-    formatSize: event.format?.size,
+    formatSize: eventForRefresh.format?.size,
   }, {
     eventKey,
     ...refs,
   });
 
-  updateGroupMessageRefs(eventKey, event, [{
-    groupKey: group.groupKey,
-    roleId: group.roleId || refs.roleId || null,
+  updateGroupMessageRefs(eventKey, eventForRefresh, [{
+    groupKey: persistedGroup.groupKey,
+    roleId: persistedGroup.roleId || refs.roleId || null,
     channelId,
     ...messageRefs,
   }]);
 
-  await refreshLiveSchedule(client, eventKey, event).catch(error => {
+  await refreshLiveSchedule(client, eventKey, eventForRefresh).catch(error => {
     console.warn(`[live-schedule] Gruppen-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
   });
 
