@@ -3,7 +3,8 @@
 const { EVENT_KEYS } = require('../../app/constants');
 const { updateTeamsData } = require('../teams/team-repository');
 const { createEmptyHistory } = require('../teams/team-achievements');
-const { normalizeClubName } = require('../teams/team-service');
+const { listVisibleTeams, normalizeClubName } = require('../teams/team-service');
+const { resolveTeamLogoPath } = require('../teams/team-logos');
 const { updateEventData } = require('../checkins/checkin-repository');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { FILES, readJson } = require('../../storage');
@@ -193,7 +194,20 @@ function addTestCheckins(eventKey, teamIds) {
 }
 
 function createTestDataForEvent({ eventKey, actorUserId }) {
-  const result = ensureTestTeams(actorUserId);
+  const candidates = listVisibleTeams().filter(team => (
+    team.status === 'active'
+    && team.registrationStatus === 'complete'
+    && resolveTeamLogoPath(team, { optional: true })
+  ));
+  if (candidates.length < 4) {
+    throw new Error('Fuer den Testlauf werden mindestens vier aktive Teams mit gespeichertem Logo benoetigt.');
+  }
+  for (let index = candidates.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
+  }
+  const allIds = candidates.slice(0, 32).map(team => String(team.id));
+  const result = { createdIds: [], existingIds: allIds, allIds, source: 'active_teams_with_logos' };
   addTestCheckins(eventKey, result.allIds);
   return result;
 }
@@ -207,7 +221,7 @@ function eventContainsRemovedTestData(event, removedSet) {
 
   for (const group of Object.values(event.groups?.groups || {})) {
     for (const slot of group.slots || []) {
-      if (participantContainsRemovedTeam(slot.participant, removedSet)) return true;
+      if (participantContainsRemovedTeam(slot.participant || slot, removedSet)) return true;
     }
   }
 
@@ -243,18 +257,25 @@ function removeTestData() {
     return data;
   });
 
-  if (!removedIds.length) return { removedIds };
-
-  const removedSet = new Set(removedIds);
   const settings = readJson(FILES.settings, createSettingsDefault());
+  let removedCheckins = 0;
   for (const eventKey of EVENT_KEYS) {
     updateEventData(eventKey, event => {
       event.checkin = event.checkin || {};
-      event.checkin.entries = (event.checkin.entries || []).filter(entry => !removedSet.has(String(entry.teamId)));
+      const testEntryIds = (event.checkin.entries || [])
+        .filter(entry => entry?.isTestEntry === true)
+        .map(entry => String(entry.teamId));
+      const removedSet = new Set([...removedIds, ...testEntryIds]);
+      removedCheckins += testEntryIds.length;
+      event.checkin.entries = (event.checkin.entries || []).filter(entry => (
+        entry?.isTestEntry !== true && !removedIds.includes(String(entry.teamId))
+      ));
       event.checkin.activeTeamIds = (event.checkin.activeTeamIds || []).filter(teamId => !removedSet.has(String(teamId)));
       event.checkin.waitlistTeamIds = (event.checkin.waitlistTeamIds || []).filter(teamId => !removedSet.has(String(teamId)));
 
-      resetTournamentStateIfNeeded(eventKey, event, removedSet);
+      if (event.meta?.testMode === true || eventContainsRemovedTestData(event, removedSet)) {
+        resetTournamentStateIfNeeded(eventKey, event, removedSet);
+      }
       event.meta = { ...(event.meta || {}), testMode: false };
       if (!event.format?.lockedAt) recalculateCheckinFormat(event, settings);
       event.meta = { ...event.meta, updatedAt: nowIso() };
@@ -262,7 +283,7 @@ function removeTestData() {
     });
   }
 
-  return { removedIds };
+  return { removedIds, removedCheckins };
 }
 
 module.exports = {

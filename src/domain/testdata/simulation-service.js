@@ -77,6 +77,7 @@ function cloneParticipant(participant) {
 
 function completeGroupMatch(match, actorUserId, timestamp) {
   const result = randomGroupResult();
+  match.release = { ...(match.release || {}), releasedAt: match.release?.releasedAt || timestamp };
   match.status = 'confirmed';
   match.result = {
     homeGoals: result.homeGoals,

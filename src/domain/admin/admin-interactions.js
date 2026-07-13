@@ -1432,7 +1432,7 @@ async function handleAdminSelect(interaction, client, settings) {
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
       content: [
-        `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} Testteams eingecheckt.`,
+        `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} zufaellig ausgewaehlte aktive Teams mit Logo eingecheckt.`,
         `${groupCount} Gruppen wurden ueber den normalen Turnierstart persistent erzeugt.`,
         'Die Ergebnisbuttons koennen jetzt direkt zum Testen der Live-Tabelle verwendet werden.',
       ].join('\n'),
@@ -2031,7 +2031,7 @@ async function handleAdminInteraction(interaction, client) {
       const result = removeTestData();
       await refreshRegisteredTeamsOverview(client).catch(() => null);
       await refreshCheckinMessages(EVENT_KEYS, client);
-      await interaction.editReply(`Testdaten wurden entfernt: ${result.removedIds.length} Testteams geloescht. Echte Teams wurden nicht angeruehrt.`);
+      await interaction.editReply(`Testdaten wurden entfernt: ${result.removedCheckins || 0} temporaere Check-ins entfernt und ${result.removedIds.length} alte synthetische Testteams bereinigt. Echte Teams wurden nicht geloescht.`);
       return true;
     }
 

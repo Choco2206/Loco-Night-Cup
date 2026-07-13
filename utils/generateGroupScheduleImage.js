@@ -83,11 +83,11 @@ function scoreText(value) {
 }
 
 function getMatchPresentation(match) {
-  if (isByeMatch(match)) return { score: '', status: 'FREILOS', color: LAYOUT.colors.bye };
-  if (!match?.release?.releasedAt) return { score: '', status: 'NOCH NICHT FREIGEGEBEN', color: LAYOUT.colors.notReleased };
+  if (isByeMatch(match)) return { score: '', status: '', color: LAYOUT.colors.bye };
+  if (!match?.release?.releasedAt) return { score: '', status: '', color: LAYOUT.colors.notReleased };
   if (match.status === 'confirmed' && hasScore(match.result)) {
     const admin = match.result.source === 'admin' || Boolean(match.adminDecision?.setByUserId);
-    return { score: scoreText(match.result), status: admin ? 'ADMIN-ERGEBNIS' : 'BESTÄTIGT', color: admin ? LAYOUT.colors.admin : LAYOUT.colors.confirmed };
+    return { score: scoreText(match.result), status: '', color: admin ? LAYOUT.colors.admin : LAYOUT.colors.confirmed };
   }
   if (match.status === 'admin_decision_required') return { score: '', status: 'ERGEBNISSE WEICHEN AB', color: LAYOUT.colors.conflict };
   const reports = Array.isArray(match.reports) ? match.reports : [];
@@ -96,7 +96,7 @@ function getMatchPresentation(match) {
     const waiting = [match.home, match.away].find(participant => participant?.type === 'team' && !reported.has(participantKey(participant)));
     return { score: scoreText(reports[0]), status: `WARTET AUF ${participantName(waiting).toUpperCase()}`, color: LAYOUT.colors.waiting };
   }
-  return { score: '', status: 'NOCH NICHT GEMELDET', color: LAYOUT.colors.notReported };
+  return { score: '', status: '', color: LAYOUT.colors.notReported };
 }
 
 function scaleBox(box, scaleX, scaleY) {
@@ -196,7 +196,7 @@ async function generateGroupScheduleImage({ group, debug = false, version = Date
     drawFittedText({ ctx, text: participantName(match.away), ...row.rightName, maxFontSize: LAYOUT.fonts.team.maxSize * scaleY, minFontSize: LAYOUT.fonts.team.minSize * scaleY, font: LAYOUT.fonts.team, color: LAYOUT.colors.text });
     const presentation = getMatchPresentation(match);
     if (presentation.score) drawFittedText({ ctx, text: presentation.score, ...row.score, maxFontSize: LAYOUT.fonts.score.maxSize * scaleY, minFontSize: LAYOUT.fonts.score.minSize * scaleY, align: 'center', font: LAYOUT.fonts.score, color: LAYOUT.colors.text });
-    drawFittedText({ ctx, text: presentation.status, ...row.status, maxFontSize: LAYOUT.fonts.status.maxSize * scaleY, minFontSize: LAYOUT.fonts.status.minSize * scaleY, align: 'center', font: LAYOUT.fonts.status, color: presentation.color });
+    if (presentation.status) drawFittedText({ ctx, text: presentation.status, ...row.status, maxFontSize: LAYOUT.fonts.status.maxSize * scaleY, minFontSize: LAYOUT.fonts.status.minSize * scaleY, align: 'center', font: LAYOUT.fonts.status, color: presentation.color });
     if (debug) drawDebug(ctx, row, index, scaleX, scaleY);
   }
   ctx.shadowBlur = 0;
