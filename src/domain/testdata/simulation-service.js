@@ -175,6 +175,82 @@ async function simulateGroupPhase({ eventKey, actorUserId, client, guild = null 
   return outcome;
 }
 
+function visualTestReport(match, participant, homeGoals, awayGoals, timestamp) {
+  return {
+    participantKey: participantKey(participant),
+    submittedByUserId: null,
+    homeGoals,
+    awayGoals,
+    submittedAt: timestamp,
+    source: 'schedule_visual_test',
+  };
+}
+
+async function prepareGroupScheduleVisualTest({ eventKey, actorUserId, client, guild = null }) {
+  const timestamp = nowIso();
+  await ensureGroupsForTestSimulation({ eventKey, actorUserId, client, guild });
+  let outcome;
+
+  updateEventData(eventKey, event => {
+    const group = Object.values(event.groups?.groups || {})
+      .find(candidate => getMatches(candidate).filter(isRealMatch).length >= 6);
+    if (!group) throw new Error('Fuer den Grafiktest wird eine Gruppe mit vier echten Teams benoetigt.');
+
+    const matches = getMatches(group).filter(isRealMatch).slice(0, 6);
+    for (const match of matches) {
+      match.status = 'open';
+      match.result = null;
+      match.reports = [];
+      match.confirmedBy = [];
+      match.adminDecision = null;
+      match.release = { ...(match.release || {}), releasedAt: timestamp };
+      match.meta = { ...(match.meta || {}), updatedAt: timestamp };
+    }
+
+    matches[0].release.releasedAt = null;
+
+    matches[2].status = 'pending_confirmation';
+    matches[2].reports = [visualTestReport(matches[2], matches[2].home, 2, 1, timestamp)];
+
+    matches[3].status = 'confirmed';
+    matches[3].reports = [
+      visualTestReport(matches[3], matches[3].home, 3, 1, timestamp),
+      visualTestReport(matches[3], matches[3].away, 3, 1, timestamp),
+    ];
+    matches[3].result = { homeGoals: 3, awayGoals: 1, confirmedAt: timestamp, source: 'teams' };
+    matches[3].confirmedBy = [participantKey(matches[3].home), participantKey(matches[3].away)].filter(Boolean);
+
+    matches[4].status = 'admin_decision_required';
+    matches[4].reports = [
+      visualTestReport(matches[4], matches[4].home, 1, 0, timestamp),
+      visualTestReport(matches[4], matches[4].away, 0, 1, timestamp),
+    ];
+
+    matches[5].status = 'confirmed';
+    matches[5].result = {
+      homeGoals: 4,
+      awayGoals: 2,
+      confirmedAt: timestamp,
+      source: 'admin',
+      adminUserId: String(actorUserId),
+    };
+    matches[5].adminDecision = { setByUserId: String(actorUserId), setAt: timestamp, reason: 'schedule_visual_test' };
+
+    recalculateGroupStandings(group);
+    group.status = 'active';
+    group.completedAt = null;
+    event.groups.status = 'active';
+    event.groups.completedAt = null;
+    event.status = 'groups';
+    event.meta = { ...(event.meta || {}), updatedAt: timestamp };
+    outcome = { event, groupKey: group.groupKey, matches: matches.length };
+    return event;
+  });
+
+  await refreshGroups(client, eventKey, outcome.event);
+  return outcome;
+}
+
 function chooseWinner(match, result) {
   if (isTeamParticipant(match.home) && isTeamParticipant(match.away)) {
     return result.homeGoals > result.awayGoals
@@ -346,6 +422,7 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
 }
 
 module.exports = {
+  prepareGroupScheduleVisualTest,
   simulateGroupPhase,
   simulateKnockoutPhase,
 };

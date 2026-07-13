@@ -12,6 +12,7 @@ const {
   getQualificationText,
 } = require('./group-embeds');
 const { generateLiveTableImage } = require('../../../utils/generateLiveTableImage');
+const { generateGroupScheduleImage } = require('../../../utils/generateGroupScheduleImage');
 
 function nowIso() {
   return new Date().toISOString();
@@ -91,6 +92,24 @@ async function buildLiveTableImagePayload(group) {
   };
 }
 
+async function buildScheduleImagePayload(group) {
+  const image = await generateGroupScheduleImage({
+    group,
+    debug: process.env.GROUP_SCHEDULE_DEBUG === 'true',
+  });
+  return {
+    content: [
+      'Beide Teams muessen das Ergebnis eintragen. Sobald alle Ergebnisse eines Spieltags bestaetigt sind, wird automatisch der naechste Slot freigegeben.',
+      'Freilose sind Platzhalter und werden nicht als echtes Match gespielt.',
+    ].join('\n'),
+    embeds: [],
+    attachments: [],
+    files: [{ attachment: image.buffer, name: image.fileName }],
+    components: [buildScheduleButtons(group)],
+    allowedMentions: { parse: [] },
+  };
+}
+
 async function upsertGroupPosts(channel, group, refs = {}) {
   const groupWithEvent = {
     ...group,
@@ -126,11 +145,26 @@ async function upsertGroupPosts(channel, group, refs = {}) {
       });
     }
   }
-  const schedule = await upsertMessage(channel, refs.scheduleMessageId || group.scheduleMessageId, {
-    embeds: [buildScheduleEmbed(group)],
-    components: [buildScheduleButtons(groupWithEvent)],
-    allowedMentions: { parse: [] },
-  }, `${group.groupKey} Spielplan`);
+  const existingScheduleMessageId = refs.scheduleMessageId || group.scheduleMessageId || null;
+  let schedule;
+  try {
+    schedule = await upsertMessage(
+      channel,
+      existingScheduleMessageId,
+      await buildScheduleImagePayload(groupWithEvent),
+      `${group.groupKey} Spielplan`,
+      { sendIfMissing: !existingScheduleMessageId }
+    );
+  } catch (error) {
+    console.error(`[group-schedule] Bild/Discord-Update fuer Gruppe ${group.groupKey} fehlgeschlagen.`, error);
+    schedule = await upsertMessage(channel, existingScheduleMessageId, {
+      content: null,
+      embeds: [buildScheduleEmbed(group)],
+      attachments: [],
+      components: [buildScheduleButtons(groupWithEvent)],
+      allowedMentions: { parse: [] },
+    }, `${group.groupKey} Spielplan Fallback`, { sendIfMissing: !existingScheduleMessageId });
+  }
 
   return {
     headerMessageId: header.id,
@@ -213,4 +247,3 @@ module.exports = {
   updateGroupMessageRefs,
   upsertGroupPosts,
 };
-

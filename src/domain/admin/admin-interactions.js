@@ -45,7 +45,7 @@ const { createKnockoutPhase } = require('../knockout');
 const { CEREMONY_DAY_LABELS, postHallOfFameCeremony, postHallOfFameTest } = require('../ceremony');
 const { ensureServerStructure } = require('../setup');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
-const { simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
+const { prepareGroupScheduleVisualTest, simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
 const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
 const {
   refreshManagersWithoutTeamMessage,
@@ -80,6 +80,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_testdata_create',
   'admin_testdata_remove',
   'admin_simulate_groups',
+  'admin_schedule_visual_test',
   'admin_simulate_knockout',
   'admin_server_setup',
 ]);
@@ -93,6 +94,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_event_reset_select',
   'admin_testdata_create_select',
   'admin_simulate_groups_select',
+  'admin_schedule_visual_test_select',
   'admin_simulate_knockout_select',
   'admin_ceremony_post_select',
   'admin_team_ban_team_select',
@@ -1457,6 +1459,24 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_schedule_visual_test_select') {
+    const result = await prepareGroupScheduleVisualTest({
+      eventKey,
+      actorUserId: interaction.user.id,
+      client,
+      guild: interaction.guild,
+    });
+    await interaction.editReply({
+      content: [
+        `Spielplan-Grafik fuer ${EVENT_LABELS[eventKey]} wurde vorbereitet.`,
+        `Gruppe ${result.groupKey} zeigt jetzt alle sechs Testzustaende gleichzeitig.`,
+        'Die bestehende Spielplan-Nachricht wurde aktualisiert; alle Buttons bleiben erhalten.',
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   if (interaction.customId === 'admin_simulate_knockout_select') {
     const result = await simulateKnockoutPhase({
       eventKey,
@@ -1915,6 +1935,15 @@ async function handleAdminInteraction(interaction, client) {
     if (actionCustomId.startsWith('admin_hof_first_page:')) {
       const [, page] = actionCustomId.split(':');
       await interaction.update(buildHallOfFameTeamSelectPayload({ placement: 'first', page }));
+      return true;
+    }
+
+    if (actionCustomId === 'admin_schedule_visual_test') {
+      await interaction.reply({
+        content: 'Fuer welches Event soll die Spielplan-Grafik mit allen sechs Zustaenden vorbereitet werden?',
+        components: [buildEventSelect('admin_schedule_visual_test_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
       return true;
     }
 

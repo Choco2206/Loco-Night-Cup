@@ -10,10 +10,10 @@ const { FILES, readJson } = require('../../storage');
 const { createEventDefault, createSettingsDefault } = require('../../storage/defaults');
 
 const TEST_TEAM_NAMES = [
-  'Alpha FC',
-  'Bravo United',
-  'Charlie CF',
-  'Delta Squad',
+  'FC Test',
+  'Loco Test United',
+  'Ein Sehr Langer Testteamname',
+  'Team Vier',
   'Echo City',
   'Foxtrot Rovers',
   'Gamma FC',

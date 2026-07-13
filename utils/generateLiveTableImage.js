@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const fs = require('fs');
+const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts');
 
 const CANVAS_SIZE = Object.freeze({ width: 1600, height: 900 });
 const TEMPLATE_SIZE = Object.freeze({ width: 1672, height: 941 });
@@ -41,13 +41,9 @@ const TABLE_LAYOUT = Object.freeze({
 
 const ASSETS = Object.freeze({
   background: path.resolve(__dirname, '..', 'assets', 'tables', 'live-table.png'),
-  oxanium: path.resolve(__dirname, '..', 'assets', 'fonts', 'Oxanium-VariableFont_wght.ttf'),
-  odibee: path.resolve(__dirname, '..', 'assets', 'fonts', 'OdibeeSans-Regular.ttf'),
-  openSans: path.resolve(__dirname, '..', 'assets', 'fonts', 'OpenSans-VariableFont_wdth,wght.ttf'),
 });
 
 let canvasApi = null;
-let fontsRegistered = false;
 let backgroundPromise = null;
 
 function getCanvasApi() {
@@ -56,26 +52,7 @@ function getCanvasApi() {
 }
 
 function ensureFontsRegistered() {
-  if (fontsRegistered) return;
-  const { registerFont } = getCanvasApi();
-  const fonts = [
-    [ASSETS.oxanium, { family: 'Oxanium', weight: '700' }],
-    [ASSETS.odibee, { family: 'Odibee Sans', weight: '400' }],
-    [ASSETS.openSans, { family: 'Open Sans', weight: '600' }],
-  ];
-  for (const [file, definition] of fonts) {
-    if (!fs.existsSync(file)) {
-      console.error(`[live-table] Fontdatei fehlt: ${file}`);
-      throw new Error(`Live-Table-Font fehlt: ${path.basename(file)}`);
-    }
-    try {
-      registerFont(file, definition);
-    } catch (error) {
-      console.error(`[live-table] Font konnte nicht registriert werden: ${file}`, error);
-      throw error;
-    }
-  }
-  fontsRegistered = true;
+  ensureCanvasFontsRegistered(getCanvasApi());
 }
 
 function loadBackgroundCached() {
@@ -90,7 +67,7 @@ function loadBackgroundCached() {
 }
 
 function setFont(ctx, size, family, weight = '400') {
-  ctx.font = `${weight} ${size}px "${family}"`;
+  setCanvasFont(ctx, size, family, weight);
 }
 
 function fitSingleLineFont(ctx, text, { family, weight, maxSize, minSize, maxWidth }) {

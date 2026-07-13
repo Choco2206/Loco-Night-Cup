@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { TEAM_LOGOS_DIR } = require('../../storage');
+const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../../storage');
 const {
   clearExpiredLogoUploads,
   findPendingLogoUpload,
@@ -36,6 +36,21 @@ function validateAttachment(attachment, settings) {
   }
 
   return ext;
+}
+
+function resolveTeamLogoPath(team, { optional = true } = {}) {
+  if (!team?.logo?.fileName) {
+    if (optional) return null;
+    throw new Error(`Team ${team?.clubName || team?.id || '-'} hat kein Logo.`);
+  }
+  const fileName = path.basename(team.logo.fileName);
+  const candidates = [
+    team.logo.path && !String(team.logo.path).includes('://') ? path.resolve(ROOT_DIR, team.logo.path) : null,
+    path.join(TEAM_LOGOS_DIR, fileName),
+  ].filter(Boolean);
+  const logoPath = candidates.find(candidate => fs.existsSync(candidate)) || null;
+  if (!logoPath && !optional) throw new Error(`Logo-Datei fuer ${team.clubName} nicht gefunden: ${fileName}`);
+  return logoPath;
 }
 
 function findExpiredUploadForMessage(expiredUploads, message) {
@@ -109,5 +124,6 @@ async function saveLogoFromMessage(message, settings) {
 }
 
 module.exports = {
+  resolveTeamLogoPath,
   saveLogoFromMessage,
 };
