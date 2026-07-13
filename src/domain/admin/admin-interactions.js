@@ -53,6 +53,7 @@ const {
 } = require('./managers-without-team');
 const { buildAdminPanelPayload } = require('./admin-components');
 const { refreshGroupPostsForTeam } = require('../groups/group-posts');
+const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-test');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -82,6 +83,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_testdata_remove',
   'admin_simulate_groups',
   'admin_schedule_visual_test',
+  'admin_ko_images_test',
   'admin_simulate_knockout',
   'admin_server_setup',
 ]);
@@ -96,6 +98,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_testdata_create_select',
   'admin_simulate_groups_select',
   'admin_schedule_visual_test_select',
+  'admin_ko_image_test_select',
   'admin_simulate_knockout_select',
   'admin_ceremony_post_select',
   'admin_team_ban_team_select',
@@ -1199,6 +1202,16 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_ko_image_test_select') {
+    await interaction.deferUpdate();
+    const result = await postKoImageTest({ guild: interaction.guild, variantKey: interaction.values?.[0] });
+    await interaction.editReply({
+      content: `${result.label} wurde in <#${result.channelId}> gepostet.`,
+      components: [],
+    });
+    return true;
+  }
+
   if (interaction.customId.startsWith('admin_team_achievement_team_select:')) {
     const teamId = interaction.values?.[0];
     const team = findTeamById(teamId);
@@ -1946,6 +1959,24 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Fuer welches Event soll die Spielplan-Grafik mit allen sechs Zustaenden vorbereitet werden?',
         components: [buildEventSelect('admin_schedule_visual_test_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (actionCustomId === 'admin_ko_images_test') {
+      await interaction.reply({
+        content: 'Welche K.O.-Bildvorlage soll getestet werden?',
+        components: [new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId('admin_ko_image_test_select')
+            .setPlaceholder('K.O.-Bild auswaehlen')
+            .addOptions(Object.entries(TEST_VARIANTS).map(([value, variant]) => ({
+              value,
+              label: variant.label,
+              description: `${variant.label} im Bild-Testkanal rendern`,
+            })))
+        )],
         flags: EPHEMERAL,
       });
       return true;

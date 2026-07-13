@@ -218,4 +218,4 @@ async function generateGroupScheduleImage({ group, debug = false, version = Date
   };
 }
 
-module.exports = { drawFittedText, fitTextToWidth, generateGroupScheduleImage, getMatchPresentation, orderedMatches };
+module.exports = { drawFittedText, drawTeamLogoOrFallback, fitTextToWidth, generateGroupScheduleImage, getMatchPresentation, orderedMatches };

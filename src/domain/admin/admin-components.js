@@ -65,6 +65,7 @@ const ADMIN_CATEGORIES = {
       ['admin_testdata_remove', 'Testdaten entfernen', 'Alle Testteams entfernen'],
       ['admin_simulate_groups', 'Gruppenphase simulieren', 'Gruppenphase eines Events simulieren'],
       ['admin_schedule_visual_test', 'Spielplan-Grafik testen', 'Alle sechs Grafikzustaende in einer Gruppe darstellen'],
+      ['admin_ko_images_test', 'K.O.-Bilder testen', 'Eine K.O.-Bildvorlage im Testkanal pruefen'],
       ['admin_simulate_knockout', 'K.O.-Phase simulieren', 'K.O.-Phase eines Events simulieren'],
       ['admin_hof_test', 'Hall of Fame testen', 'Siegerehrung im Testkanal pruefen'],
       ['admin_ceremony_post', 'Siegerehrung posten', 'Echte Siegerehrung fuer ein Event posten'],

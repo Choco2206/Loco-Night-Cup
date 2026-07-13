@@ -13,6 +13,7 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
+const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
 const KNOCKOUT_OVERVIEW_CHANNEL_NAME = 'ko-phase';
@@ -461,6 +462,55 @@ function buildOverviewEmbed(eventKey, event) {
     .setTimestamp(new Date());
 }
 
+function roundStatusContent(round) {
+  const lines = [];
+  for (const match of round?.matches || []) {
+    if (match.status === 'pending_confirmation') lines.push(`M${match.matchIndex}: ${waitingForLabel(match)}`);
+    if (match.status === 'admin_decision_required') lines.push(`M${match.matchIndex}: Admin-Klaerung erforderlich`);
+  }
+  return lines.length ? lines.join('\n') : null;
+}
+
+async function buildOverviewImagePayload(eventKey, event) {
+  const qualifiedTeams = event.knockout?.qualifiedTeams || [];
+  const image = await renderKoImage({
+    phase: 'qualification_overview',
+    qualifiedTeams,
+    eventId: event.cycle?.cycleKey || eventKey,
+  });
+  return {
+    content: null,
+    embeds: [new EmbedBuilder()
+      .setTitle('K.O.-Phase Uebersicht')
+      .setDescription(`Aktuelle Runde: **${currentRoundLabel(event)}**\n${channelLines(event)}`)
+      .setImage(`attachment://${image.fileName}`)
+      .setColor(0xf2c94c)],
+    attachments: [],
+    files: [{ attachment: image.buffer, name: image.fileName }],
+    allowedMentions: { parse: [] },
+  };
+}
+
+async function buildRoundImagePayload(eventKey, event, roundKey) {
+  const round = event.knockout?.rounds?.[roundKey];
+  const image = await renderKoImage({
+    phase: roundKey,
+    matches: round?.matches || [],
+    eventId: event.cycle?.cycleKey || eventKey,
+  });
+  return {
+    content: roundStatusContent(round),
+    embeds: [new EmbedBuilder()
+      .setTitle(ROUND_LABELS[roundKey] || roundKey)
+      .setImage(`attachment://${image.fileName}`)
+      .setColor(roundKey === event.knockout?.firstRoundKey ? 0xf2c94c : 0x5865f2)],
+    attachments: [],
+    files: [{ attachment: image.buffer, name: image.fileName }],
+    components: [buildRoundButtons(eventKey, roundKey)],
+    allowedMentions: { parse: [] },
+  };
+}
+
 async function upsertMessage(channel, messageId, payload) {
   const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
   return existing ? existing.edit(payload) : channel.send(payload);
@@ -535,10 +585,19 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     roleIds: uniqueStrings(Object.values(roundRoles)),
     existingChannelId: event.knockout?.overviewChannelId || event.knockout?.channelId || null,
   });
-  const overviewMessage = await upsertMessage(overviewChannel, event.knockout?.overviewMessageId || event.knockout?.messageId || null, {
-    embeds: [buildOverviewEmbed(eventKey, event)],
-    allowedMentions: { parse: [] },
-  });
+  const overviewMessageId = event.knockout?.overviewMessageId || event.knockout?.messageId || null;
+  let overviewMessage;
+  try {
+    overviewMessage = await upsertMessage(overviewChannel, overviewMessageId, await buildOverviewImagePayload(eventKey, event));
+  } catch (error) {
+    console.error('[KO IMAGE ERROR]', {
+      phase: 'qualification_overview', eventId: eventKey,
+      qualifiedTeamCount: event.knockout?.qualifiedTeams?.length || 0, error: error.message,
+    });
+    overviewMessage = await upsertMessage(overviewChannel, overviewMessageId, {
+      content: null, embeds: [buildOverviewEmbed(eventKey, event)], attachments: [], allowedMentions: { parse: [] },
+    });
+  }
 
   const roundPosts = {};
   const roundChannels = {};
@@ -553,11 +612,21 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
       roleIds: roundRoles[roundKey] ? [roundRoles[roundKey]] : [],
       existingChannelId: round.channelId || null,
     });
-    const message = await upsertMessage(channel, round.messageId || null, {
-      embeds: [buildRoundEmbed(eventKey, event, roundKey)],
-      components: [buildRoundButtons(eventKey, roundKey)],
-      allowedMentions: { parse: [] },
-    });
+    let message;
+    try {
+      message = await upsertMessage(channel, round.messageId || null, await buildRoundImagePayload(eventKey, event, roundKey));
+    } catch (error) {
+      console.error('[KO IMAGE ERROR]', {
+        phase: roundKey, eventId: eventKey, template: ROUND_CHANNEL_NAMES[roundKey], error: error.message,
+      });
+      message = await upsertMessage(channel, round.messageId || null, {
+        content: null,
+        embeds: [buildRoundEmbed(eventKey, event, roundKey)],
+        attachments: [],
+        components: [buildRoundButtons(eventKey, roundKey)],
+        allowedMentions: { parse: [] },
+      });
+    }
     roundPosts[roundKey] = { channelId: channel.id, messageId: message.id };
     roundChannels[roundKey] = channel.id;
     roundChannelObjects[roundKey] = channel;
