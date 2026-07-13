@@ -40,19 +40,21 @@ function shuffledSlotRefs(groups) {
   return shuffleParticipants(refs);
 }
 
-function groupHasBye(group) {
-  return group.slots.some(slot => slot?.type === 'bye');
+function groupByeCount(group) {
+  return group.slots.filter(slot => slot?.type === 'bye').length;
 }
 
 function placeParticipants(groups, participants) {
   const slotRefs = shuffledSlotRefs(groups);
 
   for (const participant of participants) {
-    const slotRef = slotRefs.find(ref => {
-      if (ref.group.slots[ref.slotIndex]) return false;
-      if (participant.type === 'bye' && groupHasBye(ref.group)) return false;
-      return true;
-    });
+    const availableSlotRefs = slotRefs.filter(ref => !ref.group.slots[ref.slotIndex]);
+    let slotRef = availableSlotRefs[0];
+
+    if (participant.type === 'bye' && availableSlotRefs.length) {
+      const minimumByeCount = Math.min(...availableSlotRefs.map(ref => groupByeCount(ref.group)));
+      slotRef = availableSlotRefs.find(ref => groupByeCount(ref.group) === minimumByeCount);
+    }
 
     if (!slotRef) {
       throw new Error('Gruppen konnten nicht zufaellig mit den gelockten Teilnehmern belegt werden.');
@@ -103,8 +105,10 @@ function shuffleParticipants(participants) {
 
 function createGroups({ eventKey, field, settings, createdAt }) {
   const groups = createEmptyGroups(field.groupCount, settings);
-  const participants = shuffleParticipants(Array.isArray(field.participants) ? field.participants : []);
-  placeParticipants(groups, participants);
+  const participants = Array.isArray(field.participants) ? field.participants : [];
+  const byes = shuffleParticipants(participants.filter(participant => participant?.type === 'bye'));
+  const teams = shuffleParticipants(participants.filter(participant => participant?.type !== 'bye'));
+  placeParticipants(groups, [...byes, ...teams]);
 
   const finalizedGroups = groups.map(group => {
     finalizeSlots(group);
