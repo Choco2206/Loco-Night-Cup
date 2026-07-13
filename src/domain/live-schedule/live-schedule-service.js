@@ -60,8 +60,8 @@ function isByeMatch(match) {
 }
 
 function formatGroupStatus(match) {
-  if (isByeMatch(match)) return '🎟️ Freilos';
   if (match.status === 'confirmed' && match.result) return `✅ ${match.result.homeGoals}:${match.result.awayGoals}`;
+  if (isByeMatch(match)) return '🎟️ Freilos';
   if (match.status === 'pending_confirmation') return '⏳ wartet auf Gegner';
   if (match.status === 'admin_decision_required') return '🚨 Admin-Klärung';
   return '⏳ offen';
