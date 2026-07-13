@@ -171,6 +171,7 @@ function addTestCheckins(eventKey, teamIds) {
       throw new Error('Testdaten können nicht in ein bereits gelocktes Event eingefügt werden. Entferne zuerst Testdaten oder resette das Event.');
     }
     const timestamp = nowIso();
+    event.meta = { ...(event.meta || {}), testMode: true, updatedAt: timestamp };
 
     for (const teamId of missingTeamIds) {
       event.checkin.entries.push({
@@ -254,6 +255,7 @@ function removeTestData() {
       event.checkin.waitlistTeamIds = (event.checkin.waitlistTeamIds || []).filter(teamId => !removedSet.has(String(teamId)));
 
       resetTournamentStateIfNeeded(eventKey, event, removedSet);
+      event.meta = { ...(event.meta || {}), testMode: false };
       if (!event.format?.lockedAt) recalculateCheckinFormat(event, settings);
       event.meta = { ...event.meta, updatedAt: nowIso() };
       return event;

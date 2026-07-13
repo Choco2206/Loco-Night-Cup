@@ -245,12 +245,26 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
     changed = true;
   }
 
-  if (switchedCycle) {
+  const preserveActiveTestTournament = event.meta?.testMode === true
+    && Object.keys(event.groups?.groups || {}).length > 0
+    && !['not_created', 'reset'].includes(event.groups?.status);
+
+  if (switchedCycle && !preserveActiveTestTournament) {
     resetToOpenCheckinCycle(event);
     changed = true;
-  } else if (planned.deadlineAt && now.getTime() < planned.deadlineAt.getTime() && !['checkin', 'checkin_open'].includes(event.status)) {
+  } else if (!preserveActiveTestTournament
+    && planned.deadlineAt
+    && now.getTime() < planned.deadlineAt.getTime()
+    && !['checkin', 'checkin_open'].includes(event.status)) {
     resetToOpenCheckinCycle(event);
     changed = true;
+  } else if (preserveActiveTestTournament && (switchedCycle || (planned.deadlineAt && now.getTime() < planned.deadlineAt.getTime()))) {
+    console.info('[checkin-schedule] Aktiver Testlauf wird ausserhalb des regulaeren Zeitfensters nicht zurueckgesetzt.', {
+      eventKey,
+      status: event.status,
+      groupStatus: event.groups?.status,
+      groupIds: Object.keys(event.groups?.groups || {}),
+    });
   }
 
   return changed;
