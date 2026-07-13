@@ -68,22 +68,21 @@ function buildLiveTableEmbed(group) {
   const rows = rankGroupRows(group);
 
   const byes = (group.slots || []).filter(slot => slot.type === 'bye');
-  const tableRows = [
-    '#  Team              Sp  S  U  N  TD  Pkt',
-    '\u2500'.repeat(41),
-    ...rows.map((row, index) => formatStandingRow(index + 1, {
+  const table = [
+    ...rows.map((row, index) => formatStandingEntry(index + 1, {
       name: row.displayName || findTeamById(row.teamId)?.clubName || row.teamId || row.participantKey,
       played: row.played,
       wins: row.wins,
       draws: row.draws,
       losses: row.losses,
+      goalsFor: row.goalsFor,
+      goalsAgainst: row.goalsAgainst,
       goalDifference: row.goalDifference,
       points: row.points,
     })),
-    ...byes.map((_, index) => formatByeRow(rows.length + index + 1)),
-  ];
+    ...byes.map((_, index) => formatByeEntry(rows.length + index + 1)),
+  ].join('\n\n');
 
-  const table = `\`\`\`txt\n${tableRows.join('\n')}\n\`\`\``;
   const qualification = getQualificationText(group.formatSize);
 
   return new EmbedBuilder()
@@ -94,36 +93,28 @@ function buildLiveTableEmbed(group) {
     .setTimestamp(new Date());
 }
 
-function truncateTeamName(name, width = 16) {
-  const clean = String(name || 'Team').trim();
-  if (clean.length <= width) return clean.padEnd(width, ' ');
-  return `${clean.slice(0, width - 1)}~`;
+function formatGoalDifference(value) {
+  const goalDifference = Number(value || 0);
+  return goalDifference > 0 ? `+${goalDifference}` : String(goalDifference);
 }
 
-function formatStandingRow(place, row) {
-  return [
-    String(place).padEnd(2, ' '),
-    truncateTeamName(row.name),
-    String(row.played).padStart(2, ' '),
-    String(row.wins).padStart(2, ' '),
-    String(row.draws).padStart(2, ' '),
-    String(row.losses).padStart(2, ' '),
-    String(row.goalDifference).padStart(3, ' '),
-    String(row.points).padStart(3, ' '),
-  ].join(' ');
+function formatStandingEntry(place, row) {
+  const name = String(row.name || 'Team').trim();
+  const statistics = [
+    `${Number(row.played || 0)} SP`,
+    `${Number(row.wins || 0)} S`,
+    `${Number(row.draws || 0)} U`,
+    `${Number(row.losses || 0)} N`,
+    `${Number(row.goalsFor || 0)}:${Number(row.goalsAgainst || 0)}`,
+    formatGoalDifference(row.goalDifference),
+    `${Number(row.points || 0)} P`,
+  ].join(' · ');
+
+  return `**${place}. ${name}**\n\`${statistics}\``;
 }
 
-function formatByeRow(place) {
-  return [
-    String(place).padEnd(2, ' '),
-    truncateTeamName('Freilos'),
-    ' -',
-    ' -',
-    ' -',
-    ' -',
-    '  -',
-    '  -',
-  ].join(' ');
+function formatByeEntry(place) {
+  return `**${place}. Freilos**\n\`Keine Tabellenwirkung\``;
 }
 
 function getQualificationText(formatSize) {
