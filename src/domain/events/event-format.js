@@ -100,9 +100,6 @@ function buildLockedParticipantField(event, now = new Date()) {
   const waitlistByes = manualByes.slice(activeManualByeCount);
   const groupCount = groupCountForSize(size);
 
-  if (activeByes.length > groupCount) {
-    throw new Error('Format-Lock nicht moeglich: maximal ein Freilos pro Gruppe erlaubt.');
-  }
 
   const participants = [
     ...activeTeams.map(team => ({
