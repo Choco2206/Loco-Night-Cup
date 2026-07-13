@@ -31,7 +31,6 @@ const ROUND_ROLE_NAMES = {
   final: 'LNC K.O. Finale',
 };
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
-const INVITE_WINDOW_MINUTES = 5;
 const STATUS_LABELS = {
   open: '⏳ Offen',
   pending_confirmation: '🕐 Wartet auf Bestaetigung',
@@ -45,19 +44,6 @@ const DIVIDER = '━━━━━━━━━━━━━━';
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function addMinutes(date, minutes) {
-  return new Date(date.getTime() + minutes * 60 * 1000);
-}
-
-function formatHm(date) {
-  return new Intl.DateTimeFormat('de-DE', {
-    timeZone: 'Europe/Berlin',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
 }
 
 function readSettings() {
@@ -503,81 +489,6 @@ function isTeamParticipant(participant) {
   return participant?.type === 'team' && participant.teamId;
 }
 
-function isRealMatch(match) {
-  return isTeamParticipant(match?.home) && isTeamParticipant(match?.away);
-}
-
-function isOpenKnockoutMatch(match) {
-  return isRealMatch(match) && match.status !== 'confirmed';
-}
-
-function getRoundReleaseAt(round) {
-  const releaseTimes = (round?.matches || [])
-    .filter(isOpenKnockoutMatch)
-    .map(match => match.release?.releasedAt)
-    .filter(Boolean)
-    .map(value => new Date(value))
-    .filter(date => !Number.isNaN(date.getTime()))
-    .sort((a, b) => a.getTime() - b.getTime());
-  return releaseTimes[0] || null;
-}
-
-function readRoundMessageState(eventKey, roundKey) {
-  const messages = readJson(FILES.messages, createMessagesDefault());
-  return messages.knockout?.[eventKey]?.rounds?.[roundKey] || {};
-}
-
-function updateRoundMessageState(eventKey, roundKey, updater) {
-  updateJson(FILES.messages, createMessagesDefault(), messages => {
-    messages.knockout = messages.knockout || {};
-    messages.knockout[eventKey] = messages.knockout[eventKey] || { cycleKey: null, rounds: {} };
-    messages.knockout[eventKey].rounds = messages.knockout[eventKey].rounds || {};
-    const current = messages.knockout[eventKey].rounds[roundKey] || {};
-    messages.knockout[eventKey].rounds[roundKey] = updater(current);
-    messages.meta = { ...(messages.meta || {}), updatedAt: nowIso() };
-    return messages;
-  });
-}
-
-async function postRoundReleaseMessage(channel, eventKey, roundKey, releasedAt) {
-  const state = readRoundMessageState(eventKey, roundKey);
-  if (state.releaseMessageId) {
-    const existing = await channel.messages.fetch(state.releaseMessageId).catch(() => null);
-    if (existing) return state.releaseMessageId;
-  }
-
-  const inviteStart = releasedAt;
-  const inviteEnd = addMinutes(releasedAt, INVITE_WINDOW_MINUTES);
-  const label = ROUND_LABELS[roundKey] || roundKey;
-  const message = await channel.send({
-    content: [
-      `${label} freigegeben.`,
-      `Einladezeit: ${formatHm(inviteStart)} Uhr bis ${formatHm(inviteEnd)} Uhr.`,
-      'Bitte ladet eure Gegner ein und spielt eure Partie.',
-      'In der K.O.-Phase gibt es keine automatische Wertung.',
-    ].join('\n'),
-    allowedMentions: { parse: [] },
-  }).catch(error => {
-    console.error(`K.O.-Freigabe fuer ${eventKey}/${roundKey} konnte nicht gesendet werden.`, error);
-    return null;
-  });
-
-  if (!message?.id) return null;
-  updateRoundMessageState(eventKey, roundKey, current => ({
-    ...current,
-    releaseMessageId: message.id,
-    updatedAt: nowIso(),
-  }));
-  return message.id;
-}
-
-async function ensureRoundReleaseMessage({ channel, eventKey, roundKey, round }) {
-  const releasedAt = getRoundReleaseAt(round);
-  if (!releasedAt) return;
-
-  await postRoundReleaseMessage(channel, eventKey, roundKey, releasedAt);
-}
-
 function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts }) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     const timestamp = nowIso();
@@ -660,17 +571,6 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     overview: { channelId: overviewChannel.id, messageId: overviewMessage.id },
     roundPosts,
   });
-
-  for (const roundKey of activeRoundKeys(event)) {
-    const channel = roundChannelObjects[roundKey];
-    if (!channel) continue;
-    await ensureRoundReleaseMessage({
-      channel,
-      eventKey,
-      roundKey,
-      round: event.knockout.rounds[roundKey],
-    });
-  }
 
   return {
     categoryId: category.id,
