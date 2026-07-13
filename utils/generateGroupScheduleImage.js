@@ -93,11 +93,11 @@ function scoreText(value) {
 }
 
 function getMatchPresentation(match) {
-  if (isByeMatch(match)) return { score: '', status: '', color: LAYOUT.colors.bye };
   if (match.status === 'confirmed' && hasScore(match.result)) {
     const admin = match.result.source === 'admin' || Boolean(match.adminDecision?.setByUserId);
     return { score: scoreText(match.result), status: '', color: admin ? LAYOUT.colors.admin : LAYOUT.colors.confirmed };
   }
+  if (isByeMatch(match)) return { score: '', status: '', color: LAYOUT.colors.bye };
   if (!match?.release?.releasedAt) return { score: '', status: '', color: LAYOUT.colors.notReleased };
   if (match.status === 'admin_decision_required') return { score: '', status: 'ERGEBNISSE WEICHEN AB', color: LAYOUT.colors.conflict };
   const reports = Array.isArray(match.reports) ? match.reports : [];
