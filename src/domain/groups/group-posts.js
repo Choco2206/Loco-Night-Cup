@@ -4,7 +4,14 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
 const { refreshLiveSchedule } = require('../live-schedule');
-const { buildLiveTableEmbed, buildScheduleEmbed, buildTeamOverviewEmbed } = require('./group-embeds');
+const {
+  buildLiveTableEmbed,
+  buildScheduleEmbed,
+  buildTeamOverviewEmbed,
+  getLiveTableRows,
+  getQualificationText,
+} = require('./group-embeds');
+const { generateLiveTableImage } = require('../../../utils/generateLiveTableImage');
 
 function nowIso() {
   return new Date().toISOString();
@@ -42,7 +49,7 @@ function buildScheduleButtons(group) {
   );
 }
 
-async function upsertMessage(channel, messageId, payload, label) {
+async function upsertMessage(channel, messageId, payload, label, { sendIfMissing = true } = {}) {
   const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
   if (existing) {
     try {
@@ -53,12 +60,35 @@ async function upsertMessage(channel, messageId, payload, label) {
     }
   }
 
+  if (messageId && !sendIfMissing) {
+    throw new Error(`Gespeicherte Message ${messageId} wurde nicht gefunden; es wird keine Ersatznachricht erstellt.`);
+  }
+
   try {
     return await channel.send(payload);
   } catch (error) {
     console.error(`Gruppe ${label}: Message konnte nicht gesendet werden. Bitte Bot-Berechtigungen pruefen.`, error);
     throw error;
   }
+}
+
+async function buildLiveTableImagePayload(group) {
+  const image = await generateLiveTableImage({
+    groupKey: group.groupKey,
+    rows: getLiveTableRows(group),
+    qualificationText: getQualificationText(group.formatSize),
+  });
+
+  return {
+    content: null,
+    embeds: [],
+    attachments: [],
+    files: [{
+      attachment: image,
+      name: `live-table-group-${String(group.groupKey || 'group').toLowerCase()}.png`,
+    }],
+    allowedMentions: { parse: [] },
+  };
 }
 
 async function upsertGroupPosts(channel, group, refs = {}) {
@@ -72,10 +102,30 @@ async function upsertGroupPosts(channel, group, refs = {}) {
     embeds: [buildTeamOverviewEmbed(group)],
     allowedMentions: { parse: ['users'] },
   }, `${group.groupKey} Teamuebersicht`);
-  const table = await upsertMessage(channel, refs.tableMessageId || group.tableMessageId, {
-    embeds: [buildLiveTableEmbed(group)],
-    allowedMentions: { parse: [] },
-  }, `${group.groupKey} Live-Tabelle`);
+  const existingTableMessageId = refs.tableMessageId || group.tableMessageId || null;
+  let table = existingTableMessageId ? { id: existingTableMessageId } : null;
+  try {
+    const tablePayload = await buildLiveTableImagePayload(group);
+    table = await upsertMessage(
+      channel,
+      existingTableMessageId,
+      tablePayload,
+      `${group.groupKey} Live-Tabelle`,
+      { sendIfMissing: !existingTableMessageId }
+    );
+  } catch (error) {
+    console.error(`[live-table] Bild/Discord-Update fuer Gruppe ${group.groupKey} fehlgeschlagen.`, error);
+
+    if (!existingTableMessageId) {
+      table = await upsertMessage(channel, null, {
+        embeds: [buildLiveTableEmbed(group)],
+        allowedMentions: { parse: [] },
+      }, `${group.groupKey} Live-Tabelle Fallback`).catch(fallbackError => {
+        console.error(`[live-table] Auch das Text-Fallback fuer Gruppe ${group.groupKey} ist fehlgeschlagen.`, fallbackError);
+        return null;
+      });
+    }
+  }
   const schedule = await upsertMessage(channel, refs.scheduleMessageId || group.scheduleMessageId, {
     embeds: [buildScheduleEmbed(group)],
     components: [buildScheduleButtons(groupWithEvent)],
@@ -86,7 +136,7 @@ async function upsertGroupPosts(channel, group, refs = {}) {
     headerMessageId: header.id,
     messageId: header.id,
     teamsMessageId: teams.id,
-    tableMessageId: table.id,
+    tableMessageId: table?.id || existingTableMessageId,
     scheduleMessageId: schedule.id,
   };
 }
@@ -163,3 +213,4 @@ module.exports = {
   updateGroupMessageRefs,
   upsertGroupPosts,
 };
+

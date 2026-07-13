@@ -65,23 +65,11 @@ function buildTeamOverviewEmbed(group) {
 }
 
 function buildLiveTableEmbed(group) {
-  const rows = rankGroupRows(group);
-
-  const byes = (group.slots || []).filter(slot => slot.type === 'bye');
-  const table = [
-    ...rows.map((row, index) => formatStandingEntry(index + 1, {
-      name: row.displayName || findTeamById(row.teamId)?.clubName || row.teamId || row.participantKey,
-      played: row.played,
-      wins: row.wins,
-      draws: row.draws,
-      losses: row.losses,
-      goalsFor: row.goalsFor,
-      goalsAgainst: row.goalsAgainst,
-      goalDifference: row.goalDifference,
-      points: row.points,
-    })),
-    ...byes.map((_, index) => formatByeEntry(rows.length + index + 1)),
-  ].join('\n\n');
+  const table = getLiveTableRows(group)
+    .map((row, index) => row.isBye
+      ? formatByeEntry(index + 1)
+      : formatStandingEntry(index + 1, row))
+    .join('\n\n');
 
   const qualification = getQualificationText(group.formatSize);
 
@@ -91,6 +79,38 @@ function buildLiveTableEmbed(group) {
     .setDescription(`${table}\n${qualification}`)
     .setFooter({ text: 'Freilose sind Platzhalter und haben keine Tabellenwirkung.' })
     .setTimestamp(new Date());
+}
+
+function getLiveTableRows(group) {
+  const rows = rankGroupRows(group).map(row => ({
+    name: row.displayName || findTeamById(row.teamId)?.clubName || row.teamId || row.participantKey,
+    played: Number(row.played || 0),
+    wins: Number(row.wins || 0),
+    draws: Number(row.draws || 0),
+    losses: Number(row.losses || 0),
+    goalsFor: Number(row.goalsFor || 0),
+    goalsAgainst: Number(row.goalsAgainst || 0),
+    goalDifference: Number(row.goalDifference || 0),
+    points: Number(row.points || 0),
+    isBye: false,
+  }));
+
+  const byes = (group.slots || []).filter(slot => slot.type === 'bye');
+  return [
+    ...rows,
+    ...byes.map(() => ({
+      name: 'Freilos',
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      points: 0,
+      isBye: true,
+    })),
+  ];
 }
 
 function formatGoalDifference(value) {
@@ -108,7 +128,7 @@ function formatStandingEntry(place, row) {
     `${Number(row.goalsFor || 0)}:${Number(row.goalsAgainst || 0)}`,
     formatGoalDifference(row.goalDifference),
     `${Number(row.points || 0)} P`,
-  ].join(' · ');
+  ].join(' Â· ');
 
   return `**${place}. ${name}**\n\`${statistics}\``;
 }
@@ -212,4 +232,7 @@ module.exports = {
   buildLiveTableEmbed,
   buildScheduleEmbed,
   buildTeamOverviewEmbed,
+  getLiveTableRows,
+  getQualificationText,
 };
+
