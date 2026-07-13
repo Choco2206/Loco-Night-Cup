@@ -51,6 +51,7 @@ const {
   refreshManagersWithoutTeamMessage,
   refreshManagersWithoutTeamMessageIfTracked,
 } = require('./managers-without-team');
+const { buildAdminPanelPayload } = require('./admin-components');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -1099,6 +1100,12 @@ async function postAdminLogMessage(client, settings, content) {
 }
 
 async function handleAdminSelect(interaction, client, settings) {
+  if (interaction.customId === 'admin_panel_category_select') {
+    const category = interaction.values?.[0];
+    await interaction.update(buildAdminPanelPayload(category));
+    return true;
+  }
+
   if (interaction.customId.startsWith('admin_team_details_select:')) {
     const teamId = interaction.values?.[0];
     const team = findTeamById(teamId);
