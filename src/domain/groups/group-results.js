@@ -22,6 +22,15 @@ function isRealMatch(match) {
   return match?.home?.type === 'team' && match?.away?.type === 'team';
 }
 
+function isTeamVsByeMatch(match) {
+  const participantTypes = [match?.home?.type, match?.away?.type];
+  return participantTypes.includes('team') && participantTypes.includes('bye');
+}
+
+function isAdminScorableMatch(match) {
+  return isRealMatch(match) || isTeamVsByeMatch(match);
+}
+
 function getGroup(event, groupKey) {
   return event.groups?.groups?.[groupKey] || null;
 }
@@ -62,9 +71,14 @@ function getCurrentReleasedSlot(group) {
 
 function normalizeMatchState(match) {
   if (!isRealMatch(match)) {
+    match.reports = Array.isArray(match.reports) ? match.reports : [];
+    const hasConfirmedAdminScore = isTeamVsByeMatch(match)
+      && match.status === 'confirmed'
+      && Number.isFinite(Number(match.result?.homeGoals))
+      && Number.isFinite(Number(match.result?.awayGoals));
+    if (hasConfirmedAdminScore) return match;
     match.status = 'bye';
     match.result = null;
-    match.reports = Array.isArray(match.reports) ? match.reports : [];
     return match;
   }
 
@@ -109,7 +123,7 @@ function getUserSelectableMatches(group, userId) {
 
 function getAdminSelectableMatches(group) {
   normalizeGroupMatches(group);
-  return getMatches(group).filter(match => isRealMatch(match));
+  return getMatches(group).filter(match => isAdminScorableMatch(match));
 }
 
 function parseGoals(value, label) {
@@ -193,12 +207,11 @@ function recalculateGroupStandings(group) {
   const byKey = new Map(rows.map(row => [row.participantKey, row]));
 
   for (const match of getMatches(group)) {
-    if (!isRealMatch(match) || match.status !== 'confirmed' || !match.result) continue;
+    if (!isAdminScorableMatch(match) || match.status !== 'confirmed' || !match.result) continue;
     const homeRow = byKey.get(participantKey(match.home));
     const awayRow = byKey.get(participantKey(match.away));
-    if (!homeRow || !awayRow) continue;
-    addResult(homeRow, Number(match.result.homeGoals), Number(match.result.awayGoals));
-    addResult(awayRow, Number(match.result.awayGoals), Number(match.result.homeGoals));
+    if (homeRow) addResult(homeRow, Number(match.result.homeGoals), Number(match.result.awayGoals));
+    if (awayRow) addResult(awayRow, Number(match.result.awayGoals), Number(match.result.homeGoals));
   }
 
   group.standings = rows;
@@ -208,8 +221,8 @@ function recalculateGroupStandings(group) {
 
 function isGroupComplete(group) {
   normalizeGroupMatches(group);
-  const realMatches = getMatches(group).filter(isRealMatch);
-  return realMatches.every(match => match.status === 'confirmed');
+  const scorableMatches = getMatches(group).filter(isAdminScorableMatch);
+  return scorableMatches.every(match => match.status === 'confirmed');
 }
 
 function updateGroupCompletion(event, group) {
@@ -275,7 +288,7 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     normalizeGroupMatches(group);
 
     const match = findMatch(group, matchId);
-    if (!match || !isRealMatch(match)) throw new Error('Spiel wurde nicht gefunden.');
+    if (!match || !isAdminScorableMatch(match)) throw new Error('Spiel wurde nicht gefunden.');
 
     match.reports = [];
     match.result = {
@@ -308,9 +321,11 @@ module.exports = {
   getMatches,
   getMatchSlot,
   getUserSelectableMatches,
+  isAdminScorableMatch,
   isGroupComplete,
   isMatchReleased,
   isRealMatch,
+  isTeamVsByeMatch,
   participantKey,
   recalculateGroupStandings,
   setAdminResult,
