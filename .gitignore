@@ -1,2 +1,7 @@
 node_modules
 .env
+data/assets/
+data/settings/settings.json
+data/team-of-the-tournament/store.json
+data/team-of-the-tournament/render-*.png
+test-tott-render.png

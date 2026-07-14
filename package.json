@@ -4,7 +4,8 @@
   "description": "Discord bot for Loco Night Cup",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test --test-isolation=none"
   },
   "engines": {
     "node": "20.x"

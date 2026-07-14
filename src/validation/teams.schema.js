@@ -85,6 +85,19 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
     }
   }
 
+  if (team.proClub !== null && team.proClub !== undefined) {
+    if (requireObject(errors, team.proClub, `${path}.proClub`)) {
+      if (typeof team.proClub.clubName !== 'string' || !team.proClub.clubName.trim()) errors.push(`${path}.proClub.clubName is required`);
+      if (typeof team.proClub.clubId !== 'string' || !team.proClub.clubId.trim()) errors.push(`${path}.proClub.clubId is required`);
+      if (typeof team.proClub.platform !== 'string' || !team.proClub.platform.trim()) errors.push(`${path}.proClub.platform is required`);
+      if (typeof team.proClub.verified !== 'boolean') errors.push(`${path}.proClub.verified must be boolean`);
+      requireIsoDateOrNull(errors, team.proClub.verifiedAt, `${path}.proClub.verifiedAt`);
+      requireIsoDateOrNull(errors, team.proClub.lastCheckedAt, `${path}.proClub.lastCheckedAt`);
+      requireSnowflakeOrNull(errors, team.proClub.updatedBy, `${path}.proClub.updatedBy`);
+      if (team.proClub.provider !== 'ea-direct') errors.push(`${path}.proClub.provider must be ea-direct`);
+    }
+  }
+
   if (team.status !== 'leaderless') {
     if (!requireObject(errors, team.manager, `${path}.manager`)) return;
     requireSnowflakeOrNull(errors, team.manager.userId, `${path}.manager.userId`);

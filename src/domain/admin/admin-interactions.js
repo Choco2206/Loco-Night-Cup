@@ -31,7 +31,12 @@ const {
   findNonDeletedTeamByUserId,
   findTeamById,
   listVisibleTeams,
+  markTeamProClubUnverified,
+  removeTeamProClub,
+  setTeamProClub,
 } = require('../teams/team-service');
+const { verifyClubConnection } = require('../team-of-the-tournament/pro-clubs-service');
+const { buildCompletedEventSelect, buildTottAdminMenu, jobSummaryEmbed, manualConfirmPayload, mockSelection, publishTeamOfTournament, selectionEmbed, sendRenderToTestChannel, stateFor } = require('../team-of-the-tournament/admin-tools');
 const { syncTeamFunctionRolesForUser } = require('../teams/team-roles');
 const { syncChampionRolesForTeam, syncChampionRolesForUser, syncChampionRolesForUsers } = require('../teams/team-champion-roles');
 const { clearTeamNickname, setTeamCoManagerNickname, setTeamManagerNickname, syncAllTeamNicknames } = require('../nicknames');
@@ -86,6 +91,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_ko_images_test',
   'admin_simulate_knockout',
   'admin_server_setup',
+  'admin_more_tools',
 ]);
 const ADMIN_SELECT_IDS = new Set([
   'admin_bye_add_select',
@@ -103,6 +109,9 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_ceremony_post_select',
   'admin_team_ban_team_select',
   'admin_team_unban_select',
+  'admin_tools_select',
+  'admin_tott_action_select',
+  'admin_tott_ea_team_select',
   'admin_checkin_manual_action_select',
 ]);
 const ADMIN_SELECT_PREFIXES = [
@@ -119,6 +128,11 @@ const ADMIN_SELECT_PREFIXES = [
   'admin_team_ban_duration_select:',
   'admin_team_achievement_team_select:',
   'admin_team_achievement_title_select:',
+  'admin_team_proclub_manage:',
+  'admin_tott_preview_event:',
+  'admin_tott_selection_event:',
+  'admin_tott_jobs_event:',
+  'admin_tott_manual_event:',
 ];
 const ADMIN_USER_SELECT_PREFIXES = [
   'admin_team_add_covm_user:',
@@ -147,12 +161,16 @@ const ADMIN_BUTTON_PREFIXES = [
   'admin_hof_first_page:',
   'admin_hof_second_page:',
   'admin_hof_third_page:',
+  'admin_tott_publish_confirm:',
+  'admin_team_proclub_confirm:',
+  'admin_team_proclub_remove_confirm:',
 ];
 const ADMIN_MODAL_PREFIXES = [
   'admin_team_edit_name_modal:',
   'admin_team_add_covm_manual_modal:',
   'admin_team_change_vm_manual_modal:',
   'admin_team_ban_manual_modal:',
+  'admin_team_proclub_modal:',
 ];
 const TEAM_BAN_PAGE_SIZE = 25;
 const TEAM_DETAILS_PAGE_SIZE = 25;
@@ -692,8 +710,13 @@ function buildTeamDetailsButtons(team) {
       new ButtonBuilder().setCustomId(`admin_team_delete_open:${team.id}`).setLabel('Team loeschen').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('admin_team_details_back:0').setLabel('Zurueck zur Team-Auswahl').setStyle(ButtonStyle.Secondary)
     ),
+    new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`admin_team_proclub_manage:${team.id}`).setPlaceholder('EA Pro Clubs verwalten').addOptions([
+      { label: team.proClub ? 'Verknuepfung aendern' : 'Club verbinden', value: 'connect' }, { label: 'Verknuepfung testen', value: 'test' }, { label: 'Verknuepfung entfernen', value: 'remove' }, { label: 'Als unverifiziert markieren', value: 'unverify' },
+    ])),
   ];
 }
+
+function buildAdminProClubModal(team) { const modal = new ModalBuilder().setCustomId(`admin_team_proclub_modal:${team.id}`).setTitle('EA Pro Club verwalten'); const id = new TextInputBuilder().setCustomId('club_id').setLabel('EA Club-ID').setStyle(TextInputStyle.Short).setRequired(true); if (team.proClub?.clubId) id.setValue(team.proClub.clubId); const platform = new TextInputBuilder().setCustomId('platform').setLabel('Plattform').setStyle(TextInputStyle.Short).setRequired(true).setValue(team.proClub?.platform || 'common-gen5'); modal.addComponents(new ActionRowBuilder().addComponents(id), new ActionRowBuilder().addComponents(platform)); return modal; }
 
 function buildTeamDetailsPayload(team) {
   return {
@@ -1126,6 +1149,15 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  const testChannelId = settings.channels?.adminPanelChannelId;
+  if (interaction.customId === 'admin_tools_select') { const action = interaction.values?.[0]; if (action === 'tott') { await interaction.reply({ ...buildTottAdminMenu(), flags: EPHEMERAL }); return true; } if (action === 'managers_without_team') { await interaction.deferReply({ flags: EPHEMERAL }); const result = await refreshManagersWithoutTeamMessage({ client, guild: interaction.guild, force: true }); await interaction.editReply(`Manager-ohne-Team-Liste aktualisiert. Betroffene Manager: ${result.affectedCount}.`); return true; } }
+  if (interaction.customId === 'admin_tott_action_select') { const action = interaction.values?.[0]; if (!testChannelId) throw new Error('Zentraler Admin-Testkanal ist nicht konfiguriert.'); if (action === 'mock') { await interaction.deferReply({ flags: EPHEMERAL }); const result = await sendRenderToTestChannel({ guild: interaction.guild, testChannelId, selection: mockSelection(), label: 'TOTT Mock-Renderer' }); await interaction.editReply(`Mock-Renderer-Test in <#${result.channelId}> gepostet.`); return true; } if (action === 'ea_test') { await interaction.update({ content: 'Team fuer den unveraenderlichen API-Test auswaehlen.', components: [buildTeamSelect('admin_tott_ea_team_select', 'Team auswaehlen')] }); return true; } const map = { preview: 'admin_tott_preview_event:run', selection: 'admin_tott_selection_event:run', jobs: 'admin_tott_jobs_event:run', manual: 'admin_tott_manual_event:run' }; if (map[action]) { await interaction.update({ content: 'Abgeschlossenes Turnier auswaehlen.', components: [buildCompletedEventSelect(map[action])] }); return true; } }
+  if (interaction.customId === 'admin_tott_ea_team_select') { const team = findTeamById(interaction.values?.[0]); if (!team?.proClub) throw new Error('Dieses Team hat keine EA-Verknuepfung.'); await interaction.deferReply({ flags: EPHEMERAL }); const checkedAt = new Date().toISOString(); const verified = await verifyClubConnection(team.proClub); await interaction.editReply(`EA-Test erfolgreich (keine Speicherung):\nTeam: **${team.clubName}**\nClub: **${verified.clubName}**\nID: ${verified.clubId}\nPlattform: ${verified.platform}\nStruktur: unterstuetzt\nZeitpunkt: ${checkedAt}`); return true; }
+  if (interaction.customId.startsWith('admin_tott_preview_event:')) { const eventKey = interaction.values?.[0]; const state = stateFor(eventKey); const selection = require('../team-of-the-tournament/selection').selectTeam(state.matches); await interaction.deferReply({ flags: EPHEMERAL }); const result = await sendRenderToTestChannel({ guild: interaction.guild, testChannelId, selection, label: `Vorschau ${eventKey}` }); await interaction.editReply(`Vorschau in <#${result.channelId}> gepostet. Produktivstatus blieb unveraendert.`); return true; }
+  if (interaction.customId.startsWith('admin_tott_selection_event:')) { await interaction.update({ content: null, embeds: [selectionEmbed(interaction.values?.[0])], components: [] }); return true; }
+  if (interaction.customId.startsWith('admin_tott_jobs_event:')) { await interaction.update({ content: null, embeds: [jobSummaryEmbed(interaction.values?.[0])], components: [] }); return true; }
+  if (interaction.customId.startsWith('admin_tott_manual_event:')) { const eventKey = interaction.values?.[0]; const state = stateFor(eventKey); const selection = require('../team-of-the-tournament/selection').selectTeam(state.matches); await interaction.deferReply({ flags: EPHEMERAL }); await sendRenderToTestChannel({ guild: interaction.guild, testChannelId, selection, label: `Manuelle Vorschau ${eventKey}` }); await interaction.editReply(manualConfirmPayload(eventKey)); return true; }
+  if (interaction.customId.startsWith('admin_team_proclub_manage:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.'); const action = interaction.values?.[0]; if (action === 'connect') { await interaction.showModal(buildAdminProClubModal(team)); return true; } if (action === 'test') { if (!team.proClub) throw new Error('Keine EA-Verknuepfung vorhanden.'); await interaction.deferReply({ flags: EPHEMERAL }); const verified = await verifyClubConnection(team.proClub); setTeamProClub({ teamId, proClub: verified, actorUserId: interaction.user.id, admin: true }); await interaction.editReply(`EA-Verknuepfung erfolgreich: **${verified.clubName}** (${verified.clubId}).`); return true; } if (action === 'remove') { await interaction.reply({ content: `EA-Verknuepfung von **${team.clubName}** entfernen?`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin_team_proclub_remove_confirm:${team.id}`).setLabel('Entfernen').setStyle(ButtonStyle.Danger))], flags: EPHEMERAL }); return true; } if (action === 'unverify') { markTeamProClubUnverified({ teamId, actorUserId: interaction.user.id, admin: true }); await interaction.reply({ content: 'EA-Verknuepfung wurde als unverifiziert markiert.', flags: EPHEMERAL }); return true; } }
   if (interaction.customId.startsWith('admin_team_details_select:')) {
     const teamId = interaction.values?.[0];
     const team = findTeamById(teamId);
@@ -1569,6 +1601,7 @@ async function handleAdminUserSelect(interaction, client, settings) {
 }
 
 async function handleAdminModal(interaction, client, settings) {
+  if (interaction.customId.startsWith('admin_team_proclub_modal:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); await interaction.deferReply({ flags: EPHEMERAL }); const verified = await verifyClubConnection({ clubId: interaction.fields.getTextInputValue('club_id'), platform: interaction.fields.getTextInputValue('platform') }); await interaction.editReply({ content: `EA Club gefunden: **${verified.clubName}**\nID: ${verified.clubId}\nPlattform: ${verified.platform}`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin_team_proclub_confirm:${team.id}:${verified.clubId}:${verified.platform}`).setLabel('Speichern').setStyle(ButtonStyle.Success))] }); return true; }
   if (interaction.customId.startsWith('admin_team_edit_name_modal:')) {
     const [, teamId] = interaction.customId.split(':');
     const newClubName = interaction.fields.getTextInputValue('new_club_name');
@@ -1666,6 +1699,11 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.update(buildAdminPanelPayload(category));
       return true;
     }
+
+    if (interaction.customId.startsWith('admin_tott_publish_confirm:')) { const [, eventKey] = interaction.customId.split(':'); const event = readAllEvents()[eventKey]; await interaction.deferUpdate(); const result = await publishTeamOfTournament({ guild: interaction.guild, eventKey, event }); await interaction.editReply({ content: result.posted ? `Produktiv veroeffentlicht. Message-ID: ${result.messageId}` : `Nicht veroeffentlicht: ${result.reason}`, embeds: [], components: [] }); return true; }
+
+    if (interaction.customId.startsWith('admin_team_proclub_confirm:')) { const [, teamId, clubId, platform] = interaction.customId.split(':'); await interaction.deferUpdate(); const verified = await verifyClubConnection({ clubId, platform }); const team = setTeamProClub({ teamId, proClub: verified, actorUserId: interaction.user.id, admin: true }); await interaction.editReply({ content: `EA Pro Club **${team.proClub.clubName}** wurde gespeichert.`, components: [], embeds: [] }); return true; }
+    if (interaction.customId.startsWith('admin_team_proclub_remove_confirm:')) { const [, teamId] = interaction.customId.split(':'); await interaction.deferUpdate(); removeTeamProClub({ teamId, actorUserId: interaction.user.id, admin: true }); await interaction.editReply({ content: 'EA-Verknuepfung wurde entfernt. Andere Teamdaten blieben erhalten.', components: [], embeds: [] }); return true; }
 
     if (isAdminModal) return await handleAdminModal(interaction, client, settings);
     if (isAdminUserSelect) return await handleAdminUserSelect(interaction, client, settings);
@@ -2077,6 +2115,11 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.deferReply({ flags: EPHEMERAL });
       await refreshRegisteredTeamsOverview(client);
       await interaction.editReply('Teamuebersicht wurde aktualisiert.');
+      return true;
+    }
+
+    if (actionCustomId === 'admin_more_tools') {
+      await interaction.reply({ content: 'Weitere Verwaltung und Tests', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('admin_tools_select').setPlaceholder('Funktion auswaehlen').addOptions([{ label: 'Manager ohne Team', value: 'managers_without_team' }, { label: 'Team of the Tournament', value: 'tott' }]))], flags: EPHEMERAL });
       return true;
     }
 

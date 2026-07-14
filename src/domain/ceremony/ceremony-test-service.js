@@ -460,6 +460,11 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     client: guild.client,
   });
 
+  const { maybePublishAfterCeremony } = require('../team-of-the-tournament');
+  await maybePublishAfterCeremony({ guild, eventKey, event: updatedEvent }).catch(error => {
+    console.warn(`[tott] Veröffentlichung nach Siegerehrung fehlgeschlagen: ${error.message}`);
+  });
+
   return {
     channelId: channel.id,
     imageMessageId: imageMessage.id,
