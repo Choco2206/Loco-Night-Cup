@@ -228,7 +228,8 @@ function buildMyTeamPayload(team, viewerUserId = null) {
   };
 }
 
-function buildProClubModal(team) { const modal = new ModalBuilder().setCustomId(`team_proclub_modal:${team.id}`).setTitle('EA Pro Club verbinden'); const id = new TextInputBuilder().setCustomId('club_id').setLabel('EA Club-ID').setStyle(TextInputStyle.Short).setRequired(true); const platform = new TextInputBuilder().setCustomId('platform').setLabel('Plattform').setStyle(TextInputStyle.Short).setRequired(true).setValue(team.proClub?.platform || 'common-gen5'); if (team.proClub?.clubId) id.setValue(team.proClub.clubId); modal.addComponents(new ActionRowBuilder().addComponents(id), new ActionRowBuilder().addComponents(platform)); return modal; }
+function buildProClubModal(team) { const modal = new ModalBuilder().setCustomId(`team_proclub_modal:${team.id}`).setTitle('EA Pro Club suchen'); const name = new TextInputBuilder().setCustomId('club_name').setLabel('EA-Clubname').setStyle(TextInputStyle.Short).setMinLength(2).setMaxLength(100).setRequired(true); if (team.proClub?.clubName) name.setValue(team.proClub.clubName); modal.addComponents(new ActionRowBuilder().addComponents(name)); return modal; }
+function buildProClubSearchPayload(team, matches, prefix = 'team_proclub_search_select') { const visible = matches.slice(0, 25); if (!visible.length) throw new Error('Kein EA Club mit diesem Namen gefunden. Pruefe die Schreibweise.'); return { content: matches.length > 25 ? `Es wurden viele Clubs gefunden. Waehle den richtigen Club aus den ersten 25 Treffern fuer **${team.clubName}**.` : `Waehle den richtigen EA Club fuer **${team.clubName}** aus.`, components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${prefix}:${team.id}`).setPlaceholder('EA Club auswaehlen').addOptions(visible.map(club => ({ label: club.clubName.slice(0, 100), description: `Club-ID: ${club.clubId}`.slice(0, 100), value: `${club.clubId}:${club.platform}` }))))] }; }
 function buildProClubConfirmPayload(team, verified) { return { content: `EA Club gefunden:\n**${verified.clubName}**\nClub-ID: ${verified.clubId}\nPlattform: ${verified.platform}\n\nVerknuepfung speichern?`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`team_proclub_confirm:${team.id}:${verified.clubId}:${verified.platform}`).setLabel('Bestaetigen').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`team_proclub_cancel:${team.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary))] }; }
 function buildProClubRemovePayload(team) { return { content: `EA-Verknuepfung von **${team.clubName}** wirklich entfernen? Teamdaten und Historie bleiben erhalten.`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`team_proclub_remove_confirm:${team.id}`).setLabel('Verknuepfung entfernen').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`team_proclub_cancel:${team.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary))] }; }
 
@@ -293,6 +294,7 @@ module.exports = {
   buildMyTeamPanelPayload,
   buildProClubConfirmPayload,
   buildProClubModal,
+  buildProClubSearchPayload,
   buildProClubRemovePayload,
   buildRegisterModal,
   buildRemoveCoManagerPayload,

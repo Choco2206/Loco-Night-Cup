@@ -35,7 +35,8 @@ const {
   removeTeamProClub,
   setTeamProClub,
 } = require('../teams/team-service');
-const { verifyClubConnection } = require('../team-of-the-tournament/pro-clubs-service');
+const { searchClubConnections, verifyClubConnection } = require('../team-of-the-tournament/pro-clubs-service');
+const { buildProClubSearchPayload } = require('../teams/team-components');
 const { buildCompletedEventSelect, buildTottAdminMenu, jobSummaryEmbed, manualConfirmPayload, mockSelection, publishTeamOfTournament, selectionEmbed, sendRenderToTestChannel, stateFor } = require('../team-of-the-tournament/admin-tools');
 const { syncTeamFunctionRolesForUser } = require('../teams/team-roles');
 const { syncChampionRolesForTeam, syncChampionRolesForUser, syncChampionRolesForUsers } = require('../teams/team-champion-roles');
@@ -129,6 +130,7 @@ const ADMIN_SELECT_PREFIXES = [
   'admin_team_achievement_team_select:',
   'admin_team_achievement_title_select:',
   'admin_team_proclub_manage:',
+  'admin_team_proclub_search_select:',
   'admin_tott_preview_event:',
   'admin_tott_selection_event:',
   'admin_tott_jobs_event:',
@@ -716,7 +718,7 @@ function buildTeamDetailsButtons(team) {
   ];
 }
 
-function buildAdminProClubModal(team) { const modal = new ModalBuilder().setCustomId(`admin_team_proclub_modal:${team.id}`).setTitle('EA Pro Club verwalten'); const id = new TextInputBuilder().setCustomId('club_id').setLabel('EA Club-ID').setStyle(TextInputStyle.Short).setRequired(true); if (team.proClub?.clubId) id.setValue(team.proClub.clubId); const platform = new TextInputBuilder().setCustomId('platform').setLabel('Plattform').setStyle(TextInputStyle.Short).setRequired(true).setValue(team.proClub?.platform || 'common-gen5'); modal.addComponents(new ActionRowBuilder().addComponents(id), new ActionRowBuilder().addComponents(platform)); return modal; }
+function buildAdminProClubModal(team) { const modal = new ModalBuilder().setCustomId(`admin_team_proclub_modal:${team.id}`).setTitle('EA Pro Club suchen'); const name = new TextInputBuilder().setCustomId('club_name').setLabel('EA-Clubname').setStyle(TextInputStyle.Short).setMinLength(2).setMaxLength(100).setRequired(true); if (team.proClub?.clubName) name.setValue(team.proClub.clubName); modal.addComponents(new ActionRowBuilder().addComponents(name)); return modal; }
 
 function buildTeamDetailsPayload(team) {
   return {
@@ -1157,6 +1159,7 @@ async function handleAdminSelect(interaction, client, settings) {
   if (interaction.customId.startsWith('admin_tott_selection_event:')) { await interaction.update({ content: null, embeds: [selectionEmbed(interaction.values?.[0])], components: [] }); return true; }
   if (interaction.customId.startsWith('admin_tott_jobs_event:')) { await interaction.update({ content: null, embeds: [jobSummaryEmbed(interaction.values?.[0])], components: [] }); return true; }
   if (interaction.customId.startsWith('admin_tott_manual_event:')) { const eventKey = interaction.values?.[0]; const state = stateFor(eventKey); const selection = require('../team-of-the-tournament/selection').selectTeam(state.matches); await interaction.deferReply({ flags: EPHEMERAL }); await sendRenderToTestChannel({ guild: interaction.guild, testChannelId, selection, label: `Manuelle Vorschau ${eventKey}` }); await interaction.editReply(manualConfirmPayload(eventKey)); return true; }
+  if (interaction.customId.startsWith('admin_team_proclub_search_select:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.'); const [clubId, platform] = String(interaction.values?.[0] || '').split(':'); await interaction.deferUpdate(); const verified = await verifyClubConnection({ clubId, platform }); await interaction.editReply({ content: `EA Club gefunden: **${verified.clubName}**\nID: ${verified.clubId}\nPlattform: ${verified.platform}`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin_team_proclub_confirm:${team.id}:${verified.clubId}:${verified.platform}`).setLabel('Speichern').setStyle(ButtonStyle.Success))] }); return true; }
   if (interaction.customId.startsWith('admin_team_proclub_manage:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.'); const action = interaction.values?.[0]; if (action === 'connect') { await interaction.showModal(buildAdminProClubModal(team)); return true; } if (action === 'test') { if (!team.proClub) throw new Error('Keine EA-Verknuepfung vorhanden.'); await interaction.deferReply({ flags: EPHEMERAL }); const verified = await verifyClubConnection(team.proClub); setTeamProClub({ teamId, proClub: verified, actorUserId: interaction.user.id, admin: true }); await interaction.editReply(`EA-Verknuepfung erfolgreich: **${verified.clubName}** (${verified.clubId}).`); return true; } if (action === 'remove') { await interaction.reply({ content: `EA-Verknuepfung von **${team.clubName}** entfernen?`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin_team_proclub_remove_confirm:${team.id}`).setLabel('Entfernen').setStyle(ButtonStyle.Danger))], flags: EPHEMERAL }); return true; } if (action === 'unverify') { markTeamProClubUnverified({ teamId, actorUserId: interaction.user.id, admin: true }); await interaction.reply({ content: 'EA-Verknuepfung wurde als unverifiziert markiert.', flags: EPHEMERAL }); return true; } }
   if (interaction.customId.startsWith('admin_team_details_select:')) {
     const teamId = interaction.values?.[0];
@@ -1601,7 +1604,7 @@ async function handleAdminUserSelect(interaction, client, settings) {
 }
 
 async function handleAdminModal(interaction, client, settings) {
-  if (interaction.customId.startsWith('admin_team_proclub_modal:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); await interaction.deferReply({ flags: EPHEMERAL }); const verified = await verifyClubConnection({ clubId: interaction.fields.getTextInputValue('club_id'), platform: interaction.fields.getTextInputValue('platform') }); await interaction.editReply({ content: `EA Club gefunden: **${verified.clubName}**\nID: ${verified.clubId}\nPlattform: ${verified.platform}`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin_team_proclub_confirm:${team.id}:${verified.clubId}:${verified.platform}`).setLabel('Speichern').setStyle(ButtonStyle.Success))] }); return true; }
+  if (interaction.customId.startsWith('admin_team_proclub_modal:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); await interaction.deferReply({ flags: EPHEMERAL }); const matches = await searchClubConnections({ clubName: interaction.fields.getTextInputValue('club_name') }); if (matches.length === 1) { const verified = await verifyClubConnection(matches[0]); await interaction.editReply({ content: `EA Club gefunden: **${verified.clubName}**\nID: ${verified.clubId}\nPlattform: ${verified.platform}`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin_team_proclub_confirm:${team.id}:${verified.clubId}:${verified.platform}`).setLabel('Speichern').setStyle(ButtonStyle.Success))] }); return true; } await interaction.editReply(buildProClubSearchPayload(team, matches, 'admin_team_proclub_search_select')); return true; }
   if (interaction.customId.startsWith('admin_team_edit_name_modal:')) {
     const [, teamId] = interaction.customId.split(':');
     const newClubName = interaction.fields.getTextInputValue('new_club_name');
