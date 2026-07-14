@@ -144,14 +144,6 @@ function buildTeamEmbed(team, logoAttachment) {
     `🥅 Gegentore: ${matchStats.goalsAgainst}`,
     `📈 Siegquote: ${formatPercent(winRate)}`,
   ];
-  const proClubLines = team.proClub ? [
-    `🎮 EA Pro Club: ${team.proClub.verified ? 'verbunden' : 'Fehler / ungeprueft'}`,
-    `Clubname: ${team.proClub.clubName || 'Unbekannt'}`,
-    `Club-ID: ${team.proClub.clubId}`,
-    `Plattform: ${team.proClub.platform}`,
-    `Status: ${team.proClub.verified ? 'Verifiziert' : team.proClub.lastCheckStatus || 'Ungeprueft'}`,
-    `Zuletzt geprueft: ${team.proClub.lastCheckedAt ? new Date(team.proClub.lastCheckedAt).toLocaleString('de-DE') : 'nie'}`,
-  ] : ['🎮 EA Pro Club: nicht verbunden', 'Status: Ungeprueft'];
 
   const embed = new EmbedBuilder()
     .setTitle(team.clubName)
@@ -165,8 +157,6 @@ function buildTeamEmbed(team, logoAttachment) {
       coManagers,
       '',
       logoLine,
-      '',
-      ...proClubLines,
       '',
       ...achievementLines,
       '',
@@ -215,23 +205,14 @@ function buildMyTeamPayload(team, viewerUserId = null) {
       .setStyle(ButtonStyle.Danger)
       .setDisabled(!team.manager?.userId)
   );
-  const row3 = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`team_proclub_manage:${team.id}`).setPlaceholder('EA Pro Club verwalten').addOptions([
-    { label: team.proClub ? 'EA-Verknuepfung aendern' : 'EA Pro Club verbinden', value: 'connect' },
-    { label: 'EA-Verknuepfung testen', value: 'test' },
-    { label: 'EA-Verknuepfung entfernen', value: 'remove' },
-  ]));
+
   return {
     embeds: [buildTeamEmbed(team, logoAttachment)],
-    components: [row1, row2, row3],
+    components: [row1, row2],
     files: logoAttachment ? [logoAttachment] : [],
     allowedMentions: { parse: ['users'] },
   };
 }
-
-function buildProClubModal(team) { const modal = new ModalBuilder().setCustomId(`team_proclub_modal:${team.id}`).setTitle('EA Pro Club suchen'); const name = new TextInputBuilder().setCustomId('club_name').setLabel('EA-Clubname').setStyle(TextInputStyle.Short).setMinLength(2).setMaxLength(100).setRequired(true); if (team.proClub?.clubName) name.setValue(team.proClub.clubName); modal.addComponents(new ActionRowBuilder().addComponents(name)); return modal; }
-function buildProClubSearchPayload(team, matches, prefix = 'team_proclub_search_select') { const visible = matches.slice(0, 25); if (!visible.length) throw new Error('Kein EA Club mit diesem Namen gefunden. Pruefe die Schreibweise.'); return { content: matches.length > 25 ? `Es wurden viele Clubs gefunden. Waehle den richtigen Club aus den ersten 25 Treffern fuer **${team.clubName}**.` : `Waehle den richtigen EA Club fuer **${team.clubName}** aus.`, components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${prefix}:${team.id}`).setPlaceholder('EA Club auswaehlen').addOptions(visible.map(club => ({ label: club.clubName.slice(0, 100), description: `Club-ID: ${club.clubId}`.slice(0, 100), value: `${club.clubId}:${club.platform}` }))))] }; }
-function buildProClubConfirmPayload(team, verified) { return { content: `EA Club gefunden:\n**${verified.clubName}**\nClub-ID: ${verified.clubId}\nPlattform: ${verified.platform}\n\nVerknuepfung speichern?`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`team_proclub_confirm:${team.id}:${verified.clubId}:${verified.platform}`).setLabel('Bestaetigen').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`team_proclub_cancel:${team.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary))] }; }
-function buildProClubRemovePayload(team) { return { content: `EA-Verknuepfung von **${team.clubName}** wirklich entfernen? Teamdaten und Historie bleiben erhalten.`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`team_proclub_remove_confirm:${team.id}`).setLabel('Verknuepfung entfernen').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`team_proclub_cancel:${team.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary))] }; }
 
 function buildAddCoManagerPayload(team) {
   const row = new ActionRowBuilder().addComponents(
@@ -292,10 +273,6 @@ module.exports = {
   buildEditNameModal,
   buildMyTeamPayload,
   buildMyTeamPanelPayload,
-  buildProClubConfirmPayload,
-  buildProClubModal,
-  buildProClubSearchPayload,
-  buildProClubRemovePayload,
   buildRegisterModal,
   buildRemoveCoManagerPayload,
   buildTeamPanelPayload,

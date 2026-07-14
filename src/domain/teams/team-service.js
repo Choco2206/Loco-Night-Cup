@@ -114,7 +114,6 @@ function createTeam({ clubName, managerUserId, settings }) {
       normalizedClubName: normalizeClubName(cleanName),
       logo: null,
       logoUpload: null,
-      proClub: null,
       manager: {
         userId: String(managerUserId),
         addedAt: timestamp,
@@ -138,38 +137,6 @@ function createTeam({ clubName, managerUserId, settings }) {
   });
 
   return createdTeam;
-}
-
-function setTeamProClub({ teamId, proClub, actorUserId, admin = false }) {
-  let updatedTeam;
-  updateTeamsData(data => {
-    const team = data.teams.find(entry => String(entry.id) === String(teamId));
-    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
-    const canManage = String(team.manager?.userId) === String(actorUserId) || (team.coManagers || []).some(co => String(co.userId) === String(actorUserId));
-    if (!admin && !canManage) throw new Error('Du darfst den Pro Club nicht bearbeiten.');
-    if (!proClub?.clubId || !(proClub?.clubName || proClub?.name) || !proClub?.platform) throw new Error('Der Pro Club ist nicht vollstaendig verifiziert.');
-    const timestamp = nowIso();
-    team.proClub = { clubId: String(proClub.clubId), platform: String(proClub.platform), clubName: String(proClub.clubName || proClub.name), verified: true, verifiedAt: timestamp, lastCheckedAt: timestamp, lastCheckStatus: 'verified', updatedBy: String(actorUserId), provider: 'ea-direct' };
-    team.meta.updatedAt = timestamp; updatedTeam = team; return data;
-  });
-  return updatedTeam;
-}
-
-function markTeamProClubUnverified({ teamId, actorUserId, admin = false, status = 'unchecked' }) {
-  let updatedTeam;
-  updateTeamsData(data => { const team = data.teams.find(entry => String(entry.id) === String(teamId)); if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.'); if (!admin && String(team.manager?.userId) !== String(actorUserId) && !(team.coManagers || []).some(co => String(co.userId) === String(actorUserId))) throw new Error('Du darfst dieses Team nicht bearbeiten.'); if (!team.proClub) throw new Error('Keine EA-Verknuepfung vorhanden.'); team.proClub.verified = false; team.proClub.lastCheckStatus = status; team.proClub.lastCheckedAt = nowIso(); team.proClub.updatedBy = String(actorUserId); team.meta.updatedAt = nowIso(); updatedTeam = team; return data; }); return updatedTeam;
-}
-
-function removeTeamProClub({ teamId, actorUserId, admin = false }) {
-  let updatedTeam;
-  updateTeamsData(data => {
-    const team = data.teams.find(entry => String(entry.id) === String(teamId));
-    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
-    const canManage = String(team.manager?.userId) === String(actorUserId) || (team.coManagers || []).some(co => String(co.userId) === String(actorUserId));
-    if (!admin && !canManage) throw new Error('Du darfst den Pro Club nicht entfernen.');
-    team.proClub = null; team.meta.updatedAt = nowIso(); updatedTeam = team; return data;
-  });
-  return updatedTeam;
 }
 
 function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
@@ -651,12 +618,9 @@ module.exports = {
   leaveTeam,
   listVisibleTeams,
   normalizeClubName,
-  markTeamProClubUnverified,
   removeCoManager,
   requestLogoUpload,
-  removeTeamProClub,
   setLogoUploadInstructionMessage,
-  setTeamProClub,
   setTeamLogo,
   updateTeamName,
 };

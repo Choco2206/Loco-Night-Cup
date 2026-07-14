@@ -11,10 +11,6 @@ const {
   buildEditNameModal,
   buildMyTeamPayload,
   buildRegisterModal,
-  buildProClubConfirmPayload,
-  buildProClubModal,
-  buildProClubRemovePayload,
-  buildProClubSearchPayload,
   buildRemoveCoManagerPayload,
 } = require('./team-components');
 const {
@@ -29,8 +25,6 @@ const {
   leaveTeam,
   removeCoManager,
   requestLogoUpload,
-  removeTeamProClub,
-  setTeamProClub,
   setLogoUploadInstructionMessage,
   updateTeamName,
 } = require('./team-service');
@@ -41,7 +35,6 @@ const { MY_TEAM_PANEL_CHANNEL_ID } = require('./team-panel');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 const { refreshManagersWithoutTeamMessageIfTracked } = require('../admin/managers-without-team');
 const { syncTeamGroupAccess } = require('../groups/group-access-sync');
-const { searchClubConnections, verifyClubConnection } = require('../team-of-the-tournament/pro-clubs-service');
 
 const EPHEMERAL = 64;
 const LOGO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
@@ -239,12 +232,6 @@ async function handleButton(interaction, client) {
 
   const team = findTeamById(teamId);
 
-  if (action === 'team_proclub_confirm') {
-    const parts = interaction.customId.split(':'); const clubId = parts[2]; const platform = parts[3]; requireTeamAccess(team, interaction.user.id); await interaction.deferUpdate(); const verified = await verifyClubConnection({ clubId, platform }); const updated = setTeamProClub({ teamId, proClub: verified, actorUserId: interaction.user.id }); await interaction.editReply({ content: `EA Pro Club **${updated.proClub.clubName}** wurde verifiziert und gespeichert.`, components: [], embeds: [] }); return true;
-  }
-  if (action === 'team_proclub_remove_confirm') { requireTeamAccess(team, interaction.user.id); await interaction.deferUpdate(); removeTeamProClub({ teamId, actorUserId: interaction.user.id }); await interaction.editReply({ content: 'EA-Verknuepfung wurde entfernt. Teamdaten und Historie blieben erhalten.', components: [], embeds: [] }); return true; }
-  if (action === 'team_proclub_cancel') { await interaction.update({ content: 'Abgebrochen.', components: [], embeds: [] }); return true; }
-
   if (action === 'team_edit_name_open') {
     requireTeamAccess(team, interaction.user.id);
     await interaction.showModal(buildEditNameModal(team, settings));
@@ -329,8 +316,6 @@ async function handleButton(interaction, client) {
 async function handleModal(interaction, client) {
   const settings = getSettings();
 
-  if (interaction.customId.startsWith('team_proclub_modal:')) { const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); requireTeamAccess(team, interaction.user.id); await interaction.deferReply({ flags: EPHEMERAL }); const matches = await searchClubConnections({ clubName: interaction.fields.getTextInputValue('club_name') }); if (matches.length === 1) { const verified = await verifyClubConnection(matches[0]); await interaction.editReply(buildProClubConfirmPayload(team, verified)); return true; } await interaction.editReply(buildProClubSearchPayload(team, matches)); return true; }
-
   if (interaction.customId === 'team_register_modal') {
     await requireStrictManagerRegistrationRole(interaction, settings);
     await interaction.deferReply({ flags: EPHEMERAL });
@@ -386,8 +371,6 @@ async function handleUserSelect(interaction, client) {
 }
 
 async function handleStringSelect(interaction, client) {
-  if (interaction.customId.startsWith('team_proclub_search_select:')) { requireGuild(interaction); const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); requireTeamAccess(team, interaction.user.id); const [clubId, platform] = String(interaction.values?.[0] || '').split(':'); await interaction.deferUpdate(); const verified = await verifyClubConnection({ clubId, platform }); await interaction.editReply(buildProClubConfirmPayload(team, verified)); return true; }
-  if (interaction.customId.startsWith('team_proclub_manage:')) { requireGuild(interaction); const [, teamId] = interaction.customId.split(':'); const team = findTeamById(teamId); requireTeamAccess(team, interaction.user.id); const action = interaction.values?.[0]; if (action === 'connect') { await interaction.showModal(buildProClubModal(team)); return true; } if (action === 'remove') { if (!team.proClub) throw new Error('Keine EA-Verknuepfung vorhanden.'); await interaction.reply({ ...buildProClubRemovePayload(team), flags: EPHEMERAL }); return true; } if (action === 'test') { if (!team.proClub) throw new Error('Keine EA-Verknuepfung vorhanden.'); await interaction.deferReply({ flags: EPHEMERAL }); const verified = await verifyClubConnection(team.proClub); setTeamProClub({ teamId, proClub: verified, actorUserId: interaction.user.id }); await interaction.editReply(`EA-Verknuepfung erfolgreich: **${verified.clubName}** (${verified.clubId}, ${verified.platform}).`); return true; } return false; }
   if (!interaction.customId.startsWith('team_remove_covm_select:')) return false;
 
   requireGuild(interaction);

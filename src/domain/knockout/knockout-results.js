@@ -2,7 +2,6 @@
 
 const { updateEventData } = require('../events/event-repository');
 const { findTeamById, isTeamMember } = require('../teams/team-service');
-const { enqueueConfirmedMatch } = require('../team-of-the-tournament');
 
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const MATCH_STATUSES = ['open', 'pending_confirmation', 'admin_decision_required', 'confirmed', 'locked'];
@@ -267,8 +266,6 @@ function submitTeamResult({ eventKey, roundKey, matchId, participantKeyValue, us
     return event;
   });
 
-  if (outcome?.match?.status === 'confirmed') enqueueConfirmedMatch({ eventKey, match: outcome.match, phase: 'knockout', round: roundKey });
-
   return outcome;
 }
 
@@ -301,8 +298,6 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
     outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed' };
     return event;
   });
-
-  enqueueConfirmedMatch({ eventKey, match: outcome.match, phase: 'knockout', round: roundKey });
 
   return outcome;
 }

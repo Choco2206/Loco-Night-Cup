@@ -11,7 +11,6 @@ const knockoutSystem = require('./src/domain/knockout');
 const banSystem = require('./src/domain/bans');
 const liveScheduleSystem = require('./src/domain/live-schedule');
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
-const { cleanupOldRenders, startTottJobScheduler } = require('./src/domain/team-of-the-tournament');
 
 const EPHEMERAL = 64;
 
@@ -69,8 +68,6 @@ async function main() {
       await groupSystem.init(client);
       await liveScheduleSystem.refreshLiveScheduleForActiveEvents(client);
       schedulePendingAutoCleanups(client);
-      cleanupOldRenders();
-      startTottJobScheduler(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
     } catch (error) {
       console.error('Startup validation failed:', error);

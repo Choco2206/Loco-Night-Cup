@@ -69,7 +69,6 @@ const ADMIN_CATEGORIES = {
       ['admin_simulate_knockout', 'K.O.-Phase simulieren', 'K.O.-Phase eines Events simulieren'],
       ['admin_hof_test', 'Hall of Fame testen', 'Siegerehrung im Testkanal pruefen'],
       ['admin_ceremony_post', 'Siegerehrung posten', 'Echte Siegerehrung fuer ein Event posten'],
-      ['admin_more_tools', 'Weitere Tests', 'Managerliste und Team of the Tournament verwalten'],
     ],
   },
   achievements: {
