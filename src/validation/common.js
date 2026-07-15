@@ -9,7 +9,7 @@ function isStringOrNull(value) {
 }
 
 function isSnowflakeOrNull(value) {
-  return value === null || /^\d{17,20}$/.test(String(value));
+  return value === null || (typeof value === 'string' && /^\d{17,20}$/.test(value));
 }
 
 function isIsoDateOrNull(value) {

@@ -57,6 +57,9 @@ const SCHEDULE_PROFILE_DEFAULTS = {
   weekend_late_night: WEEKEND_LATE_NIGHT_PROFILE,
 };
 
+const LEAGUE_PHASE_CATEGORY_ID = '1526896899934654464';
+const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,20}$/;
+
 function emptyPanelMessage() {
   return {
     channelId: null,
@@ -164,6 +167,18 @@ function migrateTournamentFormatSettings(settings) {
   return changed;
 }
 
+function migrateLeaguePhaseRoleId(settings) {
+  if (!isPlainObject(settings)) return false;
+  settings.roles = isPlainObject(settings.roles) ? settings.roles : {};
+  const value = settings.roles.leaguePhaseRoleId;
+  const validRoleId = typeof value === 'string'
+    && DISCORD_SNOWFLAKE_PATTERN.test(value)
+    && value !== LEAGUE_PHASE_CATEGORY_ID;
+  if (value === null || validRoleId) return false;
+  settings.roles.leaguePhaseRoleId = null;
+  return true;
+}
+
 function migrateUnifiedNightScheduleSettings(settings) {
   if (!isPlainObject(settings)) return false;
 
@@ -264,6 +279,7 @@ function seedSettingsFile() {
   changed = repairCheckinChannelIdsFromSeed(settings, seed) || changed;
   changed = migrateUnifiedNightScheduleSettings(settings) || changed;
   changed = migrateTournamentFormatSettings(settings) || changed;
+  changed = migrateLeaguePhaseRoleId(settings) || changed;
   changed = ensureChampionRoleIds(settings) || changed;
   if (changed) writeJsonAtomic(FILES.settings, settings);
   return settings;
@@ -632,6 +648,7 @@ module.exports = {
   initializeStorage,
   mergeMissingSettings,
   migrateEventFormat,
+  migrateLeaguePhaseRoleId,
   migrateUnifiedNightScheduleSettings,
   migrateTournamentFormatSettings,
   normalizeEventFile,
