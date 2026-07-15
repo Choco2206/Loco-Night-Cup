@@ -147,7 +147,6 @@ async function clearRoleMembers(guild, groupRefs, summary) {
       removed += 1;
     }
     summary.clearedGroupRoles.push({ roleId: role.id, name: role.name, removed });
-    if (ref.groupKey === 'league') await role.delete('Loco Night Cup Ligaphasenrolle bereinigt').catch(() => null);
   }
 }
 
@@ -421,3 +420,4 @@ module.exports = {
   schedulePendingAutoCleanups,
   resetEventForTesting,
 };
+

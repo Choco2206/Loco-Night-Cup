@@ -305,6 +305,7 @@ function createSettingsDefault() {
       playerRoleId: null,
       managerRoleId: null,
       coManagerRoleId: null,
+      leaguePhaseRoleId: null,
       championRoleIds: {
         champion: null,
         elite: null,
@@ -503,3 +504,4 @@ module.exports = {
   createTeamHistoryDefault,
   createTeamsDefault,
 };
+

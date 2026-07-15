@@ -41,17 +41,7 @@ function overwriteOptions(overwrite) {
   return options;
 }
 
-async function ensureGroupChannel(guild, settings, group, userIds) {
-  const configuredChannelId = settings.channels?.groupChannelIds?.[group.groupKey];
-  const configuredChannel = configuredChannelId
-    ? await guild.channels.fetch(configuredChannelId).catch(() => null)
-    : null;
-
-  const channelName = channelNameForGroup(group.groupKey);
-  const existingChannel = guild.channels.cache.find(channel => (
-    channel.name === channelName && channel.type === ChannelType.GuildText
-  ));
-
+function buildGroupChannelPermissionOverwrites({ guild, settings, roleId = null, userIds = [] }) {
   const adminRoleIds = getExistingRoleIds(guild, [
     ...(settings.roles?.adminRoleIds || []),
     ...(settings.roles?.cupLeadRoleIds || []),
@@ -59,11 +49,8 @@ async function ensureGroupChannel(guild, settings, group, userIds) {
     ...(settings.permissions?.cupLeadRoleIds || []),
   ]);
 
-  const permissionOverwrites = [
-    {
-      id: guild.roles.everyone.id,
-      deny: [PermissionFlagsBits.ViewChannel],
-    },
+  return [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
     {
       id: guild.client.user.id,
       allow: [
@@ -76,8 +63,8 @@ async function ensureGroupChannel(guild, settings, group, userIds) {
         PermissionFlagsBits.EmbedLinks,
       ],
     },
-    ...adminRoleIds.map(roleId => ({
-      id: roleId,
+    ...adminRoleIds.map(id => ({
+      id,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -85,8 +72,8 @@ async function ensureGroupChannel(guild, settings, group, userIds) {
         PermissionFlagsBits.ManageMessages,
       ],
     })),
-    ...(group.roleId ? [{
-      id: group.roleId,
+    ...(roleId ? [{
+      id: roleId,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -95,8 +82,8 @@ async function ensureGroupChannel(guild, settings, group, userIds) {
         PermissionFlagsBits.EmbedLinks,
       ],
     }] : []),
-    ...userIds.map(userId => ({
-      id: userId,
+    ...uniqueStrings(userIds).map(id => ({
+      id,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -104,15 +91,33 @@ async function ensureGroupChannel(guild, settings, group, userIds) {
       ],
     })),
   ];
+}
+
+async function applyGroupChannelPermissionOverwrites(channel, overwrites) {
+  await channel.permissionOverwrites.set(overwrites);
+}
+
+async function ensureGroupChannel(guild, settings, group, userIds) {
+  const configuredChannelId = settings.channels?.groupChannelIds?.[group.groupKey];
+  const configuredChannel = configuredChannelId
+    ? await guild.channels.fetch(configuredChannelId).catch(() => null)
+    : null;
+
+  const channelName = channelNameForGroup(group.groupKey);
+  const existingChannel = guild.channels.cache.find(channel => (
+    channel.name === channelName && channel.type === ChannelType.GuildText
+  ));
+
+  const permissionOverwrites = buildGroupChannelPermissionOverwrites({
+    guild, settings, roleId: group.roleId, userIds,
+  });
 
   const channel = configuredChannel?.isTextBased?.()
     ? configuredChannel
     : existingChannel;
 
   if (channel) {
-    for (const overwrite of permissionOverwrites) {
-      await channel.permissionOverwrites.edit(overwrite.id, overwriteOptions(overwrite)).catch(() => null);
-    }
+    await applyGroupChannelPermissionOverwrites(channel, permissionOverwrites);
     return channel;
   }
 
@@ -158,7 +163,10 @@ async function prepareGroupChannels({ client, event }) {
 }
 
 module.exports = {
+  applyGroupChannelPermissionOverwrites,
+  buildGroupChannelPermissionOverwrites,
   ensureGroupChannel,
   getGroupUserIds,
   prepareGroupChannels,
 };
+

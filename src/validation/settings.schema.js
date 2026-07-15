@@ -41,6 +41,7 @@ function validateSettings(data) {
     requireSnowflakeOrNull(errors, data.roles.playerRoleId, 'roles.playerRoleId');
     requireSnowflakeOrNull(errors, data.roles.managerRoleId, 'roles.managerRoleId');
     requireSnowflakeOrNull(errors, data.roles.coManagerRoleId, 'roles.coManagerRoleId');
+    requireSnowflakeOrNull(errors, data.roles.leaguePhaseRoleId, 'roles.leaguePhaseRoleId');
     validateIdMap(errors, data.roles.championRoleIds, CHAMPION_ROLE_KEYS, 'roles.championRoleIds');
     validateIdMap(errors, data.roles.groupRoleIds, GROUP_KEYS, 'roles.groupRoleIds');
     validateIdMap(errors, data.roles.knockoutRoleIds, KNOCKOUT_ROUNDS, 'roles.knockoutRoleIds');
@@ -176,3 +177,4 @@ function validateSettings(data) {
 module.exports = {
   validateSettings,
 };
+

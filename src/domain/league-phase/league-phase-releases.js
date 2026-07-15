@@ -16,7 +16,7 @@ async function postRelease(client, eventKey, dayNumber) {
   const event = readEventData(eventKey); const phase = event.leaguePhase; const channel = client && phase?.overviewChannelId ? await client.channels.fetch(phase.overviewChannelId).catch(() => null) : null; if (!channel) return null;
   const oldId = phase.messages?.releaseMessageId; const old = oldId ? await channel.messages.fetch(oldId).catch(() => null) : null;
   if (old) await old.delete().catch(() => null);
-  const message = await channel.send({ content: `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**\nAlle 10 Begegnungen dieses Spieltags können jetzt gemeldet werden.`, allowedMentions: { parse: [] } });
+  const message = await channel.send({ content: `ðŸ“£ **Ligaphase â€“ Spieltag ${dayNumber} ist freigegeben.**\nAlle 10 Begegnungen dieses Spieltags kÃ¶nnen jetzt gemeldet werden.`, allowedMentions: { parse: [] } });
   updateEventData(eventKey, stored => { stored.leaguePhase.messages.releaseMessageId = message.id; return stored; }); return message;
 }
 async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date()) {
@@ -33,7 +33,7 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   if (current < 4) return releaseLeagueMatchday(client, eventKey, current + 1, now);
   updateEventData(eventKey, stored => { stored.leaguePhase.status = 'completed'; stored.leaguePhase.completedAt = now.toISOString(); stored.leaguePhase.transitionStatus = 'ready'; return stored; });
   if (getLeagueMatches(readEventData(eventKey).leaguePhase).length !== 40) throw new Error('Ligaphase kann ohne exakt 40 Begegnungen nicht abgeschlossen werden.');
-  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Übergang ins Viertelfinale gestartet.`);
+  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Ãœbergang ins Viertelfinale gestartet.`);
   await createKnockoutPhase({ eventKey, actorUserId: 'auto-league-completed', client, now });
   if (client && phase.roleId) {
     const settings = readJson(FILES.settings, createSettingsDefault());
@@ -41,9 +41,12 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
     const role = guild ? await guild.roles.fetch(phase.roleId).catch(() => null) : null;
     if (role) {
       for (const member of role.members.values()) await member.roles.remove(role.id, 'Ligaphase abgeschlossen').catch(() => null);
-      await role.delete('Ligaphase abgeschlossen; K.O.-Phase gestartet').catch(() => null);
     }
-    updateEventData(eventKey, stored => { stored.leaguePhase.roleId = null; stored.leaguePhase.transitionStatus = 'completed'; return stored; });
+    for (const channelId of [phase.overviewChannelId, phase.resultsChannelId]) {
+      const channel = channelId ? await client.channels.fetch(channelId).catch(() => null) : null;
+      if (channel && ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name)) await channel.delete('Ligaphase abgeschlossen; K.O.-Phase gestartet').catch(() => null);
+    }
+    updateEventData(eventKey, stored => { stored.leaguePhase.overviewChannelId = null; stored.leaguePhase.resultsChannelId = null; stored.leaguePhase.transitionStatus = 'completed'; return stored; });
   }
   return true;
 }
@@ -54,3 +57,4 @@ async function maybeReleaseLeagueStart(client, eventKey, now = new Date()) {
 }
 function scheduleLeaguePhase(client, eventKey, explicit = null) { const old = timers.get(eventKey); if (old) clearTimeout(old); const event = readEventData(eventKey); if (event.leaguePhase?.phaseType !== 'league' || event.leaguePhase.status === 'completed') return; const target = explicit || (event.schedule?.tournamentStartAt ? new Date(event.schedule.tournamentStartAt) : new Date()); const timer = setTimeout(() => maybeReleaseLeagueStart(client, eventKey).catch(console.error), Math.min(Math.max(0, target.getTime() - Date.now()), 2 ** 31 - 1)); if (timer.unref) timer.unref(); timers.set(eventKey, timer); }
 module.exports = { advanceLeaguePhase, maybeReleaseLeagueStart, releaseLeagueMatchday, scheduleLeaguePhase };
+
