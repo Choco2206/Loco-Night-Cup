@@ -17,7 +17,22 @@ function buildLeaguePhaseButtons(eventKey) { return new ActionRowBuilder().addCo
   new ButtonBuilder().setCustomId(`group_admin_result_open:${eventKey}:league`).setLabel('Admin-Ergebnis').setEmoji('🛠️').setStyle(ButtonStyle.Danger),
   new ButtonBuilder().setCustomId(`group_replacement_open:${eventKey}:league`).setLabel('Nachruecker einsetzen').setEmoji('🔁').setStyle(ButtonStyle.Secondary)
 ); }
-async function upsert(channel, id, payload) { const old = id ? await channel.messages.fetch(id).catch(() => null) : null; return old ? old.edit(payload) : channel.send(payload); }
+async function findExistingImageMessage(channel, attachmentName) {
+  if (!attachmentName) return null;
+  const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!messages) return null;
+  return messages.find(message => (
+    message.author?.id === channel.client.user.id
+    && message.attachments?.some(attachment => attachment.name === attachmentName)
+  )) || null;
+}
+async function upsert(channel, id, payload) {
+  const attachmentName = payload.files?.[0]?.name || null;
+  let old = id ? await channel.messages.fetch(id).catch(() => null) : null;
+  if (!old) old = await findExistingImageMessage(channel, attachmentName);
+  if (old) return old.edit(payload);
+  return channel.send(payload);
+}
 function imagePayload(buffer, name, components = []) { return { content: null, embeds: [new EmbedBuilder().setImage(`attachment://${name}`)], attachments: [], files: [{ attachment: buffer, name }], components, allowedMentions: { parse: [] } }; }
 const LEAGUE_PHASE_ROLE_NAME = 'Ligaphase';
 const LEAGUE_PHASE_CATEGORY_ID = '1526896899934654464';
@@ -105,11 +120,11 @@ async function refreshLeaguePhasePosts(client, eventKey) {
   if (!client) return null; const event = readEventData(eventKey); const phase = event.leaguePhase; if (!phase) return null;
   recalculateGroupStandings(phase); const table = await renderLeagueTable(phase); const schedule = await renderLeagueSchedule(phase);
   const overview = await client.channels.fetch(phase.overviewChannelId).catch(() => null); const results = await client.channels.fetch(phase.resultsChannelId).catch(() => null); if (!overview || !results) return null;
-  const ot = await upsert(overview, phase.messages.overviewTableMessageId, imagePayload(table, `ligaphase-table-${eventKey}.png`));
-  const os = await upsert(overview, phase.messages.overviewScheduleMessageId, imagePayload(schedule, `ligaphase-schedule-${eventKey}.png`));
-  const rt = await upsert(results, phase.messages.resultsTableMessageId, imagePayload(table, `ligaphase-table-results-${eventKey}.png`));
-  const rs = await upsert(results, phase.messages.resultsScheduleMessageId, imagePayload(schedule, `ligaphase-schedule-results-${eventKey}.png`, [buildLeaguePhaseButtons(eventKey)]));
-  updateEventData(eventKey, stored => { Object.assign(stored.leaguePhase.messages, { overviewTableMessageId: ot.id, overviewScheduleMessageId: os.id, resultsTableMessageId: rt.id, resultsScheduleMessageId: rs.id }); stored.leaguePhase.standings = phase.standings; return stored; });
+  const ot = await upsert(overview, phase.messages?.overviewTableMessageId, imagePayload(table, `ligaphase-table-${eventKey}.png`));
+  const os = await upsert(overview, phase.messages?.overviewScheduleMessageId, imagePayload(schedule, `ligaphase-schedule-${eventKey}.png`));
+  const rt = await upsert(results, phase.messages?.resultsTableMessageId, imagePayload(table, `ligaphase-table-results-${eventKey}.png`));
+  const rs = await upsert(results, phase.messages?.resultsScheduleMessageId, imagePayload(schedule, `ligaphase-schedule-results-${eventKey}.png`, [buildLeaguePhaseButtons(eventKey)]));
+  updateEventData(eventKey, stored => { stored.leaguePhase.messages = stored.leaguePhase.messages || {}; Object.assign(stored.leaguePhase.messages, { overviewTableMessageId: ot.id, overviewScheduleMessageId: os.id, resultsTableMessageId: rt.id, resultsScheduleMessageId: rs.id }); stored.leaguePhase.standings = phase.standings; return stored; });
   const { refreshLiveSchedule } = require('../live-schedule');
   await refreshLiveSchedule(client, eventKey).catch(error => console.warn(`[league-phase] Oeffentlicher Spielplan konnte nicht aktualisiert werden: ${error.message}`));
   console.info(`[league-phase] ${eventKey}: Ligaphasengrafiken aktualisiert.`); return { ot, os, rt, rs };
