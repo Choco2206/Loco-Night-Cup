@@ -11,6 +11,7 @@ const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/leag
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
+const PUBLIC_LIVE_SCHEDULE_CHANNEL_ID = '1516429776070508555';
 const ROUND_LABELS = {
   round_of_16: 'Achtelfinale',
   quarter_final: 'Viertelfinale',
@@ -164,7 +165,15 @@ async function fetchMessage(channel, messageId) {
 }
 
 async function upsertMessage(channel, messageId, payload) {
-  const existing = await fetchMessage(channel, messageId);
+  let existing = await fetchMessage(channel, messageId);
+  const attachmentName = payload.files?.[0]?.name || null;
+  if (!existing && attachmentName) {
+    const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+    existing = recent?.find(message => (
+      message.author?.id === channel.client.user.id
+      && message.attachments?.some(attachment => attachment.name === attachmentName)
+    )) || null;
+  }
   return existing ? existing.edit(payload) : channel.send(payload);
 }
 
@@ -188,11 +197,7 @@ async function deleteKnownMessages(channel, state) {
 }
 
 async function getChannel(client, settings) {
-  const channelId = settings.channels?.liveScheduleChannelId;
-  if (!channelId) {
-    console.warn('[live-schedule] settings.channels.liveScheduleChannelId fehlt.');
-    return null;
-  }
+  const channelId = settings.channels?.liveScheduleChannelId || PUBLIC_LIVE_SCHEDULE_CHANNEL_ID;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) {
     console.warn(`[live-schedule] Live-Spielplan-Kanal ${channelId} wurde nicht gefunden oder ist nicht beschreibbar.`);
