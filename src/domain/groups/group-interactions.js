@@ -499,6 +499,8 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
 
 async function handleGroupInteraction(interaction, client) {
   const customId = interaction.customId || '';
+  const { handleLeaguePhaseTestInteraction } = require('../league-phase/league-phase-test');
+  if (await handleLeaguePhaseTestInteraction(interaction)) return true;
 
   if (interaction.isButton?.()) {
     const [action, parsedEventKey, parsedGroupKey] = customId.split(':');

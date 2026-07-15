@@ -15,6 +15,7 @@ const {
   buildLeaguePhaseButtons,
   ensureLeaguePhaseChannel,
   ensureLeaguePhaseRole,
+  getExistingGuildMemberIds,
   verifyLeaguePhaseAccess,
 } = require('./league-phase-service');
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
@@ -71,7 +72,7 @@ async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
   const role = await ensureLeaguePhaseRole(guild, settings);
   await guild.members.fetch().catch(() => null);
   for (const member of role.members.values()) await member.roles.remove(role.id, 'Verwaiste Ligaphasenmitgliedschaft vor Integrationstest bereinigt');
-  const userIds = [...new Set(phase.slots.flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))))];
+  const userIds = await getExistingGuildMemberIds(guild, phase.slots.flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))));
   const assignedMemberIds = [];
   for (const userId of userIds) {
     const member = await guild.members.fetch(userId).catch(() => null);
@@ -121,4 +122,26 @@ async function stopLeaguePhaseIntegrationTest({ guild }) {
   return state;
 }
 
-module.exports = { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest, testPhase };
+async function handleLeaguePhaseTestInteraction(interaction) {
+  if (!interaction.isButton?.() || !interaction.guild) return false;
+  const [action, eventKey, groupKey] = String(interaction.customId || '').split(':');
+  if (!['group_result_open', 'group_admin_result_open', 'group_replacement_open'].includes(action)) return false;
+  if (!/^league_test_(14|18|20)$/.test(eventKey) || groupKey !== 'league') return false;
+  const state = activeTests.get(interaction.guild.id);
+  if (!state || eventKey !== `league_test_${state.size}`) {
+    await interaction.reply({ content: 'Dieser Ligaphasen-Test ist nicht mehr aktiv. Bitte den Test im Admin-Panel neu starten.', flags: 64 });
+    return true;
+  }
+  const labels = {
+    group_result_open: 'Ergebnis eintragen',
+    group_admin_result_open: 'Admin-Ergebnis',
+    group_replacement_open: 'Nachrücker',
+  };
+  await interaction.reply({
+    content: `✅ Testbutton **${labels[action]}** wurde korrekt erkannt. Der isolierte Integrationstest verändert bewusst keine echten Event-, Ergebnis- oder Teamdaten.`,
+    flags: 64,
+  });
+  return true;
+}
+
+module.exports = { handleLeaguePhaseTestInteraction, startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest, testPhase };

@@ -68,9 +68,19 @@ function expectedSnapshot(overwrite) {
   return { allow: allow.toString(), deny: deny.toString() };
 }
 
+async function getExistingGuildMemberIds(guild, userIds) {
+  const existing = [];
+  for (const userId of [...new Set((userIds || []).map(String))]) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member) existing.push(member.id);
+  }
+  return existing;
+}
+
 async function verifyLeaguePhaseAccess({ guild, settings, phase }) {
   const role = await ensureLeaguePhaseRole(guild, settings);
-  const userIds = [...new Set((phase.slots || []).filter(slot => slot.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))))];
+  const participantUserIds = (phase.slots || []).filter(slot => slot.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId)));
+  const userIds = await getExistingGuildMemberIds(guild, participantUserIds);
   const expected = buildGroupChannelPermissionOverwrites({ guild, settings, roleId: role.id, userIds });
   const channels = [];
   for (const channelId of [phase.overviewChannelId, phase.resultsChannelId]) {
@@ -110,7 +120,7 @@ async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = 
   console.info(`[league-phase] ${eventKey}: ${result.leaguePhase.formatSize}er-Ligaphase erkannt; Auslosung mit ${LEAGUE_PHASE_FORMATS[result.leaguePhase.formatSize].totalMatches} Spielen erfolgreich validiert.`);
   if (!client) return result; const settings = readJson(FILES.settings, createSettingsDefault()); const targetGuild = guild || await getConfiguredGuild(client, settings); if (!targetGuild) return result;
   const role = await ensureLeaguePhaseRole(targetGuild, settings);
-  const leagueUserIds = [...new Set(result.leaguePhase.slots.filter(item => item.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))))];
+  const leagueUserIds = await getExistingGuildMemberIds(targetGuild, result.leaguePhase.slots.filter(item => item.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))));
   for (const userId of leagueUserIds) { const member = await targetGuild.members.fetch(userId).catch(() => null); if (member && !member.roles.cache.has(role.id)) await member.roles.add(role.id, 'Teilnahme an der Ligaphase').catch(() => null); }
   const overview = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.overviewChannelId, 'ligaphase', role.id, leagueUserIds); const results = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.resultsChannelId, 'ligaphase-ergebnisse', role.id, leagueUserIds);
   updateEventData(eventKey, event => { event.leaguePhase.roleId = role.id; event.leaguePhase.overviewChannelId = overview.id; event.leaguePhase.resultsChannelId = results.id; result.event = event; result.leaguePhase = event.leaguePhase; return event; });
@@ -122,4 +132,4 @@ async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = 
   scheduleLeaguePhase(client, eventKey);
   return { ...result, event: readEventData(eventKey), leaguePhase: readEventData(eventKey).leaguePhase };
 }
-module.exports = { LEAGUE_PHASE_CATEGORY_ID, LEAGUE_PHASE_ROLE_NAME, buildLeaguePhaseButtons, drawLeaguePhaseForEvent, ensureLeaguePhaseChannel, ensureLeaguePhaseRole, refreshLeaguePhasePosts, verifyLeaguePhaseAccess };
+module.exports = { LEAGUE_PHASE_CATEGORY_ID, LEAGUE_PHASE_ROLE_NAME, buildLeaguePhaseButtons, drawLeaguePhaseForEvent, ensureLeaguePhaseChannel, ensureLeaguePhaseRole, getExistingGuildMemberIds, refreshLeaguePhasePosts, verifyLeaguePhaseAccess };
