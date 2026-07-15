@@ -20,7 +20,10 @@ const {
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
 
 const activeTests = new Map();
-const BUSY_STATUSES = new Set(['checkin', 'checkin_open', 'deadline_reached', 'checkin_closed', 'draw_ready', 'groups', 'groups_running', 'league_phase', 'knockout', 'ceremony']);
+// Ein normales Check-in ist noch keine laufende Turnierphase und darf den
+// isolierten Ligaphasentest nicht blockieren. Erst erzeugte Gruppen-/Liga-/
+// K.O.-Daten oder die laufende Siegerehrung teilen sich Live-Ressourcen.
+const BUSY_STATUSES = new Set(['groups', 'groups_running', 'league_phase', 'knockout', 'ceremony']);
 
 function participants(size) {
   const result = listVisibleTeams()
@@ -60,14 +63,14 @@ async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
   if (!config) throw new Error('Bitte 14, 18 oder 20 waehlen.');
   if (activeTests.has(guild.id)) throw new Error('In diesem Server laeuft bereits ein Ligaphasen-Test.');
   assertNoLiveEvent();
-  const existing = guild.channels.cache.find(channel => ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name));
-  if (existing) throw new Error(`Ligaphasen-Test nicht moeglich: #${existing.name} existiert bereits.`);
+  const staleChannels = guild.channels.cache.filter(channel => ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name));
+  for (const channel of staleChannels.values()) await channel.delete('Verwaiste Ligaphasenressource vor Integrationstest bereinigt');
 
   const settings = readJson(FILES.settings, createSettingsDefault());
   const phase = testPhase(size);
   const role = await ensureLeaguePhaseRole(guild, settings);
   await guild.members.fetch().catch(() => null);
-  if (role.members.size) throw new Error('Ligaphasen-Test nicht moeglich: Die dauerhafte Ligaphasenrolle besitzt noch aktive Mitglieder.');
+  for (const member of role.members.values()) await member.roles.remove(role.id, 'Verwaiste Ligaphasenmitgliedschaft vor Integrationstest bereinigt');
   const userIds = [...new Set(phase.slots.flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))))];
   const assignedMemberIds = [];
   for (const userId of userIds) {
