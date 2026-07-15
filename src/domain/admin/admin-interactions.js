@@ -46,7 +46,7 @@ const { CEREMONY_DAY_LABELS, postHallOfFameCeremony, postHallOfFameTest } = requ
 const { ensureServerStructure } = require('../setup');
 const { createTestDataForEvent, removeTestData } = require('../testdata/testdata-service');
 const { prepareGroupScheduleVisualTest, simulateGroupPhase, simulateKnockoutPhase } = require('../testdata/simulation-service');
-const { EVENT_KEYS, EVENT_LABELS } = require('../../app/constants');
+const { EVENT_KEYS, EVENT_LABELS, LEAGUE_PHASE_FORMATS } = require('../../app/constants');
 const {
   refreshManagersWithoutTeamMessage,
   refreshManagersWithoutTeamMessageIfTracked,
@@ -54,7 +54,7 @@ const {
 const { buildAdminPanelPayload } = require('./admin-components');
 const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-test');
-const { postLeaguePhaseTest } = require('../league-phase/league-phase-test');
+const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = require('../league-phase/league-phase-test');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -85,6 +85,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_simulate_groups',
   'admin_schedule_visual_test',
   'admin_league_phase_test',
+  'admin_league_phase_test_stop',
   'admin_ko_images_test',
   'admin_simulate_knockout',
   'admin_server_setup',
@@ -163,9 +164,9 @@ const MANUAL_CHECKIN_PAGE_SIZE = 25;
 const TEAM_ACHIEVEMENT_PAGE_SIZE = 25;
 const HALL_OF_FAME_TEAM_PAGE_SIZE = 25;
 const TEAM_ACHIEVEMENT_TITLES = {
-  gold: { label: 'Cup-Sieg', emoji: 'ðŸ¥‡' },
-  silver: { label: 'Platz 2', emoji: 'ðŸ¥ˆ' },
-  bronze: { label: 'Platz 3', emoji: 'ðŸ¥‰' },
+  gold: { label: 'Cup-Sieg', emoji: '🥇' },
+  silver: { label: 'Platz 2', emoji: '🥈' },
+  bronze: { label: 'Platz 3', emoji: '🥉' },
 };
 
 function summarizeNicknameSync(summary) {
@@ -399,7 +400,6 @@ function buildTeamBanSelectPayload(page = 0) {
   };
 }
 
-
 function buildTeamDetailsSelectPayload(page = 0) {
   const teams = sortedRegisteredTeams();
   if (!teams.length) throw new Error('Es gibt keine aktiven/registrierten Teams.');
@@ -509,12 +509,12 @@ function buildTeamAchievementConfirmPayload(team, titleKey) {
         new ButtonBuilder()
           .setCustomId(`admin_team_achievement_confirm:${team.id}:${titleKey}`)
           .setLabel('Bestaetigen')
-          .setEmoji('âœ…')
+          .setEmoji('✅')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`admin_team_achievement_cancel:${team.id}:${titleKey}`)
           .setLabel('Abbrechen')
-          .setEmoji('âŒ')
+          .setEmoji('❌')
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -799,7 +799,6 @@ function buildAdminRemoveCoManagerPayload(team) {
             value: String(co.userId),
             description: `User-ID: ${String(co.userId).slice(0, 90)}`,
           })))
-
       ),
     ],
   };
@@ -1200,7 +1199,6 @@ async function handleAdminSelect(interaction, client, settings) {
         `Wochentag: ${result.dayLabel}`,
         `1. ${result.teams.first.clubName}`,
         `2. ${result.teams.second.clubName}`,
-
         `3. ${result.teams.third.clubName}`,
       ].join('\n'),
       components: [],
@@ -1220,8 +1218,8 @@ async function handleAdminSelect(interaction, client, settings) {
 
   if (interaction.customId === 'admin_league_phase_test_select') {
     await interaction.deferUpdate();
-    const result = await postLeaguePhaseTest({ guild: interaction.guild, variant: interaction.values?.[0] });
-    await interaction.editReply({ content: `Ligaphasentest wurde in <#${result.channelId}> gepostet.`, components: [] });
+    const result = await startLeaguePhaseIntegrationTest({ guild: interaction.guild, formatSize: interaction.values?.[0] });
+    await interaction.editReply({ content: `${result.size}er-Ligaphasentest gestartet: <#${result.overviewChannelId}> und <#${result.resultsChannelId}>.`, components: [] });
     return true;
   }
 
@@ -1377,7 +1375,7 @@ async function handleAdminSelect(interaction, client, settings) {
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
       content: result.leaguePhase
-        ? `Ligaphase fuer ${EVENT_LABELS[eventKey]} wurde gezogen: 4 Spieltage mit 40 Begegnungen erstellt.`
+        ? `Ligaphase fuer ${EVENT_LABELS[eventKey]} wurde gezogen: 4 Spieltage mit ${result.leaguePhase.config.totalMatches} Begegnungen erstellt.`
         : `Gruppen fuer ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
       components: [],
     });
@@ -1462,7 +1460,7 @@ async function handleAdminSelect(interaction, client, settings) {
       content: [
         `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} zufaellig ausgewaehlte aktive Teams mit Logo eingecheckt.`,
         event.leaguePhase?.phaseType === 'league'
-          ? 'Die 20er-Ligaphase mit 4 Spieltagen und 40 Begegnungen wurde persistent erzeugt.'
+          ? `Die ${event.format.size}er-Ligaphase mit 4 Spieltagen und ${LEAGUE_PHASE_FORMATS[event.format.size].totalMatches} Begegnungen wurde persistent erzeugt.`
           : `${groupCount} Gruppen wurden ueber den normalen Turnierstart persistent erzeugt.`,
         'Die Ergebnisbuttons koennen jetzt direkt zum Testen der Live-Tabelle verwendet werden.',
       ].join('\n'),
@@ -1601,7 +1599,6 @@ async function handleAdminModal(interaction, client, settings) {
       flags: EPHEMERAL,
     });
     return true;
-
   }
 
   if (interaction.customId.startsWith('admin_team_add_covm_manual_modal:')) {
@@ -1741,7 +1738,7 @@ async function handleAdminInteraction(interaction, client) {
       );
 
       await interaction.editReply({
-        content: `âœ… **${updatedTeam.clubName}** hat +1 ${definition.emoji} **${definition.label}** erhalten. Team-Erfolge wurden aktualisiert.`,
+        content: `✅ **${updatedTeam.clubName}** hat +1 ${definition.emoji} **${definition.label}** erhalten. Team-Erfolge wurden aktualisiert.`,
         embeds: [],
         components: [],
         allowedMentions: { parse: [] },
@@ -1750,7 +1747,7 @@ async function handleAdminInteraction(interaction, client) {
     }
 
     if (actionCustomId.startsWith('admin_team_achievement_cancel:')) {
-      await interaction.update({ content: 'âŒ Vorgang abgebrochen.', embeds: [], components: [] });
+      await interaction.update({ content: '❌ Vorgang abgebrochen.', embeds: [], components: [] });
       return true;
     }
 
@@ -1984,16 +1981,23 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_league_phase_test') {
       await interaction.reply({
-        content: 'Welche Ligaphasendarstellung soll getestet werden?',
+        content: 'Welches Ligaphasenformat soll vollständig getestet werden?',
         components: [new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder().setCustomId('admin_league_phase_test_select').setPlaceholder('Ligaphasentest auswaehlen').addOptions([
-            { value: 'table', label: 'Ligaphasen-Tabelle testen', description: '20 Tabellenplaetze mit echten und klaren Testteams' },
-            { value: 'schedule', label: 'Ligaphasen-Spielplan testen', description: '40 valide Begegnungen, teils mit Ergebnissen' },
-            { value: 'complete', label: 'Ligaphase komplett testen', description: 'Tabelle und Spielplan ohne Eventdaten zu veraendern' },
+            { value: '14', label: '14er-Liga', description: '14 Teams, 7 Spiele je Spieltag, 28 insgesamt' },
+            { value: '18', label: '18er-Liga', description: '18 Teams, 9 Spiele je Spieltag, 36 insgesamt' },
+            { value: '20', label: '20er-Liga', description: '20 Teams, 10 Spiele je Spieltag, 40 insgesamt' },
           ])
         )],
         flags: EPHEMERAL,
       });
+      return true;
+    }
+
+    if (actionCustomId === 'admin_league_phase_test_stop') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      const result = await stopLeaguePhaseIntegrationTest({ guild: interaction.guild });
+      await interaction.editReply({ content: `${result.size}er-Ligaphasentest wurde vollständig bereinigt.` });
       return true;
     }
 
@@ -2002,7 +2006,6 @@ async function handleAdminInteraction(interaction, client) {
         content: 'Welche K.O.-Bildvorlage soll getestet werden?',
         components: [new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-
             .setCustomId('admin_ko_image_test_select')
             .setPlaceholder('K.O.-Bild auswaehlen')
             .addOptions(Object.entries(TEST_VARIANTS).map(([value, variant]) => ({
@@ -2167,4 +2170,3 @@ module.exports = {
   handleAdminButton: handleAdminInteraction,
   handleAdminInteraction,
 };
-

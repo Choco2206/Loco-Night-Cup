@@ -148,7 +148,7 @@ function headerPayload(event, phase) {
       allowedMentions: { parse: [] },
     };
   }
-  if (phase === 'league') return { content: `📊 Loco Night Cup ${event.label || event.eventKey} • 20er-Ligaphase\n🏆 Die besten 8 qualifizieren sich für das Viertelfinale.`, allowedMentions: { parse: [] } };
+  if (phase === 'league') return { content: `📊 Loco Night Cup ${event.label || event.eventKey} • ${event.format?.size}er-Ligaphase\n🏆 Die besten 8 qualifizieren sich für das Viertelfinale.`, allowedMentions: { parse: [] } };
   return {
     content: [
       `📊 Loco Night Cup ${event.label || event.eventKey} • Live-Spielplan`,

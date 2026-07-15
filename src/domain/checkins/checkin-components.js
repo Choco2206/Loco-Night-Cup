@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const { EVENT_LABELS, TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
+const { EVENT_LABELS, TOURNAMENT_FORMAT_SIZES, isLeaguePhaseFormat } = require('../../app/constants');
 const { FILES, ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
 const {
@@ -93,14 +93,14 @@ function formatFormat(event, settings) {
   const playableSlotCount = getPlayableSlotCount(event, settings);
 
   if (event.format?.lockedAt && playableSlotCount) {
-    return `${playableSlotCount}er Turnier (gelockt)\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
+    return `${playableSlotCount}er ${isLeaguePhaseFormat(playableSlotCount) ? 'Liga' : 'Turnier'} (gelockt)\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
   }
 
   if (!playableSlotCount || participantSlots < minimum) {
     return `Noch kein gültiges Turnierformat\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
   }
 
-  return `${playableSlotCount}er Turnier\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
+  return `${playableSlotCount}er ${isLeaguePhaseFormat(playableSlotCount) ? 'Liga' : 'Turnier'}\n• Minimum ${minimum} Teilnehmerplätze erforderlich${byeLine}`;
 }
 
 function getNextFormatInfo(participantSlots, settings, event) {
@@ -174,7 +174,7 @@ function buildSlotState(event, settings) {
 }
 
 function formatMilestoneLine(size) {
-  return `════ ⬆️ ${size}er Turnier ⬆️ ════`;
+  return `════ ⬆️ ${size}er ${isLeaguePhaseFormat(size) ? 'Liga' : 'Turnier'} ⬆️ ════`;
 }
 
 function formatSlotLines(slotState) {

@@ -2,7 +2,7 @@
 
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
-const { TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
+const { TOURNAMENT_FORMAT_SIZES, isLeaguePhaseFormat } = require('../../app/constants');
 const { findTeamById } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('../checkins/checkin-ban-integration');
 
@@ -30,7 +30,7 @@ function getAllowedSizes(settings, event) {
 }
 
 function groupCountForSize(size) {
-  return size / 4;
+  return isLeaguePhaseFormat(size) ? 0 : size / 4;
 }
 
 function isTeamEligibleForLock(team, now) {

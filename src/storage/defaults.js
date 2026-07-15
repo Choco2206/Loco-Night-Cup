@@ -424,7 +424,9 @@ function createSettingsDefault() {
       qualificationRules: {
         8: TOURNAMENT_FORMATS[8].rule,
         12: TOURNAMENT_FORMATS[12].rule,
+        14: TOURNAMENT_FORMATS[14].rule,
         16: TOURNAMENT_FORMATS[16].rule,
+        18: TOURNAMENT_FORMATS[18].rule,
         20: TOURNAMENT_FORMATS[20].rule,
         24: TOURNAMENT_FORMATS[24].rule,
         28: TOURNAMENT_FORMATS[28].rule,
@@ -504,4 +506,3 @@ module.exports = {
   createTeamHistoryDefault,
   createTeamsDefault,
 };
-

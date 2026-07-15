@@ -1,11 +1,121 @@
 'use strict';
+
 const { EmbedBuilder } = require('discord.js');
+const { FILES, readJson } = require('../../storage');
+const { createSettingsDefault } = require('../../storage/defaults');
 const { HALL_OF_FAME_TEST_CHANNEL_ID } = require('../ceremony/ceremony-test-service');
-const { listVisibleTeams } = require('../teams/team-service');
+const { readAllEvents } = require('../checkins/checkin-repository');
+const { listVisibleTeams, findTeamById } = require('../teams/team-service');
+const { getTeamUserIds } = require('../groups/group-roles');
 const { recalculateGroupStandings } = require('../groups/group-results');
-const { createLeaguePhaseDraw } = require('./league-phase-draw');
+const { LEAGUE_PHASE_FORMATS } = require('../../app/constants');
+const { createLeaguePhaseDraw, validateLeaguePhaseDraw } = require('./league-phase-draw');
+const {
+  LEAGUE_PHASE_CATEGORY_ID,
+  buildLeaguePhaseButtons,
+  ensureLeaguePhaseChannel,
+  ensureLeaguePhaseRole,
+  verifyLeaguePhaseAccess,
+} = require('./league-phase-service');
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
-function participants() { const real = listVisibleTeams().filter(team => team.status === 'active' && team.registrationStatus === 'complete').slice(0, 20).map(team => ({ type: 'team', teamId: String(team.id), displayName: team.clubName, participantKey: `team:${team.id}` })); while (real.length < 20) { const index = real.length + 1; real.push({ type: 'team', teamId: `league_test_${index}`, displayName: index === 20 ? 'Sehr Langer Testverein Ohne Logo' : `Testteam ${index}`, participantKey: `team:league_test_${index}` }); } return real; }
-function testPhase() { const phase = createLeaguePhaseDraw({ eventKey: 'league_test', participants: participants(), random: () => 0.42 }); let index = 0; for (const match of phase.matchdays.flatMap(day => day.matches)) { if (index++ % 3) { match.status = 'confirmed'; match.result = { homeGoals: index % 11, awayGoals: index % 4, source: 'test' }; } } recalculateGroupStandings(phase); return phase; }
-async function postLeaguePhaseTest({ guild, variant }) { if (!['table', 'schedule', 'complete'].includes(variant)) throw new Error('Unbekannter Ligaphasentest.'); const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null); if (!channel?.isTextBased?.()) throw new Error(`Testkanal nicht gefunden: ${HALL_OF_FAME_TEST_CHANNEL_ID}`); const phase = testPhase(); const files = []; const embed = new EmbedBuilder().setTitle(`Ligaphasentest: ${variant}`); if (variant !== 'schedule') { files.push({ attachment: await renderLeagueTable(phase), name: 'ligaphase-test-table.png' }); embed.setImage('attachment://ligaphase-test-table.png'); } if (variant !== 'table') files.push({ attachment: await renderLeagueSchedule(phase), name: 'ligaphase-test-schedule.png' }); const message = await channel.send({ embeds: [embed], files, allowedMentions: { parse: [] } }); if (variant === 'complete' && files.length > 1) await channel.send({ files: [files[1]], allowedMentions: { parse: [] } }); return { channelId: channel.id, messageId: message.id, variant }; }
-module.exports = { postLeaguePhaseTest, testPhase };
+
+const activeTests = new Map();
+const BUSY_STATUSES = new Set(['checkin', 'checkin_open', 'deadline_reached', 'checkin_closed', 'draw_ready', 'groups', 'groups_running', 'league_phase', 'knockout', 'ceremony']);
+
+function participants(size) {
+  const result = listVisibleTeams()
+    .filter(team => team.status === 'active' && team.registrationStatus === 'complete')
+    .slice(0, size)
+    .map(team => ({ type: 'team', teamId: String(team.id), displayName: team.clubName, participantKey: `team:${team.id}` }));
+  while (result.length < size) {
+    const index = result.length + 1;
+    result.push({ type: 'team', teamId: `league_test_${index}`, displayName: index === size ? 'Sehr Langer Testverein Ohne Logo' : `Testteam ${index}`, participantKey: `team:league_test_${index}` });
+  }
+  return result;
+}
+
+function testPhase(size) {
+  if (!LEAGUE_PHASE_FORMATS[size]) throw new Error('Ligaphasentest unterstuetzt nur 14, 18 oder 20 Teams.');
+  const phase = createLeaguePhaseDraw({ eventKey: `league_test_${size}`, participants: participants(size), random: () => 0.42 });
+  let index = 0;
+  for (const match of phase.matchdays.flatMap(day => day.matches)) {
+    if (index++ % 3) {
+      match.status = 'confirmed';
+      match.result = { homeGoals: index % 11, awayGoals: index % 4, source: 'test' };
+    }
+  }
+  recalculateGroupStandings(phase);
+  validateLeaguePhaseDraw(phase);
+  return phase;
+}
+
+function assertNoLiveEvent() {
+  const active = Object.values(readAllEvents()).find(event => BUSY_STATUSES.has(event.status));
+  if (active) throw new Error(`Ligaphasen-Test nicht moeglich: ${active.label || active.eventKey} ist aktiv (${active.status}).`);
+}
+
+async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
+  const size = Number(formatSize);
+  const config = LEAGUE_PHASE_FORMATS[size];
+  if (!config) throw new Error('Bitte 14, 18 oder 20 waehlen.');
+  if (activeTests.has(guild.id)) throw new Error('In diesem Server laeuft bereits ein Ligaphasen-Test.');
+  assertNoLiveEvent();
+  const existing = guild.channels.cache.find(channel => ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name));
+  if (existing) throw new Error(`Ligaphasen-Test nicht moeglich: #${existing.name} existiert bereits.`);
+
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const phase = testPhase(size);
+  const role = await ensureLeaguePhaseRole(guild, settings);
+  await guild.members.fetch().catch(() => null);
+  if (role.members.size) throw new Error('Ligaphasen-Test nicht moeglich: Die dauerhafte Ligaphasenrolle besitzt noch aktive Mitglieder.');
+  const userIds = [...new Set(phase.slots.flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))))];
+  const assignedMemberIds = [];
+  for (const userId of userIds) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member && !member.roles.cache.has(role.id)) {
+      await member.roles.add(role.id, 'Ligaphasen-Integrationstest');
+      assignedMemberIds.push(member.id);
+    }
+  }
+  const overview = await ensureLeaguePhaseChannel(guild, settings, null, 'ligaphase', role.id, userIds);
+  const results = await ensureLeaguePhaseChannel(guild, settings, null, 'ligaphase-ergebnisse', role.id, userIds);
+  phase.roleId = role.id; phase.overviewChannelId = overview.id; phase.resultsChannelId = results.id;
+
+  const table = await renderLeagueTable(phase); const schedule = await renderLeagueSchedule(phase);
+  await overview.send({ files: [{ attachment: table, name: `ligaphase_table_${size}_test.png` }], allowedMentions: { parse: [] } });
+  await overview.send({ files: [{ attachment: schedule, name: `ligaphase_schedule_${size}_test.png` }], allowedMentions: { parse: [] } });
+  await overview.send({ content: `📣 **Ligaphase – Spieltag 1 ist freigegeben.**\nAlle ${config.matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`, allowedMentions: { parse: [] } });
+  await results.send({ files: [{ attachment: table, name: `ligaphase_table_${size}_results_test.png` }], allowedMentions: { parse: [] } });
+  await results.send({ files: [{ attachment: schedule, name: `ligaphase_schedule_${size}_results_test.png` }], components: [buildLeaguePhaseButtons(`league_test_${size}`)], allowedMentions: { parse: [] } });
+
+  const access = await verifyLeaguePhaseAccess({ guild, settings, phase });
+  if (!access.ok) throw new Error(`Berechtigungspruefung fehlgeschlagen: ${JSON.stringify(access)}`);
+  activeTests.set(guild.id, { roleId: role.id, channelIds: [overview.id, results.id], assignedMemberIds, size });
+
+  const testChannel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
+  if (testChannel?.isTextBased?.()) await testChannel.send({ embeds: [new EmbedBuilder()
+    .setTitle(`✅ ${size}er-Ligaphasen-Integrationstest gestartet`)
+    .setDescription([`${phase.slots.length} Startplätze`, `${config.matchdays} Spieltage`, `${config.matchesPerDay} Spiele je Spieltag`, `${config.totalMatches} Spiele insgesamt`, `Rolle: <@&${role.id}>`, `Kanäle in Kategorie ${LEAGUE_PHASE_CATEGORY_ID}`, 'Rollen und Berechtigungen erfolgreich geprüft.'].join('\n'))
+    .setColor(0x2ecc71)], allowedMentions: { parse: [] } });
+  return { size, overviewChannelId: overview.id, resultsChannelId: results.id, access };
+}
+
+async function stopLeaguePhaseIntegrationTest({ guild }) {
+  const state = activeTests.get(guild.id);
+  if (!state) throw new Error('Es laeuft kein Ligaphasen-Test.');
+  const role = await guild.roles.fetch(state.roleId).catch(() => null);
+  if (role) for (const memberId of state.assignedMemberIds) {
+    const member = await guild.members.fetch(memberId).catch(() => null);
+    if (member?.roles.cache.has(role.id)) await member.roles.remove(role.id, 'Ligaphasen-Integrationstest beendet').catch(() => null);
+  }
+  for (const channelId of state.channelIds) {
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (channel && ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name)) await channel.delete('Ligaphasen-Integrationstest beendet').catch(() => null);
+  }
+  activeTests.delete(guild.id);
+  const testChannel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
+  if (testChannel?.isTextBased?.()) await testChannel.send({ content: `✅ ${state.size}er-Ligaphasen-Test beendet. Mitgliedschaften, Kanäle und Testdaten wurden entfernt; Rolle und Kategorie bleiben bestehen.`, allowedMentions: { parse: [] } });
+  return state;
+}
+
+module.exports = { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest, testPhase };

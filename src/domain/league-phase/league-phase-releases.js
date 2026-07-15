@@ -9,14 +9,16 @@ const { refreshLeaguePhasePosts } = require('./league-phase-service');
 const { getLeagueMatches } = require('./league-phase-results');
 const { getConfiguredGuild } = require('../groups/group-roles');
 const { deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
+const { LEAGUE_PHASE_FORMATS } = require('../../app/constants');
 
 const timers = new Map();
-function dayComplete(day) { return (day?.matches || []).length === 10 && day.matches.every(match => match.status === 'confirmed'); }
+function phaseConfig(phase) { return LEAGUE_PHASE_FORMATS[Number(phase?.formatSize || phase?.slots?.length)]; }
+function dayComplete(day, phase) { const config = phaseConfig(phase); return Boolean(config) && (day?.matches || []).length === config.matchesPerDay && day.matches.every(match => match.status === 'confirmed'); }
 async function postRelease(client, eventKey, dayNumber) {
   const event = readEventData(eventKey); const phase = event.leaguePhase; const channel = client && phase?.overviewChannelId ? await client.channels.fetch(phase.overviewChannelId).catch(() => null) : null; if (!channel) return null;
   const oldId = phase.messages?.releaseMessageId; const old = oldId ? await channel.messages.fetch(oldId).catch(() => null) : null;
   if (old) await old.delete().catch(() => null);
-  const message = await channel.send({ content: `ðŸ“£ **Ligaphase â€“ Spieltag ${dayNumber} ist freigegeben.**\nAlle 10 Begegnungen dieses Spieltags kÃ¶nnen jetzt gemeldet werden.`, allowedMentions: { parse: [] } });
+  const message = await channel.send({ content: `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`, allowedMentions: { parse: [] } });
   updateEventData(eventKey, stored => { stored.leaguePhase.messages.releaseMessageId = message.id; return stored; }); return message;
 }
 async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date()) {
@@ -26,14 +28,14 @@ async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date
 async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   const event = readEventData(eventKey); const phase = event.leaguePhase; if (phase?.phaseType !== 'league' || phase.status === 'completed') return false;
   const current = Number(phase.currentMatchday || 0); if (!current) return maybeReleaseLeagueStart(client, eventKey, now);
-  const day = phase.matchdays[current - 1]; if (!dayComplete(day)) return false;
+  const day = phase.matchdays[current - 1]; if (!dayComplete(day, phase)) return false;
   updateEventData(eventKey, stored => { const target = stored.leaguePhase.matchdays[current - 1]; target.status = 'completed'; target.completedAt = target.completedAt || now.toISOString(); return stored; });
   await deleteUserMessagesFromGroupChannel(client, phase);
   console.info(`[league-phase] ${eventKey}: Spieltag ${current} abgeschlossen.`);
-  if (current < 4) return releaseLeagueMatchday(client, eventKey, current + 1, now);
+  if (current < phaseConfig(phase).matchdays) return releaseLeagueMatchday(client, eventKey, current + 1, now);
   updateEventData(eventKey, stored => { stored.leaguePhase.status = 'completed'; stored.leaguePhase.completedAt = now.toISOString(); stored.leaguePhase.transitionStatus = 'ready'; return stored; });
-  if (getLeagueMatches(readEventData(eventKey).leaguePhase).length !== 40) throw new Error('Ligaphase kann ohne exakt 40 Begegnungen nicht abgeschlossen werden.');
-  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Ãœbergang ins Viertelfinale gestartet.`);
+  if (getLeagueMatches(readEventData(eventKey).leaguePhase).length !== phaseConfig(phase).totalMatches) throw new Error(`Ligaphase kann ohne exakt ${phaseConfig(phase).totalMatches} Begegnungen nicht abgeschlossen werden.`);
+  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Übergang ins Viertelfinale gestartet.`);
   await createKnockoutPhase({ eventKey, actorUserId: 'auto-league-completed', client, now });
   if (client && phase.roleId) {
     const settings = readJson(FILES.settings, createSettingsDefault());
@@ -57,4 +59,3 @@ async function maybeReleaseLeagueStart(client, eventKey, now = new Date()) {
 }
 function scheduleLeaguePhase(client, eventKey, explicit = null) { const old = timers.get(eventKey); if (old) clearTimeout(old); const event = readEventData(eventKey); if (event.leaguePhase?.phaseType !== 'league' || event.leaguePhase.status === 'completed') return; const target = explicit || (event.schedule?.tournamentStartAt ? new Date(event.schedule.tournamentStartAt) : new Date()); const timer = setTimeout(() => maybeReleaseLeagueStart(client, eventKey).catch(console.error), Math.min(Math.max(0, target.getTime() - Date.now()), 2 ** 31 - 1)); if (timer.unref) timer.unref(); timers.set(eventKey, timer); }
 module.exports = { advanceLeaguePhase, maybeReleaseLeagueStart, releaseLeagueMatchday, scheduleLeaguePhase };
-

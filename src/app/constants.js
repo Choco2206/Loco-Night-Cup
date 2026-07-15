@@ -21,12 +21,24 @@ const EVENT_LABELS = {
 };
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-const TOURNAMENT_FORMAT_SIZES = [8, 12, 16, 20, 24, 28, 32];
+const TOURNAMENT_FORMAT_SIZES = [8, 12, 14, 16, 18, 20, 24, 28, 32];
+
+const LEAGUE_PHASE_FORMATS = {
+  14: { size: 14, matchdays: 4, matchesPerDay: 7, totalMatches: 28, qualifiedCount: 8 },
+  18: { size: 18, matchdays: 4, matchesPerDay: 9, totalMatches: 36, qualifiedCount: 8 },
+  20: { size: 20, matchdays: 4, matchesPerDay: 10, totalMatches: 40, qualifiedCount: 8 },
+};
+
+function isLeaguePhaseFormat(format) {
+  return Boolean(LEAGUE_PHASE_FORMATS[Number(format)]);
+}
 
 const TOURNAMENT_FORMATS = {
   8: { groupCount: 2, qualifiedCount: 4, bestThirds: 0, firstRoundKey: 'semi_final', rule: 'top2' },
   12: { groupCount: 3, qualifiedCount: 8, bestThirds: 2, firstRoundKey: 'quarter_final', rule: 'top2_plus_2_best_thirds' },
+  14: { groupCount: 0, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'league_top_8', phaseType: 'league' },
   16: { groupCount: 4, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'top2' },
+  18: { groupCount: 0, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'league_top_8', phaseType: 'league' },
   20: { groupCount: 0, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'league_top_8', phaseType: 'league' },
   24: { groupCount: 6, qualifiedCount: 16, bestThirds: 4, firstRoundKey: 'round_of_16', rule: 'top2_plus_4_best_thirds' },
   28: { groupCount: 7, qualifiedCount: 16, bestThirds: 2, firstRoundKey: 'round_of_16', rule: 'top2_plus_2_best_thirds' },
@@ -91,8 +103,10 @@ module.exports = {
   EVENT_STATUSES,
   GROUP_KEYS,
   KNOCKOUT_ROUNDS,
+  LEAGUE_PHASE_FORMATS,
   REGISTRATION_STATUSES,
   TEAM_STATUSES,
   TOURNAMENT_FORMAT_SIZES,
   TOURNAMENT_FORMATS,
+  isLeaguePhaseFormat,
 };

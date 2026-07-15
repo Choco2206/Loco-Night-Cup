@@ -11,6 +11,7 @@ const { ensureGroupChannel, getGroupUserIds } = require('../groups/group-channel
 const { updateGroupMessageRefs, upsertGroupPosts } = require('../groups/group-posts');
 const { createInitialReleaseState, maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 const { refreshLiveSchedule } = require('../live-schedule');
+const { isLeaguePhaseFormat } = require('../../app/constants');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -58,7 +59,7 @@ function createFieldFromLockedEvent(event) {
 
   return {
     size,
-    groupCount: size / 4,
+    groupCount: isLeaguePhaseFormat(size) ? 0 : size / 4,
     participants,
     activeTeams: participants.filter(participant => participant.type === 'team'),
     activeByes: participants.filter(participant => participant.type === 'bye'),
@@ -193,7 +194,7 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
 
 async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
   const lockedEvent = readEventData(eventKey);
-  if (Number(lockedEvent.format?.size) === 20) {
+  if (isLeaguePhaseFormat(lockedEvent.format?.size)) {
     const { drawLeaguePhaseForEvent } = require('../league-phase');
     return drawLeaguePhaseForEvent({ eventKey, actorUserId, client, guild, now });
   }

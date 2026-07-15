@@ -5,6 +5,7 @@ const {
   EVENT_PROFILE_BY_KEY,
   EVENT_STATUSES,
   TOURNAMENT_FORMAT_SIZES,
+  isLeaguePhaseFormat,
 } = require('../app/constants');
 const {
   hasNoDuplicates,
@@ -83,8 +84,8 @@ function validateEvent(data, expectedEventKey = null) {
     requireArray(errors, data.leaguePhase.matchdays, 'leaguePhase.matchdays');
     requireArray(errors, data.leaguePhase.standings, 'leaguePhase.standings');
     if (data.leaguePhase.phaseType === 'league') {
-      if (data.format.size !== 20) errors.push('leaguePhase requires locked format.size 20');
-      if (data.leaguePhase.participants.length !== 20) errors.push('leaguePhase.participants must contain 20 slots');
+      if (!isLeaguePhaseFormat(data.format.size)) errors.push('leaguePhase requires locked format.size 14, 18 or 20');
+      if (data.leaguePhase.participants.length !== data.format.size) errors.push('leaguePhase.participants must match format.size');
       if (data.leaguePhase.matchdays.length !== 4) errors.push('leaguePhase.matchdays must contain 4 matchdays');
     }
   }
