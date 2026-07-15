@@ -18,8 +18,27 @@ function template(name) {
 }
 function fit(ctx, text, maxWidth, start, min = 12) {
   let size = start;
-  while (size > min) { setCanvasFont(ctx, size, 'Oxanium', '700'); if (ctx.measureText(text).width <= maxWidth) break; size -= 1; }
+  while (size > min) {
+    setCanvasFont(ctx, size, 'Oxanium', '700');
+    if (ctx.measureText(text).width <= maxWidth) break;
+    size -= 1;
+  }
+  setCanvasFont(ctx, size, 'Oxanium', '700');
   return size;
+}
+function clippedText(ctx, text, { x, y, width, height, align = 'left', fontSize = 16, minFontSize = 8, padding = 4 }) {
+  const value = String(text || '-');
+  const innerWidth = Math.max(1, width - padding * 2);
+  fit(ctx, value, innerWidth, fontSize, minFontSize);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y - height / 2, width, height);
+  ctx.clip();
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  const textX = align === 'right' ? x + width - padding : align === 'center' ? x + width / 2 : x + padding;
+  ctx.fillText(value, textX, y);
+  ctx.restore();
 }
 async function logoFor(participant) {
   if (participant?.type !== 'team') return null;
@@ -46,8 +65,9 @@ async function renderLeagueTable(phase) {
   for (let i = 0; i < 20; i += 1) {
     const row = rows[i]; if (!row) continue;
     const y = 318 + i * 28.35; const participant = phase.slots.find(slot => slot.participantKey === row.participantKey) || row;
-    const logo = await logoFor(participant); drawLogo(ctx, logo, participant, 201, y - 12, 28, 24);
-    ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; fit(ctx, row.displayName || '-', 350, 20, 11); ctx.fillText(row.displayName || '-', 238, y);
+    const logo = await logoFor(participant); drawLogo(ctx, logo, participant, 202, y - 11, 24, 22);
+    ctx.fillStyle = '#ffffff';
+    clippedText(ctx, row.displayName || '-', { x: 232, y, width: 400, height: 25, fontSize: 19, minFontSize: 10, padding: 6 });
     ctx.textAlign = 'center'; setCanvasFont(ctx, 18, 'Oxanium', '700');
     [row.played, row.wins, row.draws, row.losses, row.goalDifference, row.points].forEach((value, col) => ctx.fillText(String(value ?? 0), [710, 855, 1025, 1205, 1370, 1530][col], y));
   }
@@ -59,13 +79,16 @@ async function renderLeagueSchedule(phase) {
   const columns = [63, 462, 852, 1245];
   for (let day = 0; day < 4; day += 1) for (let i = 0; i < 10; i += 1) {
     const match = phase.matchdays?.[day]?.matches?.[i]; if (!match) continue;
-    const x = columns[day]; const y = 414 + i * 45.2;
-    drawLogo(ctx, await logoFor(match.home), match.home, x + 9, y - 17, 34, 34); drawLogo(ctx, await logoFor(match.away), match.away, x + 334, y - 17, 34, 34);
+    const x = columns[day]; const y = 411 + i * 45.2;
+    drawLogo(ctx, await logoFor(match.home), match.home, x + 11, y - 14, 28, 28);
+    drawLogo(ctx, await logoFor(match.away), match.away, x + 337, y - 14, 28, 28);
     ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
     const left = match.home.displayName || (match.home.type === 'bye' ? 'Freilos' : '-'); const right = match.away.displayName || (match.away.type === 'bye' ? 'Freilos' : '-');
-    ctx.textAlign = 'left'; fit(ctx, left, 105, 16, 9); ctx.fillText(left, x + 52, y);
-    ctx.textAlign = 'right'; fit(ctx, right, 105, 16, 9); ctx.fillText(right, x + 325, y);
-    if (match.status === 'confirmed' && match.result) { ctx.textAlign = 'center'; setCanvasFont(ctx, 16, 'Oxanium', '700'); ctx.fillText(`${match.result.homeGoals} : ${match.result.awayGoals}`, x + 190, y); }
+    clippedText(ctx, left, { x: x + 48, y, width: 112, height: 32, fontSize: 14, minFontSize: 7, padding: 4 });
+    clippedText(ctx, right, { x: x + 222, y, width: 112, height: 32, align: 'right', fontSize: 14, minFontSize: 7, padding: 4 });
+    if (match.status === 'confirmed' && match.result) {
+      clippedText(ctx, `${match.result.homeGoals} : ${match.result.awayGoals}`, { x: x + 163, y, width: 56, height: 32, align: 'center', fontSize: 14, minFontSize: 10, padding: 2 });
+    }
   }
   return canvas.toBuffer('image/png');
 }
