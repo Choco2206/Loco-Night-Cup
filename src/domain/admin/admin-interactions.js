@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 21808)
-Total output lines: 2164
-
 'use strict';
 
 const {
@@ -166,9 +163,9 @@ const MANUAL_CHECKIN_PAGE_SIZE = 25;
 const TEAM_ACHIEVEMENT_PAGE_SIZE = 25;
 const HALL_OF_FAME_TEAM_PAGE_SIZE = 25;
 const TEAM_ACHIEVEMENT_TITLES = {
-  gold: { label: 'Cup-Sieg', emoji: '🥇' },
-  silver: { label: 'Platz 2', emoji: '🥈' },
-  bronze: { label: 'Platz 3', emoji: '🥉' },
+  gold: { label: 'Cup-Sieg', emoji: 'ðŸ¥‡' },
+  silver: { label: 'Platz 2', emoji: 'ðŸ¥ˆ' },
+  bronze: { label: 'Platz 3', emoji: 'ðŸ¥‰' },
 };
 
 function summarizeNicknameSync(summary) {
@@ -402,6 +399,7 @@ function buildTeamBanSelectPayload(page = 0) {
   };
 }
 
+
 function buildTeamDetailsSelectPayload(page = 0) {
   const teams = sortedRegisteredTeams();
   if (!teams.length) throw new Error('Es gibt keine aktiven/registrierten Teams.');
@@ -511,12 +509,12 @@ function buildTeamAchievementConfirmPayload(team, titleKey) {
         new ButtonBuilder()
           .setCustomId(`admin_team_achievement_confirm:${team.id}:${titleKey}`)
           .setLabel('Bestaetigen')
-          .setEmoji('✅')
+          .setEmoji('âœ…')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`admin_team_achievement_cancel:${team.id}:${titleKey}`)
           .setLabel('Abbrechen')
-          .setEmoji('❌')
+          .setEmoji('âŒ')
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -801,6 +799,7 @@ function buildAdminRemoveCoManagerPayload(team) {
             value: String(co.userId),
             description: `User-ID: ${String(co.userId).slice(0, 90)}`,
           })))
+
       ),
     ],
   };
@@ -992,7 +991,203 @@ function buildBanDurationSelect(teamId, reason) {
 
 function buildBanManualModal(teamId, reason, durationValue) {
   const modal = new ModalBuilder()
-    .setCustomId(`admin_team_ban_manual_modal:${teamId}:${reason}:${dur…1808 tokens truncated…it postHallOfFameTest({
+    .setCustomId(`admin_team_ban_manual_modal:${teamId}:${reason}:${durationValue}`)
+    .setTitle('Team sperren');
+
+  const reasonInput = new TextInputBuilder()
+    .setCustomId('ban_reason')
+    .setLabel('Manueller Grund')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(reason === 'manual_reason')
+    .setMaxLength(120);
+
+  const daysInput = new TextInputBuilder()
+    .setCustomId('ban_days')
+    .setLabel('Dauer in Tagen')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(durationValue === 'manual')
+    .setMaxLength(3);
+
+  if (durationValue !== 'manual') daysInput.setValue(String(durationValue));
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(reasonInput),
+    new ActionRowBuilder().addComponents(daysInput)
+  );
+  return modal;
+}
+
+function buildActiveBanSelect() {
+  const activeBans = listActiveBans().filter(ban => ban.teamId || ban.team?.teamId || ban.targets?.teamId);
+  if (!activeBans.length) throw new Error('Aktuell gibt es keine aktiven Sperren.');
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('admin_team_unban_select')
+    .setPlaceholder('Sperre auswaehlen')
+    .addOptions(activeBans.slice(0, 25).map(ban => ({
+      label: String(ban.clubName || ban.team?.clubNameSnapshot || ban.teamId || 'Unbekanntes Team').slice(0, 100),
+      value: String(ban.teamId || ban.team?.teamId || ban.targets?.teamId),
+      description: String(ban.customReason || ban.reason || 'Sperre').slice(0, 100),
+    })));
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`admin_hof_day_select:${firstTeamId}:${secondTeamId}:${thirdTeamId}`)
+    .setPlaceholder('Wochentag auswaehlen')
+    .addOptions(Object.entries(CEREMONY_DAY_LABELS).map(([value, label]) => ({ label, value })));
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function summarizeSetupItems(items, label) {
+  if (!items.length) return `${label}: 0`;
+  const shown = items.slice(0, 8).map(item => item.name).join(', ');
+  const suffix = items.length > 8 ? `, +${items.length - 8} weitere` : '';
+  return `${label}: ${items.length} (${shown}${suffix})`;
+}
+
+function nextByeNumber(eventKey, byes) {
+  let max = 0;
+  for (const bye of byes || []) {
+    const match = String(bye?.id || '').match(new RegExp(`^bye_${eventKey}_(\\d+)$`));
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return max + 1;
+}
+
+function addManualBye(eventKey, actorUserId, settings) {
+  updateEventData(eventKey, event => {
+    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr hinzugefuegt werden.');
+    event.byes = Array.isArray(event.byes) ? event.byes : [];
+    const number = nextByeNumber(eventKey, event.byes);
+    event.byes.push({
+      type: 'bye',
+      status: 'active',
+      id: `bye_${eventKey}_${number}`,
+      displayName: 'Freilos',
+      addedAt: new Date().toISOString(),
+      addedByUserId: String(actorUserId),
+    });
+    recalculateCheckinFormat(event, settings);
+    return event;
+  });
+}
+
+function removeManualBye(eventKey, actorUserId, settings) {
+  let removed = false;
+  updateEventData(eventKey, event => {
+    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr entfernt werden.');
+    event.byes = Array.isArray(event.byes) ? event.byes : [];
+    const index = event.byes.map(bye => bye?.type === 'bye' && bye?.status !== 'removed').lastIndexOf(true);
+    if (index === -1) throw new Error('Fuer dieses Event gibt es kein Freilos.');
+
+    event.byes[index] = {
+      ...event.byes[index],
+      status: 'removed',
+      removedAt: new Date().toISOString(),
+      removedByUserId: String(actorUserId),
+    };
+    removed = true;
+    recalculateCheckinFormat(event, settings);
+    return event;
+  });
+  return removed;
+}
+
+async function replyInteraction(interaction, content, extra = {}) {
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({ content, ...extra }).catch(() => {});
+  } else {
+    await interaction.reply({ content, flags: EPHEMERAL, ...extra }).catch(() => {});
+  }
+}
+
+async function postAdminLogMessage(client, settings, content) {
+  const channelId = settings.channels?.logChannelId;
+  if (!client?.channels?.fetch || !channelId) {
+    console.log(`[admin-log] ${content}`);
+    return false;
+  }
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.send) {
+    console.log(`[admin-log] ${content}`);
+    return false;
+  }
+
+  await channel.send({ content, allowedMentions: { parse: ['users'] } }).catch(error => {
+    console.warn(`[admin-log] ${error.message}`);
+  });
+  return true;
+}
+
+async function handleAdminSelect(interaction, client, settings) {
+  if (interaction.customId === 'admin_panel_category_select') {
+    const category = interaction.values?.[0];
+    await interaction.update(buildAdminPanelPayload(category));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_details_select:')) {
+    const teamId = interaction.values?.[0];
+    const team = findTeamById(teamId);
+    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
+    await interaction.update(buildTeamDetailsPayload(team));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_team_remove_covm_select:')) {
+    const [, teamId] = interaction.customId.split(':');
+    const userId = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const updatedTeam = await handleAdminRemoveCoManager({ interaction, client, settings, teamId, userId });
+    await interaction.editReply({
+      content: `<@${userId}> wurde als Co-VM bei **${updatedTeam.clubName}** entfernt.`,
+      embeds: [],
+      components: [],
+      allowedMentions: { parse: ['users'] },
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_first_select')) {
+    const firstTeamId = interaction.values?.[0];
+    await interaction.update(buildHallOfFameTeamSelectPayload({
+      placement: 'second',
+      firstTeamId,
+    }));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_second_select:')) {
+    const [, firstTeamId] = interaction.customId.split(':');
+    const secondTeamId = interaction.values?.[0];
+    await interaction.update(buildHallOfFameTeamSelectPayload({
+      placement: 'third',
+      firstTeamId,
+      secondTeamId,
+    }));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_third_select:')) {
+    const [, firstTeamId, secondTeamId] = interaction.customId.split(':');
+    const thirdTeamId = interaction.values?.[0];
+    await interaction.update({
+      content: 'Wochentag fuer den Hall-of-Fame-Test auswaehlen.',
+      components: [buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId)],
+    });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('admin_hof_day_select:')) {
+    const [, firstTeamId, secondTeamId, thirdTeamId] = interaction.customId.split(':');
+    const dayKey = interaction.values?.[0];
+    await interaction.deferUpdate();
+    const result = await postHallOfFameTest({
       guild: interaction.guild,
       dayKey,
       firstTeamId,
@@ -1005,6 +1200,7 @@ function buildBanManualModal(teamId, reason, durationValue) {
         `Wochentag: ${result.dayLabel}`,
         `1. ${result.teams.first.clubName}`,
         `2. ${result.teams.second.clubName}`,
+
         `3. ${result.teams.third.clubName}`,
       ].join('\n'),
       components: [],
@@ -1405,6 +1601,7 @@ async function handleAdminModal(interaction, client, settings) {
       flags: EPHEMERAL,
     });
     return true;
+
   }
 
   if (interaction.customId.startsWith('admin_team_add_covm_manual_modal:')) {
@@ -1544,7 +1741,7 @@ async function handleAdminInteraction(interaction, client) {
       );
 
       await interaction.editReply({
-        content: `✅ **${updatedTeam.clubName}** hat +1 ${definition.emoji} **${definition.label}** erhalten. Team-Erfolge wurden aktualisiert.`,
+        content: `âœ… **${updatedTeam.clubName}** hat +1 ${definition.emoji} **${definition.label}** erhalten. Team-Erfolge wurden aktualisiert.`,
         embeds: [],
         components: [],
         allowedMentions: { parse: [] },
@@ -1553,7 +1750,7 @@ async function handleAdminInteraction(interaction, client) {
     }
 
     if (actionCustomId.startsWith('admin_team_achievement_cancel:')) {
-      await interaction.update({ content: '❌ Vorgang abgebrochen.', embeds: [], components: [] });
+      await interaction.update({ content: 'âŒ Vorgang abgebrochen.', embeds: [], components: [] });
       return true;
     }
 
@@ -1805,6 +2002,7 @@ async function handleAdminInteraction(interaction, client) {
         content: 'Welche K.O.-Bildvorlage soll getestet werden?',
         components: [new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
+
             .setCustomId('admin_ko_image_test_select')
             .setPlaceholder('K.O.-Bild auswaehlen')
             .addOptions(Object.entries(TEST_VARIANTS).map(([value, variant]) => ({
@@ -1969,3 +2167,4 @@ module.exports = {
   handleAdminButton: handleAdminInteraction,
   handleAdminInteraction,
 };
+
