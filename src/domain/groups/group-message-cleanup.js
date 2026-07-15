@@ -10,6 +10,7 @@ function activeGroupChannelIds() {
 
   for (const eventKey of EVENT_KEYS) {
     const event = readEventData(eventKey);
+    if (event.leaguePhase?.phaseType === 'league' && event.leaguePhase.status !== 'completed' && event.leaguePhase.resultsChannelId) channelIds.add(String(event.leaguePhase.resultsChannelId));
     if (!event.groups?.groups || event.groups.status === 'completed') continue;
     for (const group of Object.values(event.groups.groups)) {
       if (group.channelId) channelIds.add(String(group.channelId));
@@ -35,8 +36,9 @@ async function handleGroupMessage(message) {
 }
 
 async function deleteUserMessagesFromGroupChannel(client, group, limit = 500) {
-  if (!client || !group?.channelId) return { deleted: 0, scanned: 0 };
-  const channel = await client.channels.fetch(group.channelId).catch(() => null);
+  const channelId = group?.phaseType === 'league' ? group.resultsChannelId : group?.channelId;
+  if (!client || !channelId) return { deleted: 0, scanned: 0 };
+  const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.messages?.fetch) return { deleted: 0, scanned: 0 };
 
   let before;

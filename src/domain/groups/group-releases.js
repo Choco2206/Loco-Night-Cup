@@ -400,6 +400,13 @@ async function releaseSlot(client, eventKey, slot, now = new Date()) {
 
 async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
   const event = readEventData(eventKey);
+  if (event.leaguePhase?.phaseType === 'league') {
+    const { releaseLeagueMatchday } = require('../league-phase');
+    const slot = Math.min(4, Number(event.leaguePhase.currentMatchday || 0) + 1);
+    const released = await releaseLeagueMatchday(client, eventKey, slot, now);
+    if (!released) throw new Error('Aktuell kann kein weiterer Ligaphasen-Spieltag freigegeben werden.');
+    return { slot, groups: [{ groupKey: 'Ligaphase', slot }] };
+  }
   if (!event.groups?.groups || !Object.keys(event.groups.groups).length) {
     throw new Error('Fuer dieses Event wurden noch keine Gruppen gezogen.');
   }
@@ -432,6 +439,10 @@ async function maybeReleaseNextSlot(client, eventKey, groupKeyOrNow = null, mayb
   const groupKey = typeof groupKeyOrNow === 'string' ? groupKeyOrNow : null;
   const now = typeof groupKeyOrNow === 'string' ? maybeNow : (groupKeyOrNow || maybeNow || new Date());
   const event = readEventData(eventKey);
+  if (event.leaguePhase?.phaseType === 'league') {
+    const { maybeReleaseLeagueStart } = require('../league-phase');
+    return maybeReleaseLeagueStart(client, eventKey, now);
+  }
   if (event.groups?.status === 'completed') return [];
 
   ensureReleaseState(eventKey, event, now);
@@ -504,6 +515,11 @@ function setTimer(key, targetAt, callback) {
 function scheduleEvent(client, eventKey) {
   clearEventTimers(eventKey);
   const event = readEventData(eventKey);
+  if (event.leaguePhase?.phaseType === 'league') {
+    const { scheduleLeaguePhase } = require('../league-phase');
+    scheduleLeaguePhase(client, eventKey);
+    return;
+  }
   if (!event.groups?.groups || !Object.keys(event.groups.groups).length) return;
   if (event.groups.status === 'completed') return;
 
@@ -530,12 +546,22 @@ function scheduleEvent(client, eventKey) {
 async function afterGroupResultConfirmed(client, eventKey, groupKeyOrNow = null, maybeNow = new Date()) {
   const groupKey = typeof groupKeyOrNow === 'string' ? groupKeyOrNow : null;
   const now = typeof groupKeyOrNow === 'string' ? maybeNow : (groupKeyOrNow || maybeNow || new Date());
+  if (String(groupKey || '').toLowerCase() === 'league' || readEventData(eventKey).leaguePhase?.phaseType === 'league') {
+    const { advanceLeaguePhase } = require('../league-phase');
+    return advanceLeaguePhase(client, eventKey, now);
+  }
   await maybeReleaseNextSlot(client, eventKey, groupKey, now);
   await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
 }
 
 async function initGroupReleases(client) {
   for (const eventKey of EVENT_KEYS) {
+    const startupEvent = readEventData(eventKey);
+    if (startupEvent.leaguePhase?.phaseType === 'league') {
+      const { drawLeaguePhaseForEvent } = require('../league-phase');
+      await drawLeaguePhaseForEvent({ eventKey, client }).catch(error => console.error(`[league-phase] Wiederherstellung fuer ${eventKey} fehlgeschlagen:`, error));
+      console.info(`[league-phase] ${eventKey}: vorhandene Ligaphase nach Neustart wiederhergestellt.`);
+    }
     scheduleEvent(client, eventKey);
     await maybeReleaseNextSlot(client, eventKey).catch(error => console.error('Gruppen-Spielfreigabe beim Start fehlgeschlagen:', error));
     await maybeCreateKnockoutAfterGroupsComplete(client, eventKey).catch(error => console.error('K.O.-Auto-Erstellung beim Start fehlgeschlagen:', error));

@@ -41,6 +41,10 @@ function collectGroupRefs(eventKey, event, messages) {
   const refs = [];
   const messageGroups = messages.groups?.[eventKey]?.groups || {};
   const groups = event.groups?.groups || {};
+  if (event.leaguePhase?.phaseType === 'league') {
+    refs.push({ groupKey: 'league', channelId: event.leaguePhase.overviewChannelId || null, roleId: event.leaguePhase.roleId || null, teamIds: (event.leaguePhase.slots || []).filter(slot => slot.type === 'team' && slot.teamId).map(slot => String(slot.teamId)) });
+    if (event.leaguePhase.resultsChannelId && event.leaguePhase.resultsChannelId !== event.leaguePhase.overviewChannelId) refs.push({ groupKey: 'league-results', channelId: event.leaguePhase.resultsChannelId, roleId: null, teamIds: [] });
+  }
   for (const group of Object.values(groups)) {
     refs.push({
       groupKey: group.groupKey,
@@ -143,6 +147,7 @@ async function clearRoleMembers(guild, groupRefs, summary) {
       removed += 1;
     }
     summary.clearedGroupRoles.push({ roleId: role.id, name: role.name, removed });
+    if (ref.groupKey === 'league') await role.delete('Loco Night Cup Ligaphasenrolle bereinigt').catch(() => null);
   }
 }
 
@@ -257,8 +262,10 @@ function resetMessages(eventKey) {
     const defaults = createMessagesDefault();
     messages.groups = messages.groups || {};
     messages.knockout = messages.knockout || {};
+    messages.leaguePhase = messages.leaguePhase || {};
     messages.ceremony = messages.ceremony || {};
     messages.groups[eventKey] = defaults.groups[eventKey];
+    messages.leaguePhase[eventKey] = defaults.leaguePhase[eventKey];
     messages.knockout[eventKey] = defaults.knockout[eventKey];
     messages.ceremony[eventKey] = defaults.ceremony[eventKey];
 

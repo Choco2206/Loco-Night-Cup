@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 21808)
+Total output lines: 2164
+
 'use strict';
 
 const {
@@ -54,6 +57,7 @@ const {
 const { buildAdminPanelPayload } = require('./admin-components');
 const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-test');
+const { postLeaguePhaseTest } = require('../league-phase/league-phase-test');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -83,6 +87,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_testdata_remove',
   'admin_simulate_groups',
   'admin_schedule_visual_test',
+  'admin_league_phase_test',
   'admin_ko_images_test',
   'admin_simulate_knockout',
   'admin_server_setup',
@@ -99,6 +104,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_simulate_groups_select',
   'admin_schedule_visual_test_select',
   'admin_ko_image_test_select',
+  'admin_league_phase_test_select',
   'admin_simulate_knockout_select',
   'admin_ceremony_post_select',
   'admin_team_ban_team_select',
@@ -986,203 +992,7 @@ function buildBanDurationSelect(teamId, reason) {
 
 function buildBanManualModal(teamId, reason, durationValue) {
   const modal = new ModalBuilder()
-    .setCustomId(`admin_team_ban_manual_modal:${teamId}:${reason}:${durationValue}`)
-    .setTitle('Team sperren');
-
-  const reasonInput = new TextInputBuilder()
-    .setCustomId('ban_reason')
-    .setLabel('Manueller Grund')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(reason === 'manual_reason')
-    .setMaxLength(120);
-
-  const daysInput = new TextInputBuilder()
-    .setCustomId('ban_days')
-    .setLabel('Dauer in Tagen')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(durationValue === 'manual')
-    .setMaxLength(3);
-
-  if (durationValue !== 'manual') daysInput.setValue(String(durationValue));
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(reasonInput),
-    new ActionRowBuilder().addComponents(daysInput)
-  );
-  return modal;
-}
-
-function buildActiveBanSelect() {
-  const activeBans = listActiveBans().filter(ban => ban.teamId || ban.team?.teamId || ban.targets?.teamId);
-  if (!activeBans.length) throw new Error('Aktuell gibt es keine aktiven Sperren.');
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('admin_team_unban_select')
-    .setPlaceholder('Sperre auswaehlen')
-    .addOptions(activeBans.slice(0, 25).map(ban => ({
-      label: String(ban.clubName || ban.team?.clubNameSnapshot || ban.teamId || 'Unbekanntes Team').slice(0, 100),
-      value: String(ban.teamId || ban.team?.teamId || ban.targets?.teamId),
-      description: String(ban.customReason || ban.reason || 'Sperre').slice(0, 100),
-    })));
-
-  return new ActionRowBuilder().addComponents(select);
-}
-
-function buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId) {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(`admin_hof_day_select:${firstTeamId}:${secondTeamId}:${thirdTeamId}`)
-    .setPlaceholder('Wochentag auswaehlen')
-    .addOptions(Object.entries(CEREMONY_DAY_LABELS).map(([value, label]) => ({ label, value })));
-
-  return new ActionRowBuilder().addComponents(select);
-}
-
-function summarizeSetupItems(items, label) {
-  if (!items.length) return `${label}: 0`;
-  const shown = items.slice(0, 8).map(item => item.name).join(', ');
-  const suffix = items.length > 8 ? `, +${items.length - 8} weitere` : '';
-  return `${label}: ${items.length} (${shown}${suffix})`;
-}
-
-function nextByeNumber(eventKey, byes) {
-  let max = 0;
-  for (const bye of byes || []) {
-    const match = String(bye?.id || '').match(new RegExp(`^bye_${eventKey}_(\\d+)$`));
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return max + 1;
-}
-
-function addManualBye(eventKey, actorUserId, settings) {
-  updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr hinzugefuegt werden.');
-    event.byes = Array.isArray(event.byes) ? event.byes : [];
-    const number = nextByeNumber(eventKey, event.byes);
-    event.byes.push({
-      type: 'bye',
-      status: 'active',
-      id: `bye_${eventKey}_${number}`,
-      displayName: 'Freilos',
-      addedAt: new Date().toISOString(),
-      addedByUserId: String(actorUserId),
-    });
-    recalculateCheckinFormat(event, settings);
-    return event;
-  });
-}
-
-function removeManualBye(eventKey, actorUserId, settings) {
-  let removed = false;
-  updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr entfernt werden.');
-    event.byes = Array.isArray(event.byes) ? event.byes : [];
-    const index = event.byes.map(bye => bye?.type === 'bye' && bye?.status !== 'removed').lastIndexOf(true);
-    if (index === -1) throw new Error('Fuer dieses Event gibt es kein Freilos.');
-
-    event.byes[index] = {
-      ...event.byes[index],
-      status: 'removed',
-      removedAt: new Date().toISOString(),
-      removedByUserId: String(actorUserId),
-    };
-    removed = true;
-    recalculateCheckinFormat(event, settings);
-    return event;
-  });
-  return removed;
-}
-
-async function replyInteraction(interaction, content, extra = {}) {
-  if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({ content, ...extra }).catch(() => {});
-  } else {
-    await interaction.reply({ content, flags: EPHEMERAL, ...extra }).catch(() => {});
-  }
-}
-
-async function postAdminLogMessage(client, settings, content) {
-  const channelId = settings.channels?.logChannelId;
-  if (!client?.channels?.fetch || !channelId) {
-    console.log(`[admin-log] ${content}`);
-    return false;
-  }
-
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.send) {
-    console.log(`[admin-log] ${content}`);
-    return false;
-  }
-
-  await channel.send({ content, allowedMentions: { parse: ['users'] } }).catch(error => {
-    console.warn(`[admin-log] ${error.message}`);
-  });
-  return true;
-}
-
-async function handleAdminSelect(interaction, client, settings) {
-  if (interaction.customId === 'admin_panel_category_select') {
-    const category = interaction.values?.[0];
-    await interaction.update(buildAdminPanelPayload(category));
-    return true;
-  }
-
-  if (interaction.customId.startsWith('admin_team_details_select:')) {
-    const teamId = interaction.values?.[0];
-    const team = findTeamById(teamId);
-    if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
-    await interaction.update(buildTeamDetailsPayload(team));
-    return true;
-  }
-
-  if (interaction.customId.startsWith('admin_team_remove_covm_select:')) {
-    const [, teamId] = interaction.customId.split(':');
-    const userId = interaction.values?.[0];
-    await interaction.deferUpdate();
-    const updatedTeam = await handleAdminRemoveCoManager({ interaction, client, settings, teamId, userId });
-    await interaction.editReply({
-      content: `<@${userId}> wurde als Co-VM bei **${updatedTeam.clubName}** entfernt.`,
-      embeds: [],
-      components: [],
-      allowedMentions: { parse: ['users'] },
-    });
-    return true;
-  }
-
-  if (interaction.customId.startsWith('admin_hof_first_select')) {
-    const firstTeamId = interaction.values?.[0];
-    await interaction.update(buildHallOfFameTeamSelectPayload({
-      placement: 'second',
-      firstTeamId,
-    }));
-    return true;
-  }
-
-  if (interaction.customId.startsWith('admin_hof_second_select:')) {
-    const [, firstTeamId] = interaction.customId.split(':');
-    const secondTeamId = interaction.values?.[0];
-    await interaction.update(buildHallOfFameTeamSelectPayload({
-      placement: 'third',
-      firstTeamId,
-      secondTeamId,
-    }));
-    return true;
-  }
-
-  if (interaction.customId.startsWith('admin_hof_third_select:')) {
-    const [, firstTeamId, secondTeamId] = interaction.customId.split(':');
-    const thirdTeamId = interaction.values?.[0];
-    await interaction.update({
-      content: 'Wochentag fuer den Hall-of-Fame-Test auswaehlen.',
-      components: [buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId)],
-    });
-    return true;
-  }
-
-  if (interaction.customId.startsWith('admin_hof_day_select:')) {
-    const [, firstTeamId, secondTeamId, thirdTeamId] = interaction.customId.split(':');
-    const dayKey = interaction.values?.[0];
-    await interaction.deferUpdate();
-    const result = await postHallOfFameTest({
+    .setCustomId(`admin_team_ban_manual_modal:${teamId}:${reason}:${dur…1808 tokens truncated…it postHallOfFameTest({
       guild: interaction.guild,
       dayKey,
       firstTeamId,
@@ -1209,6 +1019,13 @@ async function handleAdminSelect(interaction, client, settings) {
       content: `${result.label} wurde in <#${result.channelId}> gepostet.`,
       components: [],
     });
+    return true;
+  }
+
+  if (interaction.customId === 'admin_league_phase_test_select') {
+    await interaction.deferUpdate();
+    const result = await postLeaguePhaseTest({ guild: interaction.guild, variant: interaction.values?.[0] });
+    await interaction.editReply({ content: `Ligaphasentest wurde in <#${result.channelId}> gepostet.`, components: [] });
     return true;
   }
 
@@ -1363,7 +1180,9 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
-      content: `Gruppen fuer ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
+      content: result.leaguePhase
+        ? `Ligaphase fuer ${EVENT_LABELS[eventKey]} wurde gezogen: 4 Spieltage mit 40 Begegnungen erstellt.`
+        : `Gruppen fuer ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
       components: [],
     });
     return true;
@@ -1438,7 +1257,7 @@ async function handleAdminSelect(interaction, client, settings) {
         client,
         guild: interaction.guild,
       });
-      groupCount = Object.keys(draw.groups || {}).length;
+      groupCount = draw.leaguePhase ? 0 : Object.keys(draw.groups || {}).length;
       event = draw.event;
     }
     await refreshRegisteredTeamsOverview(client).catch(() => null);
@@ -1446,7 +1265,9 @@ async function handleAdminSelect(interaction, client, settings) {
     await interaction.editReply({
       content: [
         `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} zufaellig ausgewaehlte aktive Teams mit Logo eingecheckt.`,
-        `${groupCount} Gruppen wurden ueber den normalen Turnierstart persistent erzeugt.`,
+        event.leaguePhase?.phaseType === 'league'
+          ? 'Die 20er-Ligaphase mit 4 Spieltagen und 40 Begegnungen wurde persistent erzeugt.'
+          : `${groupCount} Gruppen wurden ueber den normalen Turnierstart persistent erzeugt.`,
         'Die Ergebnisbuttons koennen jetzt direkt zum Testen der Live-Tabelle verwendet werden.',
       ].join('\n'),
       components: [],
@@ -1959,6 +1780,21 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Fuer welches Event soll die Spielplan-Grafik mit allen sechs Zustaenden vorbereitet werden?',
         components: [buildEventSelect('admin_schedule_visual_test_select', 'Event auswaehlen')],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (actionCustomId === 'admin_league_phase_test') {
+      await interaction.reply({
+        content: 'Welche Ligaphasendarstellung soll getestet werden?',
+        components: [new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder().setCustomId('admin_league_phase_test_select').setPlaceholder('Ligaphasentest auswaehlen').addOptions([
+            { value: 'table', label: 'Ligaphasen-Tabelle testen', description: '20 Tabellenplaetze mit echten und klaren Testteams' },
+            { value: 'schedule', label: 'Ligaphasen-Spielplan testen', description: '40 valide Begegnungen, teils mit Ergebnissen' },
+            { value: 'complete', label: 'Ligaphase komplett testen', description: 'Tabelle und Spielplan ohne Eventdaten zu veraendern' },
+          ])
+        )],
         flags: EPHEMERAL,
       });
       return true;

@@ -54,6 +54,9 @@ function takeOpponentFor(seed, pool) {
 
 function createFirstRoundPairs(qualifiedTeams) {
   const ordered = qualifiedTeams.slice().sort((a, b) => Number(a.seed) - Number(b.seed));
+  if (ordered.length === 8 && ordered.every(team => team.groupKey === 'league')) {
+    return [[ordered[0], ordered[7]], [ordered[3], ordered[4]], [ordered[1], ordered[6]], [ordered[2], ordered[5]]];
+  }
   const topHalf = ordered.slice(0, ordered.length / 2);
   const pool = ordered.slice(ordered.length / 2);
 

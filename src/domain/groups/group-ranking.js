@@ -103,7 +103,7 @@ function compareGroupRows(group, allRows, a, b) {
 }
 
 function rankGroupRows(group) {
-  const rows = (group?.standings || []).filter(row => row.teamId).slice();
+  const rows = (group?.standings || []).filter(row => row.teamId || row.participantKey).slice();
   return rows.sort((a, b) => compareGroupRows(group, rows, a, b));
 }
 

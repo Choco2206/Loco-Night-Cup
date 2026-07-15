@@ -8,6 +8,7 @@ const { findActiveBanForTeamOrManagers } = require('../checkins/checkin-ban-inte
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const { getConfiguredGuild, getTeamUserIds } = require('./group-roles');
 const { refreshGroupPosts } = require('./group-posts');
+const { refreshLeaguePhasePosts } = require('../league-phase/league-phase-service');
 const { recalculateGroupStandings, updateGroupCompletion } = require('./group-results');
 
 function nowIso() {
@@ -34,7 +35,7 @@ function participantLabel(participant) {
 
 function getEventGroup(eventKey, groupKey) {
   const event = readEventData(eventKey);
-  const group = event.groups?.groups?.[groupKey];
+  const group = String(groupKey).toLowerCase() === 'league' ? event.leaguePhase : event.groups?.groups?.[groupKey];
   if (!group) throw new Error('Gruppe wurde nicht gefunden.');
   return { event, group };
 }
@@ -47,6 +48,7 @@ function getGroupTeamIds(group) {
 
 function getAllGroupedTeamIds(event) {
   const ids = [];
+  if (event.leaguePhase?.phaseType === 'league') ids.push(...getGroupTeamIds(event.leaguePhase));
   for (const group of Object.values(event.groups?.groups || {})) {
     ids.push(...getGroupTeamIds(group));
   }
@@ -206,6 +208,7 @@ function replaceSlotInGroup(group, oldSlot, replacementParticipant) {
 
   for (const matchday of group.matchdays || []) {
     for (const match of matchday.matches || []) {
+      if (group.phaseType === 'league' && match.status === 'confirmed') continue;
       let touched = false;
       if (participantKey(match.home) === key || Number(match.homeSlot) === Number(oldSlot.slot)) {
         match.home = { ...replacementParticipant };
@@ -242,7 +245,7 @@ function replaceGroupParticipant({ eventKey, groupKey, participantKeyValue, repl
 
   let outcome;
   updateEventData(eventKey, event => {
-    const group = event.groups?.groups?.[groupKey];
+    const group = String(groupKey).toLowerCase() === 'league' ? event.leaguePhase : event.groups?.groups?.[groupKey];
     if (!group) throw new Error('Gruppe wurde nicht gefunden.');
 
     const oldSlot = (group.slots || []).find(slot => participantKey(slot) === participantKeyValue);
@@ -327,8 +330,9 @@ async function syncReplacementDiscordResources({ client, eventKey, outcome }) {
   if (!guild) return { oldUserIds: [], newUserIds: [] };
 
   const roleId = outcome.group.roleId;
-  const channel = outcome.group.channelId
-    ? await client.channels.fetch(outcome.group.channelId).catch(() => null)
+  const channelId = outcome.group.phaseType === 'league' ? outcome.group.resultsChannelId : outcome.group.channelId;
+  const channel = channelId
+    ? await client.channels.fetch(channelId).catch(() => null)
     : null;
   const oldUserIds = getTeamUserIds(outcome.oldTeam);
   const newUserIds = getTeamUserIds(outcome.newTeam);
@@ -352,7 +356,8 @@ async function syncReplacementDiscordResources({ client, eventKey, outcome }) {
     }
   }
 
-  await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
+  if (outcome.group.phaseType === 'league') await refreshLeaguePhasePosts(client, eventKey);
+  else await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
   await refreshCheckinMessage(eventKey, client);
 
   return { oldUserIds, newUserIds };

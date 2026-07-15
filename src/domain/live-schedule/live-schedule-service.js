@@ -7,6 +7,7 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { readEventData } = require('../events/event-repository');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { findTeamById } = require('../teams/team-service');
+const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
@@ -34,12 +35,17 @@ function isGroupPhaseVisible(event) {
   return event?.groups?.groups && Object.keys(event.groups.groups).length > 0 && event.knockout?.status === 'not_created';
 }
 
+function isLeaguePhaseVisible(event) {
+  return event?.leaguePhase?.phaseType === 'league' && event.leaguePhase.status !== 'not_created' && event.knockout?.status === 'not_created';
+}
+
 function isKnockoutVisible(event) {
   return event?.knockout?.rounds && Object.keys(event.knockout.rounds).length > 0 && event.knockout.status !== 'not_created';
 }
 
 function getPhase(event) {
   if (isKnockoutVisible(event)) return 'knockout';
+  if (isLeaguePhaseVisible(event)) return 'league';
   if (isGroupPhaseVisible(event)) return 'groups';
   return null;
 }
@@ -142,6 +148,7 @@ function headerPayload(event, phase) {
       allowedMentions: { parse: [] },
     };
   }
+  if (phase === 'league') return { content: `📊 Loco Night Cup ${event.label || event.eventKey} • 20er-Ligaphase\n🏆 Die besten 8 qualifizieren sich für das Viertelfinale.`, allowedMentions: { parse: [] } };
   return {
     content: [
       `📊 Loco Night Cup ${event.label || event.eventKey} • Live-Spielplan`,
@@ -258,6 +265,16 @@ async function refreshLiveSchedule(client, eventKey, event = null) {
       });
       nextGroupMessageIds[group.groupKey] = message.id;
     }
+  }
+
+  if (phase === 'league') {
+    recalculateGroupStandings(currentEvent.leaguePhase);
+    const tableName = `public-ligaphase-table-${eventKey}.png`;
+    const scheduleName = `public-ligaphase-schedule-${eventKey}.png`;
+    const table = await upsertMessage(channel, latestState.groupMessageIds?.leagueTable, { content: null, embeds: [new EmbedBuilder().setImage(`attachment://${tableName}`)], attachments: [], files: [{ attachment: await renderLeagueTable(currentEvent.leaguePhase), name: tableName }], allowedMentions: { parse: [] } });
+    const schedule = await upsertMessage(channel, latestState.groupMessageIds?.leagueSchedule, { content: null, embeds: [new EmbedBuilder().setImage(`attachment://${scheduleName}`)], attachments: [], files: [{ attachment: await renderLeagueSchedule(currentEvent.leaguePhase), name: scheduleName }], allowedMentions: { parse: [] } });
+    nextGroupMessageIds.leagueTable = table.id;
+    nextGroupMessageIds.leagueSchedule = schedule.id;
   }
 
   if (phase === 'knockout') {

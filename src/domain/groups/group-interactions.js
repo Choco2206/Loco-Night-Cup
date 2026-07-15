@@ -13,6 +13,7 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { readEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { refreshGroupPosts } = require('./group-posts');
+const { refreshLeaguePhasePosts } = require('../league-phase');
 const { afterGroupResultConfirmed } = require('./group-releases');
 const {
   announceReplacement,
@@ -56,9 +57,14 @@ async function isAdminAllowed(interaction) {
 
 function getGroupFromEvent(eventKey, groupKey) {
   const event = readEventData(eventKey);
-  const group = event.groups?.groups?.[groupKey];
+  const group = String(groupKey).toLowerCase() === 'league' ? event.leaguePhase : event.groups?.groups?.[groupKey];
   if (!group) throw new Error('Gruppe wurde nicht gefunden.');
   return { event, group };
+}
+
+async function refreshPhasePosts(client, eventKey, event, group) {
+  if (group?.phaseType === 'league') return refreshLeaguePhasePosts(client, eventKey);
+  return refreshGroupPosts({ client, eventKey, event, group });
 }
 
 function labelForParticipant(participant) {
@@ -328,7 +334,7 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
-  await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
+  await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
   await notifyAdminDecision(interaction, outcome.match);
   if (outcome.status === 'confirmed') {
     await afterGroupResultConfirmed(client, eventKey, groupKey);
@@ -363,6 +369,13 @@ function collectGroupCandidates() {
   const candidates = [];
   for (const eventKey of EVENT_KEYS) {
     const event = readEventData(eventKey);
+    if (event.leaguePhase?.phaseType === 'league') {
+      const group = event.leaguePhase;
+      candidates.push({ eventKey, groupKey: 'league', event, group,
+        channelId: String(group.resultsChannelId || ''),
+        messageIds: Object.values(group.messages || {}).filter(Boolean).map(String),
+        liveTableMessageId: group.messages?.resultsTableMessageId || null });
+    }
     for (const [groupKey, group] of Object.entries(event.groups?.groups || {})) {
       const refs = messages.groups?.[eventKey]?.groups?.[groupKey] || {};
       candidates.push({
@@ -476,7 +489,7 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
-  await refreshGroupPosts({ client, eventKey, event: outcome.event, group: outcome.group });
+  await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
   await afterGroupResultConfirmed(client, eventKey, groupKey);
   await interaction.editReply({
     content: 'Admin-Ergebnis gesetzt. Tabelle und Spielplan wurden aktualisiert.',

@@ -385,6 +385,19 @@ function normalizeEventFile(eventKey) {
 
   changed = migrateEventFormat(event) || changed;
 
+  if (!isPlainObject(event.leaguePhase)) {
+    event.leaguePhase = createEventDefault(eventKey).leaguePhase;
+    changed = true;
+  } else {
+    const leagueDefaults = createEventDefault(eventKey).leaguePhase;
+    for (const [key, value] of Object.entries(leagueDefaults)) {
+      if (!Object.prototype.hasOwnProperty.call(event.leaguePhase, key)) {
+        event.leaguePhase[key] = JSON.parse(JSON.stringify(value));
+        changed = true;
+      }
+    }
+  }
+
   event.ceremony = isPlainObject(event.ceremony) ? event.ceremony : createEventDefault(eventKey).ceremony;
   if (!isPlainObject(event.ceremony.teamAchievements)) {
     event.ceremony.teamAchievements = {
@@ -528,6 +541,11 @@ function normalizeMessagesFile() {
     changed = true;
   }
 
+  if (!messages.leaguePhase) {
+    messages.leaguePhase = {};
+    changed = true;
+  }
+
   if (!messages.ceremony) {
     messages.ceremony = {};
     changed = true;
@@ -548,6 +566,8 @@ function normalizeMessagesFile() {
     cycleKey: null,
     groups: {},
   })) || changed;
+
+  changed = ensureEventKeys(messages.leaguePhase, () => ({ cycleKey: null })) || changed;
 
   changed = ensureEventKeys(messages.knockout, () => ({
     cycleKey: null,

@@ -109,6 +109,10 @@ function lockEventFormat(eventKey, actorUserId, now = new Date()) {
         skippedCheckins: field.skipped,
       },
     };
+    event.leaguePhase = {
+      phaseType: null, status: 'not_created', participants: [], slots: [], matchdays: [], standings: [],
+      currentMatchday: 0, transitionStatus: 'not_started', messages: {},
+    };
 
     event.meta = {
       ...event.meta,
@@ -188,6 +192,11 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
 }
 
 async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
+  const lockedEvent = readEventData(eventKey);
+  if (Number(lockedEvent.format?.size) === 20) {
+    const { drawLeaguePhaseForEvent } = require('../league-phase');
+    return drawLeaguePhaseForEvent({ eventKey, actorUserId, client, guild, now });
+  }
   const settings = readJson(FILES.settings, createSettingsDefault());
   const timestamp = nowIso(now);
   let drawResult;

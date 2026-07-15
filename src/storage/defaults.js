@@ -111,6 +111,11 @@ function createEventDefault(eventKey) {
       drawnBy: null,
       groups: {},
     },
+    leaguePhase: {
+      phaseType: null, status: 'not_created', participants: [], slots: [], matchdays: [], standings: [],
+      currentMatchday: 0, roleId: null, overviewChannelId: null, resultsChannelId: null,
+      transitionStatus: 'not_started', messages: {},
+    },
     knockout: {
       status: 'not_created',
       createdAt: null,
@@ -261,6 +266,7 @@ function createMessagesDefault() {
       updatedAt: null,
     },
     groups: createEventMap(() => emptyGroupMessages()),
+    leaguePhase: createEventMap(() => ({ cycleKey: null })),
     knockout: createEventMap(() => emptyKnockoutMessages()),
     banlist: {
       channelId: null,

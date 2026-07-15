@@ -32,6 +32,7 @@ function isAdminScorableMatch(match) {
 }
 
 function getGroup(event, groupKey) {
+  if (String(groupKey).toLowerCase() === 'league' && event.leaguePhase?.phaseType === 'league') return event.leaguePhase;
   return event.groups?.groups?.[groupKey] || null;
 }
 
@@ -123,7 +124,9 @@ function getUserSelectableMatches(group, userId) {
 
 function getAdminSelectableMatches(group) {
   normalizeGroupMatches(group);
-  return getMatches(group).filter(match => isAdminScorableMatch(match));
+  const matches = getMatches(group).filter(match => isAdminScorableMatch(match));
+  if (group.phaseType === 'league') return matches.filter(match => getMatchSlot(match) === Number(group.currentMatchday || 0));
+  return matches;
 }
 
 function parseGoals(value, label) {
@@ -172,6 +175,8 @@ function createStanding(slot) {
     slot: slot.slot,
     participantKey: slot.participantKey || participantKey(slot),
     teamId: slot.teamId,
+    byeId: slot.byeId,
+    type: slot.type,
     displayName: slot.displayName || findTeamById(slot.teamId)?.clubName || slot.teamId,
     played: 0,
     wins: 0,
@@ -202,7 +207,7 @@ function addResult(row, goalsFor, goalsAgainst) {
 
 function recalculateGroupStandings(group) {
   const rows = (group.slots || [])
-    .filter(slot => slot.type === 'team')
+    .filter(slot => group.phaseType === 'league' ? ['team', 'bye'].includes(slot.type) : slot.type === 'team')
     .map(createStanding);
   const byKey = new Map(rows.map(row => [row.participantKey, row]));
 
@@ -227,6 +232,11 @@ function isGroupComplete(group) {
 
 function updateGroupCompletion(event, group) {
   if (!isGroupComplete(group)) return false;
+
+  if (group.phaseType === 'league') {
+    group.allMatchesConfirmedAt = group.allMatchesConfirmedAt || nowIso();
+    return true;
+  }
 
   const timestamp = nowIso();
   group.completedAt = group.completedAt || timestamp;

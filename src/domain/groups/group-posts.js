@@ -241,6 +241,11 @@ async function refreshGroupPostsForTeam(client, teamId) {
   const refreshed = [];
   for (const eventKey of EVENT_KEYS) {
     const event = readEventData(eventKey);
+    if ((event.leaguePhase?.slots || []).some(slot => slot?.type === 'team' && String(slot.teamId) === String(teamId))) {
+      const { refreshLeaguePhasePosts } = require('../league-phase/league-phase-service');
+      await refreshLeaguePhasePosts(client, eventKey);
+      refreshed.push({ eventKey, groupKey: 'league' });
+    }
     for (const group of Object.values(event.groups?.groups || {})) {
       const containsTeam = (group.slots || []).some(slot => (
         slot?.type === 'team' && String(slot.teamId) === String(teamId)

@@ -78,6 +78,17 @@ function validateEvent(data, expectedEventKey = null) {
     errors.push('groups.groups must be an object');
   }
 
+  if (data.leaguePhase !== undefined && requireObject(errors, data.leaguePhase, 'leaguePhase')) {
+    requireArray(errors, data.leaguePhase.participants, 'leaguePhase.participants');
+    requireArray(errors, data.leaguePhase.matchdays, 'leaguePhase.matchdays');
+    requireArray(errors, data.leaguePhase.standings, 'leaguePhase.standings');
+    if (data.leaguePhase.phaseType === 'league') {
+      if (data.format.size !== 20) errors.push('leaguePhase requires locked format.size 20');
+      if (data.leaguePhase.participants.length !== 20) errors.push('leaguePhase.participants must contain 20 slots');
+      if (data.leaguePhase.matchdays.length !== 4) errors.push('leaguePhase.matchdays must contain 4 matchdays');
+    }
+  }
+
   if (requireObject(errors, data.knockout, 'knockout')) {
     if (!requireObject(errors, data.knockout.source, 'knockout.source')) return errors;
     if (data.knockout.source.avoidSameGroupRematches !== true) {

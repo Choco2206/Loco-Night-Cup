@@ -4,6 +4,7 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const { refreshLiveSchedule } = require('../live-schedule');
 const { buildKnockoutRounds } = require('./knockout-bracket');
 const { qualifyTeams } = require('./knockout-qualification');
+const { qualifyLeagueTopEight } = require('../league-phase/league-phase-results');
 const { upsertKnockoutPost } = require('./knockout-posts');
 
 function nowIso(now = new Date()) {
@@ -20,7 +21,8 @@ function createEmptyPlacements() {
 }
 
 function assertCanCreateKnockout(event) {
-  if (event.groups?.status !== 'completed') {
+  const leagueComplete = event.leaguePhase?.phaseType === 'league' && event.leaguePhase?.status === 'completed';
+  if (!leagueComplete && event.groups?.status !== 'completed') {
     throw new Error('Die K.O.-Phase kann erst erstellt werden, wenn die Gruppenphase abgeschlossen ist.');
   }
   if (event.knockout?.status && event.knockout.status !== 'not_created') {
@@ -31,7 +33,10 @@ function assertCanCreateKnockout(event) {
 function buildKnockoutState({ eventKey, event, actorUserId = null, now = new Date() }) {
   assertCanCreateKnockout(event);
   const timestamp = nowIso(now);
-  const qualification = qualifyTeams(event);
+  const leagueMode = event.leaguePhase?.phaseType === 'league';
+  const leagueQualified = leagueMode ? qualifyLeagueTopEight(event) : null;
+  if (leagueMode && leagueQualified.length !== 8) throw new Error('Die Ligaphase benoetigt 8 echte Teams fuer das Viertelfinale.');
+  const qualification = leagueMode ? { qualifiedTeams: leagueQualified, rule: 'league_top_8' } : qualifyTeams(event);
   const bracket = buildKnockoutRounds({
     eventKey,
     qualifiedTeams: qualification.qualifiedTeams,
@@ -52,6 +57,7 @@ function buildKnockoutState({ eventKey, event, actorUserId = null, now = new Dat
       qualifiedRule: qualification.rule,
       avoidSameGroupRematches: true,
       groupCompletedAt: event.groups?.completedAt || null,
+      leagueCompletedAt: event.leaguePhase?.completedAt || null,
     },
     qualifiedTeams: qualification.qualifiedTeams,
     rounds: bracket.rounds,
