@@ -8,11 +8,14 @@ const {
   EmbedBuilder,
   PermissionFlagsBits,
 } = require('discord.js');
+const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
+const { readEventData } = require('../events/event-repository');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
+const { buildRoundReleaseContent, getRoundReleaseAt } = require('./knockout-release');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
@@ -539,6 +542,50 @@ function isTeamParticipant(participant) {
   return participant?.type === 'team' && participant.teamId;
 }
 
+function readRoundMessageState(eventKey, roundKey) {
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  return messages.knockout?.[eventKey]?.rounds?.[roundKey] || {};
+}
+
+function updateRoundMessageState(eventKey, roundKey, updater) {
+  updateJson(FILES.messages, createMessagesDefault(), messages => {
+    messages.knockout = messages.knockout || {};
+    messages.knockout[eventKey] = messages.knockout[eventKey] || { cycleKey: null, rounds: {} };
+    messages.knockout[eventKey].rounds = messages.knockout[eventKey].rounds || {};
+    const current = messages.knockout[eventKey].rounds[roundKey] || {};
+    messages.knockout[eventKey].rounds[roundKey] = updater(current);
+    messages.meta = { ...(messages.meta || {}), updatedAt: nowIso() };
+    return messages;
+  });
+}
+
+async function ensureRoundReleaseMessage({ channel, eventKey, roundKey, round }) {
+  const releasedAt = getRoundReleaseAt(round);
+  if (!releasedAt) return null;
+
+  const state = readRoundMessageState(eventKey, roundKey);
+  if (state.releaseMessageId) {
+    const existing = await channel.messages.fetch(state.releaseMessageId).catch(() => null);
+    if (existing) return existing.id;
+  }
+
+  const userIds = getRoundTeamUserIds(round);
+  const mentions = userIds.map(userId => `<@${userId}>`).join(' ');
+  const label = ROUND_LABELS[roundKey] || roundKey;
+  const message = await channel.send({
+    content: buildRoundReleaseContent({ label, releasedAt, mentions }),
+    allowedMentions: { users: userIds },
+  });
+
+  updateRoundMessageState(eventKey, roundKey, current => ({
+    ...current,
+    releaseMessageId: message.id,
+    releasedAt: releasedAt.toISOString(),
+    updatedAt: nowIso(),
+  }));
+  return message.id;
+}
+
 function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts }) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     const timestamp = nowIso();
@@ -641,12 +688,34 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     roundPosts,
   });
 
+  for (const roundKey of activeRoundKeys(event)) {
+    const channel = roundChannelObjects[roundKey];
+    if (!channel) continue;
+    await ensureRoundReleaseMessage({
+      channel,
+      eventKey,
+      roundKey,
+      round: event.knockout.rounds[roundKey],
+    });
+  }
+
   return {
     categoryId: category.id,
     overviewChannelId: overviewChannel.id,
     overviewMessageId: overviewMessage.id,
     roundPosts,
   };
+}
+
+async function initKnockoutReleases(client) {
+  if (!client) return;
+  for (const eventKey of EVENT_KEYS) {
+    const event = readEventData(eventKey);
+    if (!event.knockout?.rounds || ['not_created', 'completed'].includes(event.knockout.status)) continue;
+    await upsertKnockoutPost({ client, eventKey, event }).catch(error => {
+      console.error(`K.O.-Freigabe-Init fuer ${eventKey} fehlgeschlagen:`, error);
+    });
+  }
 }
 
 module.exports = {
@@ -657,5 +726,6 @@ module.exports = {
   buildOverviewEmbed,
   buildRoundButtons,
   buildRoundEmbed,
+  initKnockoutReleases,
   upsertKnockoutPost,
 };

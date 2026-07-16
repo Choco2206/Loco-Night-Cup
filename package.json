@@ -7,7 +7,7 @@
     "start": "node index.js",
     "lint": "node scripts/check-syntax.js",
     "typecheck": "node scripts/check-syntax.js",
-    "test": "node test/team-stream-list.test.js"
+    "test": "node test/run.js"
   },
   "engines": {
     "node": "20.x"
