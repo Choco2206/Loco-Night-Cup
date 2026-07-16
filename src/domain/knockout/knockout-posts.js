@@ -15,7 +15,7 @@ const { readEventData } = require('../events/event-repository');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
-const { buildRoundReleaseContent, getRoundReleaseAt } = require('./knockout-release');
+const { buildRoundReleaseContent, isRoundReadyForRelease } = require('./knockout-release');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
@@ -559,22 +559,20 @@ function updateRoundMessageState(eventKey, roundKey, updater) {
   });
 }
 
-async function ensureRoundReleaseMessage({ channel, eventKey, roundKey, round }) {
-  const releasedAt = getRoundReleaseAt(round);
-  if (!releasedAt) return null;
-
+async function ensureRoundReleaseMessage({ channel, event, eventKey, roundKey, round }) {
+  if (!isRoundReadyForRelease(event, roundKey)) return null;
   const state = readRoundMessageState(eventKey, roundKey);
   if (state.releaseMessageId) {
     const existing = await channel.messages.fetch(state.releaseMessageId).catch(() => null);
     if (existing) return existing.id;
   }
 
-  const userIds = getRoundTeamUserIds(round);
-  const mentions = userIds.map(userId => `<@${userId}>`).join(' ');
+  const storedReleaseAt = state.releasedAt ? new Date(state.releasedAt) : null;
+  const releasedAt = storedReleaseAt && !Number.isNaN(storedReleaseAt.getTime()) ? storedReleaseAt : new Date();
   const label = ROUND_LABELS[roundKey] || roundKey;
   const message = await channel.send({
-    content: buildRoundReleaseContent({ label, releasedAt, mentions }),
-    allowedMentions: { users: userIds },
+    content: buildRoundReleaseContent({ label, releasedAt }),
+    allowedMentions: { parse: [] },
   });
 
   updateRoundMessageState(eventKey, roundKey, current => ({
@@ -693,6 +691,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     if (!channel) continue;
     await ensureRoundReleaseMessage({
       channel,
+      event,
       eventKey,
       roundKey,
       round: event.knockout.rounds[roundKey],

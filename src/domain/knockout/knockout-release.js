@@ -27,14 +27,28 @@ function getRoundReleaseAt(round) {
     .sort((a, b) => a.getTime() - b.getTime())[0] || null;
 }
 
-function buildRoundReleaseContent({ label, releasedAt, mentions = '' }) {
+function isRoundReadyForRelease(event, roundKey) {
+  const knockout = event?.knockout || {};
+  const round = knockout.rounds?.[roundKey];
+  if (!getRoundReleaseAt(round)) return false;
+  if (roundKey === knockout.firstRoundKey) return true;
+  const prerequisiteByRound = {
+    quarter_final: 'round_of_16',
+    semi_final: 'quarter_final',
+    third_place: 'semi_final',
+    final: 'semi_final',
+  };
+  const prerequisite = prerequisiteByRound[roundKey];
+  return !prerequisite || knockout.rounds?.[prerequisite]?.status === 'completed';
+}
+
+function buildRoundReleaseContent({ label, releasedAt }) {
   const inviteEnd = addMinutes(releasedAt, INVITE_WINDOW_MINUTES);
   return [
-    mentions,
     `📢 **${label} ist freigegeben.**`,
     `Einladezeit: **${formatHm(releasedAt)} Uhr bis ${formatHm(inviteEnd)} Uhr**.`,
     'Bitte ladet eure Gegner innerhalb dieses Zeitfensters ein und startet anschließend eure Partie.',
   ].filter(Boolean).join('\n');
 }
 
-module.exports = { INVITE_WINDOW_MINUTES, buildRoundReleaseContent, getRoundReleaseAt };
+module.exports = { INVITE_WINDOW_MINUTES, buildRoundReleaseContent, getRoundReleaseAt, isRoundReadyForRelease };
