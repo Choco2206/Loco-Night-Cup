@@ -52,6 +52,15 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
     errors.push(`${path}.normalizedClubName is required`);
   }
 
+  if (!requireArray(errors, team.twitchUrls, `${path}.twitchUrls`)) return;
+  if (team.twitchUrls.length > 3) errors.push(`${path}.twitchUrls must contain at most 3 links`);
+  if (!hasNoDuplicates(team.twitchUrls)) errors.push(`${path}.twitchUrls must not contain duplicates`);
+  for (const twitchUrl of team.twitchUrls) {
+    if (typeof twitchUrl !== 'string' || !/^https:\/\/(?:www\.)?twitch\.tv\/[a-z0-9_]{4,25}$/i.test(twitchUrl)) {
+      errors.push(`${path}.twitchUrls must contain only Twitch channel URLs`);
+    }
+  }
+
   if (team.status !== 'deleted') {
     if (seenActiveNames.has(team.normalizedClubName)) {
       errors.push(`${path}.normalizedClubName must be unique for non-deleted teams`);

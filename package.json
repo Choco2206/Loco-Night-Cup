@@ -4,7 +4,10 @@
   "description": "Discord bot for Loco Night Cup",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "lint": "node scripts/check-syntax.js",
+    "typecheck": "node scripts/check-syntax.js",
+    "test": "node test/team-stream-list.test.js"
   },
   "engines": {
     "node": "20.x"

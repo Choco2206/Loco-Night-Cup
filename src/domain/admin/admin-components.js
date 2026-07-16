@@ -52,6 +52,7 @@ const ADMIN_CATEGORIES = {
       ['admin_server_setup', 'Serverstruktur einrichten', 'Kanaele und Rollen pruefen'],
       ['admin_nickname_sync', 'Nicknames synchronisieren', 'Team-Nicknames neu synchronisieren'],
       ['admin_managers_without_team', 'Manager ohne Team', 'Manager-ohne-Team-Liste aktualisieren'],
+      ['admin_stream_list_sync', '📺 Streamliste synchronisieren', 'Zentrale Team-Streamliste neu aufbauen'],
     ],
   },
   tests: {

@@ -92,6 +92,11 @@ function repairTeam(team) {
   ensureTeamHistory(team);
   if (team.logo === undefined) team.logo = null;
   if (team.logoUpload === undefined) team.logoUpload = null;
+  const legacyTwitchUrl = typeof team.twitchUrl === 'string' && team.twitchUrl.trim() ? team.twitchUrl.trim() : null;
+  team.twitchUrls = Array.isArray(team.twitchUrls)
+    ? [...new Set(team.twitchUrls.filter(value => typeof value === 'string' && value.trim()).map(value => value.trim()))].slice(0, 3)
+    : legacyTwitchUrl ? [legacyTwitchUrl] : [];
+  delete team.twitchUrl;
   team.meta = team.meta && typeof team.meta === 'object' && !Array.isArray(team.meta) ? team.meta : {};
   team.meta.updatedAt = nowIso();
 

@@ -87,6 +87,7 @@ function createTestTeam(id, name, actorUserId, timestamp) {
       uploadedByUserId: null,
     },
     logoUpload: null,
+    twitchUrls: [],
     manager: {
       userId: null,
       addedAt: timestamp,
@@ -145,6 +146,7 @@ function ensureTestTeams(actorUserId) {
         existing.normalizedClubName = normalizeClubName(name);
         existing.manager = existing.manager || { userId: null, addedAt: timestamp };
         existing.coManagers = Array.isArray(existing.coManagers) ? existing.coManagers : [];
+        existing.twitchUrls = Array.isArray(existing.twitchUrls) ? existing.twitchUrls.slice(0, 3) : [];
         existing.logo = existing.logo || createTestTeam(id, name, actorUserId, timestamp).logo;
         existing.meta = { ...existing.meta, updatedAt: timestamp };
         existingIds.push(id);

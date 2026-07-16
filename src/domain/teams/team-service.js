@@ -90,7 +90,7 @@ function assertUserAvailable(teams, userId, ignoreTeamId = null) {
   if (existing) throw new Error(`Dieser User ist bereits bei ${existing.clubName} eingetragen.`);
 }
 
-function createTeam({ clubName, managerUserId, settings }) {
+function createTeam({ clubName, managerUserId, settings, twitchUrls = [] }) {
   const min = settings.teams.clubNameMinLength;
   const max = settings.teams.clubNameMaxLength;
   const cleanName = String(clubName || '').trim();
@@ -114,6 +114,7 @@ function createTeam({ clubName, managerUserId, settings }) {
       normalizedClubName: normalizeClubName(cleanName),
       logo: null,
       logoUpload: null,
+      twitchUrls: normalizeTwitchUrls(twitchUrls),
       manager: {
         userId: String(managerUserId),
         addedAt: timestamp,
@@ -159,6 +160,48 @@ function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
     return data;
   });
 
+  return updatedTeam;
+}
+
+function normalizeTwitchUrl(value) {
+  const input = String(value || '').trim();
+  if (!input) return null;
+  const candidate = /^(?:https?:\/\/)?(?:www\.)?twitch\.tv\//i.test(input)
+    ? input
+    : `https://www.twitch.tv/${input.replace(/^@/, '')}`;
+  let parsed;
+  try {
+    parsed = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
+  } catch {
+    throw new Error('Bitte gib einen gueltigen Twitch-Kanal an.');
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  const parts = parsed.pathname.split('/').filter(Boolean);
+  if (host !== 'twitch.tv' || parts.length !== 1 || !/^[a-z0-9_]{4,25}$/i.test(parts[0])) {
+    throw new Error('Bitte gib einen Twitch-Kanalnamen oder einen direkten Twitch-Kanallink an.');
+  }
+  return `https://www.twitch.tv/${parts[0].toLowerCase()}`;
+}
+
+function normalizeTwitchUrls(values) {
+  const source = Array.isArray(values) ? values : [values];
+  const normalized = source.map(normalizeTwitchUrl).filter(Boolean);
+  const unique = [...new Set(normalized)];
+  if (unique.length > 3) throw new Error('Pro Team koennen maximal drei Twitch-Links hinterlegt werden.');
+  return unique;
+}
+
+function updateTeamTwitchUrls({ teamId, twitchUrls, actorUserId, admin = false }) {
+  let updatedTeam;
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+    if (!admin && !isTeamMember(team, actorUserId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
+    team.twitchUrls = normalizeTwitchUrls(twitchUrls);
+    team.meta = { ...(team.meta || {}), updatedAt: nowIso() };
+    updatedTeam = team;
+    return data;
+  });
   return updatedTeam;
 }
 
@@ -618,9 +661,12 @@ module.exports = {
   leaveTeam,
   listVisibleTeams,
   normalizeClubName,
+  normalizeTwitchUrl,
+  normalizeTwitchUrls,
   removeCoManager,
   requestLogoUpload,
   setLogoUploadInstructionMessage,
   setTeamLogo,
   updateTeamName,
+  updateTeamTwitchUrls,
 };

@@ -12,6 +12,7 @@ const {
   buildMyTeamPayload,
   buildRegisterModal,
   buildRemoveCoManagerPayload,
+  buildTwitchModal,
 } = require('./team-components');
 const {
   addCoManager,
@@ -27,7 +28,9 @@ const {
   requestLogoUpload,
   setLogoUploadInstructionMessage,
   updateTeamName,
+  updateTeamTwitchUrls,
 } = require('./team-service');
+const { refreshTeamStreamList } = require('./team-stream-list');
 const { syncManagerRoleForUser, syncManagerRolesForTeam } = require('./team-roles');
 const { syncChampionRolesForUser, syncChampionRolesForUsers } = require('./team-champion-roles');
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
@@ -238,6 +241,12 @@ async function handleButton(interaction, client) {
     return true;
   }
 
+  if (action === 'team_twitch_open') {
+    requireTeamAccess(team, interaction.user.id);
+    await interaction.showModal(buildTwitchModal(team));
+    return true;
+  }
+
   if (action === 'team_logo_update_open') {
     requireTeamAccess(team, interaction.user.id);
     await interaction.deferReply({ flags: EPHEMERAL });
@@ -287,6 +296,7 @@ async function handleButton(interaction, client) {
     await syncChampionRolesForUsers(interaction.guild, [beforeUserId, ...(updated?.coManagers || []).map(co => co.userId), updated?.manager?.userId], settings);
     await cleanupInvalidTeamCheckins({ team: updated, settings, client });
     await refreshRegisteredTeamsOverview(client);
+    await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.update({ content: 'Team verlassen.', components: [], embeds: [] });
     return true;
@@ -300,6 +310,7 @@ async function handleButton(interaction, client) {
     for (const userId of userIds) await syncManagerRoleForUser(interaction.guild, userId, settings);
     await syncChampionRolesForUsers(interaction.guild, userIds, settings);
     await refreshRegisteredTeamsOverview(client);
+    await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.update({ content: 'Team wurde geloescht. Statistiken bleiben erhalten.', components: [], embeds: [] });
     return true;
@@ -320,10 +331,12 @@ async function handleModal(interaction, client) {
     await requireStrictManagerRegistrationRole(interaction, settings);
     await interaction.deferReply({ flags: EPHEMERAL });
     const clubName = interaction.fields.getTextInputValue('club_name');
-    const team = createTeam({ clubName, managerUserId: interaction.user.id, settings });
+    const twitchUrls = [1, 2, 3].map(index => interaction.fields.getTextInputValue(`twitch_url_${index}`));
+    const team = createTeam({ clubName, managerUserId: interaction.user.id, settings, twitchUrls });
     await syncManagerRoleForUser(interaction.guild, interaction.user.id, settings);
     await openLogoUpload({ interaction, client, team, settings, channelId: settings.channels.teamRegistrationChannelId });
     await refreshRegisteredTeamsOverview(client);
+    await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.editReply({
       content: `Team **${team.clubName}** wurde angelegt. Bitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
@@ -340,7 +353,24 @@ async function handleModal(interaction, client) {
     const team = updateTeamName({ teamId, newClubName, actorUserId: interaction.user.id, settings });
     await syncTeamNicknames(interaction.guild, team);
     await refreshRegisteredTeamsOverview(client);
+    await refreshTeamStreamList(client);
     await interaction.reply({ content: `Teamname wurde auf **${team.clubName}** geaendert.`, flags: EPHEMERAL });
+    return true;
+  }
+
+
+  if (interaction.customId.startsWith('team_twitch_modal:')) {
+    requireGuild(interaction);
+    const [, teamId] = interaction.customId.split(':');
+    const twitchUrls = [1, 2, 3].map(index => interaction.fields.getTextInputValue(`twitch_url_${index}`));
+    const team = updateTeamTwitchUrls({ teamId, twitchUrls, actorUserId: interaction.user.id });
+    await refreshTeamStreamList(client);
+    await interaction.reply({
+      content: team.twitchUrls.length
+        ? `${team.twitchUrls.length} Twitch-Link(s) gespeichert:\n${team.twitchUrls.join('\n')}`
+        : 'Alle Twitch-Links wurden entfernt.',
+      flags: EPHEMERAL,
+    });
     return true;
   }
 

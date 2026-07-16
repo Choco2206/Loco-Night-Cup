@@ -12,6 +12,7 @@ const { syncAllChampionRoles, syncChampionRolesForUsers } = require('./team-cham
 const { refreshRegisteredTeamsOverview } = require('./team-overview');
 const { cleanupTeamsWithoutLeadership, handleMemberRemoved } = require('./team-service');
 const { syncAllManagerRoles, syncManagerRoleForUser } = require('./team-roles');
+const { refreshTeamStreamList } = require('./team-stream-list');
 
 async function init(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
@@ -29,6 +30,9 @@ async function init(client) {
   }
 
   await refreshRegisteredTeamsOverview(client);
+  await refreshTeamStreamList(client).catch(error => {
+    console.warn(`[team-stream-list] Streamliste konnte nicht initialisiert werden: ${error.message}`);
+  });
   await ensureTeamAchievementsRankingMessage({ client }).catch(error => {
     console.warn(`[team-achievements] Basisnachricht konnte nicht initialisiert werden: ${error.message}`);
   });
@@ -60,6 +64,7 @@ async function handleGuildMemberRemove(member, client) {
   }
 
   await refreshRegisteredTeamsOverview(client);
+  await refreshTeamStreamList(client).catch(() => {});
   await syncChampionRolesForUsers(member.guild, result.affectedUserIds, settings);
   return true;
 }

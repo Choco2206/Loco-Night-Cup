@@ -18,6 +18,7 @@ const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { adminCheckInTeam, adminWithdrawTeam, removeTeamFromAllEvents } = require('../checkins/checkin-service');
 const { readAllEvents, updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
+const { refreshTeamStreamList } = require('../teams/team-stream-list');
 const {
   incrementTeamAchievement,
   refreshTeamAchievementsRankingMessage,
@@ -59,6 +60,7 @@ const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = requ
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
   'admin_nickname_sync',
+  'admin_stream_list_sync',
   'admin_checkin_open',
   'admin_checkin_close',
   'admin_checkin_manual',
@@ -676,6 +678,7 @@ function buildTeamDetailsEmbed(team) {
       { name: 'Registrierung', value: formatDate(team.meta?.createdAt), inline: true },
       { name: 'Sperrstatus', value: formatTeamBanStatus(team).slice(0, 1024), inline: true },
       { name: 'Logo', value: formatLogoStatus(team).slice(0, 1024), inline: true },
+      { name: 'Twitch', value: team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'Nicht hinterlegt', inline: true },
       { name: 'Check-ins', value: formatCheckinStatuses(team.id).slice(0, 1024), inline: false }
     )
     .setFooter({ text: `Admin-Aktionen laufen eindeutig ueber Team-ID ${team.id}` })
@@ -852,6 +855,7 @@ function assertNicknameResults(results) {
 
 async function refreshTeamAdminSurfaces({ client, settings, affectedEventKeys = [] }) {
   await refreshRegisteredTeamsOverview(client);
+  await refreshTeamStreamList(client);
   if (affectedEventKeys.length) await refreshCheckinMessages([...new Set(affectedEventKeys)], client);
 }
 
@@ -1690,6 +1694,13 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.deferReply({ flags: EPHEMERAL });
       const result = await syncAllTeamNicknames(interaction.guild);
       await interaction.editReply(summarizeNicknameSync(result.summary));
+      return true;
+    }
+
+    if (actionCustomId === 'admin_stream_list_sync') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      const result = await refreshTeamStreamList(client);
+      await interaction.editReply(`📺 Streamliste synchronisiert: ${result.teamCount} Teams in ${result.messageCount} Nachricht(en).`);
       return true;
     }
 

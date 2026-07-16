@@ -68,7 +68,17 @@ function buildRegisterModal(settings) {
     .setMaxLength(settings.teams.clubNameMaxLength)
     .setRequired(true);
 
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  const twitchInputs = [1, 2, 3].map(index => new TextInputBuilder()
+    .setCustomId(`twitch_url_${index}`)
+    .setLabel(`Twitch-Kanal oder Link ${index} (optional)`)
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(200)
+    .setRequired(false));
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(input),
+    ...twitchInputs.map(twitchInput => new ActionRowBuilder().addComponents(twitchInput))
+  );
   return modal;
 }
 
@@ -87,6 +97,24 @@ function buildEditNameModal(team, settings) {
     .setValue(team.clubName);
 
   modal.addComponents(new ActionRowBuilder().addComponents(input));
+  return modal;
+}
+
+function buildTwitchModal(team) {
+  const modal = new ModalBuilder()
+    .setCustomId(`team_twitch_modal:${team.id}`)
+    .setTitle('Twitch-Stream bearbeiten');
+  const inputs = [1, 2, 3].map((index, offset) => {
+    const input = new TextInputBuilder()
+      .setCustomId(`twitch_url_${index}`)
+      .setLabel(`Twitch-Kanal oder Link ${index} (leer = entfernen)`)
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(200)
+      .setRequired(false);
+    if (team.twitchUrls?.[offset]) input.setValue(team.twitchUrls[offset]);
+    return input;
+  });
+  modal.addComponents(...inputs.map(input => new ActionRowBuilder().addComponents(input)));
   return modal;
 }
 
@@ -157,6 +185,7 @@ function buildTeamEmbed(team, logoAttachment) {
       coManagers,
       '',
       logoLine,
+      `Twitch: ${team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'nicht hinterlegt'}`,
       '',
       ...achievementLines,
       '',
@@ -190,6 +219,10 @@ function buildMyTeamPayload(team, viewerUserId = null) {
   );
 
   const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`team_twitch_open:${team.id}`)
+      .setLabel('📺 Twitch-Links')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`team_remove_covm_open:${team.id}`)
       .setLabel('Co-VM entfernen')
@@ -276,4 +309,5 @@ module.exports = {
   buildRegisterModal,
   buildRemoveCoManagerPayload,
   buildTeamPanelPayload,
+  buildTwitchModal,
 };

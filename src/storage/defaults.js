@@ -245,6 +245,12 @@ function createMessagesDefault() {
         createdAt: null,
         updatedAt: null,
       },
+      streamList: {
+        channelId: '1527123946905010307',
+        messageIds: [],
+        createdAt: null,
+        updatedAt: null,
+      },
       teamAchievements: {
         channelId: null,
         messageIds: [],
