@@ -23,6 +23,8 @@ const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
+const { getConfiguredGuild } = require('../groups/group-roles');
+const { handleResultOutcome } = require('../results/result-confirmation-service');
 const {
   getReplacementCandidates,
   getReplaceableMatches,
@@ -325,6 +327,13 @@ async function applyAchievementsIfCompleted({ client, guild, eventKey, completed
   return result;
 }
 
+async function finalizeConfirmedKnockoutResult(client, eventKey, outcome, guild = null) {
+  const targetGuild = guild || await getConfiguredGuild(client, readSettings());
+  await refreshKnockout(client, targetGuild, eventKey, outcome.event);
+  await applyAchievementsIfCompleted({ client, guild: targetGuild, eventKey, completed: outcome.completed });
+  return postCeremonyIfReady(targetGuild, eventKey);
+}
+
 async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, selectedParticipantKey, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const outcome = submitTeamResult({
@@ -338,8 +347,12 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
   });
 
   await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
-  await applyAchievementsIfCompleted({ client, guild: interaction.guild, eventKey, completed: outcome.completed });
-  const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
+  await handleResultOutcome({
+    client, eventKey, phase: 'knockout', phaseKey: roundKey, outcome, channelId: interaction.channelId,
+  });
+  const ceremony = outcome.status === 'confirmed'
+    ? await finalizeConfirmedKnockoutResult(client, eventKey, outcome, interaction.guild)
+    : { posted: false };
   await notifyAdminDecision(interaction, outcome.match);
   const message = outcome.status === 'confirmed'
     ? ceremony.posted
@@ -457,9 +470,8 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
-  await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
-  await applyAchievementsIfCompleted({ client, guild: interaction.guild, eventKey, completed: outcome.completed });
-  const ceremony = await postCeremonyIfReady(interaction.guild, eventKey);
+  await handleResultOutcome({ client, eventKey, phase: 'knockout', phaseKey: roundKey, outcome, channelId: interaction.channelId });
+  const ceremony = await finalizeConfirmedKnockoutResult(client, eventKey, outcome, interaction.guild);
   await interaction.editReply({
     content: ceremony.posted
       ? `K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
@@ -503,5 +515,7 @@ async function handleKnockoutInteraction(interaction, client) {
 }
 
 module.exports = {
+  finalizeConfirmedKnockoutResult,
   handleKnockoutInteraction,
 };
+
