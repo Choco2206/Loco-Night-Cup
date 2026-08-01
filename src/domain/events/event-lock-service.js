@@ -7,7 +7,7 @@ const { buildLockedParticipantField } = require('./event-format');
 const { createGroups } = require('../groups/group-draw');
 const { assertCanLockEvent, assertGroupsHaveFourSlots } = require('../groups/group-validation');
 const { ensureGroupRolesAndMembers } = require('../groups/group-roles');
-const { ensureGroupChannel, getGroupUserIds } = require('../groups/group-channels');
+const { ensureGroupChannel, ensureGroupVideoChannel, getGroupUserIds } = require('../groups/group-channels');
 const { updateGroupMessageRefs, upsertGroupPosts } = require('../groups/group-posts');
 const { createInitialReleaseState, maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 const { refreshLiveSchedule } = require('../live-schedule');
@@ -149,6 +149,8 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
     const userIds = getGroupUserIds(group);
     const channel = await ensureGroupChannel(roleResult.guild || guild, settings, group, userIds);
     group.channelId = channel.id;
+    const videoChannel = await ensureGroupVideoChannel(roleResult.guild || guild, settings, group);
+    group.videoChannelId = videoChannel.id;
 
     const messageRefs = await upsertGroupPosts(channel, { ...group, eventKey, formatSize: event.format?.size }, {
       eventKey,
@@ -179,6 +181,7 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
       groupKey: group.groupKey,
       roleId: group.roleId || null,
       channelId: group.channelId,
+      videoChannelId: group.videoChannelId,
       messageId: group.messageId,
       headerMessageId: group.headerMessageId,
       teamsMessageId: group.teamsMessageId,
@@ -268,6 +271,7 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
         if (!group) continue;
         group.roleId = update.roleId;
         group.channelId = update.channelId;
+        group.videoChannelId = update.videoChannelId;
         group.messageId = update.messageId;
         group.headerMessageId = update.headerMessageId;
         group.teamsMessageId = update.teamsMessageId;
@@ -339,3 +343,4 @@ module.exports = {
   lockEventAndCreateGroups,
   lockEventFormat,
 };
+
