@@ -8,6 +8,10 @@ function channelNameForGroup(groupKey) {
   return `gruppe-${String(groupKey).toLowerCase()}`;
 }
 
+function videoChannelNameForGroup(groupKey) {
+  return `gruessenvideo-gruppe-${String(groupKey).toLowerCase()}`;
+}
+
 function uniqueStrings(values) {
   return [...new Set((values || []).filter(Boolean).map(String))];
 }
@@ -130,6 +134,38 @@ async function ensureGroupChannel(guild, settings, group, userIds) {
   });
 }
 
+async function ensureGroupVideoChannel(guild, settings, group) {
+  const configuredChannel = group.videoChannelId
+    ? await guild.channels.fetch(group.videoChannelId).catch(() => null)
+    : null;
+  const channelName = videoChannelNameForGroup(group.groupKey);
+  const existingChannel = guild.channels.cache.find(channel => (
+    channel.name === channelName && channel.type === ChannelType.GuildText
+  ));
+  const permissionOverwrites = buildGroupChannelPermissionOverwrites({
+    guild,
+    settings,
+    roleId: group.roleId,
+    userIds: [],
+  });
+  const channel = configuredChannel?.isTextBased?.()
+    ? configuredChannel
+    : existingChannel;
+
+  if (channel) {
+    await applyGroupChannelPermissionOverwrites(channel, permissionOverwrites);
+    return channel;
+  }
+
+  return guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: settings.categories?.groupCategoryId || undefined,
+    permissionOverwrites,
+    reason: 'Loco Night Cup Gruessenvideo-Kanal fuer Gruppe',
+  });
+}
+
 async function prepareGroupChannels({ client, event }) {
   if (!client) return { prepared: 0, skippedGroups: [] };
 
@@ -166,7 +202,9 @@ module.exports = {
   applyGroupChannelPermissionOverwrites,
   buildGroupChannelPermissionOverwrites,
   ensureGroupChannel,
+  ensureGroupVideoChannel,
   getGroupUserIds,
   prepareGroupChannels,
 };
+
 
