@@ -12,10 +12,13 @@ const {
   getMatchSlot,
   isMatchReleased,
   isRealMatch,
+  recalculateGroupStandings,
+  updateGroupCompletion,
 } = require('./group-results');
 const { deleteUserMessagesFromGroupChannel } = require('./group-message-cleanup');
 
 const INVITE_WINDOW_MINUTES = 5;
+const AUTO_SCORE_DELAY_MS = 25 * 60 * 1000;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const GROUP_SLOTS = [1, 2, 3];
 
@@ -176,7 +179,9 @@ function normalizeSlotRelease(slot, release, firstPlannedAt) {
     ? normalized.status
     : 'released';
   normalized.reminderAt = null;
-  normalized.autoScoreAt = null;
+  normalized.autoScoreAt = normalized.autoScoredAt
+    ? null
+    : normalized.autoScoreAt || nowIso(new Date(releasedDate.getTime() + AUTO_SCORE_DELAY_MS));
   return normalized;
 }
 
@@ -257,7 +262,7 @@ function markGroupSlotReleased(eventKey, event, groupKey, slot, now = new Date()
   release.inviteStartAt = releasedAt;
   release.inviteEndAt = nowIso(addMinutes(now, INVITE_WINDOW_MINUTES));
   release.reminderAt = null;
-  release.autoScoreAt = null;
+  release.autoScoreAt = nowIso(new Date(now.getTime() + AUTO_SCORE_DELAY_MS));
   release.reminderSentAt = null;
   release.autoScoredAt = null;
   getGroupRelease(event, groupKey).currentSlot = slot;
@@ -345,14 +350,33 @@ async function applyAutoScores(client, eventKey, groupKeyOrSlot, slotOrNow, mayb
     ensureReleaseState(eventKey, event, now);
     const targetGroups = groupKey ? [groupKey] : groupKeys(event);
     for (const key of targetGroups) {
+      const group = getGroup(event, key);
       const release = getSlotRelease(event, key, slot);
-      if (!release) continue;
+      if (!release || !group) continue;
+      for (const { match } of getSlotMatches(event, key, slot)) {
+        if (!isRealMatch(match) || match.status === 'confirmed') continue;
+        const reports = [...new Map((match.reports || []).map(report => [String(report.participantKey), report])).values()];
+        if (reports.length > 1) continue;
+        const report = reports[0] || null;
+        match.status = 'confirmed';
+        match.result = {
+          homeGoals: report ? Number(report.homeGoals) : 0,
+          awayGoals: report ? Number(report.awayGoals) : 0,
+          confirmedAt: nowIso(now),
+          source: report ? 'slot_timeout_report' : 'slot_timeout_0_0',
+          submittedByUserId: report?.submittedByUserId || null,
+        };
+        match.confirmation = null;
+        match.meta = { ...(match.meta || {}), updatedAt: nowIso(now) };
+      }
+      recalculateGroupStandings(group);
+      updateGroupCompletion(event, group);
       if (release.releasedAt && isSlotComplete(event, key, slot)) {
         release.status = 'completed';
         release.completedAt = release.completedAt || nowIso(now);
       }
       release.autoScoreAt = null;
-      release.autoScoredAt = null;
+      release.autoScoredAt = nowIso(now);
     }
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     return event;
@@ -530,6 +554,17 @@ function scheduleEvent(client, eventKey) {
 
   const current = readEventData(eventKey);
   for (const groupKey of groupKeys(current)) {
+    for (const slot of GROUP_SLOTS) {
+      const activeRelease = getSlotRelease(current, groupKey, slot);
+      if (!activeRelease?.releasedAt || !activeRelease.autoScoreAt || activeRelease.autoScoredAt) continue;
+      if (isSlotComplete(current, groupKey, slot)) continue;
+      setTimer(`${eventKey}:${groupKey}:autoscore:${slot}`, activeRelease.autoScoreAt, () => {
+        applyAutoScores(client, eventKey, groupKey, slot).catch(error => {
+          console.error(`Gruppen-Autowertung fuer ${eventKey} Gruppe ${groupKey} Spieltag ${slot} fehlgeschlagen:`, error);
+        });
+      });
+    }
+
     const nextSlot = nextReleasableSlot(current, groupKey);
     if (!nextSlot) continue;
 
@@ -580,3 +615,4 @@ module.exports = {
   releaseSlot,
   scheduleEvent,
 };
+
