@@ -29,6 +29,7 @@ const {
   setAdminResult,
   submitTeamResult,
 } = require('./group-results');
+const { handleResultOutcome } = require('../results/result-confirmation-service');
 
 const EPHEMERAL = 64;
 const SELECT_OPTION_LIMIT = 25;
@@ -321,6 +322,11 @@ async function notifyAdminDecision(interaction, match) {
   }).catch(() => null);
 }
 
+async function finalizeConfirmedGroupResult(client, eventKey, groupKey, outcome) {
+  await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
+  await afterGroupResultConfirmed(client, eventKey, groupKey);
+}
+
 async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, selectedParticipantKey, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const decodedParticipantKey = decodeURIComponent(selectedParticipantKey);
@@ -335,9 +341,12 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
   });
 
   await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
+  await handleResultOutcome({
+    client, eventKey, phase: 'group', phaseKey: groupKey, outcome, channelId: interaction.channelId,
+  });
   await notifyAdminDecision(interaction, outcome.match);
   if (outcome.status === 'confirmed') {
-    await afterGroupResultConfirmed(client, eventKey, groupKey);
+    await finalizeConfirmedGroupResult(client, eventKey, groupKey, outcome);
   }
 
   const message = outcome.status === 'confirmed'
@@ -489,6 +498,7 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
+  await handleResultOutcome({ client, eventKey, phase: 'group', phaseKey: groupKey, outcome, channelId: interaction.channelId });
   await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
   await afterGroupResultConfirmed(client, eventKey, groupKey);
   await interaction.editReply({
@@ -541,5 +551,7 @@ async function handleGroupInteraction(interaction, client) {
 }
 
 module.exports = {
+  finalizeConfirmedGroupResult,
   handleGroupInteraction,
 };
+
