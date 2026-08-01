@@ -25,6 +25,7 @@ function createEmptyGroups(groupCount, settings) {
     groupKey,
     roleId: settings.roles?.groupRoleIds?.[groupKey] || null,
     channelId: settings.channels?.groupChannelIds?.[groupKey] || null,
+    videoChannelId: null,
     slots: [null, null, null, null],
     matchdays: [],
   }));
@@ -127,3 +128,4 @@ function createGroups({ eventKey, field, settings, createdAt }) {
 module.exports = {
   createGroups,
 };
+
