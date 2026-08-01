@@ -15,7 +15,7 @@ const { readEventData } = require('../events/event-repository');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
-const { buildRoundReleaseContent, isRoundReadyForRelease } = require('./knockout-release');
+const { buildRoundReleaseContent, getRoundReminderAt, isRoundReadyForRelease } = require('./knockout-release');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
@@ -35,6 +35,7 @@ const ROUND_ROLE_NAMES = {
   final: 'LNC K.O. Finale',
 };
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
+const roundReminderTimers = new Map();
 const STATUS_LABELS = {
   open: '⏳ Offen',
   pending_confirmation: '🕐 Wartet auf Bestaetigung',
@@ -564,7 +565,10 @@ async function ensureRoundReleaseMessage({ channel, event, eventKey, roundKey, r
   const state = readRoundMessageState(eventKey, roundKey);
   if (state.releaseMessageId) {
     const existing = await channel.messages.fetch(state.releaseMessageId).catch(() => null);
-    if (existing) return existing.id;
+    if (existing) {
+      scheduleRoundReminder({ channel, eventKey, roundKey });
+      return existing.id;
+    }
   }
 
   const storedReleaseAt = state.releasedAt ? new Date(state.releasedAt) : null;
@@ -579,9 +583,68 @@ async function ensureRoundReleaseMessage({ channel, event, eventKey, roundKey, r
     ...current,
     releaseMessageId: message.id,
     releasedAt: releasedAt.toISOString(),
+    reminderAt: getRoundReminderAt(releasedAt).toISOString(),
+    reminderSentAt: null,
+    updatedAt: nowIso(),
+  }));
+  scheduleRoundReminder({ channel, eventKey, roundKey });
+  return message.id;
+}
+
+function reminderTimerKey(eventKey, roundKey) {
+  return `${eventKey}:${roundKey}`;
+}
+
+function hasOpenRoundMatches(round) {
+  return (round?.matches || []).some(match => (
+    isTeamParticipant(match.home)
+    && isTeamParticipant(match.away)
+    && ['open', 'pending_confirmation'].includes(match.status)
+  ));
+}
+
+async function postRoundReminder({ channel, eventKey, roundKey }) {
+  const event = readEventData(eventKey);
+  const round = event.knockout?.rounds?.[roundKey];
+  const state = readRoundMessageState(eventKey, roundKey);
+  if (!round || state.reminderSentAt || !hasOpenRoundMatches(round)) return null;
+
+  const label = ROUND_LABELS[roundKey] || roundKey;
+  const message = await channel.send({
+    content: `⏰ **${label}: Bitte tragt eure Ergebnisse ein bzw. bestätigt offene Meldungen.**`,
+    allowedMentions: { parse: [] },
+  });
+  updateRoundMessageState(eventKey, roundKey, current => ({
+    ...current,
+    reminderMessageIds: [...new Set([...(current.reminderMessageIds || []), message.id])],
+    reminderSentAt: nowIso(),
     updatedAt: nowIso(),
   }));
   return message.id;
+}
+
+function scheduleRoundReminder({ channel, eventKey, roundKey }) {
+  const key = reminderTimerKey(eventKey, roundKey);
+  const existing = roundReminderTimers.get(key);
+  if (existing) clearTimeout(existing);
+  roundReminderTimers.delete(key);
+
+  const state = readRoundMessageState(eventKey, roundKey);
+  if (!state.releasedAt || state.reminderSentAt) return null;
+  const reminderAt = state.reminderAt
+    ? new Date(state.reminderAt)
+    : getRoundReminderAt(new Date(state.releasedAt));
+  if (Number.isNaN(reminderAt.getTime())) return null;
+
+  const timer = setTimeout(() => {
+    roundReminderTimers.delete(key);
+    postRoundReminder({ channel, eventKey, roundKey }).catch(error => {
+      console.error(`K.O.-Ergebnisreminder fuer ${eventKey} ${roundKey} fehlgeschlagen:`, error);
+    });
+  }, Math.max(0, reminderAt.getTime() - Date.now()));
+  if (typeof timer.unref === 'function') timer.unref();
+  roundReminderTimers.set(key, timer);
+  return timer;
 }
 
 function updateKnockoutMessageState({ eventKey, event, categoryId, overview, roundPosts }) {
@@ -603,6 +666,9 @@ function updateKnockoutMessageState({ eventKey, event, categoryId, overview, rou
         channelId: post.channelId || previous.channelId || null,
         messageId: post.messageId || previous.messageId || null,
         releaseMessageId: previous.releaseMessageId || null,
+        releasedAt: previous.releasedAt || null,
+        reminderAt: previous.reminderAt || null,
+        reminderSentAt: previous.reminderSentAt || null,
         reminderMessageIds: Array.isArray(previous.reminderMessageIds) ? previous.reminderMessageIds : [],
         createdAt: previous.createdAt || timestamp,
         updatedAt: post.messageId ? timestamp : previous.updatedAt || null,
@@ -726,5 +792,8 @@ module.exports = {
   buildRoundButtons,
   buildRoundEmbed,
   initKnockoutReleases,
+  postRoundReminder,
+  scheduleRoundReminder,
   upsertKnockoutPost,
 };
+
