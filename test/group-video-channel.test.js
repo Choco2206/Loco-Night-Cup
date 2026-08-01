@@ -56,7 +56,7 @@ test('creates one role-restricted greeting-video channel for a group', async () 
 
   assert.equal(channel.id, 'video-channel');
   assert.equal(created.length, 1);
-  assert.equal(created[0].name, 'grÃ¶ÃŸenvideo-gruppe-a');
+  assert.equal(created[0].name, 'größenvideo-gruppe-a');
   assert.equal(created[0].parent, 'groups-category');
   assert.ok(created[0].permissionOverwrites.some(overwrite => overwrite.id === 'everyone'));
   assert.ok(created[0].permissionOverwrites.some(overwrite => overwrite.id === 'group-role'));
