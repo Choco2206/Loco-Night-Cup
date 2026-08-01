@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildRoundReleaseContent, getRoundReleaseAt, isRoundReadyForRelease } = require('../src/domain/knockout/knockout-release');
+const { buildRoundReleaseContent, getRoundReleaseAt, getRoundReminderAt, isRoundReadyForRelease } = require('../src/domain/knockout/knockout-release');
 
 test('uses the actual round release time for a five-minute invitation window', () => {
   const releasedAt = new Date('2026-07-17T23:10:00.000Z');
@@ -10,6 +10,11 @@ test('uses the actual round release time for a five-minute invitation window', (
   assert.match(content, /Achtelfinale ist freigegeben/);
   assert.match(content, /01:10 Uhr bis 01:15 Uhr/);
   assert.ok(!content.includes('<@'));
+});
+
+test('schedules the K.O. result reminder twenty minutes after the dynamic release', () => {
+  const releasedAt = new Date('2026-07-17T23:10:00.000Z');
+  assert.equal(getRoundReminderAt(releasedAt).toISOString(), '2026-07-17T23:30:00.000Z');
 });
 
 test('releases following rounds only after the complete prerequisite round is confirmed', () => {
@@ -39,3 +44,4 @@ test('only starts a round release when a real match is open', () => {
   assert.equal(getRoundReleaseAt(round).toISOString(), '2026-07-17T23:10:00.000Z');
   assert.equal(getRoundReleaseAt({ matches: [round.matches[0]] }), null);
 });
+
