@@ -53,7 +53,7 @@ test('group and league results use the first report after the two-minute deadlin
   assert.equal(confirmed.match.result.source, 'team_timeout');
 });
 
-test('knockout result advances with the first report after the two-minute deadline', () => {
+test('knockout result stays pending because K.O. rounds are never auto-scored', () => {
   const match = {
     id: 'ko-match', status: 'open', home: participant('home'), away: participant('away'),
     reports: [], result: null, next: null, loserNext: null,
@@ -66,10 +66,8 @@ test('knockout result advances with the first report after the two-minute deadli
     eventKey: 'monday', roundKey: 'final', matchId: match.id, participantKeyValue: 'team:home',
     userId: 'user-home', homeGoals: 3, awayGoals: 1,
   });
-  const afterDeadline = new Date(new Date(pending.match.confirmation.expiresAt).getTime() + 1);
-  const confirmed = knockoutResults.autoConfirmFirstReport({ eventKey: 'monday', roundKey: 'final', matchId: match.id, now: afterDeadline });
-  assert.equal(confirmed.status, 'confirmed');
-  assert.equal(confirmed.match.result.source, 'team_timeout');
-  assert.equal(confirmed.match.winner.teamId, 'home');
+  assert.equal(pending.status, 'pending_confirmation');
+  assert.equal(pending.match.confirmation.expiresAt, null);
+  assert.equal(pending.match.result, null);
 });
 
