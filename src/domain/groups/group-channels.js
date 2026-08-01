@@ -9,7 +9,7 @@ function channelNameForGroup(groupKey) {
 }
 
 function videoChannelNameForGroup(groupKey) {
-  return `grÃ¶ÃŸenvideo-gruppe-${String(groupKey).toLowerCase()}`;
+  return `größenvideo-gruppe-${String(groupKey).toLowerCase()}`;
 }
 
 function uniqueStrings(values) {
