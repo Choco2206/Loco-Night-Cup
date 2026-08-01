@@ -4,7 +4,7 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
-const { ensureGroupChannel, getGroupUserIds } = require('./group-channels');
+const { ensureGroupChannel, ensureGroupVideoChannel, getGroupUserIds } = require('./group-channels');
 const { getConfiguredGuild, getGroupTeamIds } = require('./group-roles');
 const { refreshGroupPosts } = require('./group-posts');
 
@@ -56,6 +56,10 @@ async function syncTeamGroupAccess({ client, guild = null, teamId, settings = re
         console.error(`Gruppe ${group.groupKey}: Gruppenrechte konnten nach Co-VM-Aenderung nicht synchronisiert werden.`, error);
         return null;
       });
+      await ensureGroupVideoChannel(targetGuild, settings, group).catch(error => {
+        console.error(`Gruppe ${group.groupKey}: Gruessenvideo-Kanal konnte nicht synchronisiert werden.`, error);
+        return null;
+      });
       const groupForRefresh = channel?.id ? { ...group, channelId: channel.id } : group;
       await refreshGroupPosts({ client, eventKey, event, group: groupForRefresh }).then(result => {
         if (result) postsRefreshed += 1;
@@ -73,3 +77,4 @@ async function syncTeamGroupAccess({ client, guild = null, teamId, settings = re
 module.exports = {
   syncTeamGroupAccess,
 };
+
