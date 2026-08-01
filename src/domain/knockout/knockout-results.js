@@ -5,7 +5,6 @@ const { findTeamById, isTeamMember } = require('../teams/team-service');
 
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const MATCH_STATUSES = ['open', 'pending_confirmation', 'admin_decision_required', 'confirmed', 'locked'];
-const RESULT_CONFIRMATION_TIMEOUT_MS = 2 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -152,7 +151,7 @@ function applyReports(event, match) {
     match.confirmation = {
       ...(match.confirmation || {}),
       startedAt: match.confirmation?.startedAt || firstReport?.submittedAt || nowIso(),
-      expiresAt: match.confirmation?.expiresAt || new Date(Date.now() + RESULT_CONFIRMATION_TIMEOUT_MS).toISOString(),
+      expiresAt: null,
     };
     return;
   }
@@ -312,33 +311,7 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
   return outcome;
 }
 
-function autoConfirmFirstReport({ eventKey, roundKey, matchId, now = new Date() }) {
-  let outcome = null;
-  updateEventData(eventKey, event => {
-    const round = getRound(event, roundKey);
-    const match = round ? findMatch(round, matchId) : null;
-    const reports = match?.reports || [];
-    const expiresAt = match?.confirmation?.expiresAt ? new Date(match.confirmation.expiresAt) : null;
-    if (!match || match.status !== 'pending_confirmation' || reports.length !== 1) return event;
-    if (!expiresAt || Number.isNaN(expiresAt.getTime()) || now.getTime() < expiresAt.getTime()) return event;
-
-    const report = reports[0];
-    applyConfirmedResult(event, match, {
-      homeGoals: Number(report.homeGoals),
-      awayGoals: Number(report.awayGoals),
-      source: 'team_timeout',
-      actorUserId: report.submittedByUserId,
-    });
-    match.confirmation = null;
-    event.meta = { ...(event.meta || {}), updatedAt: now.toISOString() };
-    outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed' };
-    return event;
-  });
-  return outcome;
-}
-
 module.exports = {
-  autoConfirmFirstReport,
   getAdminSelectableMatches,
   getMatches,
   getUserSelectableMatches,
