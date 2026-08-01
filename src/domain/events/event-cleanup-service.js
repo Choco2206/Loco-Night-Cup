@@ -52,6 +52,14 @@ function collectGroupRefs(eventKey, event, messages) {
       roleId: group.roleId || messageGroups[group.groupKey]?.roleId || null,
       teamIds: (group.slots || []).filter(slot => slot.type === 'team' && slot.teamId).map(slot => String(slot.teamId)),
     });
+    if (group.videoChannelId) {
+      refs.push({
+        groupKey: `${group.groupKey}-video`,
+        channelId: group.videoChannelId,
+        roleId: null,
+        teamIds: [],
+      });
+    }
   }
   for (const [groupKey, ref] of Object.entries(messageGroups)) {
     if (refs.some(entry => entry.groupKey === groupKey)) continue;
@@ -420,4 +428,5 @@ module.exports = {
   schedulePendingAutoCleanups,
   resetEventForTesting,
 };
+
 
