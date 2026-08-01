@@ -11,6 +11,7 @@ const knockoutSystem = require('./src/domain/knockout');
 const banSystem = require('./src/domain/bans');
 const liveScheduleSystem = require('./src/domain/live-schedule');
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
+const { initPendingResultConfirmations } = require('./src/domain/results/result-confirmation-service');
 
 const EPHEMERAL = 64;
 
@@ -67,6 +68,7 @@ async function main() {
       await banSystem.initBanService(client);
       await groupSystem.init(client);
       await knockoutSystem.initKnockoutReleases(client);
+      initPendingResultConfirmations(client);
       await liveScheduleSystem.refreshLiveScheduleForActiveEvents(client);
       schedulePendingAutoCleanups(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
@@ -114,3 +116,4 @@ main().catch(error => {
   console.error('Fatal startup error:', error);
   process.exitCode = 1;
 });
+
