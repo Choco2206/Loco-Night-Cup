@@ -5,6 +5,7 @@ const { findTeamById, isTeamMember } = require('../teams/team-service');
 const { rankGroupRows } = require('./group-ranking');
 
 const REAL_MATCH_STATUSES = ['open', 'pending_confirmation', 'admin_decision_required', 'confirmed'];
+const RESULT_CONFIRMATION_TIMEOUT_MS = 2 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -151,8 +152,16 @@ function applyReports(match) {
   if (uniqueParticipantReports.length < 2) {
     match.status = 'pending_confirmation';
     match.result = null;
+    const firstReport = uniqueParticipantReports[0];
+    match.confirmation = {
+      ...(match.confirmation || {}),
+      startedAt: match.confirmation?.startedAt || firstReport?.submittedAt || nowIso(),
+      expiresAt: match.confirmation?.expiresAt || new Date(Date.now() + RESULT_CONFIRMATION_TIMEOUT_MS).toISOString(),
+    };
     return;
   }
+
+  match.confirmation = null;
 
   const [first, second] = uniqueParticipantReports;
   if (reportsMatch(first, second)) {
@@ -301,6 +310,7 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     if (!match || !isAdminScorableMatch(match)) throw new Error('Spiel wurde nicht gefunden.');
 
     match.reports = [];
+    match.confirmation = null;
     match.result = {
       homeGoals: parseGoals(homeGoals, 'Heimtore'),
       awayGoals: parseGoals(awayGoals, 'Auswaertstore'),
@@ -325,7 +335,38 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
   return outcome;
 }
 
+function autoConfirmFirstReport({ eventKey, groupKey, matchId, now = new Date() }) {
+  let outcome = null;
+  updateEventData(eventKey, event => {
+    const group = getGroup(event, groupKey);
+    const match = group ? findMatch(group, matchId) : null;
+    const reports = match?.reports || [];
+    const expiresAt = match?.confirmation?.expiresAt ? new Date(match.confirmation.expiresAt) : null;
+    if (!match || match.status !== 'pending_confirmation' || reports.length !== 1) return event;
+    if (!expiresAt || Number.isNaN(expiresAt.getTime()) || now.getTime() < expiresAt.getTime()) return event;
+
+    const report = reports[0];
+    match.status = 'confirmed';
+    match.result = {
+      homeGoals: Number(report.homeGoals),
+      awayGoals: Number(report.awayGoals),
+      confirmedAt: now.toISOString(),
+      source: 'team_timeout',
+      submittedByUserId: report.submittedByUserId,
+    };
+    match.confirmation = null;
+    match.meta = { ...(match.meta || {}), updatedAt: now.toISOString() };
+    recalculateGroupStandings(group);
+    const completed = updateGroupCompletion(event, group);
+    event.meta = { ...(event.meta || {}), updatedAt: now.toISOString() };
+    outcome = { event, group, match, completed, status: match.status };
+    return event;
+  });
+  return outcome;
+}
+
 module.exports = {
+  autoConfirmFirstReport,
   getAdminSelectableMatches,
   getCurrentReleasedSlot,
   getMatches,
@@ -342,3 +383,4 @@ module.exports = {
   submitTeamResult,
   updateGroupCompletion,
 };
+
