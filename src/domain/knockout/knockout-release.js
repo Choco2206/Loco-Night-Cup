@@ -1,6 +1,7 @@
 'use strict';
 
 const INVITE_WINDOW_MINUTES = 5;
+const ROUND_REMINDER_MINUTES = 20;
 
 function addMinutes(date, minutes) {
   return new Date(date.getTime() + minutes * 60 * 1000);
@@ -27,6 +28,10 @@ function getRoundReleaseAt(round) {
     .sort((a, b) => a.getTime() - b.getTime())[0] || null;
 }
 
+function getRoundReminderAt(releasedAt) {
+  return addMinutes(releasedAt, ROUND_REMINDER_MINUTES);
+}
+
 function isRoundReadyForRelease(event, roundKey) {
   const knockout = event?.knockout || {};
   const round = knockout.rounds?.[roundKey];
@@ -51,4 +56,12 @@ function buildRoundReleaseContent({ label, releasedAt }) {
   ].filter(Boolean).join('\n');
 }
 
-module.exports = { INVITE_WINDOW_MINUTES, buildRoundReleaseContent, getRoundReleaseAt, isRoundReadyForRelease };
+module.exports = {
+  INVITE_WINDOW_MINUTES,
+  ROUND_REMINDER_MINUTES,
+  buildRoundReleaseContent,
+  getRoundReleaseAt,
+  getRoundReminderAt,
+  isRoundReadyForRelease,
+};
+
