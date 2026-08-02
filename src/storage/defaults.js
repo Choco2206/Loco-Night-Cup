@@ -44,6 +44,10 @@ function createTeamHistoryDefault() {
   };
 }
 
+function createTottHistoryDefault() {
+  return { version: DATA_VERSION, lastSerialNumber: 0, posts: [] };
+}
+
 function createBansDefault() {
   return {
     version: DATA_VERSION,
@@ -341,6 +345,7 @@ function createSettingsDefault() {
       teamSearchChannelId: null,
       helperSearchChannelId: null,
       hallOfFameChannelId: null,
+      teamOfTheTournamentChannelId: '153394601220505641',
       logChannelId: null,
       rulebookChannelId: null,
       chatChannelId: null,
@@ -516,6 +521,7 @@ module.exports = {
   createMessagesDefault,
   createSettingsDefault,
   createTeamHistoryDefault,
+  createTottHistoryDefault,
   createTeamsDefault,
 };
 
