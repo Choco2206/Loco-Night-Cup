@@ -345,7 +345,8 @@ function createSettingsDefault() {
       teamSearchChannelId: null,
       helperSearchChannelId: null,
       hallOfFameChannelId: null,
-      teamOfTheTournamentChannelId: '153394601220505641',
+      teamOfTheTournamentChannelId: '1533394601220505641',
+      teamOfTheTournamentTestChannelId: '1525035287971889173',
       logChannelId: null,
       rulebookChannelId: null,
       chatChannelId: null,
@@ -524,4 +525,3 @@ module.exports = {
   createTottHistoryDefault,
   createTeamsDefault,
 };
-
