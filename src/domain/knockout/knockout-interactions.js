@@ -25,6 +25,7 @@ const { maybePostHallOfFameCeremony } = require('../ceremony');
 const { upsertKnockoutPost } = require('./knockout-posts');
 const { getConfiguredGuild } = require('../groups/group-roles');
 const { handleResultOutcome } = require('../results/result-confirmation-service');
+const { scheduleRatingCapture } = require('../team-of-the-tournament');
 const {
   getReplacementCandidates,
   getReplaceableMatches,
@@ -328,6 +329,7 @@ async function applyAchievementsIfCompleted({ client, guild, eventKey, completed
 }
 
 async function finalizeConfirmedKnockoutResult(client, eventKey, outcome, guild = null) {
+  scheduleRatingCapture(eventKey, outcome.match);
   const targetGuild = guild || await getConfiguredGuild(client, readSettings());
   await refreshKnockout(client, targetGuild, eventKey, outcome.event);
   await applyAchievementsIfCompleted({ client, guild: targetGuild, eventKey, completed: outcome.completed });
