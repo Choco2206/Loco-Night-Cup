@@ -6,7 +6,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { getConfiguredGuild } = require('../groups/group-roles');
-const { deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
+const { deleteTransientMessagesFromGroupChannel, deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { createKnockoutPhase } = require('../knockout/knockout-service');
 const { scheduleRatingCapture } = require('../team-of-the-tournament/team-of-the-tournament-service');
@@ -82,6 +82,7 @@ async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date
   });
 
   if (changed) {
+    await deleteTransientMessagesFromGroupChannel(client, readEventData(eventKey).leaguePhase);
     await postRelease(client, eventKey, dayNumber);
     await refreshLeaguePhasePosts(client, eventKey);
     console.info(`[league-phase] ${eventKey}: Spieltag ${dayNumber} freigegeben.`);
@@ -100,7 +101,14 @@ async function reconcileLeagueMatchday(client, eventKey, now = new Date()) {
   const needsRelease = day.status === 'locked' || (day.matches || []).some(match =>
     match.home?.type === 'team' && match.away?.type === 'team'
     && !['open', 'pending_confirmation', 'confirmed'].includes(match.status));
-  if (!needsRelease) return false;
+  if (!needsRelease) {
+    if (day.status !== 'open') return false;
+    await deleteTransientMessagesFromGroupChannel(client, phase);
+    await postRelease(client, eventKey, dayNumber);
+    await refreshLeaguePhasePosts(client, eventKey);
+    scheduleLeaguePhase(client, eventKey);
+    return true;
+  }
   return releaseLeagueMatchday(client, eventKey, dayNumber, now);
 }
 
