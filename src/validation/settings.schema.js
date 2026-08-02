@@ -62,6 +62,7 @@ function validateSettings(data) {
       'helperSearchChannelId',
       'hallOfFameChannelId',
       'teamOfTheTournamentChannelId',
+      'teamOfTheTournamentTestChannelId',
       'logChannelId',
       'rulebookChannelId',
       'chatChannelId',
@@ -178,5 +179,4 @@ function validateSettings(data) {
 module.exports = {
   validateSettings,
 };
-
 
