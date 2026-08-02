@@ -18,6 +18,11 @@ const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-halbfinale',
   'ko-platz-3',
   'ko-finale',
+  'größenvideo-ko-achtelfinale',
+  'größenvideo-ko-viertelfinale',
+  'größenvideo-ko-halbfinale',
+  'größenvideo-ko-platz-3',
+  'größenvideo-ko-finale',
 ]);
 const KNOCKOUT_ROLE_NAMES = [
   'LNC K.O. Achtelfinale',
@@ -77,9 +82,11 @@ function collectKnockoutChannelIds(eventKey, event, messages) {
 
   for (const round of Object.values(event.knockout?.rounds || {})) {
     if (round?.channelId) ids.push(round.channelId);
+    if (round?.videoChannelId) ids.push(round.videoChannelId);
   }
   for (const round of Object.values(knockoutMessages.rounds || {})) {
     if (round?.channelId) ids.push(round.channelId);
+    if (round?.videoChannelId) ids.push(round.videoChannelId);
   }
 
   return uniqueStrings(ids);
