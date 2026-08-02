@@ -9,6 +9,7 @@ const { getConfiguredGuild } = require('../groups/group-roles');
 const { deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { createKnockoutPhase } = require('../knockout/knockout-service');
+const { scheduleRatingCapture } = require('../team-of-the-tournament/team-of-the-tournament-service');
 const { refreshLeaguePhasePosts } = require('./league-phase-service');
 const { getLeagueMatches } = require('./league-phase-results');
 
@@ -135,6 +136,7 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
 }
 
 async function applyLeagueMatchdayDeadline(client, eventKey, dayNumber, now = new Date()) {
+  const autoConfirmedMatches = [];
   updateEventData(eventKey, event => {
     const phase = event.leaguePhase;
     const day = phase?.matchdays?.[dayNumber - 1];
@@ -154,6 +156,7 @@ async function applyLeagueMatchdayDeadline(client, eventKey, dayNumber, now = ne
       };
       match.confirmation = null;
       match.meta = { ...(match.meta || {}), updatedAt: now.toISOString() };
+      autoConfirmedMatches.push(match);
     }
     day.autoScoreAt = null;
     day.autoScoredAt = now.toISOString();
@@ -161,6 +164,9 @@ async function applyLeagueMatchdayDeadline(client, eventKey, dayNumber, now = ne
     event.meta = { ...(event.meta || {}), updatedAt: now.toISOString() };
     return event;
   });
+  if (client) {
+    for (const match of autoConfirmedMatches) scheduleRatingCapture(eventKey, match);
+  }
   await refreshLeaguePhasePosts(client, eventKey);
   const advanced = await advanceLeaguePhase(client, eventKey, now);
   if (!advanced) scheduleLeaguePhase(client, eventKey);
@@ -213,4 +219,3 @@ module.exports = {
   releaseLeagueMatchday,
   scheduleLeaguePhase,
 };
-
