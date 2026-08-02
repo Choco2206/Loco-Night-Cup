@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { FORMATION, MINIMUM_MATCHES, buildSelection, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
+const { aggregatePlayers, buildAwardsText, buildTestSelection } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
+const layout = require('../config/team-of-the-tournament-layout');
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
   assert.deepEqual(FORMATION, { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 });
@@ -49,5 +51,33 @@ test('does not guess a one-linked-team match without an EA timestamp', () => {
   const lncMatch = { home: { teamId: 'home' }, away: { teamId: 'away' }, result: { homeGoals: 2, awayGoals: 1, confirmedAt: '2026-08-02T00:30:00.000Z' } };
   const matches = [{ matchId: 'unknown-time', clubs: { 101: { clubId: '101', goals: '2' }, 999: { goals: '1' } } }];
   assert.equal(selectEaMatch(matches, lncMatch, [linkedTeam]), null);
+});
+
+test('maps exactly eleven graphic slots to the 1-3-5-2 formation', () => {
+  assert.equal(layout.reference.width, 1024);
+  assert.equal(layout.reference.height, 1536);
+  assert.equal(layout.slots.goalkeeper.length, 1);
+  assert.equal(layout.slots.defender.length, 3);
+  assert.equal(layout.slots.midfielder.length, 5);
+  assert.equal(layout.slots.forward.length, 2);
+});
+
+test('builds eleven fictitious players for the admin graphic test', () => {
+  const selection = buildTestSelection();
+  assert.equal(Object.values(selection).flat().length, 11);
+  assert.ok(Object.values(selection).flat().every(player => player.averageRating >= 6.5 && player.averageRating <= 9.9));
+});
+
+test('aggregates special awards only after three appearances', () => {
+  const performances = [1, 2, 3].flatMap(match => ([
+    { teamId: 'a', playerId: 'scorer', playerName: 'Scorer', rating: 8, goals: 1, assists: 0, tacklesMade: 0, saves: 0, cleanSheets: 0, passesMade: 10, manOfTheMatch: 1 },
+    { teamId: 'b', playerId: 'helper', playerName: 'Helper', rating: 7.5, goals: 0, assists: 2, tacklesMade: 4, saves: 0, cleanSheets: 1, passesMade: 20, manOfTheMatch: 0 },
+  ]));
+  const players = aggregatePlayers(performances);
+  assert.equal(players.length, 2);
+  const awards = buildAwardsText(performances);
+  assert.match(awards, /Top-Torschütze.*Scorer/);
+  assert.match(awards, /Assist-König.*Helper/);
+  assert.match(awards, /Top-Abräumer.*Helper/);
 });
 
