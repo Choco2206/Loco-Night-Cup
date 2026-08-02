@@ -7,6 +7,8 @@ const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
 
 const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 360000];
+const LIVE_CHANNEL_ID = '1533394601220505641';
+const TEST_CHANNEL_ID = '1525035287971889173';
 const postTimers = new Map();
 
 function aggregatePlayers(performances) {
@@ -93,9 +95,11 @@ function reserveSerial(eventKey) {
   return serialNumber;
 }
 
-async function getTargetChannel(client) {
+async function getTargetChannel(client, mode = 'live') {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const channelId = settings.channels?.teamOfTheTournamentChannelId || '153394601220505641';
+  const channelId = mode === 'test'
+    ? settings.channels?.teamOfTheTournamentTestChannelId || TEST_CHANNEL_ID
+    : settings.channels?.teamOfTheTournamentChannelId || LIVE_CHANNEL_ID;
   return client.channels.fetch(channelId).catch(() => null);
 }
 
@@ -182,8 +186,8 @@ function buildTestSelection() {
 }
 
 async function postTeamOfTheTournamentTest(client) {
-  const channel = await getTargetChannel(client);
-  if (!channel?.send) throw new Error('Team-of-the-Tournament-Kanal wurde nicht gefunden.');
+  const channel = await getTargetChannel(client, 'test');
+  if (!channel?.send) throw new Error('Team-of-the-Tournament-Testkanal wurde nicht gefunden.');
   const serialNumber = 1 + Math.floor(Math.random() * 10);
   const selection = buildTestSelection();
   const rendered = await renderTeamOfTheTournament({ selection, serialNumber });
@@ -198,4 +202,3 @@ module.exports = {
   aggregatePlayers, buildAwardsText, buildTestSelection, closingRatingsReady,
   postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
 };
-
