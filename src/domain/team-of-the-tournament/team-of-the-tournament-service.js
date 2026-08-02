@@ -119,6 +119,14 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
         playerId: String(playerId), playerName: String(playerName), position, rating,
         goals: Number(player.goals) || 0, assists: Number(player.assists) || 0,
         manOfTheMatch: Number(player.man_of_the_match ?? player.mom) || 0,
+        tacklesMade: Number(player.tacklesmade ?? player.tacklesMade) || 0,
+        saves: Number(player.saves ?? player.gkSaves) || 0,
+        cleanSheets: Math.max(
+          Number(player.cleansheetsany) || 0,
+          Number(player.cleansheetsdef) || 0,
+          Number(player.cleansheetsgk) || 0
+        ),
+        passesMade: Number(player.passesmade ?? player.passesMade) || 0,
       });
     }
   }
@@ -132,6 +140,7 @@ function buildSelection(performances) {
     const aggregate = aggregates.get(key) || {
       teamId: row.teamId, playerId: row.playerId, playerName: row.playerName,
       ratings: [], positions: {}, goals: 0, assists: 0, manOfTheMatch: 0,
+      tacklesMade: 0, saves: 0, cleanSheets: 0, passesMade: 0,
     };
     aggregate.playerName = row.playerName;
     aggregate.ratings.push(Number(row.rating));
@@ -139,6 +148,10 @@ function buildSelection(performances) {
     aggregate.goals += Number(row.goals) || 0;
     aggregate.assists += Number(row.assists) || 0;
     aggregate.manOfTheMatch += Number(row.manOfTheMatch) || 0;
+    aggregate.tacklesMade += Number(row.tacklesMade) || 0;
+    aggregate.saves += Number(row.saves) || 0;
+    aggregate.cleanSheets += Number(row.cleanSheets) || 0;
+    aggregate.passesMade += Number(row.passesMade) || 0;
     aggregates.set(key, aggregate);
   }
   const eligible = [...aggregates.values()].filter(item => item.ratings.length >= MINIMUM_MATCHES).map(item => {
