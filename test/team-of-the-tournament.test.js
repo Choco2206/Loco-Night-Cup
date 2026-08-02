@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { FORMATION, MINIMUM_MATCHES, buildSelection, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
-const { aggregatePlayers, buildAwardsText, buildTestSelection } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
+const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
@@ -66,6 +66,9 @@ test('builds eleven fictitious players for the admin graphic test', () => {
   const selection = buildTestSelection();
   assert.equal(Object.values(selection).flat().length, 11);
   assert.ok(Object.values(selection).flat().every(player => player.averageRating >= 6.5 && player.averageRating <= 9.9));
+  assert.equal(buildTestPerformances(selection).length, 33);
+  assert.match(buildIntroText({ test: true }), /@everyone/);
+  assert.match(buildIntroText({ test: true }), /Loco DNA/);
 });
 
 test('aggregates special awards only after three appearances', () => {
@@ -80,4 +83,3 @@ test('aggregates special awards only after three appearances', () => {
   assert.match(awards, /Assist-König.*Helper/);
   assert.match(awards, /Top-Abräumer.*Helper/);
 });
-
