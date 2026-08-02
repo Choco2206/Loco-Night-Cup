@@ -433,7 +433,13 @@ async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
   const event = readEventData(eventKey);
   if (event.leaguePhase?.phaseType === 'league') {
     const { releaseLeagueMatchday } = require('../league-phase');
-    const slot = Math.min(4, Number(event.leaguePhase.currentMatchday || 0) + 1);
+    const current = Number(event.leaguePhase.currentMatchday || 0);
+    const currentDay = current ? event.leaguePhase.matchdays?.[current - 1] : null;
+    const currentNeedsRecovery = currentDay && currentDay.status !== 'completed'
+      && (currentDay.status !== 'open' || (currentDay.matches || []).some(match =>
+        match.home?.type === 'team' && match.away?.type === 'team'
+        && !['open', 'pending_confirmation', 'confirmed'].includes(match.status)));
+    const slot = currentNeedsRecovery ? current : Math.min(4, current + 1 || 1);
     const released = await releaseLeagueMatchday(client, eventKey, slot, now);
     if (!released) throw new Error('Aktuell kann kein weiterer Ligaphasen-Spieltag freigegeben werden.');
     return { slot, groups: [{ groupKey: 'Ligaphase', slot }] };
@@ -600,8 +606,9 @@ async function initGroupReleases(client) {
   for (const eventKey of EVENT_KEYS) {
     const startupEvent = readEventData(eventKey);
     if (startupEvent.leaguePhase?.phaseType === 'league') {
-      const { drawLeaguePhaseForEvent } = require('../league-phase');
+      const { drawLeaguePhaseForEvent, reconcileLeagueMatchday } = require('../league-phase');
       await drawLeaguePhaseForEvent({ eventKey, client }).catch(error => console.error(`[league-phase] Wiederherstellung fuer ${eventKey} fehlgeschlagen:`, error));
+      await reconcileLeagueMatchday(client, eventKey).catch(error => console.error(`[league-phase] Spieltag-Wiederherstellung fuer ${eventKey} fehlgeschlagen:`, error));
       console.info(`[league-phase] ${eventKey}: vorhandene Ligaphase nach Neustart wiederhergestellt.`);
     }
     scheduleEvent(client, eventKey);
