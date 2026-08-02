@@ -24,6 +24,7 @@ const {
   createEventDefault,
   createMessagesDefault,
   createSettingsDefault,
+  createTottHistoryDefault,
   createTeamsDefault,
 } = require('./defaults');
 const { ensureDir, ensureJsonFile, readJson, writeJsonAtomic } = require('./json-store');
@@ -660,6 +661,7 @@ function initializeStorage() {
   ensureJsonFile(FILES.teams, createTeamsDefault);
   ensureJsonFile(FILES.bans, createBansDefault);
   ensureJsonFile(FILES.messages, createMessagesDefault);
+  ensureJsonFile(FILES.tottHistory, createTottHistoryDefault);
 
   for (const eventKey of EVENT_KEYS) {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));
