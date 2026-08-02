@@ -334,7 +334,13 @@ async function finalizeConfirmedKnockoutResult(client, eventKey, outcome, guild 
   await refreshKnockout(client, targetGuild, eventKey, outcome.event);
   await applyAchievementsIfCompleted({ client, guild: targetGuild, eventKey, completed: outcome.completed });
   const ceremony = await postCeremonyIfReady(targetGuild, eventKey);
-  if (outcome.completed) scheduleTeamOfTheTournamentPost({ client, eventKey });
+  if (outcome.completed) {
+    try {
+      scheduleTeamOfTheTournamentPost({ client, eventKey });
+    } catch (error) {
+      console.warn(`[tott] Planung fuer ${eventKey} fehlgeschlagen; Turnierabschluss laeuft weiter: ${error.message}`);
+    }
+  }
   return ceremony;
 }
 
@@ -522,4 +528,3 @@ module.exports = {
   finalizeConfirmedKnockoutResult,
   handleKnockoutInteraction,
 };
-
