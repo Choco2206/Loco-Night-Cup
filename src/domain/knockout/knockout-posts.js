@@ -11,11 +11,11 @@ const {
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
-const { readEventData } = require('../events/event-repository');
+const { readEventData, updateEventData } = require('../events/event-repository');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
-const { buildRoundReleaseContent, getRoundReminderAt, isRoundReadyForRelease } = require('./knockout-release');
+const { buildRoundReleaseContent, getRoundReminderAt, isRoundReadyForRelease, ROUND_VIDEO_CHANNEL_NAMES } = require('./knockout-release');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
@@ -664,6 +664,7 @@ function updateKnockoutMessageState({ eventKey, event, categoryId, overview, rou
       const post = roundPosts[roundKey] || {};
       messages.knockout[eventKey].rounds[roundKey] = {
         channelId: post.channelId || previous.channelId || null,
+        videoChannelId: post.videoChannelId || previous.videoChannelId || null,
         messageId: post.messageId || previous.messageId || null,
         releaseMessageId: previous.releaseMessageId || null,
         releasedAt: previous.releasedAt || null,
@@ -723,6 +724,14 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
       roleIds: roundRoles[roundKey] ? [roundRoles[roundKey]] : [],
       existingChannelId: round.channelId || null,
     });
+    const videoChannel = await ensureTextChannel({
+      guild: targetGuild,
+      settings,
+      name: ROUND_VIDEO_CHANNEL_NAMES[roundKey],
+      category,
+      roleIds: roundRoles[roundKey] ? [roundRoles[roundKey]] : [],
+      existingChannelId: round.videoChannelId || null,
+    });
     let message;
     try {
       message = await upsertMessage(channel, round.messageId || null, await buildRoundImagePayload(eventKey, event, roundKey));
@@ -738,7 +747,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
         allowedMentions: { parse: [] },
       });
     }
-    roundPosts[roundKey] = { channelId: channel.id, messageId: message.id };
+    roundPosts[roundKey] = { channelId: channel.id, videoChannelId: videoChannel.id, messageId: message.id };
     roundChannels[roundKey] = channel.id;
     roundChannelObjects[roundKey] = channel;
   }
@@ -750,6 +759,22 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     categoryId: category.id,
     overview: { channelId: overviewChannel.id, messageId: overviewMessage.id },
     roundPosts,
+  });
+  updateEventData(eventKey, current => {
+    if (!current.knockout) return current;
+    current.knockout.categoryId = category.id;
+    current.knockout.overviewChannelId = overviewChannel.id;
+    current.knockout.overviewMessageId = overviewMessage.id;
+    for (const [roundKey, refs] of Object.entries(roundPosts)) {
+      const round = current.knockout.rounds?.[roundKey];
+      if (!round) continue;
+      round.channelId = refs.channelId;
+      round.videoChannelId = refs.videoChannelId;
+      round.messageId = refs.messageId;
+    }
+    current.knockout.meta = { ...(current.knockout.meta || {}), updatedAt: nowIso() };
+    current.meta = { ...(current.meta || {}), updatedAt: nowIso() };
+    return current;
   });
 
   for (const roundKey of activeRoundKeys(event)) {
@@ -787,6 +812,7 @@ module.exports = {
   KNOCKOUT_CATEGORY_NAME,
   KNOCKOUT_OVERVIEW_CHANNEL_NAME,
   ROUND_CHANNEL_NAMES,
+  ROUND_VIDEO_CHANNEL_NAMES,
   ROUND_ROLE_NAMES,
   buildOverviewEmbed,
   buildRoundButtons,
