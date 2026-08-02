@@ -47,7 +47,8 @@
     "teamSearchChannelId": null,
     "helperSearchChannelId": null,
     "hallOfFameChannelId": "1517040877787287653",
-    "teamOfTheTournamentChannelId": "153394601220505641",
+    "teamOfTheTournamentChannelId": "1533394601220505641",
+    "teamOfTheTournamentTestChannelId": "1525035287971889173",
     "logChannelId": "1517040860942962749",
     "rulebookChannelId": null,
     "chatChannelId": null,
@@ -231,4 +232,3 @@
     "updatedAt": null
   }
 }
-
