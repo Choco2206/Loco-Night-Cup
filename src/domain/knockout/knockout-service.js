@@ -81,6 +81,7 @@ function applyPostRefs(event, post) {
     const round = event.knockout.rounds?.[roundKey];
     if (!round) continue;
     round.channelId = refs.channelId || round.channelId || null;
+    round.videoChannelId = refs.videoChannelId || round.videoChannelId || null;
     round.messageId = refs.messageId || round.messageId || null;
   }
 }
@@ -132,3 +133,4 @@ module.exports = {
   buildKnockoutState,
   createKnockoutPhase,
 };
+
