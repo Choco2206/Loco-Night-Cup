@@ -6,4 +6,5 @@ require('./group-video-channel.test');
 require('./result-auto-confirm.test');
 require('./team-of-the-tournament.test');
 require('./phase-deadline.test');
+require('./messages-validation.test');
 
