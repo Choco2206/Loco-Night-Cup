@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { FORMATION, MINIMUM_MATCHES, buildSelection, normalizePosition } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
+const { FORMATION, MINIMUM_MATCHES, buildSelection, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
   assert.deepEqual(FORMATION, { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 });
@@ -28,5 +28,26 @@ test('requires three matches and selects the highest average rating', () => {
   const selection = buildSelection(rows);
   assert.deepEqual(selection.forward.map(player => player.playerId), ['eligible-high', 'eligible-low']);
   assert.equal(selection.forward[0].averageRating, 8.5);
+});
+
+test('matches one linked club by oriented score and closest confirmation time', () => {
+  const linkedTeam = { id: 'home', eaClub: { clubId: '101' } };
+  const lncMatch = {
+    home: { teamId: 'home' }, away: { teamId: 'away' },
+    result: { homeGoals: 2, awayGoals: 1, confirmedAt: '2026-08-02T00:30:00.000Z' },
+  };
+  const matches = [
+    { matchId: 'old', timestamp: '1785624000', clubs: { 101: { clubId: '101', goals: '2' }, 999: { goals: '1' } } },
+    { matchId: 'right', timestamp: '1785630000', clubs: { 101: { clubId: '101', goals: '2' }, 999: { goals: '1' } } },
+    { matchId: 'reversed', timestamp: '1785630300', clubs: { 101: { clubId: '101', goals: '1' }, 999: { goals: '2' } } },
+  ];
+  assert.equal(selectEaMatch(matches, lncMatch, [linkedTeam])?.matchId, 'right');
+});
+
+test('does not guess a one-linked-team match without an EA timestamp', () => {
+  const linkedTeam = { id: 'home', eaClub: { clubId: '101' } };
+  const lncMatch = { home: { teamId: 'home' }, away: { teamId: 'away' }, result: { homeGoals: 2, awayGoals: 1, confirmedAt: '2026-08-02T00:30:00.000Z' } };
+  const matches = [{ matchId: 'unknown-time', clubs: { 101: { clubId: '101', goals: '2' }, 999: { goals: '1' } } }];
+  assert.equal(selectEaMatch(matches, lncMatch, [linkedTeam]), null);
 });
 
