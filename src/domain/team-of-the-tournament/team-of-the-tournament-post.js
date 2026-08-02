@@ -64,6 +64,19 @@ function buildAwardsText(performances) {
   ].join('\n');
 }
 
+function buildIntroText({ test = false } = {}) {
+  return [
+    test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
+    '@everyone',
+    '🏆 **TEAM OF THE TOURNAMENT**',
+    'Elf Spieler. Eine Nacht. Maximale Aura.',
+    '',
+    'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. 🔴⚫',
+    '',
+    '**Das ist nicht einfach eine Auswahl – das ist die Elite dieser Loco Night.**',
+  ].filter(entry => entry !== null).join('\n');
+}
+
 function selectionCount(selection) {
   return ['goalkeeper', 'defender', 'midfielder', 'forward']
     .reduce((sum, position) => sum + (selection?.[position]?.length || 0), 0);
@@ -113,15 +126,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   if (!channel?.send) throw new Error('Team-of-the-Tournament-Kanal wurde nicht gefunden.');
   const serialNumber = reserveSerial(eventKey);
   const rendered = await renderTeamOfTheTournament({ selection: state.selection, serialNumber });
-  const intro = [
-    '@everyone',
-    '🏆 **TEAM OF THE TOURNAMENT**',
-    'Elf Spieler. Eine Nacht. Maximale Aura.',
-    '',
-    'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. 🔴⚫',
-    '',
-    '**Das ist nicht einfach eine Auswahl – das ist die Elite dieser Loco Night.**',
-  ].join('\n');
+  const intro = buildIntroText();
   const imageMessage = await channel.send({
     content: intro, files: [{ attachment: rendered.buffer, name: rendered.fileName }],
     allowedMentions: { parse: ['everyone'] },
@@ -185,20 +190,43 @@ function buildTestSelection() {
   return { goalkeeper: make(1), defender: make(3), midfielder: make(5), forward: make(2) };
 }
 
+function buildTestPerformances(selection) {
+  return Object.values(selection).flat().flatMap((player, playerIndex) => (
+    Array.from({ length: 3 }, (_, matchIndex) => ({
+      teamId: player.teamId,
+      playerId: player.playerId,
+      playerName: player.playerName,
+      rating: player.averageRating,
+      goals: playerIndex % 4 === 0 ? matchIndex + 1 : 0,
+      assists: playerIndex % 3 === 0 ? 2 : matchIndex % 2,
+      tacklesMade: playerIndex + matchIndex + 2,
+      saves: playerIndex === 0 ? 4 + matchIndex : 0,
+      cleanSheets: playerIndex < 4 && matchIndex !== 1 ? 1 : 0,
+      passesMade: 18 + playerIndex * 3 + matchIndex,
+      manOfTheMatch: matchIndex === 0 && playerIndex % 5 === 0 ? 1 : 0,
+    }))
+  ));
+}
+
 async function postTeamOfTheTournamentTest(client) {
   const channel = await getTargetChannel(client, 'test');
   if (!channel?.send) throw new Error('Team-of-the-Tournament-Testkanal wurde nicht gefunden.');
   const serialNumber = 1 + Math.floor(Math.random() * 10);
   const selection = buildTestSelection();
+  const performances = buildTestPerformances(selection);
   const rendered = await renderTeamOfTheTournament({ selection, serialNumber });
   const message = await channel.send({
-    content: `🧪 **TEAM OF THE TOURNAMENT – GRAFIKTEST #${serialNumber}**\nFiktive Namen und Bewertungen, zufällige Logos registrierter Teams.`,
+    content: buildIntroText({ test: true }),
     files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },
   });
-  return { channelId: channel.id, messageId: message.id, serialNumber };
+  const awardsMessage = await channel.send({
+    content: `🧪 **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
+    allowedMentions: { parse: [] },
+  });
+  return { channelId: channel.id, messageId: message.id, awardsMessageId: awardsMessage.id, serialNumber };
 }
 
 module.exports = {
-  aggregatePlayers, buildAwardsText, buildTestSelection, closingRatingsReady,
+  aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady,
   postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
 };
