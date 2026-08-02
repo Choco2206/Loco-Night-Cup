@@ -90,7 +90,7 @@ function assertUserAvailable(teams, userId, ignoreTeamId = null) {
   if (existing) throw new Error(`Dieser User ist bereits bei ${existing.clubName} eingetragen.`);
 }
 
-function createTeam({ clubName, managerUserId, settings, twitchUrls = [] }) {
+function createTeam({ clubName, managerUserId, settings, twitchUrls = [], eaClub = null }) {
   const min = settings.teams.clubNameMinLength;
   const max = settings.teams.clubNameMaxLength;
   const cleanName = String(clubName || '').trim();
@@ -115,6 +115,13 @@ function createTeam({ clubName, managerUserId, settings, twitchUrls = [] }) {
       logo: null,
       logoUpload: null,
       twitchUrls: normalizeTwitchUrls(twitchUrls),
+      eaClub: eaClub ? {
+        clubId: String(eaClub.clubId),
+        name: String(eaClub.name),
+        platform: String(eaClub.platform || 'common-gen5'),
+        linkedAt: timestamp,
+        linkedByUserId: String(managerUserId),
+      } : null,
       manager: {
         userId: String(managerUserId),
         addedAt: timestamp,
@@ -138,6 +145,24 @@ function createTeam({ clubName, managerUserId, settings, twitchUrls = [] }) {
   });
 
   return createdTeam;
+}
+
+function updateTeamEaClub({ teamId, eaClub, actorUserId }) {
+  let updatedTeam;
+  updateTeamsData(data => {
+    const team = data.teams.find(entry => String(entry.id) === String(teamId));
+    if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
+    if (!isTeamMember(team, actorUserId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
+    team.eaClub = eaClub ? {
+      clubId: String(eaClub.clubId), name: String(eaClub.name),
+      platform: String(eaClub.platform || 'common-gen5'),
+      linkedAt: nowIso(), linkedByUserId: String(actorUserId),
+    } : null;
+    team.meta = { ...(team.meta || {}), updatedAt: nowIso() };
+    updatedTeam = team;
+    return data;
+  });
+  return updatedTeam;
 }
 
 function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
@@ -668,5 +693,7 @@ module.exports = {
   setLogoUploadInstructionMessage,
   setTeamLogo,
   updateTeamName,
+  updateTeamEaClub,
   updateTeamTwitchUrls,
 };
+
