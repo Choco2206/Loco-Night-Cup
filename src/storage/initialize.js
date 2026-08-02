@@ -455,6 +455,18 @@ function normalizeEventFile(eventKey) {
     event.ceremony.teamStats.matchCount = 0;
     changed = true;
   }
+  if (!isPlainObject(event.ceremony.teamOfTheTournament)) {
+    event.ceremony.teamOfTheTournament = JSON.parse(JSON.stringify(createEventDefault(eventKey).ceremony.teamOfTheTournament));
+    changed = true;
+  }
+  if (!Array.isArray(event.ceremony.teamOfTheTournament.performances)) {
+    event.ceremony.teamOfTheTournament.performances = [];
+    changed = true;
+  }
+  if (!Array.isArray(event.ceremony.teamOfTheTournament.capturedMatches)) {
+    event.ceremony.teamOfTheTournament.capturedMatches = [];
+    changed = true;
+  }
 
   event.byes = event.byes.map((bye, index) => {
     const result = normalizeLegacyBye(bye, eventKey, index);
@@ -616,6 +628,19 @@ function normalizeMessagesFile() {
   return messages;
 }
 
+function normalizeTeamsFile() {
+  const teams = readJson(FILES.teams, createTeamsDefault());
+  let changed = false;
+  for (const team of teams.teams || []) {
+    if (!Object.prototype.hasOwnProperty.call(team, 'eaClub')) {
+      team.eaClub = null;
+      changed = true;
+    }
+  }
+  if (changed) writeJsonAtomic(FILES.teams, teams);
+  return teams;
+}
+
 function initializeStorage() {
   [
     DATA_DIR,
@@ -640,6 +665,7 @@ function initializeStorage() {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));
   }
 
+  normalizeTeamsFile();
   normalizeEventFiles();
   normalizeMessagesFile();
 }
@@ -654,6 +680,8 @@ module.exports = {
   normalizeEventFile,
   normalizeEventFiles,
   normalizeMessagesFile,
+  normalizeTeamsFile,
   seedCheckinBanner,
   seedSettingsFile,
 };
+
