@@ -2,6 +2,13 @@
 
 const INVITE_WINDOW_MINUTES = 5;
 const ROUND_REMINDER_MINUTES = 20;
+const ROUND_VIDEO_CHANNEL_NAMES = {
+  round_of_16: 'größenvideo-ko-achtelfinale',
+  quarter_final: 'größenvideo-ko-viertelfinale',
+  semi_final: 'größenvideo-ko-halbfinale',
+  third_place: 'größenvideo-ko-platz-3',
+  final: 'größenvideo-ko-finale',
+};
 
 function addMinutes(date, minutes) {
   return new Date(date.getTime() + minutes * 60 * 1000);
@@ -59,6 +66,7 @@ function buildRoundReleaseContent({ label, releasedAt }) {
 module.exports = {
   INVITE_WINDOW_MINUTES,
   ROUND_REMINDER_MINUTES,
+  ROUND_VIDEO_CHANNEL_NAMES,
   buildRoundReleaseContent,
   getRoundReleaseAt,
   getRoundReminderAt,
