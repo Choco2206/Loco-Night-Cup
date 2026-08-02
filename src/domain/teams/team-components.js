@@ -77,8 +77,24 @@ function buildRegisterModal(settings) {
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(input),
-    ...twitchInputs.map(twitchInput => new ActionRowBuilder().addComponents(twitchInput))
+    ...twitchInputs.map(twitchInput => new ActionRowBuilder().addComponents(twitchInput)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder()
+      .setCustomId('ea_club_name')
+      .setLabel('EA-FC-Clubname (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(50)
+      .setRequired(false))
   );
+  return modal;
+}
+
+function buildEaClubModal(team) {
+  const modal = new ModalBuilder().setCustomId(`team_ea_club_modal:${team.id}`).setTitle('EA-Club verknüpfen');
+  const input = new TextInputBuilder()
+    .setCustomId('ea_club_name').setLabel('Exakter EA-FC-Clubname')
+    .setStyle(TextInputStyle.Short).setMinLength(2).setMaxLength(50).setRequired(true);
+  if (team.eaClub?.name) input.setValue(team.eaClub.name);
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
   return modal;
 }
 
@@ -186,6 +202,7 @@ function buildTeamEmbed(team, logoAttachment) {
       '',
       logoLine,
       `Twitch: ${team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'nicht hinterlegt'}`,
+      `EA-Club: ${team.eaClub ? `**${team.eaClub.name}** (ID: ${team.eaClub.clubId})` : 'nicht verknüpft – keine TOTT-Wertung'}`,
       '',
       ...achievementLines,
       '',
@@ -219,6 +236,10 @@ function buildMyTeamPayload(team, viewerUserId = null) {
   );
 
   const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`team_ea_club_open:${team.id}`)
+      .setLabel(team.eaClub ? 'EA-Club ändern' : 'EA-Club verknüpfen')
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`team_twitch_open:${team.id}`)
       .setLabel('📺 Twitch-Links')
@@ -304,6 +325,7 @@ module.exports = {
   buildAddCoManagerPayload,
   buildConfirmPayload,
   buildEditNameModal,
+  buildEaClubModal,
   buildMyTeamPayload,
   buildMyTeamPanelPayload,
   buildRegisterModal,
@@ -311,3 +333,4 @@ module.exports = {
   buildTeamPanelPayload,
   buildTwitchModal,
 };
+
