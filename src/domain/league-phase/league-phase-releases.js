@@ -55,16 +55,27 @@ async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date
   updateEventData(eventKey, event => {
     const phase = event.leaguePhase;
     const day = phase?.matchdays?.[dayNumber - 1];
-    if (!day || day.status !== 'locked') return event;
+    const current = Number(phase?.currentMatchday || 0);
+    const hasBlockedRealMatch = (day?.matches || []).some(match =>
+      match.home?.type === 'team' && match.away?.type === 'team'
+      && !['open', 'pending_confirmation', 'confirmed'].includes(match.status));
+    const canRecoverCurrent = current === Number(dayNumber)
+      && day?.status === 'open' && hasBlockedRealMatch;
+    if (!day || (day.status !== 'locked' && !canRecoverCurrent)) return event;
     const timestamp = now.toISOString();
     day.status = 'open';
-    day.releasedAt = timestamp;
-    day.autoScoreAt = new Date(now.getTime() + MATCHDAY_DURATION_MS).toISOString();
+    day.releasedAt = day.releasedAt || timestamp;
+    const existingDeadline = day.autoScoreAt ? new Date(day.autoScoreAt) : null;
+    day.autoScoreAt = existingDeadline && !Number.isNaN(existingDeadline.getTime()) && existingDeadline.getTime() > now.getTime()
+      ? existingDeadline.toISOString()
+      : new Date(now.getTime() + MATCHDAY_DURATION_MS).toISOString();
     day.autoScoredAt = null;
     phase.currentMatchday = dayNumber;
     for (const match of day.matches) {
-      match.status = match.home?.type === 'team' && match.away?.type === 'team' ? 'open' : 'bye';
-      match.release = { slot: dayNumber, releasedAt: timestamp };
+      if (match.status !== 'confirmed' && match.status !== 'pending_confirmation') {
+        match.status = match.home?.type === 'team' && match.away?.type === 'team' ? 'open' : 'bye';
+      }
+      match.release = { slot: dayNumber, releasedAt: day.releasedAt };
     }
     changed = true;
     return event;
@@ -77,6 +88,20 @@ async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date
     scheduleLeaguePhase(client, eventKey);
   }
   return changed;
+}
+
+async function reconcileLeagueMatchday(client, eventKey, now = new Date()) {
+  const event = readEventData(eventKey);
+  const phase = event.leaguePhase;
+  if (phase?.phaseType !== 'league' || phase.status === 'completed') return false;
+  const dayNumber = Math.max(1, Number(phase.currentMatchday || 0));
+  const day = phase.matchdays?.[dayNumber - 1];
+  if (!day || dayComplete(day, phase)) return false;
+  const needsRelease = day.status === 'locked' || (day.matches || []).some(match =>
+    match.home?.type === 'team' && match.away?.type === 'team'
+    && !['open', 'pending_confirmation', 'confirmed'].includes(match.status));
+  if (!needsRelease) return false;
+  return releaseLeagueMatchday(client, eventKey, dayNumber, now);
 }
 
 async function advanceLeaguePhase(client, eventKey, now = new Date()) {
@@ -216,6 +241,7 @@ module.exports = {
   advanceLeaguePhase,
   applyLeagueMatchdayDeadline,
   maybeReleaseLeagueStart,
+  reconcileLeagueMatchday,
   releaseLeagueMatchday,
   scheduleLeaguePhase,
 };
