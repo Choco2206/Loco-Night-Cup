@@ -40,7 +40,7 @@ Module._load = function loadWithDeadlineMocks(request, parent, isMain) {
     };
   }
   if (request === './group-message-cleanup' || request === '../groups/group-message-cleanup') {
-    return { deleteUserMessagesFromGroupChannel: async () => true };
+    return { deleteTransientMessagesFromGroupChannel: async () => true, deleteUserMessagesFromGroupChannel: async () => true };
   }
   if (request === './league-phase-service') return { refreshLeaguePhasePosts: async () => true };
   if (request === './league-phase-results') return { getLeagueMatches: matchList };
