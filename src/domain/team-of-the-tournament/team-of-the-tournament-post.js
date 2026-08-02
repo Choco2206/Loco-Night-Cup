@@ -1,0 +1,201 @@
+'use strict';
+
+const { FILES, readJson, updateJson } = require('../../storage');
+const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
+const { readEventData, updateEventData } = require('../events/event-repository');
+const { findTeamById, listVisibleTeams } = require('../teams/team-service');
+const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
+
+const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 360000];
+const postTimers = new Map();
+
+function aggregatePlayers(performances) {
+  const players = new Map();
+  for (const row of performances || []) {
+    const key = `${row.teamId}:${row.playerId}`;
+    const player = players.get(key) || {
+      teamId: row.teamId, playerId: row.playerId, playerName: row.playerName, matches: 0,
+      ratingTotal: 0, goals: 0, assists: 0, tacklesMade: 0, saves: 0,
+      cleanSheets: 0, passesMade: 0, manOfTheMatch: 0,
+    };
+    player.playerName = row.playerName;
+    player.matches += 1;
+    player.ratingTotal += Number(row.rating) || 0;
+    for (const field of ['goals', 'assists', 'tacklesMade', 'saves', 'cleanSheets', 'passesMade', 'manOfTheMatch']) {
+      player[field] += Number(row[field]) || 0;
+    }
+    players.set(key, player);
+  }
+  return [...players.values()].filter(player => player.matches >= 3).map(player => ({
+    ...player, averageRating: player.ratingTotal / player.matches,
+  }));
+}
+
+function topPlayer(players, field) {
+  const winner = [...players].sort((a, b) => Number(b[field]) - Number(a[field])
+    || b.averageRating - a.averageRating || b.matches - a.matches)[0] || null;
+  if (winner && field !== 'averageRating' && Number(winner[field]) <= 0) return null;
+  return winner;
+}
+
+function playerAwardLine(emoji, label, player, field, suffix) {
+  if (!player) return `${emoji} **${label}:** nicht vergeben`;
+  const teamName = findTeamById(player.teamId)?.clubName || 'Unbekanntes Team';
+  const value = field === 'averageRating'
+    ? player.averageRating.toFixed(2).replace('.', ',')
+    : Number(player[field]) || 0;
+  return `${emoji} **${label}:** ${player.playerName} (${teamName}) – ${value} ${suffix}`.trim();
+}
+
+function buildAwardsText(performances) {
+  const players = aggregatePlayers(performances);
+  return [
+    '🔥 **LOCO NIGHT CUP – SPECIAL AWARDS** 🔥',
+    playerAwardLine('⚽', 'Top-Torschütze', topPlayer(players, 'goals'), 'goals', 'Tore'),
+    playerAwardLine('🎯', 'Assist-König', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
+    playerAwardLine('🧹', 'Top-Abräumer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche Zweikämpfe'),
+    playerAwardLine('🧤', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
+    playerAwardLine('🧱', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
+    playerAwardLine('🪄', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche Pässe'),
+    playerAwardLine('👑', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ø-Bewertung'),
+    playerAwardLine('⭐', 'MOTM-König', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
+  ].join('\n');
+}
+
+function selectionCount(selection) {
+  return ['goalkeeper', 'defender', 'midfielder', 'forward']
+    .reduce((sum, position) => sum + (selection?.[position]?.length || 0), 0);
+}
+
+function closingMatches(event) {
+  return ['final', 'third_place'].flatMap(key => event.knockout?.rounds?.[key]?.matches || []);
+}
+
+function closingRatingsReady(event) {
+  const captured = new Set((event.ceremony?.teamOfTheTournament?.capturedMatches || []).map(entry => String(entry.lncMatchId)));
+  return closingMatches(event).every(match => {
+    if (match.status !== 'confirmed') return false;
+    const linkedCount = [match.home?.teamId, match.away?.teamId]
+      .map(findTeamById).filter(team => team?.eaClub?.clubId).length;
+    return linkedCount === 0 || captured.has(String(match.id));
+  });
+}
+
+function reserveSerial(eventKey) {
+  let serialNumber;
+  updateJson(FILES.tottHistory, createTottHistoryDefault(), history => {
+    serialNumber = Number(history.lastSerialNumber || 0) + 1;
+    history.lastSerialNumber = serialNumber;
+    history.posts = Array.isArray(history.posts) ? history.posts : [];
+    history.posts.push({ eventKey, serialNumber, reservedAt: new Date().toISOString() });
+    return history;
+  });
+  return serialNumber;
+}
+
+async function getTargetChannel(client) {
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const channelId = settings.channels?.teamOfTheTournamentChannelId || '153394601220505641';
+  return client.channels.fetch(channelId).catch(() => null);
+}
+
+async function postTeamOfTheTournament({ client, eventKey, force = false }) {
+  const event = readEventData(eventKey);
+  const state = event.ceremony?.teamOfTheTournament;
+  if (state?.postedAt) return { posted: false, reason: 'already_posted' };
+  if (!force && !closingRatingsReady(event)) return { posted: false, reason: 'ratings_pending' };
+  if (selectionCount(state?.selection) < 11) return { posted: false, reason: 'not_enough_eligible_players' };
+  const channel = await getTargetChannel(client);
+  if (!channel?.send) throw new Error('Team-of-the-Tournament-Kanal wurde nicht gefunden.');
+  const serialNumber = reserveSerial(eventKey);
+  const rendered = await renderTeamOfTheTournament({ selection: state.selection, serialNumber });
+  const intro = [
+    '@everyone',
+    '🏆 **TEAM OF THE TOURNAMENT**',
+    'Elf Spieler. Eine Nacht. Maximale Aura.',
+    '',
+    'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. 🔴⚫',
+    '',
+    '**Das ist nicht einfach eine Auswahl – das ist die Elite dieser Loco Night.**',
+  ].join('\n');
+  const imageMessage = await channel.send({
+    content: intro, files: [{ attachment: rendered.buffer, name: rendered.fileName }],
+    allowedMentions: { parse: ['everyone'] },
+  });
+  const awardsMessage = await channel.send({ content: buildAwardsText(state.performances), allowedMentions: { parse: [] } });
+  updateEventData(eventKey, stored => {
+    stored.ceremony.teamOfTheTournament = stored.ceremony.teamOfTheTournament || {};
+    Object.assign(stored.ceremony.teamOfTheTournament, {
+      postedAt: new Date().toISOString(), serialNumber,
+      channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id,
+    });
+    return stored;
+  });
+  return { posted: true, serialNumber, channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id };
+}
+
+function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
+  if (postTimers.has(eventKey)) return false;
+  let attempt = 0;
+  const run = async () => {
+    try {
+      const force = attempt === POST_RETRY_DELAYS_MS.length - 1;
+      const result = await postTeamOfTheTournament({ client, eventKey, force });
+      if (result.posted || result.reason === 'already_posted'
+        || (result.reason === 'not_enough_eligible_players' && force)) {
+        postTimers.delete(eventKey);
+        return;
+      }
+    } catch (error) {
+      console.warn(`[tott] Abschluss-Post fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+    }
+    attempt += 1;
+    if (attempt >= POST_RETRY_DELAYS_MS.length) return postTimers.delete(eventKey);
+    const timer = setTimeout(run, POST_RETRY_DELAYS_MS[attempt]);
+    if (typeof timer.unref === 'function') timer.unref();
+    postTimers.set(eventKey, timer);
+  };
+  const timer = setTimeout(run, POST_RETRY_DELAYS_MS[0]);
+  if (typeof timer.unref === 'function') timer.unref();
+  postTimers.set(eventKey, timer);
+  return true;
+}
+
+function randomItem(items, index) {
+  return items.length ? items[index % items.length] : null;
+}
+
+function buildTestSelection() {
+  const teams = listVisibleTeams().filter(team => team.logo?.fileName);
+  const names = ['Nox', 'Viper', 'Ragnar', 'Kyro', 'Maverick', 'Nova', 'Ghost', 'Zeno', 'Blaze', 'Lynx', 'Ares'];
+  let cursor = 0;
+  const make = count => Array.from({ length: count }, () => {
+    const team = randomItem(teams, Math.floor(Math.random() * Math.max(teams.length, 1)));
+    const player = {
+      teamId: team?.id || null, playerId: `test-${cursor}`, playerName: names[cursor], matches: 4,
+      averageRating: Number((6.5 + Math.random() * 3.4).toFixed(2)),
+    };
+    cursor += 1;
+    return player;
+  });
+  return { goalkeeper: make(1), defender: make(3), midfielder: make(5), forward: make(2) };
+}
+
+async function postTeamOfTheTournamentTest(client) {
+  const channel = await getTargetChannel(client);
+  if (!channel?.send) throw new Error('Team-of-the-Tournament-Kanal wurde nicht gefunden.');
+  const serialNumber = 1 + Math.floor(Math.random() * 10);
+  const selection = buildTestSelection();
+  const rendered = await renderTeamOfTheTournament({ selection, serialNumber });
+  const message = await channel.send({
+    content: `🧪 **TEAM OF THE TOURNAMENT – GRAFIKTEST #${serialNumber}**\nFiktive Namen und Bewertungen, zufällige Logos registrierter Teams.`,
+    files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },
+  });
+  return { channelId: channel.id, messageId: message.id, serialNumber };
+}
+
+module.exports = {
+  aggregatePlayers, buildAwardsText, buildTestSelection, closingRatingsReady,
+  postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
+};
+
