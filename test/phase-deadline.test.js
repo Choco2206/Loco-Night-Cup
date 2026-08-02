@@ -99,3 +99,23 @@ test('league deadline adopts one existing report and completes the matchday', as
   assert.equal(storedEvent.leaguePhase.status, 'completed');
 });
 
+test('repairs an interrupted league matchday without replacing its fixtures', async () => {
+  const match = realMatch('league-recovery');
+  match.status = 'locked';
+  match.release.releasedAt = null;
+  storedEvent = {
+    leaguePhase: {
+      phaseType: 'league', formatSize: 2, status: 'running', currentMatchday: 1,
+      slots: [{}, {}], standings: [], messages: {},
+      matchdays: [{ status: 'locked', releasedAt: null, autoScoreAt: null, matches: [match] }],
+    },
+    knockout: { status: 'not_created' }, meta: {},
+  };
+  const repaired = await leagueReleases.reconcileLeagueMatchday(null, 'monday', new Date('2026-08-01T22:10:00.000Z'));
+  assert.equal(repaired, true);
+  assert.equal(storedEvent.leaguePhase.currentMatchday, 1);
+  assert.equal(storedEvent.leaguePhase.matchdays[0].status, 'open');
+  assert.equal(match.status, 'open');
+  assert.equal(match.release.slot, 1);
+  assert.equal(storedEvent.leaguePhase.matchdays[0].autoScoreAt, '2026-08-01T22:35:00.000Z');
+});
