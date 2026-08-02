@@ -9,6 +9,7 @@ const {
   buildAddCoManagerPayload,
   buildConfirmPayload,
   buildEditNameModal,
+  buildEaClubModal,
   buildMyTeamPayload,
   buildRegisterModal,
   buildRemoveCoManagerPayload,
@@ -28,6 +29,7 @@ const {
   requestLogoUpload,
   setLogoUploadInstructionMessage,
   updateTeamName,
+  updateTeamEaClub,
   updateTeamTwitchUrls,
 } = require('./team-service');
 const { refreshTeamStreamList } = require('./team-stream-list');
@@ -38,6 +40,7 @@ const { MY_TEAM_PANEL_CHANNEL_ID } = require('./team-panel');
 const { ensureUserIsNotBot, requireGuild } = require('./team-validation');
 const { refreshManagersWithoutTeamMessageIfTracked } = require('../admin/managers-without-team');
 const { syncTeamGroupAccess } = require('../groups/group-access-sync');
+const { resolveClub } = require('../team-of-the-tournament');
 
 const EPHEMERAL = 64;
 const LOGO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
@@ -247,6 +250,12 @@ async function handleButton(interaction, client) {
     return true;
   }
 
+  if (action === 'team_ea_club_open') {
+    requireTeamAccess(team, interaction.user.id);
+    await interaction.showModal(buildEaClubModal(team));
+    return true;
+  }
+
   if (action === 'team_logo_update_open') {
     requireTeamAccess(team, interaction.user.id);
     await interaction.deferReply({ flags: EPHEMERAL });
@@ -332,17 +341,29 @@ async function handleModal(interaction, client) {
     await interaction.deferReply({ flags: EPHEMERAL });
     const clubName = interaction.fields.getTextInputValue('club_name');
     const twitchUrls = [1, 2, 3].map(index => interaction.fields.getTextInputValue(`twitch_url_${index}`));
-    const team = createTeam({ clubName, managerUserId: interaction.user.id, settings, twitchUrls });
+    const eaClubName = interaction.fields.getTextInputValue('ea_club_name');
+    const eaClub = eaClubName.trim() ? await resolveClub(eaClubName) : null;
+    const team = createTeam({ clubName, managerUserId: interaction.user.id, settings, twitchUrls, eaClub });
     await syncManagerRoleForUser(interaction.guild, interaction.user.id, settings);
     await openLogoUpload({ interaction, client, team, settings, channelId: settings.channels.teamRegistrationChannelId });
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
     await interaction.editReply({
-      content: `Team **${team.clubName}** wurde angelegt. Bitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
+      content: `Team **${team.clubName}** wurde angelegt.${team.eaClub ? ` EA-Club **${team.eaClub.name}** wurde verknüpft.` : ' Ohne EA-Club-Verknüpfung erfolgt keine Team-of-the-Tournament-Wertung.'}\nBitte lade dein Logo innerhalb von 10 Minuten im ${teamRegistrationChannelLabel(settings)} hoch. Erlaubt: PNG/JPG/WEBP, max. ${settings.teams.maxLogoFileSizeMb} MB.`,
       components: [],
       embeds: [],
     });
+    return true;
+  }
+
+  if (interaction.customId.startsWith('team_ea_club_modal:')) {
+    requireGuild(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const [, teamId] = interaction.customId.split(':');
+    const eaClub = await resolveClub(interaction.fields.getTextInputValue('ea_club_name'));
+    const team = updateTeamEaClub({ teamId, eaClub, actorUserId: interaction.user.id });
+    await interaction.editReply({ content: `EA-Club **${team.eaClub.name}** (ID: ${team.eaClub.clubId}) wurde verknüpft. Die Spieler können jetzt für das Team of the Tournament gewertet werden.` });
     return true;
   }
 
@@ -432,3 +453,4 @@ async function handleInteraction(interaction, client) {
 module.exports = {
   handleInteraction,
 };
+
