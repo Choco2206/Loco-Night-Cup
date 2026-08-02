@@ -67,8 +67,8 @@ function validateMessages(data) {
 
   if (requireObject(errors, data.liveSchedule, 'liveSchedule')) {
     requireSnowflakeOrNull(errors, data.liveSchedule.channelId, 'liveSchedule.channelId');
-    if (![null, 'groups', 'knockout', 'ceremony'].includes(data.liveSchedule.phase)) {
-      errors.push('liveSchedule.phase must be null, groups, knockout, or ceremony');
+    if (![null, 'groups', 'league', 'knockout', 'ceremony'].includes(data.liveSchedule.phase)) {
+      errors.push('liveSchedule.phase must be null, groups, league, knockout, or ceremony');
     }
   }
 
@@ -130,3 +130,4 @@ function validateMessages(data) {
 module.exports = {
   validateMessages,
 };
+
