@@ -30,6 +30,7 @@ const {
   submitTeamResult,
 } = require('./group-results');
 const { handleResultOutcome } = require('../results/result-confirmation-service');
+const { scheduleRatingCapture } = require('../team-of-the-tournament');
 
 const EPHEMERAL = 64;
 const SELECT_OPTION_LIMIT = 25;
@@ -323,6 +324,7 @@ async function notifyAdminDecision(interaction, match) {
 }
 
 async function finalizeConfirmedGroupResult(client, eventKey, groupKey, outcome) {
+  scheduleRatingCapture(eventKey, outcome.match);
   await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
   await afterGroupResultConfirmed(client, eventKey, groupKey);
 }
