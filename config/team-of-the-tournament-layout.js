@@ -22,8 +22,7 @@ module.exports = {
       { logo: { centerX: 789, centerY: 1058, radius: 74 }, name: { x: 686, y: 1123, width: 150, height: 46 }, rating: { centerX: 866, centerY: 1144, radius: 32 } },
     ],
     goalkeeper: [
-      { logo: { centerX: 513, centerY: 1313, radius: 82 }, name: { x: 386, y: 1387, width: 190, height: 50 }, rating: { centerX: 601, centerY: 1412, radius: 38 } },
+      { logo: { centerX: 513, centerY: 1288, radius: 80 }, name: { x: 386, y: 1361, width: 190, height: 56 }, rating: { centerX: 601, centerY: 1389, radius: 34 } },
     ],
   },
 };
-
