@@ -61,6 +61,14 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
     }
   }
 
+  if (team.eaClub !== null && team.eaClub !== undefined && requireObject(errors, team.eaClub, `${path}.eaClub`)) {
+    if (!team.eaClub.clubId || typeof team.eaClub.clubId !== 'string') errors.push(`${path}.eaClub.clubId is required`);
+    if (!team.eaClub.name || typeof team.eaClub.name !== 'string') errors.push(`${path}.eaClub.name is required`);
+    if (team.eaClub.platform !== 'common-gen5') errors.push(`${path}.eaClub.platform must be common-gen5`);
+    requireIsoDateOrNull(errors, team.eaClub.linkedAt, `${path}.eaClub.linkedAt`);
+    requireSnowflakeOrNull(errors, team.eaClub.linkedByUserId, `${path}.eaClub.linkedByUserId`);
+  }
+
   if (team.status !== 'deleted') {
     if (seenActiveNames.has(team.normalizedClubName)) {
       errors.push(`${path}.normalizedClubName must be unique for non-deleted teams`);
@@ -178,3 +186,4 @@ function validateTeams(data) {
 module.exports = {
   validateTeams,
 };
+
