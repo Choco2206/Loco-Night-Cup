@@ -107,6 +107,11 @@ function validateEvent(data, expectedEventKey = null) {
       requireArray(errors, data.ceremony.teamStats.participantTeamIds, 'ceremony.teamStats.participantTeamIds');
       requireNonNegativeInteger(errors, data.ceremony.teamStats.matchCount, 'ceremony.teamStats.matchCount');
     }
+    if (data.ceremony.teamOfTheTournament !== undefined && requireObject(errors, data.ceremony.teamOfTheTournament, 'ceremony.teamOfTheTournament')) {
+      requireArray(errors, data.ceremony.teamOfTheTournament.performances, 'ceremony.teamOfTheTournament.performances');
+      requireArray(errors, data.ceremony.teamOfTheTournament.capturedMatches, 'ceremony.teamOfTheTournament.capturedMatches');
+      requireIsoDateOrNull(errors, data.ceremony.teamOfTheTournament.updatedAt, 'ceremony.teamOfTheTournament.updatedAt');
+    }
   }
 
   if (requireObject(errors, data.reset, 'reset')) {
@@ -121,3 +126,4 @@ function validateEvent(data, expectedEventKey = null) {
 module.exports = {
   validateEvent,
 };
+
