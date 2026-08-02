@@ -71,6 +71,7 @@ const ADMIN_CATEGORIES = {
       ['admin_ko_images_test', 'K.O.-Bilder testen', 'Eine K.O.-Bildvorlage im Testkanal pruefen'],
       ['admin_simulate_knockout', 'K.O.-Phase simulieren', 'K.O.-Phase eines Events simulieren'],
       ['admin_hof_test', 'Hall of Fame testen', 'Siegerehrung im Testkanal pruefen'],
+      ['admin_tott_test', 'TOTT-Grafik testen', 'Team-of-the-Tournament-Grafik mit Zufallsdaten posten'],
       ['admin_ceremony_post', 'Siegerehrung posten', 'Echte Siegerehrung fuer ein Event posten'],
     ],
   },
@@ -147,3 +148,4 @@ module.exports = {
   ADMIN_CATEGORIES,
   buildAdminPanelPayload,
 };
+
