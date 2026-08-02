@@ -146,6 +146,12 @@ function createEventDefault(eventKey) {
         participantTeamIds: [],
         matchCount: 0,
       },
+      teamOfTheTournament: {
+        performances: [],
+        capturedMatches: [],
+        selection: null,
+        updatedAt: null,
+      },
       postedAt: null,
       postedMessageIds: [],
       cleanupStatus: null,
@@ -512,3 +518,4 @@ module.exports = {
   createTeamHistoryDefault,
   createTeamsDefault,
 };
+
