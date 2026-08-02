@@ -6,6 +6,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { createKnockoutPhase } = require('../knockout/knockout-service');
+const { scheduleRatingCapture } = require('../team-of-the-tournament/team-of-the-tournament-service');
 const { refreshGroupPosts } = require('./group-posts');
 const {
   getMatches,
@@ -346,6 +347,7 @@ async function applyAutoScores(client, eventKey, groupKeyOrSlot, slotOrNow, mayb
   const slot = legacyCall ? groupKeyOrSlot : slotOrNow;
   const now = legacyCall ? (slotOrNow || new Date()) : (maybeNow || new Date());
 
+  const autoConfirmedMatches = [];
   updateEventData(eventKey, event => {
     ensureReleaseState(eventKey, event, now);
     const targetGroups = groupKey ? [groupKey] : groupKeys(event);
@@ -368,6 +370,7 @@ async function applyAutoScores(client, eventKey, groupKeyOrSlot, slotOrNow, mayb
         };
         match.confirmation = null;
         match.meta = { ...(match.meta || {}), updatedAt: nowIso(now) };
+        autoConfirmedMatches.push(match);
       }
       recalculateGroupStandings(group);
       updateGroupCompletion(event, group);
@@ -381,6 +384,10 @@ async function applyAutoScores(client, eventKey, groupKeyOrSlot, slotOrNow, mayb
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     return event;
   });
+
+  if (client) {
+    for (const match of autoConfirmedMatches) scheduleRatingCapture(eventKey, match);
+  }
 
   await maybeReleaseNextSlot(client, eventKey, groupKey, now);
   await maybeCreateKnockoutAfterGroupsComplete(client, eventKey, now);
@@ -615,4 +622,3 @@ module.exports = {
   releaseSlot,
   scheduleEvent,
 };
-
