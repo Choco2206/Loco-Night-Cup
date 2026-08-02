@@ -60,6 +60,11 @@ test('maps exactly eleven graphic slots to the 1-3-5-2 formation', () => {
   assert.equal(layout.slots.defender.length, 3);
   assert.equal(layout.slots.midfielder.length, 5);
   assert.equal(layout.slots.forward.length, 2);
+  assert.deepEqual(layout.slots.goalkeeper[0], {
+    logo: { centerX: 513, centerY: 1288, radius: 80 },
+    name: { x: 386, y: 1361, width: 190, height: 56 },
+    rating: { centerX: 601, centerY: 1389, radius: 34 },
+  });
 });
 
 test('builds eleven fictitious players for the admin graphic test', () => {
