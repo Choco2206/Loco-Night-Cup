@@ -137,6 +137,17 @@ function buildAdminPanelPayload(selectedCategory = null) {
   const components = buildCategoryButtons(category ? selectedCategory : null);
   const actionSelect = buildActionSelect(selectedCategory);
   if (actionSelect) components.push(actionSelect);
+  if (selectedCategory === 'tests') {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('admin_tott_test')
+          .setLabel('TOTT-Grafik testen')
+          .setEmoji('⭐')
+          .setStyle(ButtonStyle.Danger)
+      )
+    );
+  }
 
   return {
     embeds: [embed],
