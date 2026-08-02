@@ -7,6 +7,7 @@ const { getFriendlyMatches } = require('./ea-clubs-client');
 const MINIMUM_MATCHES = 3;
 const FORMATION = { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 };
 const RETRY_DELAYS_MS = [0, 30000, 120000, 300000];
+const MAX_MATCH_TIME_DISTANCE_MS = 2 * 60 * 60 * 1000;
 const captureTimers = new Map();
 
 function normalizePosition(value) {
@@ -32,6 +33,29 @@ function clubGoals(club) {
   return Number.isFinite(number) ? number : null;
 }
 
+function matchTimestampMs(match) {
+  const raw = match?.timestamp ?? match?.matchTimestamp ?? match?.match_timestamp ?? match?.date;
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (/^\d+$/.test(String(raw))) {
+    const number = Number(raw);
+    const milliseconds = number < 100000000000 ? number * 1000 : number;
+    return Number.isFinite(milliseconds) ? milliseconds : null;
+  }
+  const milliseconds = new Date(raw).getTime();
+  return Number.isNaN(milliseconds) ? null : milliseconds;
+}
+
+function confirmedTimestampMs(lncMatch) {
+  const raw = lncMatch?.result?.confirmedAt ?? lncMatch?.confirmation?.confirmedAt;
+  const milliseconds = new Date(raw || 0).getTime();
+  return Number.isNaN(milliseconds) || milliseconds <= 0 ? null : milliseconds;
+}
+
+function eaClubEntry(match, eaClubId) {
+  return Object.entries(clubMap(match)).find(([key, club]) =>
+    String(key) === String(eaClubId) || String(club?.clubId ?? club?.club_id ?? '') === String(eaClubId));
+}
+
 function matchContainsClubs(match, teamByEaClubId) {
   const ids = new Set(Object.entries(clubMap(match)).flatMap(([key, club]) => [String(key), String(club?.clubId ?? club?.club_id ?? '')]));
   const linkedIds = [...teamByEaClubId.keys()];
@@ -42,6 +66,39 @@ function scoreMatches(match, lncMatch) {
   const goals = Object.values(clubMap(match)).map(clubGoals).filter(Number.isFinite).sort((a, b) => a - b);
   const expected = [Number(lncMatch?.result?.homeGoals), Number(lncMatch?.result?.awayGoals)].sort((a, b) => a - b);
   return goals.length >= 2 && goals[0] === expected[0] && goals[goals.length - 1] === expected[1];
+}
+
+function linkedTeamScoreMatches(match, lncMatch, team, eaClubId) {
+  const entry = eaClubEntry(match, eaClubId);
+  if (!entry) return false;
+  const ownGoals = clubGoals(entry[1]);
+  const opponentGoals = Object.entries(clubMap(match))
+    .filter(([key]) => key !== entry[0]).map(([, club]) => clubGoals(club)).find(Number.isFinite);
+  const isHome = String(lncMatch?.home?.teamId) === String(team.id);
+  const expectedOwn = Number(isHome ? lncMatch?.result?.homeGoals : lncMatch?.result?.awayGoals);
+  const expectedOpponent = Number(isHome ? lncMatch?.result?.awayGoals : lncMatch?.result?.homeGoals);
+  return ownGoals === expectedOwn && opponentGoals === expectedOpponent;
+}
+
+function selectEaMatch(matches, lncMatch, linkedTeams) {
+  const confirmedAt = confirmedTimestampMs(lncMatch);
+  const teamByEaClubId = new Map(linkedTeams.map(team => [String(team.eaClub.clubId), String(team.id)]));
+  const candidates = (matches || []).filter(match => {
+    if (!eaMatchId(match) || !matchContainsClubs(match, teamByEaClubId)) return false;
+    if (linkedTeams.length > 1) {
+      if (!scoreMatches(match, lncMatch)) return false;
+    } else if (!linkedTeamScoreMatches(match, lncMatch, linkedTeams[0], linkedTeams[0].eaClub.clubId)) {
+      return false;
+    }
+    const matchAt = matchTimestampMs(match);
+    if (linkedTeams.length === 1 && (!confirmedAt || !matchAt)) return false;
+    return !confirmedAt || !matchAt || Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS;
+  });
+  return candidates.sort((a, b) => {
+    if (!confirmedAt) return 0;
+    return Math.abs(confirmedAt - (matchTimestampMs(a) || confirmedAt))
+      - Math.abs(confirmedAt - (matchTimestampMs(b) || confirmedAt));
+  })[0] || null;
 }
 
 function playerRows(match, teamByEaClubId, lncMatchId) {
@@ -121,13 +178,11 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
 async function captureOnce(eventKey, lncMatch) {
   const teams = [lncMatch?.home?.teamId, lncMatch?.away?.teamId].map(findTeamById).filter(Boolean);
   const linked = teams.filter(team => team.eaClub?.clubId);
-  // Beide Clubs muessen verknuepft sein, damit ein gleiches Ergebnis nicht versehentlich
-  // einem anderen Friendly des Teams zugeordnet wird.
-  if (linked.length < 2 || !lncMatch?.result) return false;
+  if (!linked.length || !lncMatch?.result) return false;
   const teamByEaClubId = new Map(linked.map(team => [String(team.eaClub.clubId), String(team.id)]));
   for (const team of linked) {
     const matches = await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform);
-    const candidate = matches.find(match => eaMatchId(match) && matchContainsClubs(match, teamByEaClubId) && scoreMatches(match, lncMatch));
+    const candidate = selectEaMatch(matches, lncMatch, linked);
     if (candidate && persistMatch(eventKey, lncMatch, candidate, teamByEaClubId)) return true;
   }
   return false;
@@ -155,5 +210,8 @@ function scheduleRatingCapture(eventKey, lncMatch) {
   return true;
 }
 
-module.exports = { FORMATION, MINIMUM_MATCHES, buildSelection, normalizePosition, scheduleRatingCapture };
+module.exports = {
+  FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
+  buildSelection, normalizePosition, scheduleRatingCapture, selectEaMatch,
+};
 
