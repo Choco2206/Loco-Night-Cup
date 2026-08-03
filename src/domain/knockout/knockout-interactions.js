@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 'use strict';
 
 const {
@@ -284,7 +287,7 @@ async function notifyAdminDecision(interaction, match) {
   if (match.status !== 'admin_decision_required') return;
   await interaction.channel?.send({
     content: [
-      '🛠️ **K.O.-Admin-Entscheidung erforderlich**',
+      'ðŸ› ï¸ **K.O.-Admin-Entscheidung erforderlich**',
       `${labelForParticipant(match.home)} vs ${labelForParticipant(match.away)}`,
       'Die beiden Teams haben unterschiedliche Ergebnisse gemeldet.',
     ].join('\n'),
@@ -451,7 +454,11 @@ async function handleReplacementTeamSelect(interaction, eventKey, roundKey, matc
     adminUserId: interaction.user.id,
   });
 
-  await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  await interaction.editReply({ content: 'Ergebnis gespeichert. K.-o.-Spielplan wird aktualisiert.' });
+
+  if (outcome.status !== 'confirmed') {
+    await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  }
   await interaction.editReply({
     content: [
       'K.O.-Team ersetzt.',
@@ -479,6 +486,8 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
     homeGoals: interaction.fields.getTextInputValue('home_goals'),
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
+
+  await interaction.editReply({ content: 'K.-o.-Admin-Ergebnis gespeichert. Spielplan wird aktualisiert.' });
 
   await handleResultOutcome({ client, eventKey, phase: 'knockout', phaseKey: roundKey, outcome, channelId: interaction.channelId });
   const ceremony = await finalizeConfirmedKnockoutResult(client, eventKey, outcome, interaction.guild);
@@ -528,3 +537,4 @@ module.exports = {
   finalizeConfirmedKnockoutResult,
   handleKnockoutInteraction,
 };
+
