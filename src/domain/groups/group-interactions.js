@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 'use strict';
 
 const {
@@ -342,7 +345,11 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
-  await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
+  await interaction.editReply({ content: 'Ergebnis gespeichert. Tabelle und Spielplan werden aktualisiert.' });
+
+  if (outcome.status !== 'confirmed') {
+    await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
+  }
   await handleResultOutcome({
     client, eventKey, phase: 'group', phaseKey: groupKey, outcome, channelId: interaction.channelId,
   });
@@ -500,9 +507,10 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
+  await interaction.editReply({ content: 'Admin-Ergebnis gespeichert. Tabelle und Spielplan werden aktualisiert.' });
+
   await handleResultOutcome({ client, eventKey, phase: 'group', phaseKey: groupKey, outcome, channelId: interaction.channelId });
-  await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
-  await afterGroupResultConfirmed(client, eventKey, groupKey);
+  await finalizeConfirmedGroupResult(client, eventKey, groupKey, outcome);
   await interaction.editReply({
     content: 'Admin-Ergebnis gesetzt. Tabelle und Spielplan wurden aktualisiert.',
   });
