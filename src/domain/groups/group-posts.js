@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1.1 seconds
-Output:
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
