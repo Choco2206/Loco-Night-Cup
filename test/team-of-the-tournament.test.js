@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { FORMATION, MINIMUM_MATCHES, buildSelection, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
+const { FORMATION, MINIMUM_MATCHES, buildSelection, confirmedEventMatches, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
 
@@ -51,6 +51,17 @@ test('does not guess a one-linked-team match without an EA timestamp', () => {
   const lncMatch = { home: { teamId: 'home' }, away: { teamId: 'away' }, result: { homeGoals: 2, awayGoals: 1, confirmedAt: '2026-08-02T00:30:00.000Z' } };
   const matches = [{ matchId: 'unknown-time', clubs: { 101: { clubId: '101', goals: '2' }, 999: { goals: '1' } } }];
   assert.equal(selectEaMatch(matches, lncMatch, [linkedTeam]), null);
+});
+
+test('finds confirmed group, league and knockout matches for startup recovery without duplicates', () => {
+  const match = id => ({ id, status: 'confirmed', result: { homeGoals: 1, awayGoals: 0 } });
+  const shared = match('shared');
+  const event = {
+    groups: { groups: { A: { matchdays: [{ matches: [match('group'), shared] }] } } },
+    leaguePhase: { matchdays: [{ matches: [match('league')] }] },
+    knockout: { rounds: { final: { matches: [match('final'), shared] } } },
+  };
+  assert.deepEqual(confirmedEventMatches(event).map(entry => entry.id), ['group', 'shared', 'league', 'final']);
 });
 
 test('maps exactly eleven graphic slots to the 1-3-5-2 formation', () => {
