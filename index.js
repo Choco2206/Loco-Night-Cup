@@ -10,6 +10,7 @@ const groupSystem = require('./src/domain/groups');
 const knockoutSystem = require('./src/domain/knockout');
 const banSystem = require('./src/domain/bans');
 const liveScheduleSystem = require('./src/domain/live-schedule');
+const teamOfTheTournamentSystem = require('./src/domain/team-of-the-tournament');
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
 const { initPendingResultConfirmations } = require('./src/domain/results/result-confirmation-service');
 
@@ -68,6 +69,7 @@ async function main() {
       await banSystem.initBanService(client);
       await groupSystem.init(client);
       await knockoutSystem.initKnockoutReleases(client);
+      await teamOfTheTournamentSystem.initTeamOfTheTournament(client);
       initPendingResultConfirmations(client);
       await liveScheduleSystem.refreshLiveScheduleForActiveEvents(client);
       schedulePendingAutoCleanups(client);
@@ -116,4 +118,3 @@ main().catch(error => {
   console.error('Fatal startup error:', error);
   process.exitCode = 1;
 });
-
