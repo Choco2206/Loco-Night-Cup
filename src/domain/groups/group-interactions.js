@@ -23,6 +23,7 @@ const {
   syncReplacementDiscordResources,
 } = require('./group-replacements');
 const {
+  getAdminSelectableMatchdays,
   getAdminSelectableMatches,
   getCurrentReleasedSlot,
   getUserSelectableMatches,
@@ -151,19 +152,16 @@ async function handleOpenAdminResult(interaction, eventKey, groupKey) {
   }
 
   const { group } = getGroupFromEvent(eventKey, groupKey);
-  const entries = getAdminSelectableMatches(group).map(match => ({
-    match,
-    value: match.id,
-  }));
+  const matchdays = getAdminSelectableMatchdays(group);
 
-  if (!entries.length) {
+  if (!matchdays.length) {
     await interaction.reply({ content: 'Keine wertbaren Gruppenspiele gefunden.', flags: EPHEMERAL });
     return true;
   }
 
   await interaction.reply({
-    content: 'Waehle das Spiel fuer das Admin-Ergebnis aus.',
-    components: [buildMatchSelect(`group_admin_result_select:${eventKey}:${groupKey}`, entries)],
+    content: 'Waehle zuerst den Spieltag aus. Auch abgeschlossene Spieltage koennen korrigiert werden.',
+    components: [buildMatchdaySelect(eventKey, groupKey, matchdays)],
     flags: EPHEMERAL,
   });
   return true;
@@ -291,7 +289,7 @@ async function handleTeamResultSelect(interaction, eventKey, groupKey) {
   return true;
 }
 
-async function handleAdminResultSelect(interaction, eventKey, groupKey) {
+async function handleAdminResultSelect(interaction, eventKey, groupKey, selectedMatchday) {
   if (!await isAdminAllowed(interaction)) {
     await interaction.reply({ content: 'Du darfst kein Admin-Ergebnis setzen.', flags: EPHEMERAL });
     return true;
@@ -299,7 +297,10 @@ async function handleAdminResultSelect(interaction, eventKey, groupKey) {
 
   const matchId = interaction.values?.[0];
   const { group } = getGroupFromEvent(eventKey, groupKey);
-  const match = getAdminSelectableMatches(group).find(entry => String(entry.id) === String(matchId));
+  const match = getAdminSelectableMatches(group).find(entry => (
+    String(entry.id) === String(matchId)
+    && Number(entry.matchday || entry.release?.slot || 0) === Number(selectedMatchday)
+  ));
   if (!match) throw new Error('Spiel wurde nicht gefunden.');
 
   await interaction.showModal(createScoreModal({
@@ -326,6 +327,19 @@ async function finalizeConfirmedGroupResult(client, eventKey, groupKey, outcome)
   scheduleRatingCapture(eventKey, outcome.match);
   await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
   await afterGroupResultConfirmed(client, eventKey, groupKey);
+}
+
+function buildMatchdaySelect(eventKey, groupKey, matchdays) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`group_admin_result_matchday:${eventKey}:${groupKey}`)
+      .setPlaceholder('Spieltag auswaehlen')
+      .addOptions(matchdays.map(entry => ({
+        label: `Spieltag ${entry.matchday}`,
+        value: String(entry.matchday),
+        description: `${entry.matches.length} Begegnung${entry.matches.length === 1 ? '' : 'en'}`,
+      })))
+  );
 }
 
 async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, selectedParticipantKey, client) {
@@ -360,6 +374,28 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
       ? 'Ergebnis gespeichert. Es ist eine Admin-Entscheidung erforderlich.'
       : 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.';
   await interaction.editReply({ content: message });
+  return true;
+}
+
+async function handleAdminMatchdaySelect(interaction, eventKey, groupKey) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein Admin-Ergebnis setzen.', flags: EPHEMERAL });
+    return true;
+  }
+
+  const selectedMatchday = Number(interaction.values?.[0]);
+  const { group } = getGroupFromEvent(eventKey, groupKey);
+  const selected = getAdminSelectableMatchdays(group)
+    .find(entry => entry.matchday === selectedMatchday);
+  if (!selected) throw new Error('Spieltag wurde nicht gefunden.');
+
+  await interaction.update({
+    content: `Waehle die Begegnung aus Spieltag ${selectedMatchday} aus.`,
+    components: [buildMatchSelect(
+      `group_admin_result_select:${eventKey}:${groupKey}:${selectedMatchday}`,
+      selected.matches.map(match => ({ match, value: match.id }))
+    )],
+  });
   return true;
 }
 
@@ -528,13 +564,14 @@ async function handleGroupInteraction(interaction, client) {
   }
 
   if (interaction.isStringSelectMenu?.()) {
-    const [action, parsedEventKey, parsedGroupKey, encodedParticipantKey] = customId.split(':');
-    if (!['group_result_select', 'group_admin_result_select', 'group_replacement_target', 'group_replacement_team'].includes(action)) return false;
+    const [action, parsedEventKey, parsedGroupKey, extraValue] = customId.split(':');
+    if (!['group_result_select', 'group_admin_result_matchday', 'group_admin_result_select', 'group_replacement_target', 'group_replacement_team'].includes(action)) return false;
     const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_select') return handleTeamResultSelect(interaction, eventKey, groupKey);
-    if (action === 'group_admin_result_select') return handleAdminResultSelect(interaction, eventKey, groupKey);
+    if (action === 'group_admin_result_matchday') return handleAdminMatchdaySelect(interaction, eventKey, groupKey);
+    if (action === 'group_admin_result_select') return handleAdminResultSelect(interaction, eventKey, groupKey, extraValue);
     if (action === 'group_replacement_target') return handleReplacementTargetSelect(interaction, eventKey, groupKey);
-    if (action === 'group_replacement_team') return handleReplacementTeamSelect(interaction, eventKey, groupKey, encodedParticipantKey, client);
+    if (action === 'group_replacement_team') return handleReplacementTeamSelect(interaction, eventKey, groupKey, extraValue, client);
   }
 
   if (interaction.isModalSubmit?.()) {
