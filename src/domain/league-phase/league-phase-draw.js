@@ -62,7 +62,7 @@ function createLeaguePhaseDraw({ eventKey, participants, createdAt = new Date().
   const phase = {
     phaseType: 'league', formatSize: size, config: { ...config }, groupKey: 'league', name: 'Ligaphase', status: 'created',
     createdAt, completedAt: null, currentMatchday: 0, roleId: null,
-    overviewChannelId: null, resultsChannelId: null, slots: normalized,
+    overviewChannelId: null, resultsChannelId: null, videoChannelId: null, slots: normalized,
     participants: normalized, matchdays, standings: [], transitionStatus: 'not_started',
     messages: { overviewTableMessageId: null, overviewScheduleMessageId: null, resultsTableMessageId: null, resultsScheduleMessageId: null, releaseMessageId: null },
   };
