@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 'use strict';
 
 const { updateEventData } = require('../events/event-repository');
@@ -265,12 +268,13 @@ function submitTeamResult({ eventKey, roundKey, matchId, participantKeyValue, us
       awayGoals: parsedAway,
       submittedAt: nowIso(),
     };
+    const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
     match.reports = (match.reports || []).filter(entry => entry.participantKey !== participantKeyValue);
     match.reports.push(report);
     applyReports(event, match);
     match.meta = { ...(match.meta || {}), updatedAt: nowIso() };
     event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
-    outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed' };
+    outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed', confirmationNotice };
     return event;
   });
 
@@ -291,6 +295,7 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
     const match = findMatch(round, matchId);
     if (!match || !isRealMatch(match)) throw new Error('K.O.-Spiel wurde nicht gefunden.');
 
+    const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
     match.reports = [];
     match.confirmation = null;
     match.adminDecision = {
@@ -304,7 +309,7 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
       actorUserId: adminUserId,
     });
     event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
-    outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed' };
+    outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed', confirmationNotice };
     return event;
   });
 
