@@ -118,6 +118,7 @@ function createEventDefault(eventKey) {
     leaguePhase: {
       phaseType: null, status: 'not_created', participants: [], slots: [], matchdays: [], standings: [],
       currentMatchday: 0, roleId: null, overviewChannelId: null, resultsChannelId: null,
+      videoChannelId: null, calculationChannelId: null, qualificationAuditMessageId: null, qualificationAuditPostedAt: null,
       transitionStatus: 'not_started', messages: {},
     },
     knockout: {
