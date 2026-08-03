@@ -252,15 +252,14 @@ async function handleReplacementTargetSelect(interaction, eventKey, groupKey) {
 }
 
 async function handleReplacementTeamSelect(interaction, eventKey, groupKey, encodedParticipantKey, client) {
+  await interaction.deferUpdate();
   if (!await isAdminAllowed(interaction)) {
-    await interaction.reply({ content: 'Du darfst keinen Nachruecker einsetzen.', flags: EPHEMERAL });
+    await interaction.editReply({ content: 'Du darfst keinen Nachruecker einsetzen.', components: [] });
     return true;
   }
 
   const participantKeyValue = decodeURIComponent(encodedParticipantKey);
   const replacementTeamId = interaction.values?.[0];
-  await interaction.deferUpdate();
-
   const outcome = replaceGroupParticipant({
     eventKey,
     groupKey,
