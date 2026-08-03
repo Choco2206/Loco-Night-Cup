@@ -107,6 +107,32 @@ function rankGroupRows(group) {
   return rows.sort((a, b) => compareGroupRows(group, rows, a, b));
 }
 
+function explainGroupOrder(group, first, second, allRows = group?.standings || []) {
+  const metric = (key, label, firstValue = first?.[key], secondValue = second?.[key]) => ({
+    criterion: key, label, firstValue: Number(firstValue || 0), secondValue: Number(secondValue || 0),
+  });
+  if (Number(first?.points || 0) !== Number(second?.points || 0)) return metric('points', 'mehr Punkte');
+  if (Number(first?.goalDifference || 0) !== Number(second?.goalDifference || 0)) return metric('goalDifference', 'bessere Tordifferenz');
+  if (Number(first?.goalsFor || 0) !== Number(second?.goalsFor || 0)) return metric('goalsFor', 'mehr erzielte Tore');
+  if (Number(first?.goalsAgainst || 0) !== Number(second?.goalsAgainst || 0)) return metric('goalsAgainst', 'weniger Gegentore');
+
+  const tiedRows = allRows.filter(row => basicCompare(row, first) === 0);
+  const miniRows = buildMiniTable(group, tiedRows);
+  const firstMini = miniRows.get(participantKey(first));
+  const secondMini = miniRows.get(participantKey(second));
+  if (firstMini && secondMini && firstMini.played && secondMini.played && basicCompare(firstMini, secondMini) !== 0) {
+    return {
+      criterion: 'directComparison', label: 'direkter Vergleich / Mini-Tabelle',
+      firstValue: `${firstMini.points} P | ${firstMini.goalDifference >= 0 ? '+' : ''}${firstMini.goalDifference} TD | ${firstMini.goalsFor}:${firstMini.goalsAgainst}`,
+      secondValue: `${secondMini.points} P | ${secondMini.goalDifference >= 0 ? '+' : ''}${secondMini.goalDifference} TD | ${secondMini.goalsFor}:${secondMini.goalsAgainst}`,
+    };
+  }
+  return {
+    criterion: 'draw', label: 'deterministischer Losentscheid des Bots',
+    firstValue: botDrawScore(first, group?.groupKey || ''), secondValue: botDrawScore(second, group?.groupKey || ''),
+  };
+}
+
 function compareThirdPlaceRows(a, b) {
   return (
     basicCompare(a, b) ||
@@ -116,5 +142,7 @@ function compareThirdPlaceRows(a, b) {
 
 module.exports = {
   compareThirdPlaceRows,
+  explainGroupOrder,
   rankGroupRows,
 };
+
