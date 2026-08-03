@@ -14,9 +14,9 @@ const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/leag
 const { LEAGUE_PHASE_FORMATS, LEAGUE_PHASE_VIDEO_CHANNEL_NAME, isLeaguePhaseFormat } = require('../../app/constants');
 
 function buildLeaguePhaseButtons(eventKey) { return new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId(`group_result_open:${eventKey}:league`).setLabel('Ergebnis eintragen').setEmoji('âš½').setStyle(ButtonStyle.Primary),
-  new ButtonBuilder().setCustomId(`group_admin_result_open:${eventKey}:league`).setLabel('Admin-Ergebnis').setEmoji('ðŸ› ï¸').setStyle(ButtonStyle.Danger),
-  new ButtonBuilder().setCustomId(`group_replacement_open:${eventKey}:league`).setLabel('Nachruecker einsetzen').setEmoji('ðŸ”').setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(`group_result_open:${eventKey}:league`).setLabel('Ergebnis eintragen').setEmoji('ƒs«').setStyle(ButtonStyle.Primary),
+  new ButtonBuilder().setCustomId(`group_admin_result_open:${eventKey}:league`).setLabel('Admin-Ergebnis').setEmoji('ÐY>ÿ‹÷?').setStyle(ButtonStyle.Danger),
+  new ButtonBuilder().setCustomId(`group_replacement_open:${eventKey}:league`).setLabel('Nachruecker einsetzen').setEmoji('ÐY"?').setStyle(ButtonStyle.Secondary)
 ); }
 async function findExistingImageMessage(channel, attachmentName) {
   if (!attachmentName) return null;
@@ -131,6 +131,8 @@ async function performLeaguePhasePostsRefresh(client, eventKey) {
   const rt = await upsert(results, phase.messages?.resultsTableMessageId, imagePayload(table, `ligaphase-table-results-${eventKey}.png`));
   const rs = await upsert(results, phase.messages?.resultsScheduleMessageId, imagePayload(schedule, `ligaphase-schedule-results-${eventKey}.png`, [buildLeaguePhaseButtons(eventKey)]));
   updateEventData(eventKey, stored => { stored.leaguePhase.messages = stored.leaguePhase.messages || {}; Object.assign(stored.leaguePhase.messages, { overviewTableMessageId: ot.id, overviewScheduleMessageId: os.id, resultsTableMessageId: rt.id, resultsScheduleMessageId: rs.id }); stored.leaguePhase.standings = phase.standings; return stored; });
+  const { ensureAttendancePost } = require('../groups/attendance-service');
+  await ensureAttendancePost(client, eventKey, 'league');
   const { refreshLiveSchedule } = require('../live-schedule');
   await refreshLiveSchedule(client, eventKey).catch(error => console.warn(`[league-phase] Oeffentlicher Spielplan konnte nicht aktualisiert werden: ${error.message}`));
   console.info(`[league-phase] ${eventKey}: Ligaphasengrafiken aktualisiert.`); return { ot, os, rt, rs };
