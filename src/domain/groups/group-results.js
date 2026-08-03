@@ -283,6 +283,8 @@ function submitTeamResult({ eventKey, groupKey, matchId, participantKeyValue, us
       submittedAt: nowIso(),
     };
 
+    if (!match.firstReportedResult) match.firstReportedResult = { ...report };
+
     match.reports = (match.reports || []).filter(entry => entry.participantKey !== participantKeyValue);
     match.reports.push(report);
     applyReports(match);
@@ -383,4 +385,3 @@ module.exports = {
   submitTeamResult,
   updateGroupCompletion,
 };
-
