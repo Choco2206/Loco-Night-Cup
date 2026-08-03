@@ -64,6 +64,7 @@ function createLeaguePhaseDraw({ eventKey, participants, createdAt = new Date().
     createdAt, completedAt: null, currentMatchday: 0, roleId: null,
     overviewChannelId: null, resultsChannelId: null, videoChannelId: null, slots: normalized,
     participants: normalized, matchdays, standings: [], transitionStatus: 'not_started',
+    calculationChannelId: null, qualificationAuditMessageId: null, qualificationAuditPostedAt: null,
     messages: { overviewTableMessageId: null, overviewScheduleMessageId: null, resultsTableMessageId: null, resultsScheduleMessageId: null, releaseMessageId: null },
   };
   validateLeaguePhaseDraw(phase);
@@ -104,3 +105,4 @@ function validateLeaguePhaseDraw(phase) {
 }
 
 module.exports = { createLeaguePhaseDraw, participantKey, validateLeaguePhaseDraw };
+
