@@ -10,7 +10,7 @@ const { applyGroupChannelPermissionOverwrites, buildGroupChannelPermissionOverwr
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { createLeaguePhaseDraw, validateLeaguePhaseDraw } = require('./league-phase-draw');
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
-const { LEAGUE_PHASE_FORMATS, isLeaguePhaseFormat } = require('../../app/constants');
+const { LEAGUE_PHASE_FORMATS, LEAGUE_PHASE_VIDEO_CHANNEL_NAME, isLeaguePhaseFormat } = require('../../app/constants');
 
 function buildLeaguePhaseButtons(eventKey) { return new ActionRowBuilder().addComponents(
   new ButtonBuilder().setCustomId(`group_result_open:${eventKey}:league`).setLabel('Ergebnis eintragen').setEmoji('⚽').setStyle(ButtonStyle.Primary),
@@ -98,7 +98,7 @@ async function verifyLeaguePhaseAccess({ guild, settings, phase }) {
   const userIds = await getExistingGuildMemberIds(guild, participantUserIds);
   const expected = buildGroupChannelPermissionOverwrites({ guild, settings, roleId: role.id, userIds });
   const channels = [];
-  for (const channelId of [phase.overviewChannelId, phase.resultsChannelId]) {
+  for (const channelId of [phase.overviewChannelId, phase.resultsChannelId, phase.videoChannelId]) {
     const channel = channelId ? await guild.channels.fetch(channelId).catch(() => null) : null;
     if (!channel) throw new Error(`Ligaphasenkanal fehlt: ${channelId || 'keine ID'}`);
     const mismatches = expected.filter(overwrite => {
@@ -137,9 +137,9 @@ async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = 
   const role = await ensureLeaguePhaseRole(targetGuild, settings);
   const leagueUserIds = await getExistingGuildMemberIds(targetGuild, result.leaguePhase.slots.filter(item => item.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId))));
   for (const userId of leagueUserIds) { const member = await targetGuild.members.fetch(userId).catch(() => null); if (member && !member.roles.cache.has(role.id)) await member.roles.add(role.id, 'Teilnahme an der Ligaphase').catch(() => null); }
-  const overview = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.overviewChannelId, 'ligaphase', role.id, leagueUserIds); const results = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.resultsChannelId, 'ligaphase-ergebnisse', role.id, leagueUserIds);
-  updateEventData(eventKey, event => { event.leaguePhase.roleId = role.id; event.leaguePhase.overviewChannelId = overview.id; event.leaguePhase.resultsChannelId = results.id; result.event = event; result.leaguePhase = event.leaguePhase; return event; });
-  updateJson(FILES.messages, createMessagesDefault(), messages => { messages.leaguePhase = messages.leaguePhase || {}; messages.leaguePhase[eventKey] = { ...(messages.leaguePhase[eventKey] || {}), cycleKey: result.event.cycle?.cycleKey || null, roleId: role.id, overviewChannelId: overview.id, resultsChannelId: results.id }; return messages; });
+  const overview = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.overviewChannelId, 'ligaphase', role.id, leagueUserIds); const results = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.resultsChannelId, 'ligaphase-ergebnisse', role.id, leagueUserIds); const video = await ensureLeaguePhaseChannel(targetGuild, settings, result.leaguePhase.videoChannelId, LEAGUE_PHASE_VIDEO_CHANNEL_NAME, role.id, leagueUserIds);
+  updateEventData(eventKey, event => { event.leaguePhase.roleId = role.id; event.leaguePhase.overviewChannelId = overview.id; event.leaguePhase.resultsChannelId = results.id; event.leaguePhase.videoChannelId = video.id; result.event = event; result.leaguePhase = event.leaguePhase; return event; });
+  updateJson(FILES.messages, createMessagesDefault(), messages => { messages.leaguePhase = messages.leaguePhase || {}; messages.leaguePhase[eventKey] = { ...(messages.leaguePhase[eventKey] || {}), cycleKey: result.event.cycle?.cycleKey || null, roleId: role.id, overviewChannelId: overview.id, resultsChannelId: results.id, videoChannelId: video.id }; return messages; });
   const accessCheck = await verifyLeaguePhaseAccess({ guild: targetGuild, settings, phase: result.leaguePhase });
   if (!accessCheck.ok) throw new Error(`Ligaphasen-Rollen-/Berechtigungspruefung fehlgeschlagen: ${JSON.stringify(accessCheck)}`);
   console.info(`[league-phase] ${eventKey}: Ligaphasenrolle und -kanaele erstellt/wiederverwendet.`); await refreshLeaguePhasePosts(client, eventKey);
@@ -147,4 +147,4 @@ async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = 
   scheduleLeaguePhase(client, eventKey);
   return { ...result, event: readEventData(eventKey), leaguePhase: readEventData(eventKey).leaguePhase };
 }
-module.exports = { LEAGUE_PHASE_CATEGORY_ID, LEAGUE_PHASE_ROLE_NAME, buildLeaguePhaseButtons, drawLeaguePhaseForEvent, ensureLeaguePhaseChannel, ensureLeaguePhaseRole, getExistingGuildMemberIds, refreshLeaguePhasePosts, verifyLeaguePhaseAccess };
+module.exports = { LEAGUE_PHASE_CATEGORY_ID, LEAGUE_PHASE_ROLE_NAME, LEAGUE_PHASE_VIDEO_CHANNEL_NAME, buildLeaguePhaseButtons, drawLeaguePhaseForEvent, ensureLeaguePhaseChannel, ensureLeaguePhaseRole, getExistingGuildMemberIds, refreshLeaguePhasePosts, verifyLeaguePhaseAccess };
