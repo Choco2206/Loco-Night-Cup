@@ -1,8 +1,12 @@
+Exit code: 0
+Wall time: 1 seconds
+Output:
 'use strict';
 
 const { EmbedBuilder } = require('discord.js');
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
+const { enqueueCoalesced } = require('../../app/async-coalescer');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { readEventData } = require('../events/event-repository');
 const { recalculateGroupStandings } = require('../groups/group-results');
@@ -67,19 +71,19 @@ function isByeMatch(match) {
 }
 
 function formatGroupStatus(match) {
-  if (match.status === 'confirmed' && match.result) return `✅ ${match.result.homeGoals}:${match.result.awayGoals}`;
-  if (isByeMatch(match)) return '🎟️ Freilos';
-  if (match.status === 'pending_confirmation') return '⏳ wartet auf Gegner';
-  if (match.status === 'admin_decision_required') return '🚨 Admin-Klärung';
-  return '⏳ offen';
+  if (match.status === 'confirmed' && match.result) return `âœ… ${match.result.homeGoals}:${match.result.awayGoals}`;
+  if (isByeMatch(match)) return 'ðŸŽŸï¸ Freilos';
+  if (match.status === 'pending_confirmation') return 'â³ wartet auf Gegner';
+  if (match.status === 'admin_decision_required') return 'ðŸš¨ Admin-KlÃ¤rung';
+  return 'â³ offen';
 }
 
 function formatKnockoutStatus(match) {
-  if (match.status === 'confirmed' && match.result) return `✅ ${match.result.homeGoals}:${match.result.awayGoals}`;
-  if (match.status === 'pending_confirmation') return '⏳ wartet auf Gegner';
-  if (match.status === 'admin_decision_required') return '🚨 Admin-Klärung';
-  if (match.status === 'locked') return '⏳ offen';
-  return '⏳ offen';
+  if (match.status === 'confirmed' && match.result) return `âœ… ${match.result.homeGoals}:${match.result.awayGoals}`;
+  if (match.status === 'pending_confirmation') return 'â³ wartet auf Gegner';
+  if (match.status === 'admin_decision_required') return 'ðŸš¨ Admin-KlÃ¤rung';
+  if (match.status === 'locked') return 'â³ offen';
+  return 'â³ offen';
 }
 
 function getGroupMatches(group) {
@@ -101,15 +105,15 @@ function sortedStandings(group) {
 
 function buildGroupEmbed(event, group) {
   const table = sortedStandings(group).map((row, index) => (
-    `${index + 1}. ${row.displayName || findTeamById(row.teamId)?.clubName || row.teamId} • P ${row.points} • Diff ${row.goalDifference >= 0 ? '+' : ''}${row.goalDifference}`
+    `${index + 1}. ${row.displayName || findTeamById(row.teamId)?.clubName || row.teamId} â€¢ P ${row.points} â€¢ Diff ${row.goalDifference >= 0 ? '+' : ''}${row.goalDifference}`
   ));
 
   const matches = getGroupMatches(group).map((match, index) => (
-    `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatGroupStatus(match)}`
+    `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} â€¢ ${formatGroupStatus(match)}`
   ));
 
   return new EmbedBuilder()
-    .setTitle(`📋 Gruppe ${group.groupKey}`)
+    .setTitle(`ðŸ“‹ Gruppe ${group.groupKey}`)
     .setColor(0xff0000)
     .setDescription([
       '**Live-Tabelle**',
@@ -118,26 +122,26 @@ function buildGroupEmbed(event, group) {
       '**Spielplan**',
       matches.join('\n') || 'Noch kein Spielplan.',
     ].join('\n'))
-    .setFooter({ text: `${event.label || event.eventKey} • Gruppenphase` })
+    .setFooter({ text: `${event.label || event.eventKey} â€¢ Gruppenphase` })
     .setTimestamp(new Date());
 }
 
 function roundTitle(roundKey) {
-  if (roundKey === 'third_place') return '🥉 Spiel um Platz 3';
-  if (roundKey === 'final') return '👑 Finale';
-  return `🏆 ${ROUND_LABELS[roundKey] || roundKey}`;
+  if (roundKey === 'third_place') return 'ðŸ¥‰ Spiel um Platz 3';
+  if (roundKey === 'final') return 'ðŸ‘‘ Finale';
+  return `ðŸ† ${ROUND_LABELS[roundKey] || roundKey}`;
 }
 
 function buildRoundEmbed(event, roundKey, round) {
   const matches = (round.matches || []).map((match, index) => (
-    `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatKnockoutStatus(match)}`
+    `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} â€¢ ${formatKnockoutStatus(match)}`
   ));
 
   return new EmbedBuilder()
     .setTitle(roundTitle(roundKey))
     .setColor(roundKey === 'final' ? 0xf2c94c : 0xff0000)
     .setDescription(matches.join('\n') || 'Diese Runde ist noch nicht bereit.')
-    .setFooter({ text: `${event.label || event.eventKey} • K.O.-Phase` })
+    .setFooter({ text: `${event.label || event.eventKey} â€¢ K.O.-Phase` })
     .setTimestamp(new Date());
 }
 
@@ -145,15 +149,15 @@ function headerPayload(event, phase) {
   const size = event.format?.size ? `${event.format.size}er Cup` : 'Cup';
   if (phase === 'knockout') {
     return {
-      content: `🏆 Loco Night Cup ${event.label || event.eventKey} • K.O.-Phase`,
+      content: `ðŸ† Loco Night Cup ${event.label || event.eventKey} â€¢ K.O.-Phase`,
       allowedMentions: { parse: [] },
     };
   }
-  if (phase === 'league') return { content: `📊 Loco Night Cup ${event.label || event.eventKey} • ${event.format?.size}er-Ligaphase\n🏆 Die besten 8 qualifizieren sich für das Viertelfinale.`, allowedMentions: { parse: [] } };
+  if (phase === 'league') return { content: `ðŸ“Š Loco Night Cup ${event.label || event.eventKey} â€¢ ${event.format?.size}er-Ligaphase\nðŸ† Die besten 8 qualifizieren sich fÃ¼r das Viertelfinale.`, allowedMentions: { parse: [] } };
   return {
     content: [
-      `📊 Loco Night Cup ${event.label || event.eventKey} • Live-Spielplan`,
-      `🏆 Turnierformat: ${size}`,
+      `ðŸ“Š Loco Night Cup ${event.label || event.eventKey} â€¢ Live-Spielplan`,
+      `ðŸ† Turnierformat: ${size}`,
     ].join('\n'),
     allowedMentions: { parse: [] },
   };
@@ -224,7 +228,7 @@ function activeRounds(event) {
     .filter(([, round]) => round?.matches?.length && round.status !== 'not_needed');
 }
 
-async function refreshLiveSchedule(client, eventKey, event = null) {
+async function performLiveScheduleRefresh(client, eventKey, event = null) {
   if (!client || !EVENT_KEYS.includes(eventKey)) return false;
   const settings = readSettings();
   const channel = await getChannel(client, settings);
@@ -326,6 +330,10 @@ async function refreshLiveSchedule(client, eventKey, event = null) {
   return true;
 }
 
+function refreshLiveSchedule(client, eventKey, event = null) {
+  return enqueueCoalesced(`live-schedule:${eventKey}`, () => performLiveScheduleRefresh(client, eventKey, event));
+}
+
 async function refreshLiveScheduleForActiveEvents(client) {
   for (const eventKey of EVENT_KEYS) {
     const event = readEventData(eventKey);
@@ -378,3 +386,4 @@ module.exports = {
   refreshLiveSchedule,
   refreshLiveScheduleForActiveEvents,
 };
+
