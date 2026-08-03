@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1 seconds
+Output:
 'use strict';
 
 const assert = require('node:assert/strict');
@@ -69,5 +72,27 @@ test('knockout result stays pending because K.O. rounds are never auto-scored', 
   assert.equal(pending.status, 'pending_confirmation');
   assert.equal(pending.match.confirmation.expiresAt, null);
   assert.equal(pending.match.result, null);
+});
+
+test('preserves the opponent reminder reference when the second team confirms', () => {
+  const match = {
+    id: 'notice-match', matchday: 1, status: 'open', release: { releasedAt: new Date().toISOString() },
+    home: participant('home'), away: participant('away'), reports: [], result: null,
+  };
+  const group = { groupKey: 'A', slots: [match.home, match.away], matchdays: [{ matches: [match] }], standings: [] };
+  storedEvent = { groups: { status: 'created', groups: { A: group } }, meta: {} };
+  groupResults.submitTeamResult({
+    eventKey: 'monday', groupKey: 'A', matchId: match.id, participantKeyValue: 'team:home',
+    userId: 'user-home', homeGoals: '2', awayGoals: '0',
+  });
+  match.confirmation.notificationMessageId = 'notice-1';
+  match.confirmation.channelId = 'channel-1';
+  const confirmed = groupResults.submitTeamResult({
+    eventKey: 'monday', groupKey: 'A', matchId: match.id, participantKeyValue: 'team:away',
+    userId: 'user-away', homeGoals: '2', awayGoals: '0',
+  });
+  assert.equal(confirmed.status, 'confirmed');
+  assert.equal(confirmed.confirmationNotice.notificationMessageId, 'notice-1');
+  assert.equal(confirmed.confirmationNotice.channelId, 'channel-1');
 });
 
