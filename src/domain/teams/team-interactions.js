@@ -369,28 +369,29 @@ async function handleModal(interaction, client) {
 
   if (interaction.customId.startsWith('team_edit_name_modal:')) {
     requireGuild(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
     const [, teamId] = interaction.customId.split(':');
     const newClubName = interaction.fields.getTextInputValue('new_club_name');
     const team = updateTeamName({ teamId, newClubName, actorUserId: interaction.user.id, settings });
     await syncTeamNicknames(interaction.guild, team);
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
-    await interaction.reply({ content: `Teamname wurde auf **${team.clubName}** geaendert.`, flags: EPHEMERAL });
+    await interaction.editReply({ content: `Teamname wurde auf **${team.clubName}** geaendert.` });
     return true;
   }
 
 
   if (interaction.customId.startsWith('team_twitch_modal:')) {
     requireGuild(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
     const [, teamId] = interaction.customId.split(':');
     const twitchUrls = [1, 2, 3].map(index => interaction.fields.getTextInputValue(`twitch_url_${index}`));
     const team = updateTeamTwitchUrls({ teamId, twitchUrls, actorUserId: interaction.user.id });
     await refreshTeamStreamList(client);
-    await interaction.reply({
+    await interaction.editReply({
       content: team.twitchUrls.length
         ? `${team.twitchUrls.length} Twitch-Link(s) gespeichert:\n${team.twitchUrls.join('\n')}`
         : 'Alle Twitch-Links wurden entfernt.',
-      flags: EPHEMERAL,
     });
     return true;
   }
@@ -453,4 +454,3 @@ async function handleInteraction(interaction, client) {
 module.exports = {
   handleInteraction,
 };
-
