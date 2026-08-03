@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.3 seconds
+Output:
 'use strict';
 
 const { EVENT_KEYS } = require('../../app/constants');
@@ -5,13 +8,27 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
-const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
 const { resumeRatingCaptures } = require('./team-of-the-tournament-service');
 
 const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 360000];
 const LIVE_CHANNEL_ID = '1533394601220505641';
 const TEST_CHANNEL_ID = '1525035287971889173';
 const postTimers = new Map();
+
+function renderTeamOfTheTournament(input) {
+  // Canvas erst beim tatsaechlichen Rendern laden. So bleibt Bootstrap/Recovery
+  // unabhaengig von nativen Grafik-Bindings, bis wirklich ein Bild gebaut wird.
+  return require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input);
+}
+
+function updatePostState(eventKey, values) {
+  updateEventData(eventKey, event => {
+    event.ceremony = event.ceremony || {};
+    event.ceremony.teamOfTheTournament = event.ceremony.teamOfTheTournament || {};
+    Object.assign(event.ceremony.teamOfTheTournament, values, { updatedAt: new Date().toISOString() });
+    return event;
+  });
+}
 
 function aggregatePlayers(performances) {
   const players = new Map();
@@ -48,34 +65,34 @@ function playerAwardLine(emoji, label, player, field, suffix) {
   const value = field === 'averageRating'
     ? player.averageRating.toFixed(2).replace('.', ',')
     : Number(player[field]) || 0;
-  return `${emoji} **${label}:** ${player.playerName} (${teamName}) – ${value} ${suffix}`.trim();
+  return `${emoji} **${label}:** ${player.playerName} (${teamName}) â€“ ${value} ${suffix}`.trim();
 }
 
 function buildAwardsText(performances) {
   const players = aggregatePlayers(performances);
   return [
-    '🔥 **LOCO NIGHT CUP – SPECIAL AWARDS** 🔥',
-    playerAwardLine('⚽', 'Top-Torschütze', topPlayer(players, 'goals'), 'goals', 'Tore'),
-    playerAwardLine('🎯', 'Assist-König', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
-    playerAwardLine('🧹', 'Top-Abräumer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche Zweikämpfe'),
-    playerAwardLine('🧤', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
-    playerAwardLine('🧱', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
-    playerAwardLine('🪄', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche Pässe'),
-    playerAwardLine('👑', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ø-Bewertung'),
-    playerAwardLine('⭐', 'MOTM-König', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
+    'ðŸ”¥ **LOCO NIGHT CUP â€“ SPECIAL AWARDS** ðŸ”¥',
+    playerAwardLine('âš½', 'Top-TorschÃ¼tze', topPlayer(players, 'goals'), 'goals', 'Tore'),
+    playerAwardLine('ðŸŽ¯', 'Assist-KÃ¶nig', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
+    playerAwardLine('ðŸ§¹', 'Top-AbrÃ¤umer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche ZweikÃ¤mpfe'),
+    playerAwardLine('ðŸ§¤', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
+    playerAwardLine('ðŸ§±', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
+    playerAwardLine('ðŸª„', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche PÃ¤sse'),
+    playerAwardLine('ðŸ‘‘', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ã˜-Bewertung'),
+    playerAwardLine('â­', 'MOTM-KÃ¶nig', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
   ].join('\n');
 }
 
 function buildIntroText({ test = false } = {}) {
   return [
-    test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
+    test ? 'ðŸ§ª **TESTAUSGABE â€“ KEINE ECHTE AUSZEICHNUNG**' : null,
     '@everyone',
-    '🏆 **TEAM OF THE TOURNAMENT**',
+    'ðŸ† **TEAM OF THE TOURNAMENT**',
     'Elf Spieler. Eine Nacht. Maximale Aura.',
     '',
-    'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. 🔴⚫',
+    'Herzlichen GlÃ¼ckwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. ðŸ”´âš«',
     '',
-    '**Das ist nicht einfach eine Auswahl – das ist die Elite dieser Loco Night.**',
+    '**Das ist nicht einfach eine Auswahl â€“ das ist die Elite dieser Loco Night.**',
   ].filter(entry => entry !== null).join('\n');
 }
 
@@ -139,6 +156,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     Object.assign(stored.ceremony.teamOfTheTournament, {
       postedAt: new Date().toISOString(), serialNumber,
       channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id,
+      postStatus: 'posted', postCompletedAt: new Date().toISOString(), postFailureReason: null,
     });
     return stored;
   });
@@ -147,21 +165,50 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
 
 function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   if (postTimers.has(eventKey)) return false;
+  updatePostState(eventKey, {
+    postStatus: 'pending',
+    postStartedAt: new Date().toISOString(),
+    postCompletedAt: null,
+    postFailureReason: null,
+  });
   let attempt = 0;
   const run = async () => {
     try {
       const force = attempt === POST_RETRY_DELAYS_MS.length - 1;
       const result = await postTeamOfTheTournament({ client, eventKey, force });
-      if (result.posted || result.reason === 'already_posted'
-        || (result.reason === 'not_enough_eligible_players' && force)) {
+      if (result.posted || result.reason === 'already_posted') {
+        postTimers.delete(eventKey);
+        return;
+      }
+      if (result.reason === 'not_enough_eligible_players' && force) {
+        updatePostState(eventKey, {
+          postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
+          postFailureReason: 'not_enough_eligible_players',
+        });
+        console.warn(`[tott] ${eventKey}: keine vollstaendige Elf mit mindestens drei Spielen; Post uebersprungen.`);
         postTimers.delete(eventKey);
         return;
       }
     } catch (error) {
       console.warn(`[tott] Abschluss-Post fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+      if (attempt === POST_RETRY_DELAYS_MS.length - 1) {
+        updatePostState(eventKey, {
+          postStatus: 'failed', postCompletedAt: new Date().toISOString(),
+          postFailureReason: String(error.message || 'unknown_error').slice(0, 500),
+        });
+      }
     }
     attempt += 1;
-    if (attempt >= POST_RETRY_DELAYS_MS.length) return postTimers.delete(eventKey);
+    if (attempt >= POST_RETRY_DELAYS_MS.length) {
+      const latest = readEventData(eventKey);
+      if (latest.ceremony?.teamOfTheTournament?.postStatus === 'pending') {
+        updatePostState(eventKey, {
+          postStatus: 'failed', postCompletedAt: new Date().toISOString(),
+          postFailureReason: 'retry_limit_reached',
+        });
+      }
+      return postTimers.delete(eventKey);
+    }
     const timer = setTimeout(run, POST_RETRY_DELAYS_MS[attempt]);
     if (typeof timer.unref === 'function') timer.unref();
     postTimers.set(eventKey, timer);
@@ -237,7 +284,7 @@ async function postTeamOfTheTournamentTest(client) {
     files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },
   });
   const awardsMessage = await channel.send({
-    content: `🧪 **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
+    content: `ðŸ§ª **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
     allowedMentions: { parse: [] },
   });
   return { channelId: channel.id, messageId: message.id, awardsMessageId: awardsMessage.id, serialNumber };
@@ -247,3 +294,4 @@ module.exports = {
   aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady,
   initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
 };
+
