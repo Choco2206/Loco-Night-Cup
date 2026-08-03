@@ -28,6 +28,7 @@ const LEAGUE_PHASE_FORMATS = {
   18: { size: 18, matchdays: 4, matchesPerDay: 9, totalMatches: 36, qualifiedCount: 8 },
   20: { size: 20, matchdays: 4, matchesPerDay: 10, totalMatches: 40, qualifiedCount: 8 },
 };
+const LEAGUE_PHASE_VIDEO_CHANNEL_NAME = 'größenvideo-ligaphase';
 
 function isLeaguePhaseFormat(format) {
   return Boolean(LEAGUE_PHASE_FORMATS[Number(format)]);
@@ -104,6 +105,7 @@ module.exports = {
   GROUP_KEYS,
   KNOCKOUT_ROUNDS,
   LEAGUE_PHASE_FORMATS,
+  LEAGUE_PHASE_VIDEO_CHANNEL_NAME,
   REGISTRATION_STATUSES,
   TEAM_STATUSES,
   TOURNAMENT_FORMAT_SIZES,
