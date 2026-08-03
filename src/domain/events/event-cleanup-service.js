@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.3 seconds
+Output:
 'use strict';
 
 const { FILES, readJson, updateJson } = require('../../storage');
@@ -9,8 +12,7 @@ const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { cleanupLiveScheduleForEvent } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
 const { EVENT_KEYS } = require('../../app/constants');
-
-const AUTO_CLEANUP_DELAY_MS = 10 * 60 * 1000;
+const { AUTO_CLEANUP_DELAY_MS, TOTT_CLEANUP_RECHECK_MS, isTeamOfTheTournamentSettled } = require('./event-completion-policy');
 const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-phase',
   'ko-achtelfinale',
@@ -18,11 +20,11 @@ const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-halbfinale',
   'ko-platz-3',
   'ko-finale',
-  'größenvideo-ko-achtelfinale',
-  'größenvideo-ko-viertelfinale',
-  'größenvideo-ko-halbfinale',
-  'größenvideo-ko-platz-3',
-  'größenvideo-ko-finale',
+  'grÃ¶ÃŸenvideo-ko-achtelfinale',
+  'grÃ¶ÃŸenvideo-ko-viertelfinale',
+  'grÃ¶ÃŸenvideo-ko-halbfinale',
+  'grÃ¶ÃŸenvideo-ko-platz-3',
+  'grÃ¶ÃŸenvideo-ko-finale',
 ]);
 const KNOCKOUT_ROLE_NAMES = [
   'LNC K.O. Achtelfinale',
@@ -384,6 +386,20 @@ async function runAutoCleanup({ eventKey, client, guild = null, scheduledAt = nu
     return { skipped: true, reason: 'not_pending' };
   }
 
+  if (!isTeamOfTheTournamentSettled(event)) {
+    const nextCheckAt = new Date(Date.now() + TOTT_CLEANUP_RECHECK_MS).toISOString();
+    updateJson(FILES.events[eventKey], createEventDefault(eventKey), stored => {
+      stored.ceremony = stored.ceremony || {};
+      stored.ceremony.cleanupScheduledAt = nextCheckAt;
+      stored.ceremony.cleanupStatus = 'scheduled';
+      stored.meta = { ...(stored.meta || {}), updatedAt: nowIso() };
+      return stored;
+    });
+    console.log(`Auto-cleanup postponed for ${eventKey}: Team of the Tournament is still pending.`);
+    scheduleAutoCleanupForEvent({ eventKey, client, guild, scheduledAt: nextCheckAt });
+    return { skipped: true, reason: 'tott_pending', rescheduledAt: nextCheckAt };
+  }
+
   console.log(`Auto-cleanup started for ${eventKey}.`);
   return resetEventForTesting({
     eventKey,
@@ -430,10 +446,13 @@ function schedulePendingAutoCleanups(client) {
 
 module.exports = {
   AUTO_CLEANUP_DELAY_MS,
+  TOTT_CLEANUP_RECHECK_MS,
   getAutoCleanupScheduledAt,
+  isTeamOfTheTournamentSettled,
   markCeremonyAutoCleanupScheduled,
   scheduleAutoCleanupForEvent,
   schedulePendingAutoCleanups,
   resetEventForTesting,
 };
+
 
