@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.3 seconds
+Output:
 'use strict';
 
 const fs = require('fs');
@@ -467,6 +470,13 @@ function normalizeEventFile(eventKey) {
   if (!Array.isArray(event.ceremony.teamOfTheTournament.capturedMatches)) {
     event.ceremony.teamOfTheTournament.capturedMatches = [];
     changed = true;
+  }
+  const tottDefaults = createEventDefault(eventKey).ceremony.teamOfTheTournament;
+  for (const field of ['postStatus', 'postStartedAt', 'postCompletedAt', 'postFailureReason']) {
+    if (!Object.prototype.hasOwnProperty.call(event.ceremony.teamOfTheTournament, field)) {
+      event.ceremony.teamOfTheTournament[field] = tottDefaults[field];
+      changed = true;
+    }
   }
 
   event.byes = event.byes.map((bye, index) => {
