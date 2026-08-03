@@ -9,4 +9,5 @@ require('./phase-deadline.test');
 require('./messages-validation.test');
 require('./async-coalescer.test');
 require('./league-qualification-audit.test');
+require('./league-replacement.test');
 
