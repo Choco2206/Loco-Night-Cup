@@ -1,6 +1,7 @@
 'use strict';
 
 const groupReleases = require('./group-releases');
+const attendance = require('./attendance-service');
 
 module.exports = {
   ...require('./group-channels'),
@@ -8,6 +9,7 @@ module.exports = {
   ...require('./group-draw'),
   ...require('./group-embeds'),
   ...require('./group-access-sync'),
+  ...attendance,
   ...require('./group-interactions'),
   ...require('./group-matches'),
   ...require('./group-message-cleanup'),
@@ -16,5 +18,9 @@ module.exports = {
   ...groupReleases,
   ...require('./group-results'),
   ...require('./group-roles'),
-  init: groupReleases.initGroupReleases,
+  init: async client => {
+    await attendance.initAttendance(client);
+    await groupReleases.initGroupReleases(client);
+  },
 };
+
