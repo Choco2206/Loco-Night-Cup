@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.3 seconds
+Output:
 'use strict';
 
 const assert = require('node:assert/strict');
@@ -5,10 +8,18 @@ const test = require('node:test');
 const { FORMATION, MINIMUM_MATCHES, buildSelection, confirmedEventMatches, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
+const { AUTO_CLEANUP_DELAY_MS, isTeamOfTheTournamentSettled } = require('../src/domain/events/event-completion-policy');
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
   assert.deepEqual(FORMATION, { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 });
   assert.equal(MINIMUM_MATCHES, 3);
+});
+
+test('keeps event data until the Team of the Tournament workflow is settled', () => {
+  assert.equal(AUTO_CLEANUP_DELAY_MS, 75 * 60 * 1000);
+  assert.equal(isTeamOfTheTournamentSettled({ knockout: { status: 'completed' }, ceremony: { teamOfTheTournament: { postStatus: 'pending' } } }), false);
+  assert.equal(isTeamOfTheTournamentSettled({ knockout: { status: 'completed' }, ceremony: { teamOfTheTournament: { postStatus: 'posted' } } }), true);
+  assert.equal(isTeamOfTheTournamentSettled({ knockout: { status: 'completed' }, ceremony: { teamOfTheTournament: { postStatus: 'skipped' } } }), true);
 });
 
 test('normalizes the four EA Clubs position groups', () => {
@@ -95,7 +106,8 @@ test('aggregates special awards only after three appearances', () => {
   const players = aggregatePlayers(performances);
   assert.equal(players.length, 2);
   const awards = buildAwardsText(performances);
-  assert.match(awards, /Top-Torschütze.*Scorer/);
-  assert.match(awards, /Assist-König.*Helper/);
-  assert.match(awards, /Top-Abräumer.*Helper/);
+  assert.match(awards, /Top-TorschÃ¼tze.*Scorer/);
+  assert.match(awards, /Assist-KÃ¶nig.*Helper/);
+  assert.match(awards, /Top-AbrÃ¤umer.*Helper/);
 });
+
