@@ -1,9 +1,13 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault } = require('../../storage/defaults');
 const { refreshLiveSchedule } = require('../live-schedule');
+const { enqueueCoalesced } = require('../../app/async-coalescer');
 const {
   buildLiveTableEmbed,
   buildScheduleEmbed,
@@ -199,7 +203,7 @@ async function upsertGroupPosts(channel, group, refs = {}) {
   };
 }
 
-async function refreshGroupPosts({ client, eventKey, event, group }) {
+async function performGroupPostsRefresh({ client, eventKey, event, group }) {
   if (!client || !group) return null;
 
   const persistedEvent = readEventData(eventKey);
@@ -234,6 +238,13 @@ async function refreshGroupPosts({ client, eventKey, event, group }) {
   });
 
   return messageRefs;
+}
+
+function refreshGroupPosts({ client, eventKey, event, group }) {
+  const groupKey = group?.groupKey || 'unknown';
+  return enqueueCoalesced(`group-posts:${eventKey}:${groupKey}`, () => (
+    performGroupPostsRefresh({ client, eventKey, event, group })
+  ));
 }
 
 async function refreshGroupPostsForTeam(client, teamId) {
@@ -297,3 +308,4 @@ module.exports = {
   updateGroupMessageRefs,
   upsertGroupPosts,
 };
+
