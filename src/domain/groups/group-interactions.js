@@ -1,5 +1,5 @@
 Exit code: 0
-Wall time: 1.1 seconds
+Wall time: 1 seconds
 Output:
 'use strict';
 
@@ -347,12 +347,12 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
 
   await interaction.editReply({ content: 'Ergebnis gespeichert. Tabelle und Spielplan werden aktualisiert.' });
 
-  if (outcome.status !== 'confirmed') {
-    await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
-  }
   await handleResultOutcome({
     client, eventKey, phase: 'group', phaseKey: groupKey, outcome, channelId: interaction.channelId,
   });
+  if (outcome.status !== 'confirmed') {
+    await refreshPhasePosts(client, eventKey, outcome.event, outcome.group);
+  }
   await notifyAdminDecision(interaction, outcome.match);
   if (outcome.status === 'confirmed') {
     await finalizeConfirmedGroupResult(client, eventKey, groupKey, outcome);
