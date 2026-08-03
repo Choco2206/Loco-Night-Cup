@@ -550,6 +550,8 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
 }
 
 async function handleGroupInteraction(interaction, client) {
+  const { handleAttendanceInteraction } = require('./attendance-service');
+  if (await handleAttendanceInteraction(interaction, client)) return true;
   const customId = interaction.customId || '';
   const { handleLeaguePhaseTestInteraction } = require('../league-phase/league-phase-test');
   if (await handleLeaguePhaseTestInteraction(interaction)) return true;
