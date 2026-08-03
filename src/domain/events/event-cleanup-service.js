@@ -49,6 +49,7 @@ function collectGroupRefs(eventKey, event, messages) {
   if (event.leaguePhase?.phaseType === 'league') {
     refs.push({ groupKey: 'league', channelId: event.leaguePhase.overviewChannelId || null, roleId: event.leaguePhase.roleId || null, teamIds: (event.leaguePhase.slots || []).filter(slot => slot.type === 'team' && slot.teamId).map(slot => String(slot.teamId)) });
     if (event.leaguePhase.resultsChannelId && event.leaguePhase.resultsChannelId !== event.leaguePhase.overviewChannelId) refs.push({ groupKey: 'league-results', channelId: event.leaguePhase.resultsChannelId, roleId: null, teamIds: [] });
+    if (event.leaguePhase.videoChannelId) refs.push({ groupKey: 'league-video', channelId: event.leaguePhase.videoChannelId, roleId: null, teamIds: [] });
   }
   for (const group of Object.values(groups)) {
     refs.push({
@@ -435,5 +436,4 @@ module.exports = {
   schedulePendingAutoCleanups,
   resetEventForTesting,
 };
-
 
