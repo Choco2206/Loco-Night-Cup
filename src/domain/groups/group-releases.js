@@ -359,7 +359,7 @@ async function applyAutoScores(client, eventKey, groupKeyOrSlot, slotOrNow, mayb
         if (!isRealMatch(match) || match.status === 'confirmed') continue;
         const reports = [...new Map((match.reports || []).map(report => [String(report.participantKey), report])).values()];
         if (reports.length > 1) continue;
-        const report = reports[0] || null;
+        const report = reports[0] || match.firstReportedResult || null;
         match.status = 'confirmed';
         match.result = {
           homeGoals: report ? Number(report.homeGoals) : 0,
