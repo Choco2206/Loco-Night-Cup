@@ -93,3 +93,30 @@ test('preserves the opponent reminder reference when the second team confirms', 
   assert.equal(confirmed.confirmationNotice.channelId, 'channel-1');
 });
 
+test('admin result selection includes completed matchdays in groups and league phase', () => {
+  const first = {
+    id: 'day-1', matchday: 1, status: 'confirmed',
+    home: participant('home'), away: participant('away'), reports: [],
+    result: { homeGoals: 0, awayGoals: 0, source: 'matchday_timeout_0_0' },
+  };
+  const second = {
+    id: 'day-2', matchday: 2, status: 'locked',
+    home: participant('home'), away: participant('away'), reports: [], result: null,
+  };
+  const league = {
+    phaseType: 'league', currentMatchday: 2,
+    slots: [first.home, first.away],
+    matchdays: [{ matches: [first] }, { matches: [second] }],
+    standings: [],
+  };
+
+  assert.deepEqual(
+    groupResults.getAdminSelectableMatchdays(league).map(entry => entry.matchday),
+    [1, 2]
+  );
+  assert.deepEqual(
+    groupResults.getAdminSelectableMatches(league).map(match => match.id),
+    ['day-1', 'day-2']
+  );
+});
+
