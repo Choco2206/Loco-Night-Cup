@@ -1,10 +1,12 @@
 'use strict';
 
+const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
+const { resumeRatingCaptures } = require('./team-of-the-tournament-service');
 
 const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 360000];
 const LIVE_CHANNEL_ID = '1533394601220505641';
@@ -170,6 +172,21 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   return true;
 }
 
+async function initTeamOfTheTournament(client) {
+  for (const eventKey of EVENT_KEYS) {
+    try {
+      const event = readEventData(eventKey);
+      if (event?.knockout?.status !== 'completed' || event?.ceremony?.teamOfTheTournament?.postedAt) continue;
+      const resumed = resumeRatingCaptures(eventKey, event);
+      scheduleTeamOfTheTournamentPost({ client, eventKey });
+      console.info(`[tott] ${eventKey}: Abschluss nach Neustart fortgesetzt; ${resumed} EA-Abfragen wiederhergestellt.`);
+    } catch (error) {
+      console.warn(`[tott] Wiederherstellung fuer ${eventKey} fehlgeschlagen; Botstart laeuft weiter: ${error.message}`);
+    }
+  }
+  return true;
+}
+
 function randomItem(items, index) {
   return items.length ? items[index % items.length] : null;
 }
@@ -228,5 +245,5 @@ async function postTeamOfTheTournamentTest(client) {
 
 module.exports = {
   aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady,
-  postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
+  initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
 };
