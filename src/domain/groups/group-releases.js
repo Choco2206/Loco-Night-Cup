@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.2 seconds
+Output:
 'use strict';
 
 const { EVENT_KEYS } = require('../../app/constants');
@@ -16,7 +19,7 @@ const {
   recalculateGroupStandings,
   updateGroupCompletion,
 } = require('./group-results');
-const { deleteUserMessagesFromGroupChannel } = require('./group-message-cleanup');
+const { deleteTransientMessagesFromGroupChannel } = require('./group-message-cleanup');
 
 const INVITE_WINDOW_MINUTES = 5;
 const AUTO_SCORE_DELAY_MS = 25 * 60 * 1000;
@@ -406,7 +409,7 @@ async function releaseGroupSlot(client, eventKey, groupKey, slot, now = new Date
   });
 
   if (didRelease && releasedEvent) {
-    await deleteUserMessagesFromGroupChannel(client, getGroup(releasedEvent, groupKey));
+    await deleteTransientMessagesFromGroupChannel(client, getGroup(releasedEvent, groupKey));
     await postReleaseMessage(client, eventKey, releasedEvent, groupKey, slot);
     await refreshGroup(client, eventKey, releasedEvent, groupKey);
   }
@@ -629,3 +632,4 @@ module.exports = {
   releaseSlot,
   scheduleEvent,
 };
+
