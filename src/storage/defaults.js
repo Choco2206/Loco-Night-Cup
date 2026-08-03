@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.3 seconds
+Output:
 'use strict';
 
 const {
@@ -155,6 +158,10 @@ function createEventDefault(eventKey) {
         capturedMatches: [],
         selection: null,
         updatedAt: null,
+        postStatus: 'not_started',
+        postStartedAt: null,
+        postCompletedAt: null,
+        postFailureReason: null,
       },
       postedAt: null,
       postedMessageIds: [],
@@ -525,3 +532,4 @@ module.exports = {
   createTottHistoryDefault,
   createTeamsDefault,
 };
+
