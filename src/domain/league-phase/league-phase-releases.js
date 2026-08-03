@@ -5,7 +5,11 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
-const { deleteTransientMessagesFromGroupChannel, deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
+const {
+  deleteTransientMessagesFromGroupChannel,
+  deleteTransientMessagesFromLeagueOverview,
+  deleteUserMessagesFromGroupChannel,
+} = require('../groups/group-message-cleanup');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { getConfiguredGuild } = require('../groups/group-roles');
 const { createKnockoutPhase } = require('../knockout/knockout-service');
@@ -58,7 +62,7 @@ async function postRelease(client, eventKey, dayNumber) {
   const safeReleaseContent = [
     `\u{1F4E3} **Ligaphase \u2013 Spieltag ${dayNumber} ist freigegeben.**`,
     `\u{1F552} **${formatHm(releasedAt)}\u2013${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
-    `Alle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags k\u00F6nnen jetzt gemeldet werden.`,
+    'Bitte tragt beide das Ergebnis unverz\u00FCglich nach dem Spiel ein.',
     'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
   ].join('\n');
   const message = await channel.send({
@@ -71,6 +75,13 @@ async function postRelease(client, eventKey, dayNumber) {
     return stored;
   });
   return message;
+}
+
+async function cleanupLeagueReleaseChannels(client, phase) {
+  await Promise.all([
+    deleteTransientMessagesFromGroupChannel(client, phase),
+    deleteTransientMessagesFromLeagueOverview(client, phase),
+  ]);
 }
 
 async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date()) {
@@ -105,7 +116,7 @@ async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date
   });
 
   if (changed) {
-    await deleteTransientMessagesFromGroupChannel(client, readEventData(eventKey).leaguePhase);
+    await cleanupLeagueReleaseChannels(client, readEventData(eventKey).leaguePhase);
     await postRelease(client, eventKey, dayNumber);
     await refreshLeaguePhasePosts(client, eventKey);
     console.info(`[league-phase] ${eventKey}: Spieltag ${dayNumber} freigegeben.`);
@@ -128,7 +139,7 @@ async function reconcileLeagueMatchday(client, eventKey, now = new Date()) {
     && !['open', 'pending_confirmation', 'confirmed'].includes(match.status));
   if (!needsRelease) {
     if (day.status !== 'open') return false;
-    await deleteTransientMessagesFromGroupChannel(client, phase);
+    await cleanupLeagueReleaseChannels(client, phase);
     await postRelease(client, eventKey, dayNumber);
     await refreshLeaguePhasePosts(client, eventKey);
     scheduleLeaguePhase(client, eventKey);
