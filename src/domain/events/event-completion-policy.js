@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1.3 seconds
-Output:
 'use strict';
 
 // EA kann die letzten Matchdaten zeitversetzt liefern. Der TOTT-Workflow versucht
