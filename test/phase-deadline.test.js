@@ -5,6 +5,7 @@ const test = require('node:test');
 const Module = require('node:module');
 
 let storedEvent = null;
+let cleanupCalls = [];
 const originalLoad = Module._load;
 const matchList = group => (group?.matchdays || []).flatMap(day => day.matches || []);
 
@@ -40,7 +41,11 @@ Module._load = function loadWithDeadlineMocks(request, parent, isMain) {
     };
   }
   if (request === './group-message-cleanup' || request === '../groups/group-message-cleanup') {
-    return { deleteTransientMessagesFromGroupChannel: async () => true, deleteUserMessagesFromGroupChannel: async () => true };
+    return {
+      deleteTransientMessagesFromGroupChannel: async (_client, phase) => { cleanupCalls.push(['results', phase.resultsChannelId]); },
+      deleteTransientMessagesFromLeagueOverview: async (_client, phase) => { cleanupCalls.push(['overview', phase.overviewChannelId]); },
+      deleteUserMessagesFromGroupChannel: async () => true,
+    };
   }
   if (request === './league-phase-service') return { refreshLeaguePhasePosts: async () => true };
   if (request === './league-phase-results') return { getLeagueMatches: matchList };
@@ -162,6 +167,7 @@ test('posts league release with invitation window in the main league channel', a
   match.status = 'locked';
   match.release.releasedAt = null;
   let sentPayload = null;
+  cleanupCalls = [];
   const requestedChannels = [];
   const channel = {
     messages: { fetch: async () => null },
@@ -182,5 +188,8 @@ test('posts league release with invitation window in the main league channel', a
   assert.equal(requestedChannels[0], 'league-main');
   assert.match(sentPayload.content, /Spieltag 1 ist freigegeben/);
   assert.match(sentPayload.content, /00:00.*00:05 Uhr: Zeit zum Einladen/);
+  assert.match(sentPayload.content, /Bitte tragt beide das Ergebnis unverz\u00FCglich nach dem Spiel ein/);
+  assert.doesNotMatch(sentPayload.content, /Alle Begegnungen dieses Spieltags/);
+  assert.deepEqual(cleanupCalls, [['results', 'league-results'], ['overview', 'league-main']]);
 });
 
