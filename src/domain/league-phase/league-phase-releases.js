@@ -5,7 +5,6 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
-const { getConfiguredGuild } = require('../groups/group-roles');
 const { deleteTransientMessagesFromGroupChannel, deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { createKnockoutPhase } = require('../knockout/knockout-service');
@@ -143,28 +142,10 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   }
   console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Übergang ins Viertelfinale gestartet.`);
   await createKnockoutPhase({ eventKey, actorUserId: 'auto-league-completed', client, now });
-  if (client && phase.roleId) {
-    const settings = readJson(FILES.settings, createSettingsDefault());
-    const guild = await getConfiguredGuild(client, settings);
-    const role = guild ? await guild.roles.fetch(phase.roleId).catch(() => null) : null;
-    if (role) {
-      for (const member of role.members.values()) {
-        await member.roles.remove(role.id, 'Ligaphase abgeschlossen').catch(() => null);
-      }
-    }
-    for (const channelId of [phase.overviewChannelId, phase.resultsChannelId]) {
-      const channel = channelId ? await client.channels.fetch(channelId).catch(() => null) : null;
-      if (channel && ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name)) {
-        await channel.delete('Ligaphase abgeschlossen; K.O.-Phase gestartet').catch(() => null);
-      }
-    }
-    updateEventData(eventKey, stored => {
-      stored.leaguePhase.overviewChannelId = null;
-      stored.leaguePhase.resultsChannelId = null;
-      stored.leaguePhase.transitionStatus = 'completed';
-      return stored;
-    });
-  }
+  updateEventData(eventKey, stored => {
+    stored.leaguePhase.transitionStatus = 'completed';
+    return stored;
+  });
   return true;
 }
 
@@ -178,7 +159,7 @@ async function applyLeagueMatchdayDeadline(client, eventKey, dayNumber, now = ne
       if (match.status === 'confirmed' || match.home?.type !== 'team' || match.away?.type !== 'team') continue;
       const reports = [...new Map((match.reports || []).map(report => [String(report.participantKey), report])).values()];
       if (reports.length > 1) continue;
-      const report = reports[0] || null;
+      const report = reports[0] || match.firstReportedResult || null;
       match.status = 'confirmed';
       match.result = {
         homeGoals: report ? Number(report.homeGoals) : 0,
