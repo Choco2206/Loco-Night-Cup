@@ -208,7 +208,7 @@ function replaceSlotInGroup(group, oldSlot, replacementParticipant) {
 
   for (const matchday of group.matchdays || []) {
     for (const match of matchday.matches || []) {
-      if (group.phaseType === 'league' && match.status === 'confirmed') continue;
+      const previousStatus = match.status;
       let touched = false;
       if (participantKey(match.home) === key || Number(match.homeSlot) === Number(oldSlot.slot)) {
         match.home = { ...replacementParticipant };
@@ -220,6 +220,7 @@ function replaceSlotInGroup(group, oldSlot, replacementParticipant) {
       }
       if (touched) {
         normalizeMatchAfterReplacement(match, key);
+        if (previousStatus === 'locked' && match.status === 'open') match.status = 'locked';
         match.meta = { ...(match.meta || {}), updatedAt: nowIso() };
       }
     }
@@ -330,10 +331,11 @@ async function syncReplacementDiscordResources({ client, eventKey, outcome }) {
   if (!guild) return { oldUserIds: [], newUserIds: [] };
 
   const roleId = outcome.group.roleId;
-  const channelId = outcome.group.phaseType === 'league' ? outcome.group.resultsChannelId : outcome.group.channelId;
-  const channel = channelId
-    ? await client.channels.fetch(channelId).catch(() => null)
-    : null;
+  const channelIds = outcome.group.phaseType === 'league'
+    ? [outcome.group.overviewChannelId, outcome.group.resultsChannelId, outcome.group.videoChannelId]
+    : [outcome.group.channelId, outcome.group.videoChannelId];
+  const channels = (await Promise.all(channelIds.filter(Boolean)
+    .map(channelId => client.channels.fetch(channelId).catch(() => null)))).filter(Boolean);
   const oldUserIds = getTeamUserIds(outcome.oldTeam);
   const newUserIds = getTeamUserIds(outcome.newTeam);
   const currentGroupUserIds = groupUserIdsAfterReplacement(outcome.group);
@@ -347,7 +349,7 @@ async function syncReplacementDiscordResources({ client, eventKey, outcome }) {
     }
   }
 
-  if (channel) {
+  for (const channel of channels) {
     for (const userId of oldUserIds) {
       if (!currentGroupUserIds.has(String(userId))) await removeUserOverwrite(channel, userId);
     }
@@ -364,16 +366,23 @@ async function syncReplacementDiscordResources({ client, eventKey, outcome }) {
 }
 
 async function announceReplacement({ interaction, outcome, newUserIds }) {
-  const channel = interaction.channel;
+  const channel = outcome.group?.phaseType === 'league' && outcome.group.overviewChannelId
+    ? await interaction.client.channels.fetch(outcome.group.overviewChannelId).catch(() => interaction.channel)
+    : interaction.channel;
   if (!channel?.send) return;
   const oldLabel = outcome.oldTeam?.clubName || participantLabel(outcome.oldSlot);
   const newLabel = outcome.newTeam?.clubName || outcome.replacementParticipant.displayName;
   const mentions = (newUserIds || []).map(userId => `<@${userId}>`);
+  const safeContent = [
+    `\u{1F501} **Nachr\u00FCcker eingesetzt:** ${oldLabel} \u2192 ${newLabel}`,
+    mentions.length ? `Zust\u00E4ndig: ${mentions.join(', ')}` : null,
+  ].filter(Boolean).join('\n');
   await channel.send({
     content: [
-      `🔁 **Nachruecker eingesetzt:** ${oldLabel} -> ${newLabel}`,
+      `ĐY"? **Nachruecker eingesetzt:** ${oldLabel} -> ${newLabel}`,
       mentions.length ? `Zustaendig: ${mentions.join(', ')}` : null,
     ].filter(Boolean).join('\n'),
+    content: safeContent,
     allowedMentions: { users: newUserIds || [] },
   }).catch(() => null);
 }
@@ -383,5 +392,7 @@ module.exports = {
   getAvailableReplacementTeams,
   getReplaceableParticipants,
   replaceGroupParticipant,
+  replaceSlotInGroup,
   syncReplacementDiscordResources,
 };
+
