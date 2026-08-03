@@ -262,7 +262,7 @@ async function refreshLiveSchedule(client, eventKey, event = null) {
   const nextGroupMessageIds = {};
   const nextKnockoutMessageIds = {};
 
-  if (phase === 'groups') {
+  if (activeGroups(currentEvent).length) {
     for (const group of activeGroups(currentEvent)) {
       const message = await upsertMessage(channel, latestState.groupMessageIds?.[group.groupKey], {
         embeds: [buildGroupEmbed(currentEvent, group)],
@@ -272,7 +272,7 @@ async function refreshLiveSchedule(client, eventKey, event = null) {
     }
   }
 
-  if (phase === 'league') {
+  if (currentEvent.leaguePhase?.phaseType === 'league' && currentEvent.leaguePhase.status !== 'not_created') {
     recalculateGroupStandings(currentEvent.leaguePhase);
     const tableName = `public-ligaphase-table-${eventKey}.png`;
     const scheduleName = `public-ligaphase-schedule-${eventKey}.png`;
