@@ -15,6 +15,7 @@ const { postQualificationAudit } = require('./league-phase-qualification-audit')
 const { getLeagueMatches } = require('./league-phase-results');
 
 const MATCHDAY_DURATION_MS = 25 * 60 * 1000;
+const INVITE_WINDOW_MINUTES = 5;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const timers = new Map();
 
@@ -29,6 +30,12 @@ function dayComplete(day, phase) {
     && day.matches.every(match => match.status === 'confirmed');
 }
 
+function formatHm(date) {
+  return new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+}
+
 async function postRelease(client, eventKey, dayNumber) {
   const event = readEventData(eventKey);
   const phase = event.leaguePhase;
@@ -40,8 +47,23 @@ async function postRelease(client, eventKey, dayNumber) {
   const oldId = phase.messages?.releaseMessageId;
   const old = oldId ? await channel.messages.fetch(oldId).catch(() => null) : null;
   if (old) await old.delete().catch(() => null);
+  const releasedAt = new Date(phase.matchdays?.[dayNumber - 1]?.releasedAt || Date.now());
+  const inviteUntil = new Date(releasedAt.getTime() + INVITE_WINDOW_MINUTES * 60 * 1000);
+  const releaseContent = [
+    `ÐY"œ **Ligaphase ƒ?" Spieltag ${dayNumber} ist freigegeben.**`,
+    `ÐY' **${formatHm(releasedAt)}ƒ?"${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
+    `Alle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÇônnen jetzt gemeldet werden.`,
+    'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
+  ].join('\n');
+  const safeReleaseContent = [
+    `\u{1F4E3} **Ligaphase \u2013 Spieltag ${dayNumber} ist freigegeben.**`,
+    `\u{1F552} **${formatHm(releasedAt)}\u2013${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
+    `Alle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags k\u00F6nnen jetzt gemeldet werden.`,
+    'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
+  ].join('\n');
   const message = await channel.send({
-    content: `ðŸ“£ **Ligaphase â€“ Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÃ¶nnen jetzt gemeldet werden.`,
+    content: `ÐY"œ **Ligaphase ƒ?" Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÇônnen jetzt gemeldet werden.`,
+    content: safeReleaseContent,
     allowedMentions: { parse: [] },
   });
   updateEventData(eventKey, stored => {
@@ -96,7 +118,9 @@ async function reconcileLeagueMatchday(client, eventKey, now = new Date()) {
   const event = readEventData(eventKey);
   const phase = event.leaguePhase;
   if (phase?.phaseType !== 'league' || phase.status === 'completed') return false;
-  const dayNumber = Math.max(1, Number(phase.currentMatchday || 0));
+  const currentMatchday = Number(phase.currentMatchday || 0);
+  if (!currentMatchday) return maybeReleaseLeagueStart(client, eventKey, now);
+  const dayNumber = currentMatchday;
   const day = phase.matchdays?.[dayNumber - 1];
   if (!day || dayComplete(day, phase)) return false;
   const needsRelease = day.status === 'locked' || (day.matches || []).some(match =>
@@ -143,7 +167,7 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   if (getLeagueMatches(readEventData(eventKey).leaguePhase).length !== phaseConfig(phase).totalMatches) {
     throw new Error(`Ligaphase kann ohne exakt ${phaseConfig(phase).totalMatches} Begegnungen nicht abgeschlossen werden.`);
   }
-  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Ãœbergang ins Viertelfinale gestartet.`);
+  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Çobergang ins Viertelfinale gestartet.`);
   try {
     const settings = readJson(FILES.settings, createSettingsDefault());
     const guild = await getConfiguredGuild(client, settings);
@@ -228,6 +252,7 @@ function scheduleLeaguePhase(client, eventKey, explicit = null) {
   let target = explicit;
   let callback = () => maybeReleaseLeagueStart(client, eventKey).catch(console.error);
   if (day?.status === 'open' && !dayComplete(day, phase)) {
+    if (day.autoScoredAt && !day.autoScoreAt) return;
     target = day.autoScoreAt
       ? new Date(day.autoScoreAt)
       : new Date(new Date(day.releasedAt).getTime() + MATCHDAY_DURATION_MS);
@@ -242,6 +267,7 @@ function scheduleLeaguePhase(client, eventKey, explicit = null) {
 }
 
 module.exports = {
+  INVITE_WINDOW_MINUTES,
   advanceLeaguePhase,
   applyLeagueMatchdayDeadline,
   maybeReleaseLeagueStart,
