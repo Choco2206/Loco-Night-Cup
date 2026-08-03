@@ -1,5 +1,5 @@
 Exit code: 0
-Wall time: 1.1 seconds
+Wall time: 0.9 seconds
 Output:
 'use strict';
 
@@ -29,6 +29,7 @@ const { upsertKnockoutPost } = require('./knockout-posts');
 const { getConfiguredGuild } = require('../groups/group-roles');
 const { handleResultOutcome } = require('../results/result-confirmation-service');
 const { scheduleRatingCapture, scheduleTeamOfTheTournamentPost } = require('../team-of-the-tournament');
+const { enqueueCoalesced } = require('../../app/async-coalescer');
 const {
   getReplacementCandidates,
   getReplaceableMatches,
@@ -296,9 +297,12 @@ async function notifyAdminDecision(interaction, match) {
 }
 
 async function refreshKnockout(client, guild, eventKey, event) {
-  await upsertKnockoutPost({ client, guild, eventKey, event });
-  await refreshLiveSchedule(client, eventKey, event).catch(error => {
-    console.warn(`[live-schedule] K.O.-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+  return enqueueCoalesced(`knockout-posts:${eventKey}`, async () => {
+    const latestEvent = readEventData(eventKey);
+    await upsertKnockoutPost({ client, guild, eventKey, event: latestEvent || event });
+    await refreshLiveSchedule(client, eventKey, latestEvent || event).catch(error => {
+      console.warn(`[live-schedule] K.O.-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+    });
   });
 }
 
@@ -359,10 +363,13 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
 
-  await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  await interaction.editReply({ content: 'Ergebnis gespeichert. K.-o.-Spielplan wird aktualisiert.' });
   await handleResultOutcome({
     client, eventKey, phase: 'knockout', phaseKey: roundKey, outcome, channelId: interaction.channelId,
   });
+  if (outcome.status !== 'confirmed') {
+    await refreshKnockout(client, interaction.guild, eventKey, outcome.event);
+  }
   const ceremony = outcome.status === 'confirmed'
     ? await finalizeConfirmedKnockoutResult(client, eventKey, outcome, interaction.guild)
     : { posted: false };
