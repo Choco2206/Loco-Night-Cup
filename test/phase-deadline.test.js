@@ -81,6 +81,23 @@ test('group deadline scores an entirely unreported match as 0:0', async () => {
   assert.equal(match.result.source, 'slot_timeout_0_0');
 });
 
+test('group deadline preserves the first submitted score even if the reports array was lost', async () => {
+  const match = realMatch('group-first-report');
+  match.firstReportedResult = { participantKey: 'team:home', homeGoals: 4, awayGoals: 2, submittedByUserId: 'manager' };
+  storedEvent = {
+    schedule: { tournamentStartAt: '2026-08-01T22:00:00.000Z' },
+    groups: {
+      status: 'created',
+      groups: { A: { groupKey: 'A', status: 'running', matchdays: [{ matches: [match] }] } },
+      releases: { groups: { A: { currentSlot: 1, slots: { 1: { status: 'released', releasedAt: '2026-08-01T22:00:00.000Z', autoScoreAt: '2026-08-01T22:25:00.000Z' } } } } },
+    },
+    meta: {},
+  };
+  await groupReleases.applyAutoScores(null, 'monday', 'A', 1, new Date('2026-08-01T22:25:00.000Z'));
+  assert.deepEqual([match.result.homeGoals, match.result.awayGoals], [4, 2]);
+  assert.equal(match.result.source, 'slot_timeout_report');
+});
+
 test('league deadline adopts one existing report and completes the matchday', async () => {
   const report = { participantKey: 'team:home', homeGoals: 2, awayGoals: 1, submittedByUserId: 'manager' };
   const match = realMatch('league-match', [report]);
