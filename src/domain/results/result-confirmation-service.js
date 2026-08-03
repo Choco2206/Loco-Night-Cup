@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 'use strict';
 
 const { EVENT_KEYS } = require('../../app/constants');
@@ -62,6 +65,20 @@ async function fetchChannel(client, channelId) {
   return client.channels.fetch(channelId).catch(() => null);
 }
 
+async function deleteOpponentReminder(client, notice, fallbackChannelId = null) {
+  const messageId = notice?.notificationMessageId;
+  const channelId = notice?.channelId || fallbackChannelId;
+  if (!messageId || !channelId) return false;
+  const channel = await fetchChannel(client, channelId);
+  if (!channel?.messages?.fetch) return false;
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (!message) return false;
+  return message.delete().then(() => true).catch(error => {
+    if (error?.code !== 10008) console.warn(`[results] Bestaetigungsaufforderung ${messageId} konnte nicht geloescht werden: ${error.message}`);
+    return false;
+  });
+}
+
 async function sendOpponentReminder({ client, descriptor, match, channelId }) {
   if (match.confirmation?.notificationMessageId) return match.confirmation.notificationMessageId;
   const report = match.reports?.[0];
@@ -78,7 +95,7 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
       mentions,
       descriptor.phase === 'knockout'
         ? `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. In der K.-o.-Phase erfolgt keine automatische Wertung.`
-        : `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. Ohne Rückmeldung wird dieses Ergebnis in 2 Minuten übernommen.`,
+        : `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. Ohne RÃ¼ckmeldung wird dieses Ergebnis in 2 Minuten Ã¼bernommen.`,
     ].filter(Boolean).join('\n'),
     allowedMentions: { users: userIds },
   }).catch(() => null);
@@ -88,14 +105,18 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
 }
 
 async function finalizeAutomaticResult(client, descriptor, channelId) {
+  const pendingMatch = getMatch(readEventData(descriptor.eventKey), descriptor);
+  const notice = pendingMatch?.confirmation || null;
   const outcome = autoConfirmGroupResult({
     eventKey: descriptor.eventKey, groupKey: descriptor.phaseKey, matchId: descriptor.matchId,
   });
   if (!outcome) return false;
 
+  await deleteOpponentReminder(client, notice, channelId);
+
   const channel = await fetchChannel(client, channelId);
   await channel?.send?.({
-    content: `⏱️ Keine Gegenmeldung: **${outcome.match.result.homeGoals}:${outcome.match.result.awayGoals}** wurde automatisch übernommen.`,
+    content: `â±ï¸ Keine Gegenmeldung: **${outcome.match.result.homeGoals}:${outcome.match.result.awayGoals}** wurde automatisch Ã¼bernommen.`,
     allowedMentions: { parse: [] },
   }).catch(() => null);
 
@@ -112,7 +133,7 @@ function scheduleTimer(client, descriptor, match, channelId) {
   const timer = setTimeout(() => {
     pendingTimers.delete(timerKey(descriptor));
     finalizeAutomaticResult(client, descriptor, channelId).catch(error => {
-      console.error(`[results] Automatische Ergebnisübernahme fehlgeschlagen (${timerKey(descriptor)}):`, error);
+      console.error(`[results] Automatische ErgebnisÃ¼bernahme fehlgeschlagen (${timerKey(descriptor)}):`, error);
     });
   }, delay);
   if (typeof timer.unref === 'function') timer.unref();
@@ -124,6 +145,7 @@ async function handleResultOutcome({ client, eventKey, phase, phaseKey, outcome,
   const descriptor = { eventKey, phase, phaseKey, matchId: outcome.match.id };
   if (outcome.status !== 'pending_confirmation' || outcome.match.reports?.length !== 1) {
     cancelTimer(descriptor);
+    await deleteOpponentReminder(client, outcome.confirmationNotice, channelId);
     return false;
   }
   const targetChannelId = channelId || outcome.match.confirmation?.channelId;
@@ -159,11 +181,12 @@ function initPendingResultConfirmations(client) {
       scheduled += 1;
     }
   }
-  console.log(`[results] ${scheduled} offene Zwei-Minuten-Bestätigungen wiederhergestellt.`);
+  console.log(`[results] ${scheduled} offene Zwei-Minuten-BestÃ¤tigungen wiederhergestellt.`);
   return scheduled;
 }
 
 module.exports = {
+  deleteOpponentReminder,
   handleResultOutcome,
   initPendingResultConfirmations,
   pendingDescriptors,
