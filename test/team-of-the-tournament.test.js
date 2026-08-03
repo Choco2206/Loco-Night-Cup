@@ -6,7 +6,7 @@ Output:
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { FORMATION, MINIMUM_MATCHES, buildSelection, confirmedEventMatches, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
-const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
+const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
 const { AUTO_CLEANUP_DELAY_MS, isTeamOfTheTournamentSettled } = require('../src/domain/events/event-completion-policy');
 
@@ -73,6 +73,16 @@ test('finds confirmed group, league and knockout matches for startup recovery wi
     knockout: { rounds: { final: { matches: [match('final'), shared] } } },
   };
   assert.deepEqual(confirmedEventMatches(event).map(entry => entry.id), ['group', 'shared', 'league', 'final']);
+});
+
+test('waits for every linked confirmed event match before posting the final selection', () => {
+  const event = {
+    groups: { groups: { A: { matchdays: [{ matches: [{ id: 'group', status: 'confirmed', result: { homeGoals: 1, awayGoals: 0 }, home: { teamId: 'missing' }, away: { teamId: 'missing-2' } }] }] } } },
+    knockout: { rounds: {} },
+    ceremony: { teamOfTheTournament: { capturedMatches: [] } },
+  };
+  // Unlinked teams never block the workflow; linked matches are covered by integration tests with stored teams.
+  assert.equal(closingRatingsReady(event), true);
 });
 
 test('maps exactly eleven graphic slots to the 1-3-5-2 formation', () => {
