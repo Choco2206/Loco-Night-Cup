@@ -104,8 +104,42 @@ async function deleteTransientMessagesFromGroupChannel(client, group, limit = 50
   return { deleted, scanned };
 }
 
+async function deleteTransientMessagesFromLeagueOverview(client, phase, limit = 500) {
+  const channelId = phase?.overviewChannelId;
+  if (!client || !channelId) return { deleted: 0, scanned: 0 };
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return { deleted: 0, scanned: 0 };
+  const keepIds = new Set([
+    phase.messages?.overviewTableMessageId,
+    phase.messages?.overviewScheduleMessageId,
+  ].filter(Boolean).map(String));
+  let before;
+  let deleted = 0;
+  let scanned = 0;
+  while (scanned < limit) {
+    const remaining = Math.min(100, limit - scanned);
+    const messages = await channel.messages.fetch({ limit: remaining, before }).catch(error => {
+      console.error('Ligaphase: Kanalbereinigung konnte Nachrichten nicht laden:', error);
+      return null;
+    });
+    if (!messages?.size) break;
+    for (const message of messages.values()) {
+      scanned += 1;
+      before = message.id;
+      if (keepIds.has(String(message.id))) continue;
+      await message.delete().then(() => { deleted += 1; }).catch(error => {
+        if (error?.code !== 10008) console.error('Ligaphase: Nachricht konnte nicht bereinigt werden:', error);
+      });
+    }
+    if (messages.size < remaining) break;
+  }
+  return { deleted, scanned };
+}
+
 module.exports = {
+  deleteTransientMessagesFromLeagueOverview,
   deleteTransientMessagesFromGroupChannel,
   deleteUserMessagesFromGroupChannel,
   handleGroupMessage,
 };
+
