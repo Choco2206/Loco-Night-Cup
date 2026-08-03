@@ -136,3 +136,51 @@ test('repairs an interrupted league matchday without replacing its fixtures', as
   assert.equal(match.release.slot, 1);
   assert.equal(storedEvent.leaguePhase.matchdays[0].autoScoreAt, '2026-08-01T22:35:00.000Z');
 });
+
+test('does not release league matchday one early during startup recovery', async () => {
+  const match = realMatch('league-not-yet-started');
+  match.status = 'locked';
+  match.release.releasedAt = null;
+  storedEvent = {
+    schedule: { tournamentStartAt: '2026-08-01T23:00:00.000Z' },
+    leaguePhase: {
+      phaseType: 'league', formatSize: 2, status: 'running', currentMatchday: 0,
+      slots: [{}, {}], standings: [], messages: {},
+      matchdays: [{ status: 'locked', releasedAt: null, autoScoreAt: null, matches: [match] }],
+    },
+    knockout: { status: 'not_created' }, meta: {},
+  };
+  const released = await leagueReleases.reconcileLeagueMatchday(null, 'monday', new Date('2026-08-01T22:00:00.000Z'));
+  assert.equal(released, false);
+  assert.equal(storedEvent.leaguePhase.currentMatchday, 0);
+  assert.equal(storedEvent.leaguePhase.matchdays[0].status, 'locked');
+  assert.equal(match.status, 'locked');
+});
+
+test('posts league release with invitation window in the main league channel', async () => {
+  const match = realMatch('league-release-message');
+  match.status = 'locked';
+  match.release.releasedAt = null;
+  let sentPayload = null;
+  const requestedChannels = [];
+  const channel = {
+    messages: { fetch: async () => null },
+    send: async payload => { sentPayload = payload; return { id: 'release-message' }; },
+  };
+  const client = { channels: { fetch: async id => { requestedChannels.push(id); return channel; } } };
+  storedEvent = {
+    leaguePhase: {
+      phaseType: 'league', formatSize: 2, status: 'running', currentMatchday: 0,
+      overviewChannelId: 'league-main', resultsChannelId: 'league-results',
+      slots: [{}, {}], standings: [], messages: {},
+      matchdays: [{ status: 'locked', releasedAt: null, autoScoreAt: null, matches: [match] }],
+    },
+    knockout: { status: 'not_created' }, meta: {},
+  };
+  const released = await leagueReleases.releaseLeagueMatchday(client, 'monday', 1, new Date('2026-08-01T22:00:00.000Z'));
+  assert.equal(released, true);
+  assert.equal(requestedChannels[0], 'league-main');
+  assert.match(sentPayload.content, /Spieltag 1 ist freigegeben/);
+  assert.match(sentPayload.content, /00:00.*00:05 Uhr: Zeit zum Einladen/);
+});
+
