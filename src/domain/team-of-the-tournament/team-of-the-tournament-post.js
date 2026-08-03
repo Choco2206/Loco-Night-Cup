@@ -8,7 +8,7 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
-const { resumeRatingCaptures } = require('./team-of-the-tournament-service');
+const { confirmedEventMatches, resumeRatingCaptures } = require('./team-of-the-tournament-service');
 
 const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 360000];
 const LIVE_CHANNEL_ID = '1533394601220505641';
@@ -101,14 +101,9 @@ function selectionCount(selection) {
     .reduce((sum, position) => sum + (selection?.[position]?.length || 0), 0);
 }
 
-function closingMatches(event) {
-  return ['final', 'third_place'].flatMap(key => event.knockout?.rounds?.[key]?.matches || []);
-}
-
 function closingRatingsReady(event) {
   const captured = new Set((event.ceremony?.teamOfTheTournament?.capturedMatches || []).map(entry => String(entry.lncMatchId)));
-  return closingMatches(event).every(match => {
-    if (match.status !== 'confirmed') return false;
+  return confirmedEventMatches(event).every(match => {
     const linkedCount = [match.home?.teamId, match.away?.teamId]
       .map(findTeamById).filter(team => team?.eaClub?.clubId).length;
     return linkedCount === 0 || captured.has(String(match.id));
