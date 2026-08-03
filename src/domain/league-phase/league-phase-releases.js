@@ -7,9 +7,11 @@ const { getTournamentStartAt } = require('../checkins/checkin-schedule');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { deleteTransientMessagesFromGroupChannel, deleteUserMessagesFromGroupChannel } = require('../groups/group-message-cleanup');
 const { recalculateGroupStandings } = require('../groups/group-results');
+const { getConfiguredGuild } = require('../groups/group-roles');
 const { createKnockoutPhase } = require('../knockout/knockout-service');
 const { scheduleRatingCapture } = require('../team-of-the-tournament/team-of-the-tournament-service');
-const { refreshLeaguePhasePosts } = require('./league-phase-service');
+const { ensureLeagueCalculationChannel, refreshLeaguePhasePosts } = require('./league-phase-service');
+const { postQualificationAudit } = require('./league-phase-qualification-audit');
 const { getLeagueMatches } = require('./league-phase-results');
 
 const MATCHDAY_DURATION_MS = 25 * 60 * 1000;
@@ -39,7 +41,7 @@ async function postRelease(client, eventKey, dayNumber) {
   const old = oldId ? await channel.messages.fetch(oldId).catch(() => null) : null;
   if (old) await old.delete().catch(() => null);
   const message = await channel.send({
-    content: `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`,
+    content: `ðŸ“£ **Ligaphase â€“ Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÃ¶nnen jetzt gemeldet werden.`,
     allowedMentions: { parse: [] },
   });
   updateEventData(eventKey, stored => {
@@ -132,6 +134,7 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   if (current < phaseConfig(phase).matchdays) return releaseLeagueMatchday(client, eventKey, current + 1, now);
 
   updateEventData(eventKey, stored => {
+    recalculateGroupStandings(stored.leaguePhase);
     stored.leaguePhase.status = 'completed';
     stored.leaguePhase.completedAt = now.toISOString();
     stored.leaguePhase.transitionStatus = 'ready';
@@ -140,7 +143,19 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   if (getLeagueMatches(readEventData(eventKey).leaguePhase).length !== phaseConfig(phase).totalMatches) {
     throw new Error(`Ligaphase kann ohne exakt ${phaseConfig(phase).totalMatches} Begegnungen nicht abgeschlossen werden.`);
   }
-  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Übergang ins Viertelfinale gestartet.`);
+  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Ãœbergang ins Viertelfinale gestartet.`);
+  try {
+    const settings = readJson(FILES.settings, createSettingsDefault());
+    const guild = await getConfiguredGuild(client, settings);
+    if (!guild) throw new Error('Server wurde nicht gefunden.');
+    await postQualificationAudit({
+      client,
+      eventKey,
+      ensureChannel: event => ensureLeagueCalculationChannel(guild, settings, event.leaguePhase?.calculationChannelId),
+    });
+  } catch (error) {
+    console.warn(`[league-phase] Interne Weiterkommen-Berechnung fuer ${eventKey} fehlgeschlagen; Turnierablauf laeuft weiter: ${error.message}`);
+  }
   await createKnockoutPhase({ eventKey, actorUserId: 'auto-league-completed', client, now });
   updateEventData(eventKey, stored => {
     stored.leaguePhase.transitionStatus = 'completed';
@@ -234,3 +249,4 @@ module.exports = {
   releaseLeagueMatchday,
   scheduleLeaguePhase,
 };
+
