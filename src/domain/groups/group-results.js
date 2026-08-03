@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 'use strict';
 
 const { updateEventData } = require('../events/event-repository');
@@ -285,6 +288,7 @@ function submitTeamResult({ eventKey, groupKey, matchId, participantKeyValue, us
 
     if (!match.firstReportedResult) match.firstReportedResult = { ...report };
 
+    const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
     match.reports = (match.reports || []).filter(entry => entry.participantKey !== participantKeyValue);
     match.reports.push(report);
     applyReports(match);
@@ -293,7 +297,7 @@ function submitTeamResult({ eventKey, groupKey, matchId, participantKeyValue, us
     recalculateGroupStandings(group);
     const completed = updateGroupCompletion(event, group);
     event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
-    outcome = { event, group, match, completed, status: match.status };
+    outcome = { event, group, match, completed, status: match.status, confirmationNotice };
     return event;
   });
 
@@ -311,6 +315,7 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     const match = findMatch(group, matchId);
     if (!match || !isAdminScorableMatch(match)) throw new Error('Spiel wurde nicht gefunden.');
 
+    const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
     match.reports = [];
     match.confirmation = null;
     match.result = {
@@ -330,7 +335,7 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     recalculateGroupStandings(group);
     const completed = updateGroupCompletion(event, group);
     event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
-    outcome = { event, group, match, completed, status: match.status };
+    outcome = { event, group, match, completed, status: match.status, confirmationNotice };
     return event;
   });
 
@@ -385,3 +390,4 @@ module.exports = {
   submitTeamResult,
   updateGroupCompletion,
 };
+
