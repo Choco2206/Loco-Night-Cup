@@ -125,9 +125,17 @@ function getUserSelectableMatches(group, userId) {
 
 function getAdminSelectableMatches(group) {
   normalizeGroupMatches(group);
-  const matches = getMatches(group).filter(match => isAdminScorableMatch(match));
-  if (group.phaseType === 'league') return matches.filter(match => getMatchSlot(match) === Number(group.currentMatchday || 0));
-  return matches;
+  return getMatches(group).filter(match => isAdminScorableMatch(match));
+}
+
+function getAdminSelectableMatchdays(group) {
+  const matches = getAdminSelectableMatches(group);
+  return [...new Set(matches.map(getMatchSlot).filter(slot => Number.isInteger(slot) && slot > 0))]
+    .sort((first, second) => first - second)
+    .map(matchday => ({
+      matchday,
+      matches: matches.filter(match => getMatchSlot(match) === matchday),
+    }));
 }
 
 function parseGoals(value, label) {
@@ -371,6 +379,7 @@ function autoConfirmFirstReport({ eventKey, groupKey, matchId, now = new Date() 
 
 module.exports = {
   autoConfirmFirstReport,
+  getAdminSelectableMatchdays,
   getAdminSelectableMatches,
   getCurrentReleasedSlot,
   getMatches,
