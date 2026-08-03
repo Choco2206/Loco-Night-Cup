@@ -1,6 +1,6 @@
 'use strict';
 
-const { updateEventData } = require('../events/event-repository');
+const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { getFriendlyMatches } = require('./ea-clubs-client');
 
@@ -223,8 +223,28 @@ function scheduleRatingCapture(eventKey, lncMatch) {
   return true;
 }
 
+function confirmedEventMatches(event) {
+  const matches = [
+    ...Object.values(event?.groups?.groups || {}).flatMap(group => group?.matchdays || []).flatMap(day => day?.matches || []),
+    ...(event?.leaguePhase?.matchdays || []).flatMap(day => day?.matches || []),
+    ...Object.values(event?.knockout?.rounds || {}).flatMap(round => round?.matches || []),
+  ].filter(match => match?.id && match.status === 'confirmed' && match.result);
+  return [...new Map(matches.map(match => [String(match.id), match])).values()];
+}
+
+function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
+  const captured = new Set((event?.ceremony?.teamOfTheTournament?.capturedMatches || [])
+    .map(entry => String(entry.lncMatchId)));
+  let scheduled = 0;
+  for (const match of confirmedEventMatches(event)) {
+    if (captured.has(String(match.id))) continue;
+    if (scheduleRatingCapture(eventKey, match)) scheduled += 1;
+  }
+  return scheduled;
+}
+
 module.exports = {
   FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
-  buildSelection, normalizePosition, scheduleRatingCapture, selectEaMatch,
+  buildSelection, confirmedEventMatches, normalizePosition, resumeRatingCaptures,
+  scheduleRatingCapture, selectEaMatch,
 };
-
