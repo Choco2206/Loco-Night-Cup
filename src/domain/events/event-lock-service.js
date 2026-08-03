@@ -177,6 +177,9 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
       return persistedEvent;
     });
 
+    const { ensureAttendancePost } = require('../groups/attendance-service');
+    await ensureAttendancePost(client, eventKey, group.groupKey);
+
     updates.push({
       groupKey: group.groupKey,
       roleId: group.roleId || null,
