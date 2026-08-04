@@ -55,7 +55,7 @@ async function resolveClub(clubName, platform = DEFAULT_PLATFORM) {
   throw new Error(`EA-Clubname **${cleanName}** ist nicht eindeutig. Bitte gib den Namen exakt wie in EA FC ein.`);
 }
 
-async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResultCount = 5) {
+async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResultCount = 50) {
   const payload = await requestJson('clubs/matches', {
     platform,
     clubIds: clubId,
