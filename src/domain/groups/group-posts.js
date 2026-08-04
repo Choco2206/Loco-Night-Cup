@@ -95,7 +95,7 @@ async function buildLiveTableImagePayload(group) {
   };
 }
 
-async function buildScheduleImagePayload(group) {
+async function buildScheduleImagePayload(group, { includeResultButtons = true } = {}) {
   const image = await generateGroupScheduleImage({
     group,
     debug: process.env.GROUP_SCHEDULE_DEBUG === 'true',
@@ -105,12 +105,12 @@ async function buildScheduleImagePayload(group) {
     embeds: [new EmbedBuilder().setImage(`attachment://${image.fileName}`)],
     attachments: [],
     files: [{ attachment: image.buffer, name: image.fileName }],
-    components: [buildScheduleButtons(group)],
+    components: includeResultButtons ? [buildScheduleButtons(group)] : [],
     allowedMentions: { parse: [] },
   };
 }
 
-async function upsertGroupPosts(channel, group, refs = {}) {
+async function upsertGroupPosts(channel, group, refs = {}, resultsChannel = null) {
   const groupWithEvent = {
     ...group,
     eventKey: group.eventKey || refs.eventKey,
@@ -171,7 +171,7 @@ async function upsertGroupPosts(channel, group, refs = {}) {
     schedule = await upsertMessage(
       channel,
       existingScheduleMessageId,
-      await buildScheduleImagePayload(groupWithEvent),
+      await buildScheduleImagePayload(groupWithEvent, { includeResultButtons: false }),
       `${group.groupKey} Spielplan`,
       { sendIfMissing: !existingScheduleMessageId }
     );
@@ -186,9 +186,30 @@ async function upsertGroupPosts(channel, group, refs = {}) {
       content: null,
       embeds: [buildScheduleEmbed(group)],
       attachments: [],
-      components: [buildScheduleButtons(groupWithEvent)],
+      components: [],
       allowedMentions: { parse: [] },
     }, `${group.groupKey} Spielplan Fallback`, { sendIfMissing: !existingScheduleMessageId });
+  }
+
+  let resultsTableMessageId = refs.resultsTableMessageId || group.resultsTableMessageId || null;
+  let resultsScheduleMessageId = refs.resultsScheduleMessageId || group.resultsScheduleMessageId || null;
+  if (resultsChannel) {
+    const resultsTable = await upsertMessage(
+      resultsChannel,
+      resultsTableMessageId,
+      await buildLiveTableImagePayload(groupWithEvent),
+      `${group.groupKey} Ergebnis-Live-Tabelle`,
+      { sendIfMissing: !resultsTableMessageId }
+    );
+    const resultsSchedule = await upsertMessage(
+      resultsChannel,
+      resultsScheduleMessageId,
+      await buildScheduleImagePayload(groupWithEvent, { includeResultButtons: true }),
+      `${group.groupKey} Ergebnis-Spielplan`,
+      { sendIfMissing: !resultsScheduleMessageId }
+    );
+    resultsTableMessageId = resultsTable.id;
+    resultsScheduleMessageId = resultsSchedule.id;
   }
 
   return {
@@ -197,6 +218,8 @@ async function upsertGroupPosts(channel, group, refs = {}) {
     teamsMessageId: teams.id,
     tableMessageId: table?.id || existingTableMessageId,
     scheduleMessageId: schedule.id,
+    resultsTableMessageId,
+    resultsScheduleMessageId,
   };
 }
 
@@ -213,6 +236,10 @@ async function performGroupPostsRefresh({ client, eventKey, event, group }) {
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) return null;
+  const resultsChannelId = persistedGroup.resultsChannelId || refs.resultsChannelId;
+  const resultsChannel = resultsChannelId
+    ? await client.channels.fetch(resultsChannelId).catch(() => null)
+    : null;
 
   const messageRefs = await upsertGroupPosts(channel, {
     ...persistedGroup,
@@ -221,12 +248,13 @@ async function performGroupPostsRefresh({ client, eventKey, event, group }) {
   }, {
     eventKey,
     ...refs,
-  });
+  }, resultsChannel);
 
   updateGroupMessageRefs(eventKey, eventForRefresh, [{
     groupKey: persistedGroup.groupKey,
     roleId: persistedGroup.roleId || refs.roleId || null,
     channelId,
+    resultsChannelId: resultsChannel?.id || resultsChannelId || null,
     ...messageRefs,
   }]);
 
@@ -284,6 +312,9 @@ function updateGroupMessageRefs(eventKey, event, groupUpdates) {
         teamsMessageId: update.teamsMessageId,
         tableMessageId: update.tableMessageId,
         scheduleMessageId: update.scheduleMessageId,
+        resultsChannelId: update.resultsChannelId || previous.resultsChannelId || null,
+        resultsTableMessageId: update.resultsTableMessageId || previous.resultsTableMessageId || null,
+        resultsScheduleMessageId: update.resultsScheduleMessageId || previous.resultsScheduleMessageId || null,
         updatedAt: nowIso(),
       };
     }
