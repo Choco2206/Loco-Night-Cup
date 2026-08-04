@@ -15,7 +15,7 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
-const { buildRoundReleaseContent, getRoundReminderAt, isRoundReadyForRelease, ROUND_VIDEO_CHANNEL_NAMES } = require('./knockout-release');
+const { buildRoundReleasePayload, getRoundReminderAt, isRoundReadyForRelease, ROUND_VIDEO_CHANNEL_NAMES } = require('./knockout-release');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
@@ -37,15 +37,15 @@ const ROUND_ROLE_NAMES = {
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const roundReminderTimers = new Map();
 const STATUS_LABELS = {
-  open: '⏳ Offen',
-  pending_confirmation: '🕐 Wartet auf Bestaetigung',
-  admin_decision_required: '🚨 Admin-Klaerung',
-  locked: '🔒 Noch nicht bereit',
+  open: 'ƒ?ü Offen',
+  pending_confirmation: 'ÐY? Wartet auf Bestaetigung',
+  admin_decision_required: 'ÐYsù Admin-Klaerung',
+  locked: 'ÐY"' Noch nicht bereit',
   not_needed: 'Nicht benoetigt',
-  completed: '✅ Abgeschlossen',
-  confirmed: '✅ Bestaetigt',
+  completed: 'ƒo. Abgeschlossen',
+  confirmed: 'ƒo. Bestaetigt',
 };
-const DIVIDER = '━━━━━━━━━━━━━━';
+const DIVIDER = 'ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?';
 
 function nowIso() {
   return new Date().toISOString();
@@ -339,7 +339,7 @@ function waitingForLabel(match) {
     .filter(participant => participant?.type === 'team')
     .filter(participant => !reported.has(participantKey(participant)))
     .map(participantName);
-  return pending.length ? `🕐 Wartet auf Bestaetigung von ${pending.join(' & ')}` : statusLabel(match.status);
+  return pending.length ? `ÐY? Wartet auf Bestaetigung von ${pending.join(' & ')}` : statusLabel(match.status);
 }
 
 function formatMatchStatus(match) {
@@ -362,12 +362,12 @@ function buildRoundButtons(eventKey, roundKey) {
     new ButtonBuilder()
       .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
       .setLabel('Ergebnis eintragen')
-      .setEmoji('⚽')
+      .setEmoji('ƒs«')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`ko_admin_result_open:${eventKey}:${roundKey}`)
       .setLabel('Admin-Ergebnis')
-      .setEmoji('🛠️')
+      .setEmoji('ÐY>ÿ‹÷?')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`ko_replace_open:${eventKey}:${roundKey}`)
@@ -392,7 +392,7 @@ function channelLines(event) {
   const lines = [];
   for (const roundKey of activeRoundKeys(event)) {
     const channelId = event.knockout?.rounds?.[roundKey]?.channelId;
-    lines.push(`• ${ROUND_LABELS[roundKey] || roundKey}: ${channelId ? `<#${channelId}>` : 'wird vorbereitet'}`);
+    lines.push(`ƒ?½ ${ROUND_LABELS[roundKey] || roundKey}: ${channelId ? `<#${channelId}>` : 'wird vorbereitet'}`);
   }
   return lines.join('\n') || 'Noch keine K.O.-Kanaele vorbereitet.';
 }
@@ -403,7 +403,7 @@ function buildRoundEmbed(eventKey, event, roundKey) {
   const lines = [];
 
   for (const match of round?.matches || []) {
-    lines.push(`⚔️ **M${match.matchIndex}**`);
+    lines.push(`ƒs"‹÷? **M${match.matchIndex}**`);
     lines.push(`${participantName(match.home)} vs ${participantName(match.away)}`);
     lines.push(`Status: ${formatMatchStatus(match)}`);
     const result = resultLine(match);
@@ -416,7 +416,7 @@ function buildRoundEmbed(eventKey, event, roundKey) {
   if (!lines.length) lines.push('Diese Runde wird in diesem Format nicht benoetigt.');
 
   return new EmbedBuilder()
-    .setTitle(`🏆 ${label}`)
+    .setTitle(`ÐY?Å ${label}`)
     .setColor(roundKey === event.knockout?.firstRoundKey ? 0xf2c94c : 0x5865f2)
     .setDescription([
       DIVIDER,
@@ -426,13 +426,13 @@ function buildRoundEmbed(eventKey, event, roundKey) {
     .addFields({
       name: 'Hinweis',
       value: [
-        '⚠️ Beide Teams muessen das Ergebnis eintragen.',
-        '⚠️ In der K.O.-Phase muss ein Sieger feststehen.',
+        'ƒsÿ‹÷? Beide Teams muessen das Ergebnis eintragen.',
+        'ƒsÿ‹÷? In der K.O.-Phase muss ein Sieger feststehen.',
         'Spielt bei Gleichstand Verlaengerung und Elfmeterschiessen, bis ein Gewinner feststeht.',
       ].join('\n'),
       inline: false,
     })
-    .setFooter({ text: `${event.label || eventKey} · K.O.-Phase` })
+    .setFooter({ text: `${event.label || eventKey} ¶ú K.O.-Phase` })
     .setTimestamp(new Date());
 }
 
@@ -443,7 +443,7 @@ function buildOverviewEmbed(eventKey, event) {
     .join('\n') || 'Keine qualifizierten Teams gefunden.';
 
   return new EmbedBuilder()
-    .setTitle('🏆 K.O.-Phase Uebersicht')
+    .setTitle('ÐY?Å K.O.-Phase Uebersicht')
     .setColor(0xf2c94c)
     .setDescription([
       `**Event:** ${event.label || eventKey}`,
@@ -452,15 +452,15 @@ function buildOverviewEmbed(eventKey, event) {
       '',
       DIVIDER,
       '',
-      '🎟️ **Qualifizierte Teams**',
+      'ÐYZY‹÷? **Qualifizierte Teams**',
       qualified.slice(0, 900),
       '',
       DIVIDER,
       '',
-      '⚔️ **Aktuelle Runde**',
+      'ƒs"‹÷? **Aktuelle Runde**',
       currentRoundLabel(event),
       '',
-      '📍 **Kanaele**',
+      'ÐY"? **Kanaele**',
       channelLines(event),
     ].join('\n'))
     .setTimestamp(new Date());
@@ -560,7 +560,7 @@ function updateRoundMessageState(eventKey, roundKey, updater) {
   });
 }
 
-async function ensureRoundReleaseMessage({ channel, event, eventKey, roundKey, round }) {
+async function ensureRoundReleaseMessage({ channel, event, eventKey, roundKey, round, roleId = null }) {
   if (!isRoundReadyForRelease(event, roundKey)) return null;
   const state = readRoundMessageState(eventKey, roundKey);
   if (state.releaseMessageId) {
@@ -574,10 +574,7 @@ async function ensureRoundReleaseMessage({ channel, event, eventKey, roundKey, r
   const storedReleaseAt = state.releasedAt ? new Date(state.releasedAt) : null;
   const releasedAt = storedReleaseAt && !Number.isNaN(storedReleaseAt.getTime()) ? storedReleaseAt : new Date();
   const label = ROUND_LABELS[roundKey] || roundKey;
-  const message = await channel.send({
-    content: buildRoundReleaseContent({ label, releasedAt }),
-    allowedMentions: { parse: [] },
-  });
+  const message = await channel.send(buildRoundReleasePayload({ label, releasedAt, roleId }));
 
   updateRoundMessageState(eventKey, roundKey, current => ({
     ...current,
@@ -611,7 +608,7 @@ async function postRoundReminder({ channel, eventKey, roundKey }) {
 
   const label = ROUND_LABELS[roundKey] || roundKey;
   const message = await channel.send({
-    content: `⏰ **${label}: Bitte tragt eure Ergebnisse ein bzw. bestätigt offene Meldungen.**`,
+    content: `ƒ?ø **${label}: Bitte tragt eure Ergebnisse ein bzw. bestÇÏtigt offene Meldungen.**`,
     allowedMentions: { parse: [] },
   });
   updateRoundMessageState(eventKey, roundKey, current => ({
@@ -786,6 +783,7 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
       eventKey,
       roundKey,
       round: event.knockout.rounds[roundKey],
+      roleId: roundRoles[roundKey] || null,
     });
   }
 

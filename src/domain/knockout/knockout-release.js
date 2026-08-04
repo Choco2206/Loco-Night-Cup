@@ -3,11 +3,11 @@
 const INVITE_WINDOW_MINUTES = 5;
 const ROUND_REMINDER_MINUTES = 20;
 const ROUND_VIDEO_CHANNEL_NAMES = {
-  round_of_16: 'größenvideo-ko-achtelfinale',
-  quarter_final: 'größenvideo-ko-viertelfinale',
-  semi_final: 'größenvideo-ko-halbfinale',
-  third_place: 'größenvideo-ko-platz-3',
-  final: 'größenvideo-ko-finale',
+  round_of_16: 'grÇôÇYenvideo-ko-achtelfinale',
+  quarter_final: 'grÇôÇYenvideo-ko-viertelfinale',
+  semi_final: 'grÇôÇYenvideo-ko-halbfinale',
+  third_place: 'grÇôÇYenvideo-ko-platz-3',
+  final: 'grÇôÇYenvideo-ko-finale',
 };
 
 function addMinutes(date, minutes) {
@@ -57,10 +57,18 @@ function isRoundReadyForRelease(event, roundKey) {
 function buildRoundReleaseContent({ label, releasedAt }) {
   const inviteEnd = addMinutes(releasedAt, INVITE_WINDOW_MINUTES);
   return [
-    `📢 **${label} ist freigegeben.**`,
+    `ÐY"½ **${label} ist freigegeben.**`,
     `Einladezeit: **${formatHm(releasedAt)} Uhr bis ${formatHm(inviteEnd)} Uhr**.`,
-    'Bitte ladet eure Gegner innerhalb dieses Zeitfensters ein und startet anschließend eure Partie.',
+    'Bitte ladet eure Gegner innerhalb dieses Zeitfensters ein und startet anschlieÇYend eure Partie.',
   ].filter(Boolean).join('\n');
+}
+
+function buildRoundReleasePayload({ label, releasedAt, roleId = null }) {
+  const content = buildRoundReleaseContent({ label, releasedAt });
+  return {
+    content: roleId ? `<@&${roleId}>\n${content}` : content,
+    allowedMentions: { parse: [], roles: roleId ? [roleId] : [] },
+  };
 }
 
 module.exports = {
@@ -68,6 +76,7 @@ module.exports = {
   ROUND_REMINDER_MINUTES,
   ROUND_VIDEO_CHANNEL_NAMES,
   buildRoundReleaseContent,
+  buildRoundReleasePayload,
   getRoundReleaseAt,
   getRoundReminderAt,
   isRoundReadyForRelease,

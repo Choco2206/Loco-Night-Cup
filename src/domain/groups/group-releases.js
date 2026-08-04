@@ -284,14 +284,14 @@ function markGroupSlotReleased(eventKey, event, groupKey, slot, now = new Date()
   return true;
 }
 
-async function sendToGroupChannel(client, group, content, idBucketName, slot) {
+async function sendToGroupChannel(client, group, content, idBucketName, slot, roleId = null) {
   if (!client || !group?.channelId) return null;
   const channel = await client.channels.fetch(group.channelId).catch(() => null);
   if (!channel) return null;
 
   const message = await channel.send({
-    content,
-    allowedMentions: { parse: [] },
+    content: roleId ? `<@&${roleId}>\n${content}` : content,
+    allowedMentions: { parse: [], roles: roleId ? [roleId] : [] },
   }).catch(error => {
     console.error(`Gruppe ${group.groupKey}: ${idBucketName} fuer Spieltag ${slot} konnte nicht gesendet werden.`, error);
     return null;
@@ -316,7 +316,7 @@ async function postReleaseMessage(client, eventKey, event, groupKey, slot) {
     'Sobald alle Ergebnisse dieses Spieltags in dieser Gruppe final bestaetigt sind, wird automatisch nur in dieser Gruppe der naechste Spieltag freigegeben.',
   ].join('\n');
 
-  const messageId = await sendToGroupChannel(client, group, content, 'Freigabe-Post', slot);
+  const messageId = await sendToGroupChannel(client, group, content, 'Freigabe-Post', slot, group.roleId);
   if (!messageId) return;
 
   updateEventData(eventKey, current => {

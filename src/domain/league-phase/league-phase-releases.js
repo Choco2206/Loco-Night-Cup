@@ -67,8 +67,8 @@ async function postRelease(client, eventKey, dayNumber) {
   ].join('\n');
   const message = await channel.send({
     content: `ÐY"œ **Ligaphase ƒ?" Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÇônnen jetzt gemeldet werden.`,
-    content: safeReleaseContent,
-    allowedMentions: { parse: [] },
+    content: phase.roleId ? `<@&${phase.roleId}>\n${safeReleaseContent}` : safeReleaseContent,
+    allowedMentions: { parse: [], roles: phase.roleId ? [phase.roleId] : [] },
   });
   updateEventData(eventKey, stored => {
     stored.leaguePhase.messages.releaseMessageId = message.id;

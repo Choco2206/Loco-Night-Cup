@@ -103,6 +103,38 @@ test('group deadline preserves the first submitted score even if the reports arr
   assert.equal(match.result.source, 'slot_timeout_report');
 });
 
+test('pings only the matching group role when a group matchday is released', async () => {
+  const match = realMatch('group-release-role');
+  match.status = 'not_released';
+  match.release.releasedAt = null;
+  let sentPayload = null;
+  const channel = {
+    send: async payload => { sentPayload = payload; return { id: 'group-release-message' }; },
+  };
+  const client = { channels: { fetch: async () => channel } };
+  storedEvent = {
+    schedule: { tournamentStartAt: '2026-08-01T22:00:00.000Z' },
+    groups: {
+      status: 'created',
+      groups: {
+        A: {
+          groupKey: 'A', roleId: 'group-a-role', channelId: 'group-a-channel', status: 'running',
+          matchdays: [{ matches: [match] }],
+        },
+      },
+      releases: { groups: { A: { currentSlot: null, slots: { 1: { status: 'not_released', plannedAt: '2026-08-01T22:00:00.000Z' } } } } },
+    },
+    meta: {},
+  };
+
+  const releasedGroups = await groupReleases.releaseSlot(client, 'monday', 1, new Date('2026-08-01T22:00:00.000Z'));
+
+  assert.deepEqual(releasedGroups, [{ groupKey: 'A', slot: 1 }]);
+  assert.match(sentPayload.content, /^<@&group-a-role>\n/);
+  assert.match(sentPayload.content, /Gruppe A: Spieltag 1 ist freigegeben/);
+  assert.deepEqual(sentPayload.allowedMentions, { parse: [], roles: ['group-a-role'] });
+});
+
 test('league deadline adopts one existing report and completes the matchday', async () => {
   const report = { participantKey: 'team:home', homeGoals: 2, awayGoals: 1, submittedByUserId: 'manager' };
   const match = realMatch('league-match', [report]);
@@ -178,6 +210,7 @@ test('posts league release with invitation window in the main league channel', a
     leaguePhase: {
       phaseType: 'league', formatSize: 2, status: 'running', currentMatchday: 0,
       overviewChannelId: 'league-main', resultsChannelId: 'league-results',
+      roleId: 'league-role',
       slots: [{}, {}], standings: [], messages: {},
       matchdays: [{ status: 'locked', releasedAt: null, autoScoreAt: null, matches: [match] }],
     },
@@ -187,6 +220,8 @@ test('posts league release with invitation window in the main league channel', a
   assert.equal(released, true);
   assert.equal(requestedChannels[0], 'league-main');
   assert.match(sentPayload.content, /Spieltag 1 ist freigegeben/);
+  assert.match(sentPayload.content, /^<@&league-role>\n/);
+  assert.deepEqual(sentPayload.allowedMentions, { parse: [], roles: ['league-role'] });
   assert.match(sentPayload.content, /00:00.*00:05 Uhr: Zeit zum Einladen/);
   assert.match(sentPayload.content, /Bitte tragt beide das Ergebnis unverz\u00FCglich nach dem Spiel ein/);
   assert.doesNotMatch(sentPayload.content, /Alle Begegnungen dieses Spieltags/);
