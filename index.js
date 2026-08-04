@@ -21,6 +21,12 @@ function runBootstrap() {
   console.log(`Phase 1 bootstrap complete: ${result.phase}`);
 }
 
+async function runStartupStep(label, task) {
+  console.log(`[startup] ${label} startet`);
+  await task();
+  console.log(`[startup] ${label} abgeschlossen`);
+}
+
 function isExpectedUserError(error) {
   return error?.name === 'Error' && typeof error.message === 'string' && error.message.length > 0;
 }

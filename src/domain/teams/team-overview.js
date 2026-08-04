@@ -85,10 +85,10 @@ function collectTeamUserIds(teams) {
 
 async function getPresentUserIds(guild, teams) {
   const present = new Set();
-  if (!guild?.members?.fetch) return present;
+  if (!guild?.members?.cache) return present;
 
   for (const userId of collectTeamUserIds(teams)) {
-    const member = await guild.members.fetch(userId).catch(() => null);
+    const member = guild.members.cache.get(String(userId));
     if (member) present.add(String(userId));
   }
 

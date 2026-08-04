@@ -38,8 +38,14 @@ async function init(client) {
   });
 
   for (const guild of client.guilds.cache.values()) {
-    await syncAllManagerRoles(guild, settings);
-    await syncAllChampionRoles(guild, settings);
+    Promise.all([
+      syncAllManagerRoles(guild, settings),
+      syncAllChampionRoles(guild, settings),
+    ]).then(() => {
+      console.log(`[teams] Rollenabgleich für ${guild.name || guild.id} abgeschlossen.`);
+    }).catch(error => {
+      console.warn(`[teams] Rollenabgleich für ${guild.name || guild.id} fehlgeschlagen: ${error.message}`);
+    });
   }
 }
 
