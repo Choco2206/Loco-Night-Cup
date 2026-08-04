@@ -7,7 +7,7 @@ const { buildLockedParticipantField } = require('./event-format');
 const { createGroups } = require('../groups/group-draw');
 const { assertCanLockEvent, assertGroupsHaveFourSlots } = require('../groups/group-validation');
 const { ensureGroupRolesAndMembers } = require('../groups/group-roles');
-const { ensureGroupChannel, ensureGroupVideoChannel, getGroupUserIds } = require('../groups/group-channels');
+const { ensureGroupChannel, ensureGroupResultsChannel, ensureGroupVideoChannel, getGroupUserIds } = require('../groups/group-channels');
 const { updateGroupMessageRefs, upsertGroupPosts } = require('../groups/group-posts');
 const { createInitialReleaseState, maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 const { refreshLiveSchedule } = require('../live-schedule');
@@ -149,6 +149,8 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
     const userIds = getGroupUserIds(group);
     const channel = await ensureGroupChannel(roleResult.guild || guild, settings, group, userIds);
     group.channelId = channel.id;
+    const resultsChannel = await ensureGroupResultsChannel(roleResult.guild || guild, settings, group, userIds);
+    group.resultsChannelId = resultsChannel.id;
     const videoChannel = await ensureGroupVideoChannel(roleResult.guild || guild, settings, group);
     group.videoChannelId = videoChannel.id;
 
@@ -160,12 +162,16 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
       teamsMessageId: group.teamsMessageId || storedRefs[group.groupKey]?.teamsMessageId || null,
       tableMessageId: group.tableMessageId || storedRefs[group.groupKey]?.tableMessageId || null,
       scheduleMessageId: group.scheduleMessageId || storedRefs[group.groupKey]?.scheduleMessageId || null,
-    });
+      resultsTableMessageId: group.resultsTableMessageId || storedRefs[group.groupKey]?.resultsTableMessageId || null,
+      resultsScheduleMessageId: group.resultsScheduleMessageId || storedRefs[group.groupKey]?.resultsScheduleMessageId || null,
+    }, resultsChannel);
     group.messageId = messageRefs.messageId;
     group.headerMessageId = messageRefs.headerMessageId;
     group.teamsMessageId = messageRefs.teamsMessageId;
     group.tableMessageId = messageRefs.tableMessageId;
     group.scheduleMessageId = messageRefs.scheduleMessageId;
+    group.resultsTableMessageId = messageRefs.resultsTableMessageId;
+    group.resultsScheduleMessageId = messageRefs.resultsScheduleMessageId;
 
     // Sobald die sichtbaren Discord-Posts existieren, muss auch das vollständige
     // normal erzeugte Gruppenobjekt in derselben Eventdatei auffindbar sein.
@@ -184,12 +190,15 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
       groupKey: group.groupKey,
       roleId: group.roleId || null,
       channelId: group.channelId,
+      resultsChannelId: group.resultsChannelId,
       videoChannelId: group.videoChannelId,
       messageId: group.messageId,
       headerMessageId: group.headerMessageId,
       teamsMessageId: group.teamsMessageId,
       tableMessageId: group.tableMessageId,
       scheduleMessageId: group.scheduleMessageId,
+      resultsTableMessageId: group.resultsTableMessageId,
+      resultsScheduleMessageId: group.resultsScheduleMessageId,
     });
   }
 
@@ -274,12 +283,15 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
         if (!group) continue;
         group.roleId = update.roleId;
         group.channelId = update.channelId;
+        group.resultsChannelId = update.resultsChannelId;
         group.videoChannelId = update.videoChannelId;
         group.messageId = update.messageId;
         group.headerMessageId = update.headerMessageId;
         group.teamsMessageId = update.teamsMessageId;
         group.tableMessageId = update.tableMessageId;
         group.scheduleMessageId = update.scheduleMessageId;
+        group.resultsTableMessageId = update.resultsTableMessageId;
+        group.resultsScheduleMessageId = update.resultsScheduleMessageId;
       }
       event.meta = {
         ...event.meta,
