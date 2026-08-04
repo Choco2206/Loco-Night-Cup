@@ -24,7 +24,7 @@ Module._load = function loadWithDiscordMock(request, parent, isMain) {
   return originalLoad.call(this, request, parent, isMain);
 };
 
-const { ensureGroupVideoChannel } = require('../src/domain/groups/group-channels');
+const { ensureGroupResultsChannel, ensureGroupVideoChannel } = require('../src/domain/groups/group-channels');
 Module._load = originalLoad;
 
 function createGuild() {
@@ -64,3 +64,16 @@ test('creates one role-restricted greeting-video channel for a group', async () 
   assert.equal(created[0].permissionOverwrites.some(overwrite => overwrite.id === 'individual-user'), false);
 });
 
+test('creates one role-restricted results channel for each group', async () => {
+  const { guild, created } = createGuild();
+  const channel = await ensureGroupResultsChannel(guild, {
+    roles: { adminRoleIds: ['admin-role'] },
+    categories: { groupCategoryId: 'groups-category' },
+  }, { groupKey: 'B', roleId: 'group-role', resultsChannelId: null }, ['individual-user']);
+
+  assert.equal(channel.id, 'video-channel');
+  assert.equal(created[0].name, 'ergebnisse-gruppe-b');
+  assert.equal(created[0].parent, 'groups-category');
+  assert.ok(created[0].permissionOverwrites.some(overwrite => overwrite.id === 'group-role'));
+  assert.ok(created[0].permissionOverwrites.some(overwrite => overwrite.id === 'individual-user'));
+});
