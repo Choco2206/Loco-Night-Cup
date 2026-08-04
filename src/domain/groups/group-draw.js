@@ -58,7 +58,7 @@ function placeParticipants(groups, participants) {
     }
 
     if (!slotRef) {
-      throw new Error('Gruppen konnten nicht zufaellig mit den gelockten Teilnehmern belegt werden.');
+      throw new Error('Gruppen konnten nicht zufällig mit den gelockten Teilnehmern belegt werden.');
     }
 
     slotRef.group.slots[slotRef.slotIndex] = participant.type === 'bye'
@@ -114,7 +114,7 @@ function createGroups({ eventKey, field, settings, createdAt }) {
   const finalizedGroups = groups.map(group => {
     finalizeSlots(group);
     if (group.slots.some(slot => !slot.type)) {
-      throw new Error(`Gruppe ${group.groupKey} konnte nicht vollstaendig mit 4 Slots erstellt werden.`);
+      throw new Error(`Gruppe ${group.groupKey} konnte nicht vollständig mit 4 Slots erstellt werden.`);
     }
     group.name = `Gruppe ${group.groupKey}`;
     group.standings = createStandings(group.slots);
@@ -128,4 +128,3 @@ function createGroups({ eventKey, field, settings, createdAt }) {
 module.exports = {
   createGroups,
 };
-

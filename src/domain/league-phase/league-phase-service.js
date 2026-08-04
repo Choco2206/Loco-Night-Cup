@@ -14,9 +14,9 @@ const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/leag
 const { LEAGUE_PHASE_FORMATS, LEAGUE_PHASE_VIDEO_CHANNEL_NAME, isLeaguePhaseFormat } = require('../../app/constants');
 
 function buildLeaguePhaseButtons(eventKey) { return new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId(`group_result_open:${eventKey}:league`).setLabel('Ergebnis eintragen').setEmoji('ƒs«').setStyle(ButtonStyle.Primary),
-  new ButtonBuilder().setCustomId(`group_admin_result_open:${eventKey}:league`).setLabel('Admin-Ergebnis').setEmoji('ÐY>ÿ‹÷?').setStyle(ButtonStyle.Danger),
-  new ButtonBuilder().setCustomId(`group_replacement_open:${eventKey}:league`).setLabel('Nachruecker einsetzen').setEmoji('ÐY"?').setStyle(ButtonStyle.Secondary)
+  new ButtonBuilder().setCustomId(`group_result_open:${eventKey}:league`).setLabel('Ergebnis eintragen').setEmoji('⚽').setStyle(ButtonStyle.Primary),
+  new ButtonBuilder().setCustomId(`group_admin_result_open:${eventKey}:league`).setLabel('Admin-Ergebnis').setEmoji('🛠️').setStyle(ButtonStyle.Danger),
+  new ButtonBuilder().setCustomId(`group_replacement_open:${eventKey}:league`).setLabel('Nachrücker einsetzen').setEmoji('🔁').setStyle(ButtonStyle.Secondary)
 ); }
 async function findExistingImageMessage(channel, attachmentName) {
   if (!attachmentName) return null;
@@ -134,14 +134,14 @@ async function performLeaguePhasePostsRefresh(client, eventKey) {
   const { ensureAttendancePost } = require('../groups/attendance-service');
   await ensureAttendancePost(client, eventKey, 'league');
   const { refreshLiveSchedule } = require('../live-schedule');
-  await refreshLiveSchedule(client, eventKey).catch(error => console.warn(`[league-phase] Oeffentlicher Spielplan konnte nicht aktualisiert werden: ${error.message}`));
+  await refreshLiveSchedule(client, eventKey).catch(error => console.warn(`[league-phase] Öffentlicher Spielplan konnte nicht aktualisiert werden: ${error.message}`));
   console.info(`[league-phase] ${eventKey}: Ligaphasengrafiken aktualisiert.`); return { ot, os, rt, rs };
 }
 function refreshLeaguePhasePosts(client, eventKey) {
   return enqueueCoalesced(`league-posts:${eventKey}`, () => performLeaguePhasePostsRefresh(client, eventKey));
 }
 async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
-  let result; updateEventData(eventKey, event => { if (!isLeaguePhaseFormat(event.format?.size) || !event.format?.lockedAt) throw new Error('Ligaphase ist ausschliesslich fuer die final gelockten Formate 14, 18 und 20 erlaubt.'); if (event.leaguePhase?.status && event.leaguePhase.status !== 'not_created') { result = { event, leaguePhase: event.leaguePhase, restored: true }; return event; }
+  let result; updateEventData(eventKey, event => { if (!isLeaguePhaseFormat(event.format?.size) || !event.format?.lockedAt) throw new Error('Ligaphase ist ausschließlich für die final gelockten Formate 14, 18 und 20 erlaubt.'); if (event.leaguePhase?.status && event.leaguePhase.status !== 'not_created') { result = { event, leaguePhase: event.leaguePhase, restored: true }; return event; }
     const phase = createLeaguePhaseDraw({ eventKey, participants: event.format.participants, createdAt: now.toISOString() }); validateLeaguePhaseDraw(phase); recalculateGroupStandings(phase); phase.drawnBy = actorUserId ? String(actorUserId) : null; event.status = 'league_phase'; event.phaseType = 'league'; event.leaguePhase = phase; event.groups = { ...(event.groups || {}), status: 'not_created', groups: {} }; result = { event, leaguePhase: phase, restored: false }; return event; });
   console.info(`[league-phase] ${eventKey}: ${result.leaguePhase.formatSize}er-Ligaphase erkannt; Auslosung mit ${LEAGUE_PHASE_FORMATS[result.leaguePhase.formatSize].totalMatches} Spielen erfolgreich validiert.`);
   if (!client) return result; const settings = readJson(FILES.settings, createSettingsDefault()); const targetGuild = guild || await getConfiguredGuild(client, settings); if (!targetGuild) return result;
@@ -153,11 +153,10 @@ async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = 
   updateEventData(eventKey, event => { event.leaguePhase.roleId = role.id; event.leaguePhase.overviewChannelId = overview.id; event.leaguePhase.resultsChannelId = results.id; event.leaguePhase.videoChannelId = video.id; event.leaguePhase.calculationChannelId = calculation?.id || event.leaguePhase.calculationChannelId || null; result.event = event; result.leaguePhase = event.leaguePhase; return event; });
   updateJson(FILES.messages, createMessagesDefault(), messages => { messages.leaguePhase = messages.leaguePhase || {}; messages.leaguePhase[eventKey] = { ...(messages.leaguePhase[eventKey] || {}), cycleKey: result.event.cycle?.cycleKey || null, roleId: role.id, overviewChannelId: overview.id, resultsChannelId: results.id, videoChannelId: video.id }; return messages; });
   const accessCheck = await verifyLeaguePhaseAccess({ guild: targetGuild, settings, phase: result.leaguePhase });
-  if (!accessCheck.ok) throw new Error(`Ligaphasen-Rollen-/Berechtigungspruefung fehlgeschlagen: ${JSON.stringify(accessCheck)}`);
-  console.info(`[league-phase] ${eventKey}: Ligaphasenrolle und -kanaele erstellt/wiederverwendet.`); await refreshLeaguePhasePosts(client, eventKey);
+  if (!accessCheck.ok) throw new Error(`Ligaphasen-Rollen-/Berechtigungsprüfung fehlgeschlagen: ${JSON.stringify(accessCheck)}`);
+  console.info(`[league-phase] ${eventKey}: Ligaphasenrolle und -kanäle erstellt/wiederverwendet.`); await refreshLeaguePhasePosts(client, eventKey);
   const { scheduleLeaguePhase } = require('./league-phase-releases');
   scheduleLeaguePhase(client, eventKey);
   return { ...result, event: readEventData(eventKey), leaguePhase: readEventData(eventKey).leaguePhase };
 }
 module.exports = { LEAGUE_PHASE_CATEGORY_ID, LEAGUE_PHASE_ROLE_NAME, LEAGUE_PHASE_VIDEO_CHANNEL_NAME, buildLeaguePhaseButtons, drawLeaguePhaseForEvent, ensureLeagueCalculationChannel, ensureLeaguePhaseChannel, ensureLeaguePhaseRole, getExistingGuildMemberIds, refreshLeaguePhasePosts, verifyLeaguePhaseAccess };
-

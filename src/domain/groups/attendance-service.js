@@ -62,12 +62,12 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
     .setColor(0x8b5cf6)
     .setTitle(title)
     .setDescription([
-      'Zeigt kurz, dass ihr bereit fuer den Loco Night Cup seid.',
+      'Zeigt kurz, dass ihr bereit für den Loco Night Cup seid.',
       '',
       ...lines,
       '',
       `**${present.size}/${teamIds.length} Teams anwesend**`,
-      'Bitte drueckt auf **Anwesend**, um euer Team einzuchecken.',
+      'Bitte drückt auf **Anwesend**, um euer Team einzuchecken.',
     ].join('\n'))
     .setFooter({ text: 'VM AURA \u2022 LOCO DNA \u2022 READY FOR KICK-OFF' });
   const row = new ActionRowBuilder().addComponents(
@@ -162,12 +162,12 @@ async function finalizeAttendance(client, eventKey, groupKey, now = new Date()) 
   const users = outcome.missingTeamIds.flatMap(teamUserIds);
   await channel.send({
     content: [
-      '\u26A0\uFE0F **Anwesenheitspruefung abgeschlossen**',
+      '\u26A0\uFE0F **Anwesenheitsprüfung abgeschlossen**',
       `${staffMentions} Folgende Teams sind voraussichtlich nicht anwesend:`,
       '',
       ...missingLines,
       '',
-      'Bitte pruefen, ob ein Nachruecker eingesetzt werden muss oder die betroffenen Spiele mit 1:0 gewertet werden.',
+      'Bitte prüfen, ob ein Nachrücker eingesetzt werden muss oder die betroffenen Spiele mit 1:0 gewertet werden.',
     ].join('\n'),
     allowedMentions: { roles, users },
   });
@@ -202,12 +202,12 @@ async function handleAttendanceInteraction(interaction, client) {
   const scope = getScope(event, groupKey);
   const attendance = scope?.attendance;
   if (!scope || attendance?.status !== 'open') {
-    await interaction.reply({ content: 'Die Anwesenheitspruefung ist bereits beendet.', flags: 64 });
+    await interaction.reply({ content: 'Die Anwesenheitsprüfung ist bereits beendet.', flags: 64 });
     return true;
   }
   const closesAt = attendance.closesAt ? new Date(attendance.closesAt) : null;
   if (closesAt && !Number.isNaN(closesAt.getTime()) && closesAt.getTime() <= Date.now()) {
-    await interaction.reply({ content: 'Die Anwesenheitspruefung ist bereits beendet.', flags: 64 });
+    await interaction.reply({ content: 'Die Anwesenheitsprüfung ist bereits beendet.', flags: 64 });
     await finalizeAttendance(client, eventKey, groupKey);
     return true;
   }
@@ -262,4 +262,3 @@ module.exports = {
   initAttendance,
   scheduleAttendance,
 };
-

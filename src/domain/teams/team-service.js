@@ -168,7 +168,7 @@ function updateTeamEaClub({ teamId, eaClub, actorUserId }) {
 function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
   const cleanName = String(newClubName || '').trim();
   if (cleanName.length < settings.teams.clubNameMinLength || cleanName.length > settings.teams.clubNameMaxLength) {
-    throw new Error('Der Teamname hat eine ungueltige Laenge.');
+    throw new Error('Der Teamname hat eine ungültige Länge.');
   }
 
   let updatedTeam;
@@ -198,7 +198,7 @@ function normalizeTwitchUrl(value) {
   try {
     parsed = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
   } catch {
-    throw new Error('Bitte gib einen gueltigen Twitch-Kanal an.');
+    throw new Error('Bitte gib einen gültigen Twitch-Kanal an.');
   }
   const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
   const parts = parsed.pathname.split('/').filter(Boolean);
@@ -212,7 +212,7 @@ function normalizeTwitchUrls(values) {
   const source = Array.isArray(values) ? values : [values];
   const normalized = source.map(normalizeTwitchUrl).filter(Boolean);
   const unique = [...new Set(normalized)];
-  if (unique.length > 3) throw new Error('Pro Team koennen maximal drei Twitch-Links hinterlegt werden.');
+  if (unique.length > 3) throw new Error('Pro Team können maximal drei Twitch-Links hinterlegt werden.');
   return unique;
 }
 
@@ -233,7 +233,7 @@ function updateTeamTwitchUrls({ teamId, twitchUrls, actorUserId, admin = false }
 function adminUpdateTeamName({ teamId, newClubName, actorUserId, settings }) {
   const cleanName = String(newClubName || '').trim();
   if (cleanName.length < settings.teams.clubNameMinLength || cleanName.length > settings.teams.clubNameMaxLength) {
-    throw new Error('Der Teamname hat eine ungueltige Laenge.');
+    throw new Error('Der Teamname hat eine ungültige Länge.');
   }
 
   let updatedTeam;
@@ -281,7 +281,7 @@ function requestLogoUpload({ teamId, requestedByUserId, channelId, instructionMe
   updateTeamsData(data => {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
-    if (!isTeamMember(team, requestedByUserId)) throw new Error('Du darfst fuer dieses Team kein Logo hochladen.');
+    if (!isTeamMember(team, requestedByUserId)) throw new Error('Du darfst für dieses Team kein Logo hochladen.');
 
     replacedInstructionMessageId = team.logoUpload?.instructionMessageId || null;
     team.logoUpload = {
@@ -305,7 +305,7 @@ function setLogoUploadInstructionMessage({ teamId, requestedByUserId, instructio
   updateTeamsData(data => {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team) || !team.logoUpload) throw new Error('Kein offener Logo-Upload gefunden.');
-    if (String(team.logoUpload.requestedByUserId) !== String(requestedByUserId)) throw new Error('Logo-Upload gehoert zu einem anderen User.');
+    if (String(team.logoUpload.requestedByUserId) !== String(requestedByUserId)) throw new Error('Logo-Upload gehört zu einem anderen User.');
 
     team.logoUpload.instructionMessageId = instructionMessageId ? String(instructionMessageId) : null;
     team.meta.updatedAt = nowIso();
@@ -376,7 +376,7 @@ function addCoManager({ teamId, userId, actorUserId, settings }) {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
     if (!isTeamMember(team, actorUserId)) throw new Error('Du darfst dieses Team nicht bearbeiten.');
-    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusaetzlich Co-VM sein.');
+    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusätzlich Co-VM sein.');
     if (team.coManagers.length >= settings.teams.coManagerLimit) throw new Error('Das Co-VM-Limit ist erreicht.');
     if (team.coManagers.some(co => String(co.userId) === String(userId))) throw new Error('Dieser User ist bereits Co-VM.');
 
@@ -400,7 +400,7 @@ function adminAddCoManager({ teamId, userId, actorUserId, settings }) {
   updateTeamsData(data => {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
-    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusaetzlich Co-VM sein.');
+    if (team.manager?.userId && String(team.manager.userId) === String(userId)) throw new Error('Der VM kann nicht zusätzlich Co-VM sein.');
     if (team.coManagers.length >= settings.teams.coManagerLimit) throw new Error('Das Co-VM-Limit ist erreicht.');
     if (team.coManagers.some(co => String(co.userId) === String(userId))) throw new Error('Dieser User ist bereits Co-VM.');
 
@@ -494,7 +494,7 @@ function deleteTeam({ teamId, actorUserId }) {
     const team = data.teams.find(entry => String(entry.id) === String(teamId));
     if (!isNonDeletedTeam(team)) throw new Error('Team wurde nicht gefunden.');
     if (!team.manager?.userId || String(team.manager.userId) !== String(actorUserId)) {
-      throw new Error('Nur der VM kann das Team loeschen.');
+      throw new Error('Nur der VM kann das Team löschen.');
     }
 
     const timestamp = nowIso();
@@ -696,4 +696,3 @@ module.exports = {
   updateTeamEaClub,
   updateTeamTwitchUrls,
 };
-

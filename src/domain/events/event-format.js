@@ -89,7 +89,7 @@ function buildLockedParticipantField(event, now = new Date()) {
   });
 
   if (!size) {
-    throw new Error(`Format-Lock nicht moeglich: mindestens ${minimumParticipantSlots} gueltige Teams und ein spielbares Format aus ${getAllowedSizes(settings, event).join(', ')} Slots erforderlich.`);
+    throw new Error(`Format-Lock nicht möglich: mindestens ${minimumParticipantSlots} gültige Teams und ein spielbares Format aus ${getAllowedSizes(settings, event).join(', ')} Slots erforderlich.`);
   }
 
   const activeRealCount = Math.min(teams.length, size);
@@ -116,7 +116,7 @@ function buildLockedParticipantField(event, now = new Date()) {
   ];
 
   if (participants.length !== size) {
-    throw new Error('Format-Lock nicht moeglich: Teilnehmerliste enthaelt nicht genug Teams oder manuell gesetzte Freilose.');
+    throw new Error('Format-Lock nicht möglich: Teilnehmerliste enthält nicht genug Teams oder manuell gesetzte Freilose.');
   }
 
   return {

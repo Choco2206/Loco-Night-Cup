@@ -26,7 +26,7 @@ async function assignGroupRoleToUsers(guild, group, userIds) {
   for (const userId of userIds) {
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member || member.roles.cache.has(group.roleId)) continue;
-    await member.roles.add(group.roleId, 'Loco Night Cup Gruppenrechte nach Co-VM-Aenderung').then(() => {
+    await member.roles.add(group.roleId, 'Loco Night Cup Gruppenrechte nach Co-VM-Änderung').then(() => {
       assigned += 1;
     }).catch(() => null);
   }
@@ -53,18 +53,18 @@ async function syncTeamGroupAccess({ client, guild = null, teamId, settings = re
       rolesAssigned += await assignGroupRoleToUsers(targetGuild, group, userIds);
 
       const channel = await ensureGroupChannel(targetGuild, settings, group, userIds).catch(error => {
-        console.error(`Gruppe ${group.groupKey}: Gruppenrechte konnten nach Co-VM-Aenderung nicht synchronisiert werden.`, error);
+        console.error(`Gruppe ${group.groupKey}: Gruppenrechte konnten nach Co-VM-Änderung nicht synchronisiert werden.`, error);
         return null;
       });
       await ensureGroupVideoChannel(targetGuild, settings, group).catch(error => {
-        console.error(`Gruppe ${group.groupKey}: Gruessenvideo-Kanal konnte nicht synchronisiert werden.`, error);
+        console.error(`Gruppe ${group.groupKey}: Größenvideo-Kanal konnte nicht synchronisiert werden.`, error);
         return null;
       });
       const groupForRefresh = channel?.id ? { ...group, channelId: channel.id } : group;
       await refreshGroupPosts({ client, eventKey, event, group: groupForRefresh }).then(result => {
         if (result) postsRefreshed += 1;
       }).catch(error => {
-        console.error(`Gruppe ${group.groupKey}: Gruppenposts konnten nach Co-VM-Aenderung nicht aktualisiert werden.`, error);
+        console.error(`Gruppe ${group.groupKey}: Gruppenposts konnten nach Co-VM-Änderung nicht aktualisiert werden.`, error);
       });
 
       groups += 1;
@@ -77,4 +77,3 @@ async function syncTeamGroupAccess({ client, guild = null, teamId, settings = re
 module.exports = {
   syncTeamGroupAccess,
 };
-

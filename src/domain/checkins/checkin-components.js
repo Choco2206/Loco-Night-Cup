@@ -122,10 +122,10 @@ function formatCheckinSummary(event, settings, slotState) {
   const { currentSize, nextSize, missingForNext } = getNextFormatInfo(slotState.participantSlotCount, settings, event);
   return [
     `Aktueller Stand: ${slotState.participantSlotCount} Teams`,
-    `Aktuell gueltig: ${currentSize ? `${currentSize}er Cup` : 'noch kein gueltiger Cup'}`,
-    `Naechster Schritt: ${nextSize ? `${nextSize}er Cup` : 'maximal erreicht'}`,
+    `Aktuell gültig: ${currentSize ? `${currentSize}er Cup` : 'noch kein gültiger Cup'}`,
+    `Nächster Schritt: ${nextSize ? `${nextSize}er Cup` : 'maximal erreicht'}`,
     nextSize
-      ? `Es fehlen noch ${missingForNext} Team${missingForNext === 1 ? '' : 's'} fuer den ${nextSize}er Cup`
+      ? `Es fehlen noch ${missingForNext} Team${missingForNext === 1 ? '' : 's'} für den ${nextSize}er Cup`
       : 'Es fehlen noch 0 Teams',
     `Warteliste aktuell: ${slotState.waitlistLabels.length} Teams`,
   ].join('\n');

@@ -20,7 +20,7 @@ function assertGroupsCompleted(event) {
 
   const formatSize = Number(event.format?.size || 0);
   const groupKeys = groupKeysForFormat(formatSize);
-  if (!groupKeys.length) throw new Error('Fuer dieses Format kann keine K.O.-Phase erstellt werden.');
+  if (!groupKeys.length) throw new Error('Für dieses Format kann keine K.O.-Phase erstellt werden.');
 
   for (const groupKey of groupKeys) {
     const group = event.groups?.groups?.[groupKey];
@@ -60,7 +60,7 @@ function rankedGroupRows(group, groupKey) {
 function qualifyTeams(event) {
   const formatSize = Number(event.format?.size || 0);
   const config = QUALIFICATION_RULES[formatSize];
-  if (!config) throw new Error('Fuer dieses Format ist keine K.O.-Qualifikation definiert.');
+  if (!config) throw new Error('Für dieses Format ist keine K.O.-Qualifikation definiert.');
 
   const groupKeys = assertGroupsCompleted(event);
   const winners = [];
@@ -70,7 +70,7 @@ function qualifyTeams(event) {
 
   for (const groupKey of groupKeys) {
     const rows = rankedGroupRows(event.groups.groups[groupKey], groupKey);
-    if (rows.length < 2) throw new Error(`Gruppe ${groupKey} hat nicht genug echte Teams fuer die K.O.-Qualifikation.`);
+    if (rows.length < 2) throw new Error(`Gruppe ${groupKey} hat nicht genug echte Teams für die K.O.-Qualifikation.`);
 
     winners.push(createQualifiedTeam(rows[0], groupKey, 1, 'winner', winners.length + 1));
     runnersUp.push(createQualifiedTeam(rows[1], groupKey, 2, 'runner_up', runnersUp.length + 1));

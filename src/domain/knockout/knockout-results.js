@@ -86,7 +86,7 @@ function parseGoals(value, label) {
 
 function assertNoDraw(homeGoals, awayGoals) {
   if (Number(homeGoals) === Number(awayGoals)) {
-    throw new Error('In der K.O.-Phase ist kein Unentschieden erlaubt. Spielt Verlaengerung und Elfmeterschiessen, bis ein Sieger feststeht.');
+    throw new Error('In der K.O.-Phase ist kein Unentschieden erlaubt. Spielt Verlängerung und Elfmeterschiessen, bis ein Sieger feststeht.');
   }
 }
 
@@ -243,7 +243,7 @@ function updatePlacementsIfReady(event) {
 function submitTeamResult({ eventKey, roundKey, matchId, participantKeyValue, userId, homeGoals, awayGoals }) {
   let outcome;
   const parsedHome = parseGoals(homeGoals, 'Heimtore');
-  const parsedAway = parseGoals(awayGoals, 'Auswaertstore');
+  const parsedAway = parseGoals(awayGoals, 'Auswärtstore');
   assertNoDraw(parsedHome, parsedAway);
 
   updateEventData(eventKey, event => {
@@ -256,7 +256,7 @@ function submitTeamResult({ eventKey, roundKey, matchId, participantKeyValue, us
     if (!['open', 'pending_confirmation'].includes(match.status)) throw new Error('Dieses K.O.-Spiel kann aktuell nicht gemeldet werden.');
     const validKeys = [participantKey(match.home), participantKey(match.away)];
     if (!validKeys.includes(participantKeyValue)) throw new Error('Du darfst dieses K.O.-Spiel nicht melden.');
-    if (!getUserParticipantKeysForMatch(match, userId).includes(participantKeyValue)) throw new Error('Du bist fuer dieses Team nicht berechtigt.');
+    if (!getUserParticipantKeysForMatch(match, userId).includes(participantKeyValue)) throw new Error('Du bist für dieses Team nicht berechtigt.');
 
     const report = {
       participantKey: participantKeyValue,
@@ -281,7 +281,7 @@ function submitTeamResult({ eventKey, roundKey, matchId, participantKeyValue, us
 function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, awayGoals }) {
   let outcome;
   const parsedHome = parseGoals(homeGoals, 'Heimtore');
-  const parsedAway = parseGoals(awayGoals, 'Auswaertstore');
+  const parsedAway = parseGoals(awayGoals, 'Auswärtstore');
   assertNoDraw(parsedHome, parsedAway);
 
   updateEventData(eventKey, event => {
@@ -324,4 +324,3 @@ module.exports = {
   updatePlacementsIfReady,
   updateRoundStatuses,
 };
-

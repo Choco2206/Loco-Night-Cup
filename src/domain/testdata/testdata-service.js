@@ -202,7 +202,7 @@ function createTestDataForEvent({ eventKey, actorUserId }) {
     && resolveTeamLogoPath(team, { optional: true })
   ));
   if (candidates.length < 4) {
-    throw new Error('Fuer den Testlauf werden mindestens vier aktive Teams mit gespeichertem Logo benoetigt.');
+    throw new Error('Für den Testlauf werden mindestens vier aktive Teams mit gespeichertem Logo benötigt.');
   }
   for (let index = candidates.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));

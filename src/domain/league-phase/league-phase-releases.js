@@ -54,9 +54,9 @@ async function postRelease(client, eventKey, dayNumber) {
   const releasedAt = new Date(phase.matchdays?.[dayNumber - 1]?.releasedAt || Date.now());
   const inviteUntil = new Date(releasedAt.getTime() + INVITE_WINDOW_MINUTES * 60 * 1000);
   const releaseContent = [
-    `ÐY"œ **Ligaphase ƒ?" Spieltag ${dayNumber} ist freigegeben.**`,
-    `ÐY' **${formatHm(releasedAt)}ƒ?"${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
-    `Alle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÇônnen jetzt gemeldet werden.`,
+    `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**`,
+    `🕒 **${formatHm(releasedAt)}–${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
+    `Alle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`,
     'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
   ].join('\n');
   const safeReleaseContent = [
@@ -66,7 +66,7 @@ async function postRelease(client, eventKey, dayNumber) {
     'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
   ].join('\n');
   const message = await channel.send({
-    content: `ÐY"œ **Ligaphase ƒ?" Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags kÇônnen jetzt gemeldet werden.`,
+    content: `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`,
     content: phase.roleId ? `<@&${phase.roleId}>\n${safeReleaseContent}` : safeReleaseContent,
     allowedMentions: { parse: [], roles: phase.roleId ? [phase.roleId] : [] },
   });
@@ -178,7 +178,7 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
   if (getLeagueMatches(readEventData(eventKey).leaguePhase).length !== phaseConfig(phase).totalMatches) {
     throw new Error(`Ligaphase kann ohne exakt ${phaseConfig(phase).totalMatches} Begegnungen nicht abgeschlossen werden.`);
   }
-  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Çobergang ins Viertelfinale gestartet.`);
+  console.info(`[league-phase] ${eventKey}: Top 8 ermittelt; Übergang ins Viertelfinale gestartet.`);
   try {
     const settings = readJson(FILES.settings, createSettingsDefault());
     const guild = await getConfiguredGuild(client, settings);
@@ -189,7 +189,7 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
       ensureChannel: event => ensureLeagueCalculationChannel(guild, settings, event.leaguePhase?.calculationChannelId),
     });
   } catch (error) {
-    console.warn(`[league-phase] Interne Weiterkommen-Berechnung fuer ${eventKey} fehlgeschlagen; Turnierablauf laeuft weiter: ${error.message}`);
+    console.warn(`[league-phase] Interne Weiterkommen-Berechnung für ${eventKey} fehlgeschlagen; Turnierablauf läuft weiter: ${error.message}`);
   }
   await createKnockoutPhase({ eventKey, actorUserId: 'auto-league-completed', client, now });
   updateEventData(eventKey, stored => {
@@ -286,4 +286,3 @@ module.exports = {
   releaseLeagueMatchday,
   scheduleLeaguePhase,
 };
-

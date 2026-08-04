@@ -227,4 +227,3 @@ test('posts league release with invitation window in the main league channel', a
   assert.doesNotMatch(sentPayload.content, /Alle Begegnungen dieses Spieltags/);
   assert.deepEqual(cleanupCalls, [['results', 'league-results'], ['overview', 'league-main']]);
 });
-

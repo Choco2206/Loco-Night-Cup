@@ -57,8 +57,8 @@ function teamRegistrationChannelLabel(settings) {
 function strictManagerRoleRequiredMessage(settings) {
   const prefix = '❌ Du brauchst zuerst die Manager-Rolle, um ein Team zu registrieren.';
   const channelId = settings.channels?.roleSelectChannelId;
-  if (channelId) return `${prefix}\nBitte waehle zuerst im <#${channelId}> die Manager-Rolle aus.`;
-  return `${prefix}\nBitte waehle zuerst in der Rollenauswahl die Manager-Rolle aus.`;
+  if (channelId) return `${prefix}\nBitte wähle zuerst im <#${channelId}> die Manager-Rolle aus.`;
+  return `${prefix}\nBitte wähle zuerst in der Rollenauswahl die Manager-Rolle aus.`;
 }
 
 function shouldLogInteractionError(error) {
@@ -97,7 +97,7 @@ async function requireStrictManagerRegistrationRole(interaction, settings) {
   const playerRoleId = settings.roles?.playerRoleId ? String(settings.roles.playerRoleId) : null;
   if (!managerRoleId) throw new Error('Manager-Rolle ist nicht konfiguriert.');
   if (playerRoleId && playerRoleId === managerRoleId) {
-    throw new Error('Manager- und Spieler-Rolle sind gleich konfiguriert. Bitte Settings pruefen.');
+    throw new Error('Manager- und Spieler-Rolle sind gleich konfiguriert. Bitte Settings prüfen.');
   }
 
   const managerRole = await getConfiguredRole(interaction.guild, managerRoleId);
@@ -119,7 +119,7 @@ function requireTeamAccess(team, userId) {
 function requireTeamManager(team, userId) {
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   if (!team.manager?.userId || String(team.manager.userId) !== String(userId)) {
-    throw new Error('Nur der VM darf diese Aktion ausfuehren.');
+    throw new Error('Nur der VM darf diese Aktion ausführen.');
   }
 }
 
@@ -261,7 +261,7 @@ async function handleButton(interaction, client) {
     await interaction.deferReply({ flags: EPHEMERAL });
     await openLogoUpload({ interaction, client, team, settings, channelId: MY_TEAM_PANEL_CHANNEL_ID });
     await interaction.editReply({
-      content: `Logo-Upload fuer **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im <#${MY_TEAM_PANEL_CHANNEL_ID}> hoch.`,
+      content: `Logo-Upload für **${team.clubName}** gestartet. Bitte lade dein Logo innerhalb von 10 Minuten im <#${MY_TEAM_PANEL_CHANNEL_ID}> hoch.`,
       components: [],
       embeds: [],
     });
@@ -290,7 +290,7 @@ async function handleButton(interaction, client) {
   if (action === 'team_delete_open') {
     requireTeamAccess(team, interaction.user.id);
     if (!team.manager?.userId || String(team.manager.userId) !== String(interaction.user.id)) {
-      throw new Error('Nur der VM kann das Team loeschen.');
+      throw new Error('Nur der VM kann das Team löschen.');
     }
     await interaction.reply({ ...buildConfirmPayload('delete', team), flags: EPHEMERAL });
     return true;
@@ -321,7 +321,7 @@ async function handleButton(interaction, client) {
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
-    await interaction.update({ content: 'Team wurde geloescht. Statistiken bleiben erhalten.', components: [], embeds: [] });
+    await interaction.update({ content: 'Team wurde gelöscht. Statistiken bleiben erhalten.', components: [], embeds: [] });
     return true;
   }
 
@@ -376,7 +376,7 @@ async function handleModal(interaction, client) {
     await syncTeamNicknames(interaction.guild, team);
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
-    await interaction.editReply({ content: `Teamname wurde auf **${team.clubName}** geaendert.` });
+    await interaction.editReply({ content: `Teamname wurde auf **${team.clubName}** geändert.` });
     return true;
   }
 
@@ -418,7 +418,7 @@ async function handleUserSelect(interaction, client) {
   await syncTeamGroupAccess({ client, guild: interaction.guild, teamId: team.id, settings });
   await refreshRegisteredTeamsOverview(client);
   await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
-  await interaction.editReply({ content: `<@${userId}> wurde als Co-VM hinzugefuegt.`, components: [], allowedMentions: { parse: ['users'] } });
+  await interaction.editReply({ content: `<@${userId}> wurde als Co-VM hinzugefügt.`, components: [], allowedMentions: { parse: ['users'] } });
   return true;
 }
 

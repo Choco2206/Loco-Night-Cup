@@ -13,8 +13,8 @@ const TEST_CHANNEL_ID = '1525035287971889173';
 const postTimers = new Map();
 
 function renderTeamOfTheTournament(input) {
-  // Canvas erst beim tatsaechlichen Rendern laden. So bleibt Bootstrap/Recovery
-  // unabhaengig von nativen Grafik-Bindings, bis wirklich ein Bild gebaut wird.
+  // Canvas erst beim tatsächlichen Rendern laden. So bleibt Bootstrap/Recovery
+  // unabhängig von nativen Grafik-Bindings, bis wirklich ein Bild gebaut wird.
   return require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input);
 }
 
@@ -62,34 +62,34 @@ function playerAwardLine(emoji, label, player, field, suffix) {
   const value = field === 'averageRating'
     ? player.averageRating.toFixed(2).replace('.', ',')
     : Number(player[field]) || 0;
-  return `${emoji} **${label}:** ${player.playerName} (${teamName}) â€“ ${value} ${suffix}`.trim();
+  return `${emoji} **${label}:** ${player.playerName} (${teamName}) – ${value} ${suffix}`.trim();
 }
 
 function buildAwardsText(performances) {
   const players = aggregatePlayers(performances);
   return [
-    'ðŸ”¥ **LOCO NIGHT CUP â€“ SPECIAL AWARDS** ðŸ”¥',
-    playerAwardLine('âš½', 'Top-TorschÃ¼tze', topPlayer(players, 'goals'), 'goals', 'Tore'),
-    playerAwardLine('ðŸŽ¯', 'Assist-KÃ¶nig', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
-    playerAwardLine('ðŸ§¹', 'Top-AbrÃ¤umer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche ZweikÃ¤mpfe'),
-    playerAwardLine('ðŸ§¤', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
-    playerAwardLine('ðŸ§±', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
-    playerAwardLine('ðŸª„', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche PÃ¤sse'),
-    playerAwardLine('ðŸ‘‘', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ã˜-Bewertung'),
-    playerAwardLine('â­', 'MOTM-KÃ¶nig', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
+    '🔥 **LOCO NIGHT CUP – SPECIAL AWARDS** 🔥',
+    playerAwardLine('⚽', 'Top-Torschütze', topPlayer(players, 'goals'), 'goals', 'Tore'),
+    playerAwardLine('🎯', 'Assist-König', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
+    playerAwardLine('🧹', 'Top-Abräumer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche Zweikämpfe'),
+    playerAwardLine('🧤', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
+    playerAwardLine('🧱', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
+    playerAwardLine('🪄', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche Pässe'),
+    playerAwardLine('👑', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ø-Bewertung'),
+    playerAwardLine('⭐', 'MOTM-König', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
   ].join('\n');
 }
 
 function buildIntroText({ test = false } = {}) {
   return [
-    test ? 'ðŸ§ª **TESTAUSGABE â€“ KEINE ECHTE AUSZEICHNUNG**' : null,
+    test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
     '@everyone',
-    'ðŸ† **TEAM OF THE TOURNAMENT**',
+    '🏆 **TEAM OF THE TOURNAMENT**',
     'Elf Spieler. Eine Nacht. Maximale Aura.',
     '',
-    'Herzlichen GlÃ¼ckwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. ðŸ”´âš«',
+    'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. 🔴⚫',
     '',
-    '**Das ist nicht einfach eine Auswahl â€“ das ist die Elite dieser Loco Night.**',
+    '**Das ist nicht einfach eine Auswahl – das ist die Elite dieser Loco Night.**',
   ].filter(entry => entry !== null).join('\n');
 }
 
@@ -177,12 +177,12 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
           postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
           postFailureReason: 'not_enough_eligible_players',
         });
-        console.warn(`[tott] ${eventKey}: keine vollstaendige Elf mit mindestens drei Spielen; Post uebersprungen.`);
+        console.warn(`[tott] ${eventKey}: keine vollständige Elf mit mindestens drei Spielen; Post übersprungen.`);
         postTimers.delete(eventKey);
         return;
       }
     } catch (error) {
-      console.warn(`[tott] Abschluss-Post fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+      console.warn(`[tott] Abschluss-Post für ${eventKey} fehlgeschlagen: ${error.message}`);
       if (attempt === POST_RETRY_DELAYS_MS.length - 1) {
         updatePostState(eventKey, {
           postStatus: 'failed', postCompletedAt: new Date().toISOString(),
@@ -220,7 +220,7 @@ async function initTeamOfTheTournament(client) {
       scheduleTeamOfTheTournamentPost({ client, eventKey });
       console.info(`[tott] ${eventKey}: Abschluss nach Neustart fortgesetzt; ${resumed} EA-Abfragen wiederhergestellt.`);
     } catch (error) {
-      console.warn(`[tott] Wiederherstellung fuer ${eventKey} fehlgeschlagen; Botstart laeuft weiter: ${error.message}`);
+      console.warn(`[tott] Wiederherstellung für ${eventKey} fehlgeschlagen; Botstart läuft weiter: ${error.message}`);
     }
   }
   return true;
@@ -276,7 +276,7 @@ async function postTeamOfTheTournamentTest(client) {
     files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },
   });
   const awardsMessage = await channel.send({
-    content: `ðŸ§ª **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
+    content: `🧪 **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
     allowedMentions: { parse: [] },
   });
   return { channelId: channel.id, messageId: message.id, awardsMessageId: awardsMessage.id, serialNumber };
@@ -286,4 +286,3 @@ module.exports = {
   aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady,
   initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
 };
-

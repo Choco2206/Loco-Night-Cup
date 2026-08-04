@@ -20,7 +20,7 @@ async function handleJoin(interaction, client, eventKey) {
   await refreshCheckinMessage(eventKey, client);
 
   if (result.alreadyCheckedIn) {
-    await interaction.editReply('Dein Team ist fuer dieses Event bereits eingecheckt. Es wurde kein Duplikat erzeugt.');
+    await interaction.editReply('Dein Team ist für dieses Event bereits eingecheckt. Es wurde kein Duplikat erzeugt.');
     return true;
   }
 
@@ -34,7 +34,7 @@ async function handleLeave(interaction, client, eventKey) {
 
   if (!result.wasCheckedIn) {
     await refreshCheckinMessage(eventKey, client);
-    await interaction.editReply('Dein Team war fuer dieses Event nicht eingecheckt.');
+    await interaction.editReply('Dein Team war für dieses Event nicht eingecheckt.');
     return true;
   }
 

@@ -16,7 +16,7 @@ function firstRoundForQualifiedCount(count) {
   if (count === 4) return 'semi_final';
   if (count === 8) return 'quarter_final';
   if (count === 16) return 'round_of_16';
-  throw new Error(`Keine K.O.-Runde fuer ${count} qualifizierte Teams definiert.`);
+  throw new Error(`Keine K.O.-Runde für ${count} qualifizierte Teams definiert.`);
 }
 
 function mainRoundSequence(firstRoundKey) {

@@ -71,7 +71,7 @@ async function deleteOpponentReminder(client, notice, fallbackChannelId = null) 
   const message = await channel.messages.fetch(messageId).catch(() => null);
   if (!message) return false;
   return message.delete().then(() => true).catch(error => {
-    if (error?.code !== 10008) console.warn(`[results] Bestaetigungsaufforderung ${messageId} konnte nicht geloescht werden: ${error.message}`);
+    if (error?.code !== 10008) console.warn(`[results] Bestätigungsaufforderung ${messageId} konnte nicht gelöscht werden: ${error.message}`);
     return false;
   });
 }
@@ -92,7 +92,7 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
       mentions,
       descriptor.phase === 'knockout'
         ? `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. In der K.-o.-Phase erfolgt keine automatische Wertung.`
-        : `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. Ohne RÃ¼ckmeldung wird dieses Ergebnis in 2 Minuten Ã¼bernommen.`,
+        : `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. Ohne Rückmeldung wird dieses Ergebnis in 2 Minuten übernommen.`,
     ].filter(Boolean).join('\n'),
     allowedMentions: { users: userIds },
   }).catch(() => null);
@@ -113,7 +113,7 @@ async function finalizeAutomaticResult(client, descriptor, channelId) {
 
   const channel = await fetchChannel(client, channelId);
   await channel?.send?.({
-    content: `â±ï¸ Keine Gegenmeldung: **${outcome.match.result.homeGoals}:${outcome.match.result.awayGoals}** wurde automatisch Ã¼bernommen.`,
+    content: `⏱️ Keine Gegenmeldung: **${outcome.match.result.homeGoals}:${outcome.match.result.awayGoals}** wurde automatisch übernommen.`,
     allowedMentions: { parse: [] },
   }).catch(() => null);
 
@@ -130,7 +130,7 @@ function scheduleTimer(client, descriptor, match, channelId) {
   const timer = setTimeout(() => {
     pendingTimers.delete(timerKey(descriptor));
     finalizeAutomaticResult(client, descriptor, channelId).catch(error => {
-      console.error(`[results] Automatische ErgebnisÃ¼bernahme fehlgeschlagen (${timerKey(descriptor)}):`, error);
+      console.error(`[results] Automatische Ergebnisübernahme fehlgeschlagen (${timerKey(descriptor)}):`, error);
     });
   }, delay);
   if (typeof timer.unref === 'function') timer.unref();
@@ -178,7 +178,7 @@ function initPendingResultConfirmations(client) {
       scheduled += 1;
     }
   }
-  console.log(`[results] ${scheduled} offene Zwei-Minuten-BestÃ¤tigungen wiederhergestellt.`);
+  console.log(`[results] ${scheduled} offene Zwei-Minuten-Bestätigungen wiederhergestellt.`);
   return scheduled;
 }
 
@@ -188,4 +188,3 @@ module.exports = {
   initPendingResultConfirmations,
   pendingDescriptors,
 };
-

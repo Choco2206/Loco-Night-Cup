@@ -8,9 +8,9 @@ const { rankGroupRows } = require('./group-ranking');
 const STATUS_LABELS = {
   not_released: 'Noch nicht freigegeben',
   open: 'Offen',
-  pending_confirmation: 'Wartet auf Bestaetigung',
+  pending_confirmation: 'Wartet auf Bestätigung',
   admin_decision_required: 'Admin-Entscheidung erforderlich',
-  confirmed: 'Bestaetigt',
+  confirmed: 'Bestätigt',
   bye: 'Freilos / spielfrei',
 };
 
@@ -39,7 +39,7 @@ function formatSlotName(slot) {
 
 function buildTeamOverviewEmbed(group) {
   const embed = new EmbedBuilder()
-    .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Teamuebersicht`)
+    .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Teamübersicht`)
     .setColor(0x2f80ed)
     .setTimestamp(new Date());
 
@@ -47,7 +47,7 @@ function buildTeamOverviewEmbed(group) {
     if (slot.type === 'bye') {
       embed.addFields({
         name: `${slot.slot}. Freilos / spielfrei`,
-        value: 'Platzhalter, kann spaeter durch einen Nachruecker ersetzt werden.',
+        value: 'Platzhalter, kann später durch einen Nachrücker ersetzt werden.',
         inline: false,
       });
       continue;
@@ -128,7 +128,7 @@ function formatStandingEntry(place, row) {
     `${Number(row.goalsFor || 0)}:${Number(row.goalsAgainst || 0)}`,
     formatGoalDifference(row.goalDifference),
     `${Number(row.points || 0)} P`,
-  ].join(' Â· ');
+  ].join(' • ');
 
   return `**${place}. ${name}**\n\`${statistics}\``;
 }
@@ -178,8 +178,8 @@ function formatByeMatch(match) {
 }
 
 function formatConfirmedMatch(match, homeName, awayName) {
-  if (!hasResult(match)) return `${'\u2705'} ${homeName} vs ${awayName} \u2014 Bestaetigt`;
-  return `${'\u2705'} ${homeName} ${match.result.homeGoals}:${match.result.awayGoals} ${awayName} \u2014 Bestaetigt`;
+  if (!hasResult(match)) return `${'\u2705'} ${homeName} vs ${awayName} \u2014 Bestätigt`;
+  return `${'\u2705'} ${homeName} ${match.result.homeGoals}:${match.result.awayGoals} ${awayName} \u2014 Bestätigt`;
 }
 
 function formatPendingMatch(match, homeName, awayName) {
@@ -222,7 +222,7 @@ function buildScheduleEmbed(group) {
   return new EmbedBuilder()
     .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Spielplan`)
     .setColor(0xf2c94c)
-    .setDescription(`${scheduleText}\n\n\u26a0\ufe0f Beide Teams muessen das Ergebnis eintragen. Sobald alle Ergebnisse dieses Slots final bestaetigt sind, wird automatisch der naechste Slot freigegeben.`)
+    .setDescription(`${scheduleText}\n\n\u26a0\ufe0f Beide Teams müssen das Ergebnis eintragen. Sobald alle Ergebnisse dieses Slots final bestätigt sind, wird automatisch der nächste Slot freigegeben.`)
     .setFooter({ text: 'Freilose sind Platzhalter und werden nicht als echtes Match gespielt.' })
     .setTimestamp(new Date());
 }

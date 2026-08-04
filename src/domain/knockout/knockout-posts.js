@@ -37,15 +37,15 @@ const ROUND_ROLE_NAMES = {
 const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const roundReminderTimers = new Map();
 const STATUS_LABELS = {
-  open: 'ƒ?ü Offen',
-  pending_confirmation: 'ÐY? Wartet auf Bestaetigung',
-  admin_decision_required: 'ÐYsù Admin-Klaerung',
-  locked: 'ÐY"' Noch nicht bereit',
-  not_needed: 'Nicht benoetigt',
-  completed: 'ƒo. Abgeschlossen',
-  confirmed: 'ƒo. Bestaetigt',
+  open: '⏳ Offen',
+  pending_confirmation: '🕐 Wartet auf Bestätigung',
+  admin_decision_required: '🚨 Admin-Klärung',
+  locked: '🔒 Noch nicht bereit',
+  not_needed: 'Nicht benötigt',
+  completed: '✅ Abgeschlossen',
+  confirmed: '✅ Bestätigt',
 };
-const DIVIDER = 'ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?';
+const DIVIDER = '━━━━━━━━━━━━━━';
 
 function nowIso() {
   return new Date().toISOString();
@@ -339,7 +339,7 @@ function waitingForLabel(match) {
     .filter(participant => participant?.type === 'team')
     .filter(participant => !reported.has(participantKey(participant)))
     .map(participantName);
-  return pending.length ? `ÐY? Wartet auf Bestaetigung von ${pending.join(' & ')}` : statusLabel(match.status);
+  return pending.length ? `🕐 Wartet auf Bestätigung von ${pending.join(' & ')}` : statusLabel(match.status);
 }
 
 function formatMatchStatus(match) {
@@ -362,12 +362,12 @@ function buildRoundButtons(eventKey, roundKey) {
     new ButtonBuilder()
       .setCustomId(`ko_result_open:${eventKey}:${roundKey}`)
       .setLabel('Ergebnis eintragen')
-      .setEmoji('ƒs«')
+      .setEmoji('⚽')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`ko_admin_result_open:${eventKey}:${roundKey}`)
       .setLabel('Admin-Ergebnis')
-      .setEmoji('ÐY>ÿ‹÷?')
+      .setEmoji('🛠️')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`ko_replace_open:${eventKey}:${roundKey}`)
@@ -385,16 +385,16 @@ function currentRoundLabel(event) {
     if (event.knockout?.status === 'completed') return 'K.O.-Phase abgeschlossen';
     return 'Noch keine aktive Runde';
   }
-  return `${ROUND_LABELS[roundKey] || roundKey} laeuft`;
+  return `${ROUND_LABELS[roundKey] || roundKey} läuft`;
 }
 
 function channelLines(event) {
   const lines = [];
   for (const roundKey of activeRoundKeys(event)) {
     const channelId = event.knockout?.rounds?.[roundKey]?.channelId;
-    lines.push(`ƒ?½ ${ROUND_LABELS[roundKey] || roundKey}: ${channelId ? `<#${channelId}>` : 'wird vorbereitet'}`);
+    lines.push(`• ${ROUND_LABELS[roundKey] || roundKey}: ${channelId ? `<#${channelId}>` : 'wird vorbereitet'}`);
   }
-  return lines.join('\n') || 'Noch keine K.O.-Kanaele vorbereitet.';
+  return lines.join('\n') || 'Noch keine K.O.-Kanäle vorbereitet.';
 }
 
 function buildRoundEmbed(eventKey, event, roundKey) {
@@ -403,7 +403,7 @@ function buildRoundEmbed(eventKey, event, roundKey) {
   const lines = [];
 
   for (const match of round?.matches || []) {
-    lines.push(`ƒs"‹÷? **M${match.matchIndex}**`);
+    lines.push(`⚔️ **M${match.matchIndex}**`);
     lines.push(`${participantName(match.home)} vs ${participantName(match.away)}`);
     lines.push(`Status: ${formatMatchStatus(match)}`);
     const result = resultLine(match);
@@ -413,10 +413,10 @@ function buildRoundEmbed(eventKey, event, roundKey) {
     lines.push('');
   }
 
-  if (!lines.length) lines.push('Diese Runde wird in diesem Format nicht benoetigt.');
+  if (!lines.length) lines.push('Diese Runde wird in diesem Format nicht benötigt.');
 
   return new EmbedBuilder()
-    .setTitle(`ÐY?Å ${label}`)
+    .setTitle(`🏆 ${label}`)
     .setColor(roundKey === event.knockout?.firstRoundKey ? 0xf2c94c : 0x5865f2)
     .setDescription([
       DIVIDER,
@@ -426,13 +426,13 @@ function buildRoundEmbed(eventKey, event, roundKey) {
     .addFields({
       name: 'Hinweis',
       value: [
-        'ƒsÿ‹÷? Beide Teams muessen das Ergebnis eintragen.',
-        'ƒsÿ‹÷? In der K.O.-Phase muss ein Sieger feststehen.',
-        'Spielt bei Gleichstand Verlaengerung und Elfmeterschiessen, bis ein Gewinner feststeht.',
+        '⚠️ Beide Teams müssen das Ergebnis eintragen.',
+        '⚠️ In der K.O.-Phase muss ein Sieger feststehen.',
+        'Spielt bei Gleichstand Verlängerung und Elfmeterschiessen, bis ein Gewinner feststeht.',
       ].join('\n'),
       inline: false,
     })
-    .setFooter({ text: `${event.label || eventKey} ¶ú K.O.-Phase` })
+    .setFooter({ text: `${event.label || eventKey} · K.O.-Phase` })
     .setTimestamp(new Date());
 }
 
@@ -443,7 +443,7 @@ function buildOverviewEmbed(eventKey, event) {
     .join('\n') || 'Keine qualifizierten Teams gefunden.';
 
   return new EmbedBuilder()
-    .setTitle('ÐY?Å K.O.-Phase Uebersicht')
+    .setTitle('🏆 K.O.-Phase Übersicht')
     .setColor(0xf2c94c)
     .setDescription([
       `**Event:** ${event.label || eventKey}`,
@@ -452,15 +452,15 @@ function buildOverviewEmbed(eventKey, event) {
       '',
       DIVIDER,
       '',
-      'ÐYZY‹÷? **Qualifizierte Teams**',
+      '🎟️ **Qualifizierte Teams**',
       qualified.slice(0, 900),
       '',
       DIVIDER,
       '',
-      'ƒs"‹÷? **Aktuelle Runde**',
+      '⚔️ **Aktuelle Runde**',
       currentRoundLabel(event),
       '',
-      'ÐY"? **Kanaele**',
+      '📍 **Kanäle**',
       channelLines(event),
     ].join('\n'))
     .setTimestamp(new Date());
@@ -470,7 +470,7 @@ function roundStatusContent(round) {
   const lines = [];
   for (const match of round?.matches || []) {
     if (match.status === 'pending_confirmation') lines.push(`M${match.matchIndex}: ${waitingForLabel(match)}`);
-    if (match.status === 'admin_decision_required') lines.push(`M${match.matchIndex}: Admin-Klaerung erforderlich`);
+    if (match.status === 'admin_decision_required') lines.push(`M${match.matchIndex}: Admin-Klärung erforderlich`);
   }
   return lines.length ? lines.join('\n') : null;
 }
@@ -485,7 +485,7 @@ async function buildOverviewImagePayload(eventKey, event) {
   return {
     content: null,
     embeds: [new EmbedBuilder()
-      .setTitle('K.O.-Phase Uebersicht')
+      .setTitle('K.O.-Phase Übersicht')
       .setDescription(`Aktuelle Runde: **${currentRoundLabel(event)}**\n${channelLines(event)}`)
       .setImage(`attachment://${image.fileName}`)
       .setColor(0xf2c94c)],
@@ -608,7 +608,7 @@ async function postRoundReminder({ channel, eventKey, roundKey }) {
 
   const label = ROUND_LABELS[roundKey] || roundKey;
   const message = await channel.send({
-    content: `ƒ?ø **${label}: Bitte tragt eure Ergebnisse ein bzw. bestÇÏtigt offene Meldungen.**`,
+    content: `⏰ **${label}: Bitte tragt eure Ergebnisse ein bzw. bestätigt offene Meldungen.**`,
     allowedMentions: { parse: [] },
   });
   updateRoundMessageState(eventKey, roundKey, current => ({
@@ -636,7 +636,7 @@ function scheduleRoundReminder({ channel, eventKey, roundKey }) {
   const timer = setTimeout(() => {
     roundReminderTimers.delete(key);
     postRoundReminder({ channel, eventKey, roundKey }).catch(error => {
-      console.error(`K.O.-Ergebnisreminder fuer ${eventKey} ${roundKey} fehlgeschlagen:`, error);
+      console.error(`K.O.-Ergebnisreminder für ${eventKey} ${roundKey} fehlgeschlagen:`, error);
     });
   }, Math.max(0, reminderAt.getTime() - Date.now()));
   if (typeof timer.unref === 'function') timer.unref();
@@ -801,7 +801,7 @@ async function initKnockoutReleases(client) {
     const event = readEventData(eventKey);
     if (!event.knockout?.rounds || ['not_created', 'completed'].includes(event.knockout.status)) continue;
     await upsertKnockoutPost({ client, eventKey, event }).catch(error => {
-      console.error(`K.O.-Freigabe-Init fuer ${eventKey} fehlgeschlagen:`, error);
+      console.error(`K.O.-Freigabe-Init für ${eventKey} fehlgeschlagen:`, error);
     });
   }
 }
@@ -820,4 +820,3 @@ module.exports = {
   scheduleRoundReminder,
   upsertKnockoutPost,
 };
-

@@ -122,7 +122,7 @@ function normalizeBanReason(reason) {
 }
 
 function createTeamBanEntry(team, reason, bannedByUserId = null, durationDays = DEFAULT_DURATION_DAYS, now = new Date()) {
-  if (!team?.id) throw new Error('Team fuer Sperre wurde nicht gefunden.');
+  if (!team?.id) throw new Error('Team für Sperre wurde nicht gefunden.');
   const timestamp = nowIso(now);
   const expiresAt = addDays(now, durationDays).toISOString();
   const managerId = getManagerId(team);
@@ -211,7 +211,7 @@ function removeTeamBan(teamId, removedByUserId = null, reason = null) {
 
   if (removedBan) {
     refreshBanlistMessage().catch(error => console.warn(`[ban-service] banlist refresh failed: ${error.message}`));
-    postLogMessage(`Sperre fuer **${removedBan.clubName || removedBan.team?.clubNameSnapshot || id}** wurde entfernt.`).catch(() => null);
+    postLogMessage(`Sperre für **${removedBan.clubName || removedBan.team?.clubNameSnapshot || id}** wurde entfernt.`).catch(() => null);
   }
 
   return removedBan;

@@ -54,7 +54,7 @@ function createFieldFromLockedEvent(event) {
   }
 
   if (participants.length !== size) {
-    throw new Error('Das gelockte Format enthaelt keine vollstaendige Teilnehmerliste.');
+    throw new Error('Das gelockte Format enthält keine vollständige Teilnehmerliste.');
   }
 
   return {
@@ -167,7 +167,7 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
     group.tableMessageId = messageRefs.tableMessageId;
     group.scheduleMessageId = messageRefs.scheduleMessageId;
 
-    // Sobald die sichtbaren Discord-Posts existieren, muss auch das vollstaendige
+    // Sobald die sichtbaren Discord-Posts existieren, muss auch das vollständige
     // normal erzeugte Gruppenobjekt in derselben Eventdatei auffindbar sein.
     updateEventData(eventKey, persistedEvent => {
       persistedEvent.groups = persistedEvent.groups || {};
@@ -307,7 +307,7 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
   await maybeReleaseNextSlot(client, eventKey, now);
   scheduleEvent(client, eventKey);
   await refreshLiveSchedule(client, eventKey).catch(error => {
-    console.warn(`[live-schedule] Refresh nach Gruppenziehung fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+    console.warn(`[live-schedule] Refresh nach Gruppenziehung für ${eventKey} fehlgeschlagen: ${error.message}`);
   });
 
   return {
@@ -346,4 +346,3 @@ module.exports = {
   lockEventAndCreateGroups,
   lockEventFormat,
 };
-

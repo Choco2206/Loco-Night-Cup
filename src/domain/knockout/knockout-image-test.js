@@ -6,9 +6,9 @@ const { HALL_OF_FAME_TEST_CHANNEL_ID } = require('../ceremony/ceremony-test-serv
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const TEST_VARIANTS = Object.freeze({
-  qualification_4: { phase: 'qualification_overview', teams: 4, label: 'K.O.-Uebersicht 4 Teams' },
-  qualification_8: { phase: 'qualification_overview', teams: 8, label: 'K.O.-Uebersicht 8 Teams' },
-  qualification_16: { phase: 'qualification_overview', teams: 16, label: 'K.O.-Uebersicht 16 Teams' },
+  qualification_4: { phase: 'qualification_overview', teams: 4, label: 'K.O.-Übersicht 4 Teams' },
+  qualification_8: { phase: 'qualification_overview', teams: 8, label: 'K.O.-Übersicht 8 Teams' },
+  qualification_16: { phase: 'qualification_overview', teams: 16, label: 'K.O.-Übersicht 16 Teams' },
   round_of_16: { phase: 'round_of_16', matches: 8, label: 'Achtelfinale' },
   quarter_final: { phase: 'quarter_final', matches: 4, label: 'Viertelfinale' },
   semi_final: { phase: 'semi_final', matches: 2, label: 'Halbfinale' },

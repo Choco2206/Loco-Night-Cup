@@ -1,10 +1,9 @@
 'use strict';
 
-// Gemeinsamer Einstiegspunkt fuer EA-Club-Verknuepfung und TOTT-Auswertung.
+// Gemeinsamer Einstiegspunkt für EA-Club-Verknüpfung und TOTT-Auswertung.
 
 module.exports = {
   ...require('./ea-clubs-client'),
   ...require('./team-of-the-tournament-service'),
   ...require('./team-of-the-tournament-post'),
 };
-

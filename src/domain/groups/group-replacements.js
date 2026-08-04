@@ -112,7 +112,7 @@ function getAvailableReplacementTeams({ eventKey, groupKey, participantKeyValue,
       label: String(team.clubName || team.id).slice(0, 100),
       description: (event.checkin?.waitlistTeamIds || []).map(String).includes(String(team.id))
         ? 'Warteliste'
-        : 'Registriert verfuegbar',
+        : 'Registriert verfügbar',
     }));
 }
 
@@ -254,7 +254,7 @@ function replaceGroupParticipant({ eventKey, groupKey, participantKeyValue, repl
 
     const available = getAvailableReplacementTeams({ eventKey, groupKey, participantKeyValue });
     if (!available.some(team => String(team.id) === String(replacementTeamId))) {
-      throw new Error('Dieses Team ist nicht als Ersatzteam verfuegbar.');
+      throw new Error('Dieses Team ist nicht als Ersatzteam verfügbar.');
     }
 
     const originalSlot = { ...oldSlot };
@@ -379,8 +379,8 @@ async function announceReplacement({ interaction, outcome, newUserIds }) {
   ].filter(Boolean).join('\n');
   await channel.send({
     content: [
-      `ĐY"? **Nachruecker eingesetzt:** ${oldLabel} -> ${newLabel}`,
-      mentions.length ? `Zustaendig: ${mentions.join(', ')}` : null,
+      `🔁 **Nachrücker eingesetzt:** ${oldLabel} -> ${newLabel}`,
+      mentions.length ? `Zuständig: ${mentions.join(', ')}` : null,
     ].filter(Boolean).join('\n'),
     content: safeContent,
     allowedMentions: { users: newUserIds || [] },
@@ -395,4 +395,3 @@ module.exports = {
   replaceSlotInGroup,
   syncReplacementDiscordResources,
 };
-

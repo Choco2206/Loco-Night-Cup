@@ -45,7 +45,7 @@ async function handleMessage(message, client) {
     if (result.status === 'no_pending') {
       await sendTemporary(
         message.channel,
-        'Kein offener Logo-Upload gefunden. Bitte registriere zuerst dein Team oder oeffne "Mein Team" -> Logo aendern.'
+        'Kein offener Logo-Upload gefunden. Bitte registriere zuerst dein Team oder öffne "Mein Team" -> Logo ändern.'
       );
       return true;
     }
@@ -54,7 +54,7 @@ async function handleMessage(message, client) {
       await deleteInstructionMessage(message.channel, result.instructionMessageId);
       await sendTemporary(
         message.channel,
-        'Der offene Logo-Upload ist abgelaufen. Bitte oeffne "Mein Team" -> Logo aendern erneut.'
+        'Der offene Logo-Upload ist abgelaufen. Bitte öffne "Mein Team" -> Logo ändern erneut.'
       );
       return true;
     }
@@ -67,13 +67,13 @@ async function handleMessage(message, client) {
 
     await refreshRegisteredTeamsOverview(client);
     await refreshGroupPostsForTeam(client, result.team.id).catch(error => {
-      console.warn(`[group-schedule] Gruppen konnten nach Logoaenderung nicht aktualisiert werden: ${error.message}`);
+      console.warn(`[group-schedule] Gruppen konnten nach Logoänderung nicht aktualisiert werden: ${error.message}`);
     });
     await deleteInstructionMessage(message.channel, result.instructionMessageId);
     await message.delete().catch(() => {});
     await sendTemporary(
       message.channel,
-      `Logo fuer **${result.team.clubName}** wurde gespeichert. Die Registrierung ist jetzt vollstaendig.`
+      `Logo für **${result.team.clubName}** wurde gespeichert. Die Registrierung ist jetzt vollständig.`
     );
 
     return true;

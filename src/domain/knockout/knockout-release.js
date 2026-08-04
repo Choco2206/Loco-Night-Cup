@@ -3,11 +3,11 @@
 const INVITE_WINDOW_MINUTES = 5;
 const ROUND_REMINDER_MINUTES = 20;
 const ROUND_VIDEO_CHANNEL_NAMES = {
-  round_of_16: 'grÇôÇYenvideo-ko-achtelfinale',
-  quarter_final: 'grÇôÇYenvideo-ko-viertelfinale',
-  semi_final: 'grÇôÇYenvideo-ko-halbfinale',
-  third_place: 'grÇôÇYenvideo-ko-platz-3',
-  final: 'grÇôÇYenvideo-ko-finale',
+  round_of_16: 'größenvideo-ko-achtelfinale',
+  quarter_final: 'größenvideo-ko-viertelfinale',
+  semi_final: 'größenvideo-ko-halbfinale',
+  third_place: 'größenvideo-ko-platz-3',
+  final: 'größenvideo-ko-finale',
 };
 
 function addMinutes(date, minutes) {
@@ -57,9 +57,9 @@ function isRoundReadyForRelease(event, roundKey) {
 function buildRoundReleaseContent({ label, releasedAt }) {
   const inviteEnd = addMinutes(releasedAt, INVITE_WINDOW_MINUTES);
   return [
-    `ÐY"½ **${label} ist freigegeben.**`,
+    `📢 **${label} ist freigegeben.**`,
     `Einladezeit: **${formatHm(releasedAt)} Uhr bis ${formatHm(inviteEnd)} Uhr**.`,
-    'Bitte ladet eure Gegner innerhalb dieses Zeitfensters ein und startet anschlieÇYend eure Partie.',
+    'Bitte ladet eure Gegner innerhalb dieses Zeitfensters ein und startet anschließend eure Partie.',
   ].filter(Boolean).join('\n');
 }
 
@@ -81,4 +81,3 @@ module.exports = {
   getRoundReminderAt,
   isRoundReadyForRelease,
 };
-

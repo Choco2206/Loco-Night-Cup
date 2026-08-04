@@ -48,7 +48,7 @@ function minimumTeams(settings, event) {
 }
 
 function currentFormatLabel(event) {
-  return event.format?.size ? `${event.format.size}er Turnier` : 'noch kein gueltiges Format';
+  return event.format?.size ? `${event.format.size}er Turnier` : 'noch kein gültiges Format';
 }
 
 function getValidRealTeamCount(event, now = new Date()) {
@@ -72,11 +72,11 @@ function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
     return [
       '⚠️ **Aktueller Stand nach offiziellem Anmeldeschluss**',
       '',
-      'Aktuell sind noch nicht genug Teams fuer den NightCup angemeldet.',
+      'Aktuell sind noch nicht genug Teams für den NightCup angemeldet.',
       `Minimum sind ${minimum} Teams.`,
       '',
-      `Teams koennen sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
-      `Um ${lateDeadlineText} wird final geprueft, ob ein gueltiges Format zustande kommt.`,
+      `Teams können sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
+      `Um ${lateDeadlineText} wird final geprüft, ob ein gültiges Format zustande kommt.`,
     ].join('\n');
   }
 
@@ -85,8 +85,8 @@ function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
     '',
     `Aktuelles Format: ${currentFormatLabel(event)}`,
     '',
-    `Teams koennen sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
-    `Um ${lateDeadlineText} wird final geprueft, welches Format zustande kommt.`,
+    `Teams können sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
+    `Um ${lateDeadlineText} wird final geprüft, welches Format zustande kommt.`,
     '',
     `🎲 Die Gruppenauslosung findet um ${drawText} statt.`,
   ].join('\n');
@@ -99,10 +99,10 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
   return [
     '❌ **Night Cup abgesagt**',
     '',
-    'Nach Ende des Late-Check-ins sind leider nicht genug Teams fuer ein gueltiges Turnierformat zusammengekommen.',
+    'Nach Ende des Late-Check-ins sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.',
     '',
     `Mindestanzahl: **${minimum} Teams**`,
-    `Aktuell gueltige Teams: **${validTeamCount}**`,
+    `Aktuell gültige Teams: **${validTeamCount}**`,
     '',
     'Der heutige Night Cup findet daher nicht statt.',
   ].join('\n');
@@ -118,7 +118,7 @@ function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
     '',
     `Finales Format: **${currentFormatLabel(event)}**`,
     `Aktive Teams: **${getActiveTeamCount(event)}**`,
-    `Warteliste/Ueberschuss: **${waitlistCount}**`,
+    `Warteliste/Überschuss: **${waitlistCount}**`,
     '',
     'Die Gruppenauslosung startet in **5 Minuten**.',
   ].join('\n');

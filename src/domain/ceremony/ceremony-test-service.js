@@ -120,7 +120,7 @@ function resolveTeamLogoPath(team, { optional = false } = {}) {
 
   const logoPath = candidates.find(candidate => fs.existsSync(candidate));
   if (!logoPath && optional) return null;
-  if (!logoPath) throw new Error(`Logo-Datei fuer ${team.clubName} nicht gefunden: ${fileName}`);
+  if (!logoPath) throw new Error(`Logo-Datei für ${team.clubName} nicht gefunden: ${fileName}`);
   return logoPath;
 }
 
@@ -164,7 +164,7 @@ function getSelectedTeams({ firstTeamId, secondTeamId, thirdTeamId }) {
   };
 
   for (const [placement, team] of Object.entries(teams)) {
-    if (!team || team.status === 'deleted') throw new Error(`Team fuer ${placement} wurde nicht gefunden.`);
+    if (!team || team.status === 'deleted') throw new Error(`Team für ${placement} wurde nicht gefunden.`);
   }
 
   return teams;
@@ -272,7 +272,7 @@ function getCeremonyTeams(event) {
   };
 
   for (const [placement, team] of Object.entries(teams)) {
-    if (!team) throw new Error(`Team fuer ${placement} wurde nicht gefunden.`);
+    if (!team) throw new Error(`Team für ${placement} wurde nicht gefunden.`);
   }
 
   return teams;
@@ -320,7 +320,7 @@ function buildCeremonyText({ dayKey, teams, promotion = null }) {
     getTeamPings(teams.first),
     ...buildPromotionBlock(promotion),
     '',
-    'Verdient den Titel geholt und ueber das gesamte Turnier hinweg ueberzeugt. Herzlichen Glueckwunsch zum Turniersieg! 🏆',
+    'Verdient den Titel geholt und über das gesamte Turnier hinweg überzeugt. Herzlichen Glückwunsch zum Turniersieg! 🏆',
     '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
@@ -328,7 +328,7 @@ function buildCeremonyText({ dayKey, teams, promotion = null }) {
     '👑 Manager / Co-Manager:',
     getTeamPings(teams.second),
     '',
-    'Starke Leistungen gezeigt und voellig verdient auf dem Podium gelandet. 👏',
+    'Starke Leistungen gezeigt und völlig verdient auf dem Podium gelandet. 👏',
     '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
@@ -342,11 +342,11 @@ function buildCeremonyText({ dayKey, teams, promotion = null }) {
     '',
     '❤️ Danke an alle Teilnehmer',
     '',
-    'Vielen Dank an alle Teams fuer die Teilnahme am heutigen Cup.',
+    'Vielen Dank an alle Teams für die Teilnahme am heutigen Cup.',
     '',
-    'Wir hoffen, ihr hattet Spass und seid auch beim naechsten Loco Night Cup wieder dabei.',
+    'Wir hoffen, ihr hattet Spass und seid auch beim nächsten Loco Night Cup wieder dabei.',
     '',
-    'Bis zum naechsten Mal! 🏆🐺',
+    'Bis zum nächsten Mal! 🏆🐺',
   ].join('\n');
 }
 
@@ -392,7 +392,7 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     throw new Error('Siegerehrung wurde bereits gepostet.');
   }
   if (!isCeremonyReady(event)) {
-    throw new Error('Siegerehrung ist noch nicht bereit. Finale und Spiel um Platz 3 muessen bestaetigt sein.');
+    throw new Error('Siegerehrung ist noch nicht bereit. Finale und Spiel um Platz 3 müssen bestätigt sein.');
   }
 
   const dayKey = getEventDayKey(eventKey, event);

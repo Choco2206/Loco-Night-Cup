@@ -162,7 +162,7 @@ async function ensureGroupVideoChannel(guild, settings, group) {
     type: ChannelType.GuildText,
     parent: settings.categories?.groupCategoryId || undefined,
     permissionOverwrites,
-    reason: 'Loco Night Cup Gruessenvideo-Kanal fuer Gruppe',
+    reason: 'Loco Night Cup Größenvideo-Kanal für Gruppe',
   });
 }
 
@@ -206,5 +206,4 @@ module.exports = {
   getGroupUserIds,
   prepareGroupChannels,
 };
-
 

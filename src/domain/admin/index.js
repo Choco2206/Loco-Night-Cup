@@ -25,9 +25,9 @@ function isAdminAllowed(member, settings) {
 function summarizeNicknameSync(summary) {
   return [
     'Nicknames wurden synchronisiert.',
-    `Erfolgreich geaendert: ${summary.changed}`,
+    `Erfolgreich geändert: ${summary.changed}`,
     `Bereits korrekt: ${summary.alreadyCorrect}`,
-    `Uebersprungen: ${summary.skipped}`,
+    `Übersprungen: ${summary.skipped}`,
     `Fehlende Rechte/Hierarchie: ${summary.missingPermissions}`,
     `User nicht mehr auf Server: ${summary.notOnServer}`,
     `Andere Fehler: ${summary.errors}`,

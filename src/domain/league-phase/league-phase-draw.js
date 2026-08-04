@@ -22,7 +22,7 @@ function createLeaguePhaseDraw({ eventKey, participants, createdAt = new Date().
   const size = participants?.length;
   const config = LEAGUE_PHASE_FORMATS[size];
   if (!Array.isArray(participants) || !isLeaguePhaseFormat(size)) {
-    throw new Error('Die Ligaphase benoetigt exakt 14, 18 oder 20 persistierte Startplaetze.');
+    throw new Error('Die Ligaphase benötigt exakt 14, 18 oder 20 persistierte Startplätze.');
   }
   const normalized = shuffled(participants, random).map((participant, index) => ({
     ...participant,
@@ -30,7 +30,7 @@ function createLeaguePhaseDraw({ eventKey, participants, createdAt = new Date().
     participantKey: participantKey(participant),
   }));
   if (new Set(normalized.map(participantKey)).size !== size) {
-    throw new Error('Die Ligaphasen-Teilnehmer enthalten doppelte oder ungueltige Startplaetze.');
+    throw new Error('Die Ligaphasen-Teilnehmer enthalten doppelte oder ungültige Startplätze.');
   }
 
   const fixed = normalized[0];
@@ -76,16 +76,16 @@ function validateLeaguePhaseDraw(phase) {
   const config = LEAGUE_PHASE_FORMATS[size];
   if (!config) throw new Error('Ligaphase: Unbekanntes Format.');
   const days = phase?.matchdays || [];
-  if (days.length !== config.matchdays) throw new Error(`Ligaphase: Es muessen exakt ${config.matchdays} Spieltage existieren.`);
+  if (days.length !== config.matchdays) throw new Error(`Ligaphase: Es müssen exakt ${config.matchdays} Spieltage existieren.`);
   const total = new Map((phase.slots || []).map(slot => [participantKey(slot), 0]));
   const pairs = new Set();
   for (const [dayIndex, day] of days.entries()) {
-    if (day.matches?.length !== config.matchesPerDay) throw new Error(`Ligaphase: Spieltag ${dayIndex + 1} benoetigt exakt ${config.matchesPerDay} Spiele.`);
+    if (day.matches?.length !== config.matchesPerDay) throw new Error(`Ligaphase: Spieltag ${dayIndex + 1} benötigt exakt ${config.matchesPerDay} Spiele.`);
     const appearances = new Map();
     for (const match of day.matches) {
       const home = participantKey(match.home);
       const away = participantKey(match.away);
-      if (!home || !away || home === away) throw new Error('Ligaphase: Selbst- oder ungueltige Paarung erkannt.');
+      if (!home || !away || home === away) throw new Error('Ligaphase: Selbst- oder ungültige Paarung erkannt.');
       appearances.set(home, (appearances.get(home) || 0) + 1);
       appearances.set(away, (appearances.get(away) || 0) + 1);
       total.set(home, (total.get(home) || 0) + 1);
@@ -105,4 +105,3 @@ function validateLeaguePhaseDraw(phase) {
 }
 
 module.exports = { createLeaguePhaseDraw, participantKey, validateLeaguePhaseDraw };
-

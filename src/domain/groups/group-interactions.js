@@ -89,7 +89,7 @@ function buildMatchSelect(customId, entries) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(customId)
-      .setPlaceholder('Spiel auswaehlen')
+      .setPlaceholder('Spiel auswählen')
       .addOptions(entries.slice(0, 25).map(entry => ({
         label: matchLabel(entry.match),
         value: entry.value,
@@ -131,14 +131,14 @@ async function handleOpenTeamResult(interaction, eventKey, groupKey) {
   if (!entries.length) {
     const slot = getCurrentReleasedSlot(group);
     await interaction.reply({
-      content: `Keine meldbaren Spiele fuer dich im aktuell freigegebenen Slot ${slot || '-'}.`,
+      content: `Keine meldbaren Spiele für dich im aktuell freigegebenen Slot ${slot || '-'}.`,
       flags: EPHEMERAL,
     });
     return true;
   }
 
   await interaction.reply({
-    content: `Waehle dein Spiel aus. Aktuell freigegebener Slot: ${getCurrentReleasedSlot(group)}.`,
+    content: `Wähle dein Spiel aus. Aktuell freigegebener Slot: ${getCurrentReleasedSlot(group)}.`,
     components: [buildMatchSelect(`group_result_select:${eventKey}:${groupKey}`, entries)],
     flags: EPHEMERAL,
   });
@@ -160,7 +160,7 @@ async function handleOpenAdminResult(interaction, eventKey, groupKey) {
   }
 
   await interaction.reply({
-    content: 'Waehle zuerst den Spieltag aus. Auch abgeschlossene Spieltage koennen korrigiert werden.',
+    content: 'Wähle zuerst den Spieltag aus. Auch abgeschlossene Spieltage können korrigiert werden.',
     components: [buildMatchdaySelect(eventKey, groupKey, matchdays)],
     flags: EPHEMERAL,
   });
@@ -191,13 +191,13 @@ function chunk(entries, size) {
 function buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, teams) {
   const chunks = chunk(teams, SELECT_OPTION_LIMIT);
   if (chunks.length > SELECT_ROW_LIMIT) {
-    throw new Error('Es sind zu viele Ersatzteams verfuegbar. Bitte reduziere die Auswahl voruebergehend.');
+    throw new Error('Es sind zu viele Ersatzteams verfügbar. Bitte reduziere die Auswahl vorübergehend.');
   }
 
   return chunks.map((teamChunk, index) => new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`group_replacement_team:${eventKey}:${groupKey}:${encodeURIComponent(participantKeyValue)}:${index}`)
-      .setPlaceholder(chunks.length === 1 ? 'Ersatzteam auswaehlen' : `Ersatzteam auswaehlen (${index + 1}/${chunks.length})`)
+      .setPlaceholder(chunks.length === 1 ? 'Ersatzteam auswählen' : `Ersatzteam auswählen (${index + 1}/${chunks.length})`)
       .addOptions(teamChunk.map(team => ({
         label: team.label.slice(0, 100),
         value: team.id,
@@ -208,7 +208,7 @@ function buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue,
 
 async function handleOpenReplacement(interaction, eventKey, groupKey) {
   if (!await isAdminAllowed(interaction)) {
-    await interaction.reply({ content: 'Du darfst keinen Nachruecker einsetzen.', flags: EPHEMERAL });
+    await interaction.reply({ content: 'Du darfst keinen Nachrücker einsetzen.', flags: EPHEMERAL });
     return true;
   }
 
@@ -219,7 +219,7 @@ async function handleOpenReplacement(interaction, eventKey, groupKey) {
   }
 
   await interaction.reply({
-    content: 'Waehle den Slot oder Teilnehmer aus, der ersetzt werden soll.',
+    content: 'Wähle den Slot oder Teilnehmer aus, der ersetzt werden soll.',
     components: [buildReplacementTargetSelect(eventKey, groupKey, participants)],
     flags: EPHEMERAL,
   });
@@ -228,7 +228,7 @@ async function handleOpenReplacement(interaction, eventKey, groupKey) {
 
 async function handleReplacementTargetSelect(interaction, eventKey, groupKey) {
   if (!await isAdminAllowed(interaction)) {
-    await interaction.reply({ content: 'Du darfst keinen Nachruecker einsetzen.', flags: EPHEMERAL });
+    await interaction.reply({ content: 'Du darfst keinen Nachrücker einsetzen.', flags: EPHEMERAL });
     return true;
   }
 
@@ -236,14 +236,14 @@ async function handleReplacementTargetSelect(interaction, eventKey, groupKey) {
   const teams = getAvailableReplacementTeams({ eventKey, groupKey, participantKeyValue });
   if (!teams.length) {
     await interaction.update({
-      content: 'Kein verfuegbares Ersatzteam gefunden.',
+      content: 'Kein verfügbares Ersatzteam gefunden.',
       components: [],
     });
     return true;
   }
 
   await interaction.update({
-    content: 'Waehle das Ersatzteam aus.',
+    content: 'Wähle das Ersatzteam aus.',
     components: buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, teams),
   });
   return true;
@@ -252,7 +252,7 @@ async function handleReplacementTargetSelect(interaction, eventKey, groupKey) {
 async function handleReplacementTeamSelect(interaction, eventKey, groupKey, encodedParticipantKey, client) {
   await interaction.deferUpdate();
   if (!await isAdminAllowed(interaction)) {
-    await interaction.editReply({ content: 'Du darfst keinen Nachruecker einsetzen.', components: [] });
+    await interaction.editReply({ content: 'Du darfst keinen Nachrücker einsetzen.', components: [] });
     return true;
   }
 
@@ -268,7 +268,7 @@ async function handleReplacementTeamSelect(interaction, eventKey, groupKey, enco
   await announceReplacement({ interaction, outcome, newUserIds: sync.newUserIds });
 
   await interaction.editReply({
-    content: `Nachruecker eingesetzt: **${outcome.newTeam.clubName}**. Gruppenanzeigen, Rollen, Kanalrechte und Check-in wurden aktualisiert.`,
+    content: `Nachrücker eingesetzt: **${outcome.newTeam.clubName}**. Gruppenanzeigen, Rollen, Kanalrechte und Check-in wurden aktualisiert.`,
     components: [],
   });
   return true;
@@ -279,7 +279,7 @@ async function handleTeamResultSelect(interaction, eventKey, groupKey) {
   const { group } = getGroupFromEvent(eventKey, groupKey);
   const entry = getUserSelectableMatches(group, interaction.user.id)
     .find(item => String(item.match.id) === String(matchId) && item.participantKeys.includes(selectedParticipantKey));
-  if (!entry) throw new Error('Dieses Spiel ist fuer dich nicht meldbar.');
+  if (!entry) throw new Error('Dieses Spiel ist für dich nicht meldbar.');
 
   await interaction.showModal(createScoreModal({
     customId: `group_result_modal:${eventKey}:${groupKey}:${matchId}:${encodeURIComponent(selectedParticipantKey)}`,
@@ -333,7 +333,7 @@ function buildMatchdaySelect(eventKey, groupKey, matchdays) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`group_admin_result_matchday:${eventKey}:${groupKey}`)
-      .setPlaceholder('Spieltag auswaehlen')
+      .setPlaceholder('Spieltag auswählen')
       .addOptions(matchdays.map(entry => ({
         label: `Spieltag ${entry.matchday}`,
         value: String(entry.matchday),
@@ -369,7 +369,7 @@ async function handleTeamResultModal(interaction, eventKey, groupKey, matchId, s
   }
 
   const message = outcome.status === 'confirmed'
-    ? 'Ergebnis bestaetigt. Tabelle und Spielplan wurden aktualisiert.'
+    ? 'Ergebnis bestätigt. Tabelle und Spielplan wurden aktualisiert.'
     : outcome.status === 'admin_decision_required'
       ? 'Ergebnis gespeichert. Es ist eine Admin-Entscheidung erforderlich.'
       : 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.';
@@ -390,7 +390,7 @@ async function handleAdminMatchdaySelect(interaction, eventKey, groupKey) {
   if (!selected) throw new Error('Spieltag wurde nicht gefunden.');
 
   await interaction.update({
-    content: `Waehle die Begegnung aus Spieltag ${selectedMatchday} aus.`,
+    content: `Wähle die Begegnung aus Spieltag ${selectedMatchday} aus.`,
     components: [buildMatchSelect(
       `group_admin_result_select:${eventKey}:${groupKey}:${selectedMatchday}`,
       selected.matches.map(match => ({ match, value: match.id }))
@@ -465,7 +465,7 @@ function logMissingGroup(interaction, parsedEventKey, parsedGroupKey, candidates
 
 function resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey) {
   const candidates = collectGroupCandidates();
-  console.info('[group-interactions] Gruppeninteraktion wird aufgeloest.', {
+  console.info('[group-interactions] Gruppeninteraktion wird aufgelöst.', {
     customId: interaction.customId || null,
     channelId: interaction.channelId || interaction.channel?.id || null,
     messageId: interaction.message?.id || null,
@@ -506,7 +506,7 @@ function resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroup
         : null;
 
   if (resolved) {
-    console.warn('[group-interactions] Gruppe ueber gespeicherte Discord-Zuordnung aufgeloest.', {
+    console.warn('[group-interactions] Gruppe über gespeicherte Discord-Zuordnung aufgelöst.', {
       customId: interaction.customId || null,
       channelId: channelId || null,
       messageId: messageId || null,
@@ -599,4 +599,3 @@ module.exports = {
   finalizeConfirmedGroupResult,
   handleGroupInteraction,
 };
-

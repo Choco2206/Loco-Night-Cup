@@ -26,7 +26,7 @@ function assertCanCreateKnockout(event) {
     throw new Error('Die K.O.-Phase kann erst erstellt werden, wenn die Gruppenphase abgeschlossen ist.');
   }
   if (event.knockout?.status && event.knockout.status !== 'not_created') {
-    throw new Error('Die K.O.-Phase wurde fuer dieses Event bereits erstellt.');
+    throw new Error('Die K.O.-Phase wurde für dieses Event bereits erstellt.');
   }
 }
 
@@ -35,7 +35,7 @@ function buildKnockoutState({ eventKey, event, actorUserId = null, now = new Dat
   const timestamp = nowIso(now);
   const leagueMode = event.leaguePhase?.phaseType === 'league';
   const leagueQualified = leagueMode ? qualifyLeagueTopEight(event) : null;
-  if (leagueMode && leagueQualified.length !== 8) throw new Error('Die Ligaphase benoetigt 8 echte Teams fuer das Viertelfinale.');
+  if (leagueMode && leagueQualified.length !== 8) throw new Error('Die Ligaphase benötigt 8 echte Teams für das Viertelfinale.');
   const qualification = leagueMode ? { qualifiedTeams: leagueQualified, rule: 'league_top_8' } : qualifyTeams(event);
   const bracket = buildKnockoutRounds({
     eventKey,
@@ -119,7 +119,7 @@ async function createKnockoutPhase({ eventKey, actorUserId = null, client = null
   }
 
   await refreshLiveSchedule(client, eventKey, readEventData(eventKey)).catch(error => {
-    console.warn(`[live-schedule] Refresh nach K.O.-Erstellung fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+    console.warn(`[live-schedule] Refresh nach K.O.-Erstellung für ${eventKey} fehlgeschlagen: ${error.message}`);
   });
 
   return {
@@ -133,4 +133,3 @@ module.exports = {
   buildKnockoutState,
   createKnockoutPhase,
 };
-

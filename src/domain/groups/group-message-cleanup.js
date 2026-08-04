@@ -27,7 +27,7 @@ async function handleGroupMessage(message) {
   setTimeout(() => {
     message.delete().catch(error => {
       if (error?.code !== 10008) {
-        console.error('Gruppenkanal-Usernachricht konnte nicht geloescht werden:', error);
+        console.error('Gruppenkanal-Usernachricht konnte nicht gelöscht werden:', error);
       }
     });
   }, USER_MESSAGE_DELETE_DELAY_MS);
@@ -61,7 +61,7 @@ async function deleteUserMessagesFromGroupChannel(client, group, limit = 500) {
         deleted += 1;
       }).catch(error => {
         if (error?.code !== 10008) {
-          console.error(`Gruppe ${group.groupKey}: Usernachricht konnte nicht geloescht werden:`, error);
+          console.error(`Gruppe ${group.groupKey}: Usernachricht konnte nicht gelöscht werden:`, error);
         }
       });
     }
@@ -142,4 +142,3 @@ module.exports = {
   deleteUserMessagesFromGroupChannel,
   handleGroupMessage,
 };
-

@@ -64,7 +64,7 @@ async function handleInteraction(interaction) {
   if (!selectedRole) return false;
 
   try {
-    if (!interaction.guild) throw new Error('Rollenwahl ist nur auf dem Server moeglich.');
+    if (!interaction.guild) throw new Error('Rollenwahl ist nur auf dem Server möglich.');
     const settings = readSettings();
     const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
     if (!member) throw new Error('Dein Server-Mitglied konnte nicht geladen werden.');

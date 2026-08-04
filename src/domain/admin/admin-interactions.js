@@ -176,9 +176,9 @@ const TEAM_ACHIEVEMENT_TITLES = {
 function summarizeNicknameSync(summary) {
   return [
     'Nicknames wurden synchronisiert.',
-    `Erfolgreich geaendert: ${summary.changed}`,
+    `Erfolgreich geändert: ${summary.changed}`,
     `Bereits korrekt: ${summary.alreadyCorrect}`,
-    `Uebersprungen: ${summary.skipped}`,
+    `Übersprungen: ${summary.skipped}`,
     `Fehlende Rechte/Hierarchie: ${summary.missingPermissions}`,
     `User nicht mehr auf Server: ${summary.notOnServer}`,
     `Andere Fehler: ${summary.errors}`,
@@ -219,7 +219,7 @@ function formatTeamsList() {
   if (!teams.length) return 'Noch keine Teams registriert.';
 
   const lines = teams.map((team, index) => {
-    const complete = team.registrationStatus === 'complete' ? 'Vollstaendig' : 'Unvollstaendig';
+    const complete = team.registrationStatus === 'complete' ? 'Vollständig' : 'Unvollständig';
     const vm = team.manager?.userId ? `<@${team.manager.userId}>` : 'Kein VM';
     const marker = team.isTestTeam ? ' | Testteam' : '';
     return `${index + 1}. **${team.clubName}**${marker}\nStatus: ${team.status} | ${complete}\nVM: ${vm} | Co-VMs: ${team.coManagers.length}`;
@@ -237,7 +237,7 @@ function formatTeamsList() {
     }
   }
   if (current) chunks.push(current);
-  return chunks[0] + (chunks.length > 1 ? `\n\n... ${chunks.length - 1} weitere Bloecke gekuerzt.` : '');
+  return chunks[0] + (chunks.length > 1 ? `\n\n... ${chunks.length - 1} weitere Blöcke gekürzt.` : '');
 }
 
 function buildEventSelect(customId, placeholder) {
@@ -267,7 +267,7 @@ function sortedRegisteredTeams(excludeTeamIds = []) {
 
 function buildTeamSelect(customId, placeholder, excludeTeamIds = []) {
   const teams = sortedRegisteredTeams(excludeTeamIds);
-  if (!teams.length) throw new Error('Es gibt keine auswaehlbaren Teams.');
+  if (!teams.length) throw new Error('Es gibt keine auswählbaren Teams.');
 
   const select = new StringSelectMenuBuilder()
     .setCustomId(customId)
@@ -299,7 +299,7 @@ function buildHallOfFameTeamSelectPayload({
 
   const excludeTeamIds = [firstTeamId, secondTeamId].filter(Boolean);
   const teams = sortedRegisteredTeams(excludeTeamIds);
-  if (!teams.length) throw new Error('Es gibt keine auswaehlbaren Teams.');
+  if (!teams.length) throw new Error('Es gibt keine auswählbaren Teams.');
 
   const totalPages = Math.max(1, Math.ceil(teams.length / HALL_OF_FAME_TEAM_PAGE_SIZE));
   const currentPage = clampPage(page, totalPages);
@@ -329,7 +329,7 @@ function buildHallOfFameTeamSelectPayload({
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(selectCustomId)
-        .setPlaceholder(totalPages === 1 ? `${placementLabel} auswaehlen` : `${placementLabel} auswaehlen (${currentPage + 1}/${totalPages})`)
+        .setPlaceholder(totalPages === 1 ? `${placementLabel} auswählen` : `${placementLabel} auswählen (${currentPage + 1}/${totalPages})`)
         .addOptions(pageTeams.map(team => ({
           label: team.clubName.slice(0, 100),
           value: String(team.id),
@@ -342,7 +342,7 @@ function buildHallOfFameTeamSelectPayload({
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(previousPageCustomId)
-        .setLabel('Zurueck')
+        .setLabel('Zurück')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
@@ -355,15 +355,15 @@ function buildHallOfFameTeamSelectPayload({
 
   return {
     content: totalPages === 1
-      ? `${placementLabel} auswaehlen.`
-      : `${placementLabel} auswaehlen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+      ? `${placementLabel} auswählen.`
+      : `${placementLabel} auswählen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
     components,
   };
 }
 
 function buildTeamBanSelectPayload(page = 0) {
   const teams = sortedRegisteredTeams();
-  if (!teams.length) throw new Error('Es gibt keine auswaehlbaren Teams.');
+  if (!teams.length) throw new Error('Es gibt keine auswählbaren Teams.');
 
   const totalPages = Math.max(1, Math.ceil(teams.length / TEAM_BAN_PAGE_SIZE));
   const currentPage = clampPage(page, totalPages);
@@ -372,7 +372,7 @@ function buildTeamBanSelectPayload(page = 0) {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`admin_team_ban_team_select:${currentPage}`)
-        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswählen' : `Team auswählen (${currentPage + 1}/${totalPages})`)
         .addOptions(pageTeams.map(team => ({
           label: team.clubName.slice(0, 100),
           value: String(team.id),
@@ -385,7 +385,7 @@ function buildTeamBanSelectPayload(page = 0) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`admin_team_ban_page:${currentPage - 1}`)
-        .setLabel('Zurueck')
+        .setLabel('Zurück')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
@@ -415,7 +415,7 @@ function buildTeamDetailsSelectPayload(page = 0) {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`admin_team_details_select:${currentPage}`)
-        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswählen' : `Team auswählen (${currentPage + 1}/${totalPages})`)
         .addOptions(pageTeams.map(team => ({
           label: team.clubName.slice(0, 100),
           value: String(team.id),
@@ -428,7 +428,7 @@ function buildTeamDetailsSelectPayload(page = 0) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`admin_team_details_page:${currentPage - 1}`)
-        .setLabel('Zurueck')
+        .setLabel('Zurück')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
@@ -441,8 +441,8 @@ function buildTeamDetailsSelectPayload(page = 0) {
 
   return {
     content: totalPages === 1
-      ? 'Team fuer Details/Verwaltung auswaehlen.'
-      : `Team fuer Details/Verwaltung auswaehlen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+      ? 'Team für Details/Verwaltung auswählen.'
+      : `Team für Details/Verwaltung auswählen.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
     components,
   };
 }
@@ -458,7 +458,7 @@ function buildTeamAchievementSelectPayload(page = 0) {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`admin_team_achievement_team_select:${currentPage}`)
-        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswählen' : `Team auswählen (${currentPage + 1}/${totalPages})`)
         .addOptions(pageTeams.map(team => ({
           label: team.clubName.slice(0, 100),
           value: String(team.id),
@@ -471,7 +471,7 @@ function buildTeamAchievementSelectPayload(page = 0) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`admin_team_achievement_page:${currentPage - 1}`)
-        .setLabel('Zurueck')
+        .setLabel('Zurück')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
@@ -494,7 +494,7 @@ function buildTeamAchievementTitleSelect(team) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`admin_team_achievement_title_select:${team.id}`)
-      .setPlaceholder('Erfolg auswaehlen')
+      .setPlaceholder('Erfolg auswählen')
       .addOptions(Object.entries(TEAM_ACHIEVEMENT_TITLES).map(([key, definition]) => ({
         label: `${definition.emoji} ${definition.label}`,
         value: key,
@@ -512,7 +512,7 @@ function buildTeamAchievementConfirmPayload(team, titleKey) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`admin_team_achievement_confirm:${team.id}:${titleKey}`)
-          .setLabel('Bestaetigen')
+          .setLabel('Bestätigen')
           .setEmoji('✅')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
@@ -538,7 +538,7 @@ function buildManualCheckinActionSelect() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('admin_checkin_manual_action_select')
-      .setPlaceholder('Aktion auswaehlen')
+      .setPlaceholder('Aktion auswählen')
       .addOptions([
         { label: 'Team anmelden', value: 'join', description: 'Team manuell in einen Check-in eintragen' },
         { label: 'Team abmelden', value: 'leave', description: 'Team manuell aus einem Check-in entfernen' },
@@ -550,7 +550,7 @@ function buildManualCheckinEventSelect(action) {
   const normalizedAction = normalizeManualCheckinAction(action);
   return buildEventSelect(
     `admin_checkin_manual_event_select:${normalizedAction}`,
-    `Event zum ${getManualCheckinActionLabel(normalizedAction)} auswaehlen`
+    `Event zum ${getManualCheckinActionLabel(normalizedAction)} auswählen`
   );
 }
 
@@ -578,7 +578,7 @@ function buildManualCheckinTeamSelectPayload(action, eventKey, page = 0) {
   const teams = getManualCheckinTeams(normalizedAction, eventKey);
   if (!teams.length) {
     throw new Error(normalizedAction === 'join'
-      ? 'Es gibt kein auswaehlbares Team fuer diesen Check-in.'
+      ? 'Es gibt kein auswählbares Team für diesen Check-in.'
       : 'In diesem Event ist kein Team eingecheckt.');
   }
 
@@ -590,7 +590,7 @@ function buildManualCheckinTeamSelectPayload(action, eventKey, page = 0) {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`admin_checkin_manual_team_select:${normalizedAction}:${eventKey}:${currentPage}`)
-        .setPlaceholder(totalPages === 1 ? 'Team auswaehlen' : `Team auswaehlen (${currentPage + 1}/${totalPages})`)
+        .setPlaceholder(totalPages === 1 ? 'Team auswählen' : `Team auswählen (${currentPage + 1}/${totalPages})`)
         .addOptions(pageTeams.map(team => ({
           label: team.clubName.slice(0, 100),
           value: String(team.id),
@@ -603,7 +603,7 @@ function buildManualCheckinTeamSelectPayload(action, eventKey, page = 0) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`admin_checkin_manual_page:${normalizedAction}:${eventKey}:${currentPage - 1}`)
-        .setLabel('Zurueck')
+        .setLabel('Zurück')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
@@ -616,8 +616,8 @@ function buildManualCheckinTeamSelectPayload(action, eventKey, page = 0) {
 
   return {
     content: totalPages === 1
-      ? `Team fuer ${EVENT_LABELS[eventKey] || eventKey} ${actionLabel}.`
-      : `Team fuer ${EVENT_LABELS[eventKey] || eventKey} ${actionLabel}.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
+      ? `Team für ${EVENT_LABELS[eventKey] || eventKey} ${actionLabel}.`
+      : `Team für ${EVENT_LABELS[eventKey] || eventKey} ${actionLabel}.\nSeite ${currentPage + 1}/${totalPages} (${teams.length} Teams)`,
     components,
   };
 }
@@ -683,7 +683,7 @@ function buildTeamDetailsEmbed(team) {
       { name: 'Twitch', value: team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'Nicht hinterlegt', inline: true },
       { name: 'Check-ins', value: formatCheckinStatuses(team.id).slice(0, 1024), inline: false }
     )
-    .setFooter({ text: `Admin-Aktionen laufen eindeutig ueber Team-ID ${team.id}` })
+    .setFooter({ text: `Admin-Aktionen laufen eindeutig über Team-ID ${team.id}` })
     .setTimestamp(new Date());
 }
 
@@ -691,15 +691,15 @@ function buildTeamDetailsButtons(team) {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`admin_team_edit_name_open:${team.id}`).setLabel('Team bearbeiten').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`admin_team_add_covm_open:${team.id}`).setLabel('Co-VM hinzufuegen').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`admin_team_add_covm_open:${team.id}`).setLabel('Co-VM hinzufügen').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`admin_team_remove_covm_open:${team.id}`).setLabel('Co-VM entfernen').setStyle(ButtonStyle.Secondary).setDisabled(!(team.coManagers || []).length),
-      new ButtonBuilder().setCustomId(`admin_team_change_vm_open:${team.id}`).setLabel('VM aendern').setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`admin_team_change_vm_open:${team.id}`).setLabel('VM ändern').setStyle(ButtonStyle.Primary)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`admin_team_ban_confirm:${team.id}`).setLabel('Team sperren').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`admin_team_unban_confirm:${team.id}`).setLabel('Sperre entfernen').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`admin_team_delete_open:${team.id}`).setLabel('Team loeschen').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('admin_team_details_back:0').setLabel('Zurueck zur Team-Auswahl').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`admin_team_delete_open:${team.id}`).setLabel('Team löschen').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('admin_team_details_back:0').setLabel('Zurück zur Team-Auswahl').setStyle(ButtonStyle.Secondary)
     ),
   ];
 }
@@ -750,12 +750,12 @@ function buildManualUserModal(customId, title) {
 
 function buildAdminAddCoManagerPayload(team) {
   return {
-    content: `Neuen Co-VM fuer **${team.clubName}** auswaehlen oder per User-ID eingeben.`,
+    content: `Neuen Co-VM für **${team.clubName}** auswählen oder per User-ID eingeben.`,
     components: [
       new ActionRowBuilder().addComponents(
         new UserSelectMenuBuilder()
           .setCustomId(`admin_team_add_covm_user:${team.id}`)
-          .setPlaceholder('Discord User auswaehlen')
+          .setPlaceholder('Discord User auswählen')
           .setMinValues(1)
           .setMaxValues(1)
       ),
@@ -771,12 +771,12 @@ function buildAdminAddCoManagerPayload(team) {
 
 function buildAdminChangeManagerPayload(team) {
   return {
-    content: `Neuen VM fuer **${team.clubName}** auswaehlen oder per User-ID eingeben. Der alte VM wird entfernt.`,
+    content: `Neuen VM für **${team.clubName}** auswählen oder per User-ID eingeben. Der alte VM wird entfernt.`,
     components: [
       new ActionRowBuilder().addComponents(
         new UserSelectMenuBuilder()
           .setCustomId(`admin_team_change_vm_user:${team.id}`)
-          .setPlaceholder('Neuen VM auswaehlen')
+          .setPlaceholder('Neuen VM auswählen')
           .setMinValues(1)
           .setMaxValues(1)
       ),
@@ -798,7 +798,7 @@ function buildAdminRemoveCoManagerPayload(team) {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId(`admin_team_remove_covm_select:${team.id}`)
-          .setPlaceholder('Co-VM auswaehlen')
+          .setPlaceholder('Co-VM auswählen')
           .addOptions(team.coManagers.slice(0, 25).map(co => ({
             label: String(co.userId).slice(0, 100),
             value: String(co.userId),
@@ -811,11 +811,11 @@ function buildAdminRemoveCoManagerPayload(team) {
 
 function buildAdminDeleteConfirmPayload(team) {
   return {
-    content: `Team **${team.clubName}** wirklich loeschen? Check-ins werden entfernt, Rollen und Nicknames werden bereinigt.`,
+    content: `Team **${team.clubName}** wirklich löschen? Check-ins werden entfernt, Rollen und Nicknames werden bereinigt.`,
     embeds: [],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`admin_team_delete_confirm:${team.id}`).setLabel('Ja, Team loeschen').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`admin_team_delete_confirm:${team.id}`).setLabel('Ja, Team löschen').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId(`admin_team_delete_cancel:${team.id}`).setLabel('Abbrechen').setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -975,7 +975,7 @@ function buildBanReasonSelect(teamId) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`admin_team_ban_reason_select:${teamId}`)
-      .setPlaceholder('Sperrgrund auswaehlen')
+      .setPlaceholder('Sperrgrund auswählen')
       .addOptions(BAN_REASON_OPTIONS)
   );
 }
@@ -984,7 +984,7 @@ function buildBanDurationSelect(teamId, reason) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`admin_team_ban_duration_select:${teamId}:${reason}`)
-      .setPlaceholder('Dauer auswaehlen')
+      .setPlaceholder('Dauer auswählen')
       .addOptions([
         { label: '7 Tage', value: '7' },
         { label: '14 Tage', value: '14' },
@@ -1028,7 +1028,7 @@ function buildActiveBanSelect() {
 
   const select = new StringSelectMenuBuilder()
     .setCustomId('admin_team_unban_select')
-    .setPlaceholder('Sperre auswaehlen')
+    .setPlaceholder('Sperre auswählen')
     .addOptions(activeBans.slice(0, 25).map(ban => ({
       label: String(ban.clubName || ban.team?.clubNameSnapshot || ban.teamId || 'Unbekanntes Team').slice(0, 100),
       value: String(ban.teamId || ban.team?.teamId || ban.targets?.teamId),
@@ -1041,7 +1041,7 @@ function buildActiveBanSelect() {
 function buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId) {
   const select = new StringSelectMenuBuilder()
     .setCustomId(`admin_hof_day_select:${firstTeamId}:${secondTeamId}:${thirdTeamId}`)
-    .setPlaceholder('Wochentag auswaehlen')
+    .setPlaceholder('Wochentag auswählen')
     .addOptions(Object.entries(CEREMONY_DAY_LABELS).map(([value, label]) => ({ label, value })));
 
   return new ActionRowBuilder().addComponents(select);
@@ -1065,7 +1065,7 @@ function nextByeNumber(eventKey, byes) {
 
 function addManualBye(eventKey, actorUserId, settings) {
   updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr hinzugefuegt werden.');
+    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock können keine Freilose mehr hinzugefügt werden.');
     event.byes = Array.isArray(event.byes) ? event.byes : [];
     const number = nextByeNumber(eventKey, event.byes);
     event.byes.push({
@@ -1084,10 +1084,10 @@ function addManualBye(eventKey, actorUserId, settings) {
 function removeManualBye(eventKey, actorUserId, settings) {
   let removed = false;
   updateEventData(eventKey, event => {
-    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock koennen keine Freilose mehr entfernt werden.');
+    if (event.format?.lockedAt) throw new Error('Nach dem Format-Lock können keine Freilose mehr entfernt werden.');
     event.byes = Array.isArray(event.byes) ? event.byes : [];
     const index = event.byes.map(bye => bye?.type === 'bye' && bye?.status !== 'removed').lastIndexOf(true);
-    if (index === -1) throw new Error('Fuer dieses Event gibt es kein Freilos.');
+    if (index === -1) throw new Error('Für dieses Event gibt es kein Freilos.');
 
     event.byes[index] = {
       ...event.byes[index],
@@ -1182,7 +1182,7 @@ async function handleAdminSelect(interaction, client, settings) {
     const [, firstTeamId, secondTeamId] = interaction.customId.split(':');
     const thirdTeamId = interaction.values?.[0];
     await interaction.update({
-      content: 'Wochentag fuer den Hall-of-Fame-Test auswaehlen.',
+      content: 'Wochentag für den Hall-of-Fame-Test auswählen.',
       components: [buildHallOfFameDaySelect(firstTeamId, secondTeamId, thirdTeamId)],
     });
     return true;
@@ -1254,7 +1254,7 @@ async function handleAdminSelect(interaction, client, settings) {
     const team = findTeamById(teamId);
     if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
     await interaction.update({
-      content: `Sperrgrund fuer **${team.clubName}** auswaehlen.`,
+      content: `Sperrgrund für **${team.clubName}** auswählen.`,
       components: [buildBanReasonSelect(team.id)],
     });
     return true;
@@ -1266,7 +1266,7 @@ async function handleAdminSelect(interaction, client, settings) {
     const team = findTeamById(teamId);
     if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
     await interaction.update({
-      content: `Sperrdauer fuer **${team.clubName}** auswaehlen.`,
+      content: `Sperrdauer für **${team.clubName}** auswählen.`,
       components: [buildBanDurationSelect(team.id, reason)],
     });
     return true;
@@ -1296,9 +1296,9 @@ async function handleAdminSelect(interaction, client, settings) {
     const teamId = interaction.values?.[0];
     await interaction.deferUpdate();
     const removed = removeTeamBan(teamId, interaction.user.id, 'admin_removed');
-    if (!removed) throw new Error('Fuer dieses Team wurde keine aktive Sperre gefunden.');
+    if (!removed) throw new Error('Für dieses Team wurde keine aktive Sperre gefunden.');
     await interaction.editReply({
-      content: `Sperre fuer **${removed.clubName || removed.team?.clubNameSnapshot || teamId}** wurde entfernt.`,
+      content: `Sperre für **${removed.clubName || removed.team?.clubNameSnapshot || teamId}** wurde entfernt.`,
       components: [],
     });
     return true;
@@ -1307,7 +1307,7 @@ async function handleAdminSelect(interaction, client, settings) {
   if (interaction.customId === 'admin_checkin_manual_action_select') {
     const action = normalizeManualCheckinAction(interaction.values?.[0]);
     await interaction.update({
-      content: `Fuer welches Event soll ein Team manuell ${getManualCheckinActionLabel(action)} werden?`,
+      content: `Für welches Event soll ein Team manuell ${getManualCheckinActionLabel(action)} werden?`,
       components: [buildManualCheckinEventSelect(action)],
     });
     return true;
@@ -1333,8 +1333,8 @@ async function handleAdminSelect(interaction, client, settings) {
     await refreshRegisteredTeamsOverview(client).catch(() => null);
     await interaction.editReply({
       content: [
-        `Team **${result.team.clubName}** wurde fuer **${EVENT_LABELS[eventKey] || eventKey}** manuell ${getManualCheckinActionLabel(normalizedAction)}.`,
-        result.changed ? 'Status: geaendert.' : 'Status: war bereits so.',
+        `Team **${result.team.clubName}** wurde für **${EVENT_LABELS[eventKey] || eventKey}** manuell ${getManualCheckinActionLabel(normalizedAction)}.`,
+        result.changed ? 'Status: geändert.' : 'Status: war bereits so.',
       ].join('\n'),
       components: [],
       embeds: [],
@@ -1350,14 +1350,14 @@ async function handleAdminSelect(interaction, client, settings) {
   if (interaction.customId === 'admin_bye_add_select') {
     addManualBye(eventKey, interaction.user.id, settings);
     await refreshCheckinMessage(eventKey, client);
-    await interaction.editReply({ content: `Freilos fuer ${EVENT_LABELS[eventKey]} wurde hinzugefuegt.`, components: [] });
+    await interaction.editReply({ content: `Freilos für ${EVENT_LABELS[eventKey]} wurde hinzugefügt.`, components: [] });
     return true;
   }
 
   if (interaction.customId === 'admin_bye_remove_select') {
     removeManualBye(eventKey, interaction.user.id, settings);
     await refreshCheckinMessage(eventKey, client);
-    await interaction.editReply({ content: `Freilos fuer ${EVENT_LABELS[eventKey]} wurde entfernt.`, components: [] });
+    await interaction.editReply({ content: `Freilos für ${EVENT_LABELS[eventKey]} wurde entfernt.`, components: [] });
     return true;
   }
 
@@ -1365,7 +1365,7 @@ async function handleAdminSelect(interaction, client, settings) {
     const result = lockEventFormat(eventKey, interaction.user.id);
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
-      content: `Format fuer ${EVENT_LABELS[eventKey]} wurde gelockt: ${result.size}er Turnier mit ${result.participants.length} Teilnehmerplaetzen. Warteliste: ${result.waitlistTeamIds.length} Teams, ${result.waitlistByeCount} Freilose.`,
+      content: `Format für ${EVENT_LABELS[eventKey]} wurde gelockt: ${result.size}er Turnier mit ${result.participants.length} Teilnehmerplätzen. Warteliste: ${result.waitlistTeamIds.length} Teams, ${result.waitlistByeCount} Freilose.`,
       components: [],
     });
     return true;
@@ -1381,8 +1381,8 @@ async function handleAdminSelect(interaction, client, settings) {
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
       content: result.leaguePhase
-        ? `Ligaphase fuer ${EVENT_LABELS[eventKey]} wurde gezogen: 4 Spieltage mit ${result.leaguePhase.config.totalMatches} Begegnungen erstellt.`
-        : `Gruppen fuer ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
+        ? `Ligaphase für ${EVENT_LABELS[eventKey]} wurde gezogen: 4 Spieltage mit ${result.leaguePhase.config.totalMatches} Begegnungen erstellt.`
+        : `Gruppen für ${EVENT_LABELS[eventKey]} wurden gezogen: ${Object.keys(result.groups).length} Gruppen erstellt.`,
       components: [],
     });
     return true;
@@ -1409,12 +1409,12 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await interaction.editReply({
       content: [
-        `K.O.-Phase fuer ${EVENT_LABELS[eventKey]} wurde erstellt.`,
+        `K.O.-Phase für ${EVENT_LABELS[eventKey]} wurde erstellt.`,
         `Qualifiziert: ${result.knockout.qualifiedTeams.length} Teams`,
         `Erste Runde: ${result.knockout.firstRoundKey}`,
         result.post?.categoryId ? `Kategorie: ${result.post.categoryId}` : null,
-        result.post?.overviewChannelId ? `Uebersicht: <#${result.post.overviewChannelId}>` : 'K.O.-Uebersicht konnte nicht erstellt/gepostet werden.',
-        result.post?.roundPosts?.length ? `Rundenkanaele: ${result.post.roundPosts.length}` : null,
+        result.post?.overviewChannelId ? `Übersicht: <#${result.post.overviewChannelId}>` : 'K.O.-Übersicht konnte nicht erstellt/gepostet werden.',
+        result.post?.roundPosts?.length ? `Rundenkanäle: ${result.post.roundPosts.length}` : null,
       ].filter(Boolean).join('\n'),
       components: [],
     });
@@ -1431,14 +1431,14 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await interaction.editReply({
       content: [
-        `Event-Reset fuer ${EVENT_LABELS[eventKey]} wurde ausgefuehrt.`,
-        `Gruppenkanaele geloescht: ${result.deletedGroupChannels.length}`,
-        `K.O.-Kanaele geloescht: ${result.deletedKnockoutChannels.length}`,
+        `Event-Reset für ${EVENT_LABELS[eventKey]} wurde ausgeführt.`,
+        `Gruppenkanäle gelöscht: ${result.deletedGroupChannels.length}`,
+        `K.O.-Kanäle gelöscht: ${result.deletedKnockoutChannels.length}`,
         `Gruppenrollen geleert: ${result.clearedGroupRoles.length}`,
         `K.O.-Rollen geleert: ${result.clearedKnockoutRoles.length}`,
-        `Fehlende Kanaele ignoriert: ${result.missingChannels.length}`,
+        `Fehlende Kanäle ignoriert: ${result.missingChannels.length}`,
         `Check-in aktualisiert: ${result.checkinRefreshed ? 'ja' : 'nein'}`,
-        'Eventdaten und Message-Refs wurden zurueckgesetzt. Teamregistrierungen wurden nicht geloescht.',
+        'Eventdaten und Message-Refs wurden zurückgesetzt. Teamregistrierungen wurden nicht gelöscht.',
       ].join('\n'),
       components: [],
     });
@@ -1464,11 +1464,11 @@ async function handleAdminSelect(interaction, client, settings) {
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply({
       content: [
-        `Testdaten fuer ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} zufaellig ausgewaehlte aktive Teams mit Logo eingecheckt.`,
+        `Testdaten für ${EVENT_LABELS[eventKey]} wurden erzeugt: ${result.allIds.length} zufällig ausgewählte aktive Teams mit Logo eingecheckt.`,
         event.leaguePhase?.phaseType === 'league'
           ? `Die ${event.format.size}er-Ligaphase mit 4 Spieltagen und ${LEAGUE_PHASE_FORMATS[event.format.size].totalMatches} Begegnungen wurde persistent erzeugt.`
-          : `${groupCount} Gruppen wurden ueber den normalen Turnierstart persistent erzeugt.`,
-        'Die Ergebnisbuttons koennen jetzt direkt zum Testen der Live-Tabelle verwendet werden.',
+          : `${groupCount} Gruppen wurden über den normalen Turnierstart persistent erzeugt.`,
+        'Die Ergebnisbuttons können jetzt direkt zum Testen der Live-Tabelle verwendet werden.',
       ].join('\n'),
       components: [],
     });
@@ -1484,9 +1484,9 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await interaction.editReply({
       content: [
-        `Gruppenphase fuer ${EVENT_LABELS[eventKey]} wurde simuliert.`,
+        `Gruppenphase für ${EVENT_LABELS[eventKey]} wurde simuliert.`,
         `Gruppen: ${result.groups}`,
-        `Bestaetigte Spiele: ${result.simulatedMatches}`,
+        `Bestätigte Spiele: ${result.simulatedMatches}`,
         'Status: Gruppenphase completed. K.O. erstellen kann jetzt getestet werden.',
       ].join('\n'),
       components: [],
@@ -1503,8 +1503,8 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await interaction.editReply({
       content: [
-        `Spielplan-Grafik fuer ${EVENT_LABELS[eventKey]} wurde vorbereitet.`,
-        `Gruppe ${result.groupKey} zeigt jetzt alle sechs Testzustaende gleichzeitig.`,
+        `Spielplan-Grafik für ${EVENT_LABELS[eventKey]} wurde vorbereitet.`,
+        `Gruppe ${result.groupKey} zeigt jetzt alle sechs Testzustände gleichzeitig.`,
         'Die bestehende Spielplan-Nachricht wurde aktualisiert; alle Buttons bleiben erhalten.',
       ].join('\n'),
       components: [],
@@ -1521,8 +1521,8 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await interaction.editReply({
       content: [
-        `K.O.-Phase fuer ${EVENT_LABELS[eventKey]} wurde simuliert.`,
-        `Bestaetigte K.O.-Spiele: ${result.simulatedMatches}`,
+        `K.O.-Phase für ${EVENT_LABELS[eventKey]} wurde simuliert.`,
+        `Bestätigte K.O.-Spiele: ${result.simulatedMatches}`,
         result.placements?.firstTeamId ? `Platz 1: ${result.placements.first.displayName}` : null,
         result.placements?.secondTeamId ? `Platz 2: ${result.placements.second.displayName}` : null,
         result.placements?.thirdTeamId ? `Platz 3: ${result.placements.third.displayName}` : null,
@@ -1543,7 +1543,7 @@ async function handleAdminSelect(interaction, client, settings) {
     });
     await interaction.editReply({
       content: [
-        `Siegerehrung fuer ${EVENT_LABELS[eventKey]} wurde gepostet.`,
+        `Siegerehrung für ${EVENT_LABELS[eventKey]} wurde gepostet.`,
         `Kanal: <#${result.channelId}>`,
         `1. ${result.teams.first.clubName}`,
         `2. ${result.teams.second.clubName}`,
@@ -1564,7 +1564,7 @@ async function handleAdminUserSelect(interaction, client, settings) {
     await interaction.deferUpdate();
     const team = await handleAdminAddCoManager({ interaction, client, settings, teamId, userId });
     await interaction.editReply({
-      content: `<@${userId}> wurde als Co-VM bei **${team.clubName}** hinzugefuegt.`,
+      content: `<@${userId}> wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
       embeds: [],
       components: [],
       allowedMentions: { parse: ['users'] },
@@ -1598,10 +1598,10 @@ async function handleAdminModal(interaction, client, settings) {
     assertNicknameResults(nicknameResults);
     await refreshTeamAdminSurfaces({ client, settings });
     await refreshGroupPostsForTeam(client, team.id).catch(error => {
-      console.warn(`[group-schedule] Gruppen konnten nach Teamnamenaenderung nicht aktualisiert werden: ${error.message}`);
+      console.warn(`[group-schedule] Gruppen konnten nach Teamnamensänderung nicht aktualisiert werden: ${error.message}`);
     });
     await interaction.reply({
-      content: `Teamname wurde auf **${team.clubName}** geaendert.`,
+      content: `Teamname wurde auf **${team.clubName}** geändert.`,
       flags: EPHEMERAL,
     });
     return true;
@@ -1612,7 +1612,7 @@ async function handleAdminModal(interaction, client, settings) {
     const userId = interaction.fields.getTextInputValue('user_id').trim();
     const team = await handleAdminAddCoManager({ interaction, client, settings, teamId, userId });
     await interaction.reply({
-      content: `<@${userId}> wurde als Co-VM bei **${team.clubName}** hinzugefuegt.`,
+      content: `<@${userId}> wurde als Co-VM bei **${team.clubName}** hinzugefügt.`,
       flags: EPHEMERAL,
       allowedMentions: { parse: ['users'] },
     });
@@ -1829,9 +1829,9 @@ async function handleAdminInteraction(interaction, client) {
       const [, teamId] = actionCustomId.split(':');
       const team = findTeamById(teamId);
       const removed = removeTeamBan(teamId, interaction.user.id, 'admin_removed');
-      if (!removed) throw new Error('Fuer dieses Team wurde keine aktive Sperre gefunden.');
+      if (!removed) throw new Error('Für dieses Team wurde keine aktive Sperre gefunden.');
       await interaction.reply({
-        content: `Sperre fuer **${team?.clubName || removed.clubName || teamId}** wurde entfernt.`,
+        content: `Sperre für **${team?.clubName || removed.clubName || teamId}** wurde entfernt.`,
         flags: EPHEMERAL,
       });
       return true;
@@ -1854,7 +1854,7 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.deferUpdate();
       const result = await handleAdminDeleteTeam({ interaction, client, settings, teamId });
       await interaction.editReply({
-        content: `Team **${result.team.clubName}** wurde geloescht. Entfernte Check-ins: ${result.affectedEventKeys.length ? result.affectedEventKeys.map(key => EVENT_LABELS[key] || key).join(', ') : 'keine'}.`,
+        content: `Team **${result.team.clubName}** wurde gelöscht. Entfernte Check-ins: ${result.affectedEventKeys.length ? result.affectedEventKeys.map(key => EVENT_LABELS[key] || key).join(', ') : 'keine'}.`,
         embeds: [],
         components: [],
       });
@@ -1862,7 +1862,7 @@ async function handleAdminInteraction(interaction, client) {
     }
 
     if (actionCustomId.startsWith('admin_team_delete_cancel:')) {
-      await interaction.update({ content: 'Team-Loeschung abgebrochen.', embeds: [], components: [] });
+      await interaction.update({ content: 'Team-Löschung abgebrochen.', embeds: [], components: [] });
       return true;
     }
 
@@ -1889,8 +1889,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_bye_add') {
       await interaction.reply({
-        content: 'Fuer welches Event soll ein Freilos hinzugefuegt werden?',
-        components: [buildEventSelect('admin_bye_add_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll ein Freilos hinzugefügt werden?',
+        components: [buildEventSelect('admin_bye_add_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1898,8 +1898,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_bye_remove') {
       await interaction.reply({
-        content: 'Fuer welches Event soll ein Freilos entfernt werden?',
-        components: [buildEventSelect('admin_bye_remove_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll ein Freilos entfernt werden?',
+        components: [buildEventSelect('admin_bye_remove_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1907,8 +1907,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_format_lock') {
       await interaction.reply({
-        content: 'Fuer welches Event soll das Format gelockt werden?',
-        components: [buildEventSelect('admin_format_lock_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll das Format gelockt werden?',
+        components: [buildEventSelect('admin_format_lock_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1916,8 +1916,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_groups_draw') {
       await interaction.reply({
-        content: 'Fuer welches Event sollen Gruppen gezogen werden?',
-        components: [buildEventSelect('admin_groups_draw_select', 'Event auswaehlen')],
+        content: 'Für welches Event sollen Gruppen gezogen werden?',
+        components: [buildEventSelect('admin_groups_draw_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1925,8 +1925,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_group_release_current') {
       await interaction.reply({
-        content: 'Fuer welches Event soll der aktuelle Spieltag sofort freigegeben werden?',
-        components: [buildEventSelect('admin_group_release_current_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll der aktuelle Spieltag sofort freigegeben werden?',
+        components: [buildEventSelect('admin_group_release_current_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1934,8 +1934,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_knockout_create') {
       await interaction.reply({
-        content: 'Fuer welches Event soll die K.O.-Phase erstellt werden?',
-        components: [buildEventSelect('admin_knockout_create_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll die K.O.-Phase erstellt werden?',
+        components: [buildEventSelect('admin_knockout_create_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1943,8 +1943,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_event_reset') {
       await interaction.reply({
-        content: 'Fuer welches Event soll der Reset vorbereitet werden?',
-        components: [buildEventSelect('admin_event_reset_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll der Reset vorbereitet werden?',
+        components: [buildEventSelect('admin_event_reset_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1952,8 +1952,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_testdata_create') {
       await interaction.reply({
-        content: 'Fuer welches Event sollen Testdaten erzeugt und eingecheckt werden?',
-        components: [buildEventSelect('admin_testdata_create_select', 'Event auswaehlen')],
+        content: 'Für welches Event sollen Testdaten erzeugt und eingecheckt werden?',
+        components: [buildEventSelect('admin_testdata_create_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1961,8 +1961,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_simulate_groups') {
       await interaction.reply({
-        content: 'Fuer welches Event soll die Gruppenphase simuliert werden?',
-        components: [buildEventSelect('admin_simulate_groups_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll die Gruppenphase simuliert werden?',
+        components: [buildEventSelect('admin_simulate_groups_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1970,8 +1970,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_simulate_knockout') {
       await interaction.reply({
-        content: 'Fuer welches Event soll die K.O.-Phase simuliert werden?',
-        components: [buildEventSelect('admin_simulate_knockout_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll die K.O.-Phase simuliert werden?',
+        components: [buildEventSelect('admin_simulate_knockout_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1985,8 +1985,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_schedule_visual_test') {
       await interaction.reply({
-        content: 'Fuer welches Event soll die Spielplan-Grafik mit allen sechs Zustaenden vorbereitet werden?',
-        components: [buildEventSelect('admin_schedule_visual_test_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll die Spielplan-Grafik mit allen sechs Zuständen vorbereitet werden?',
+        components: [buildEventSelect('admin_schedule_visual_test_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -1996,7 +1996,7 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         content: 'Welches Ligaphasenformat soll vollständig getestet werden?',
         components: [new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder().setCustomId('admin_league_phase_test_select').setPlaceholder('Ligaphasentest auswaehlen').addOptions([
+          new StringSelectMenuBuilder().setCustomId('admin_league_phase_test_select').setPlaceholder('Ligaphasentest auswählen').addOptions([
             { value: '14', label: '14er-Liga', description: '14 Teams, 7 Spiele je Spieltag, 28 insgesamt' },
             { value: '18', label: '18er-Liga', description: '18 Teams, 9 Spiele je Spieltag, 36 insgesamt' },
             { value: '20', label: '20er-Liga', description: '20 Teams, 10 Spiele je Spieltag, 40 insgesamt' },
@@ -2020,7 +2020,7 @@ async function handleAdminInteraction(interaction, client) {
         components: [new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId('admin_ko_image_test_select')
-            .setPlaceholder('K.O.-Bild auswaehlen')
+            .setPlaceholder('K.O.-Bild auswählen')
             .addOptions(Object.entries(TEST_VARIANTS).map(([value, variant]) => ({
               value,
               label: variant.label,
@@ -2051,7 +2051,7 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_hof_test') {
       const teams = sortedRegisteredTeams();
-      if (teams.length < 3) throw new Error('Fuer den Hall-of-Fame-Test werden mindestens drei registrierte Teams benoetigt.');
+      if (teams.length < 3) throw new Error('Für den Hall-of-Fame-Test werden mindestens drei registrierte Teams benötigt.');
       await interaction.reply({
         ...buildHallOfFameTeamSelectPayload({ placement: 'first' }),
         flags: EPHEMERAL,
@@ -2061,8 +2061,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_ceremony_post') {
       await interaction.reply({
-        content: 'Fuer welches Event soll die Siegerehrung gepostet werden?',
-        components: [buildEventSelect('admin_ceremony_post_select', 'Event auswaehlen')],
+        content: 'Für welches Event soll die Siegerehrung gepostet werden?',
+        components: [buildEventSelect('admin_ceremony_post_select', 'Event auswählen')],
         flags: EPHEMERAL,
       });
       return true;
@@ -2076,15 +2076,15 @@ async function handleAdminInteraction(interaction, client) {
       });
       await interaction.editReply({
         content: [
-          'Serverstruktur wurde geprueft und eingerichtet.',
+          'Serverstruktur wurde geprüft und eingerichtet.',
           summarizeSetupItems(result.roles.created, 'Rollen erstellt'),
           summarizeSetupItems(result.roles.reused, 'Rollen wiederverwendet'),
           summarizeSetupItems(result.categories.created, 'Kategorien erstellt'),
           summarizeSetupItems(result.categories.reused, 'Kategorien wiederverwendet'),
-          summarizeSetupItems(result.channels.created, 'Kanaele erstellt'),
-          summarizeSetupItems(result.channels.reused, 'Kanaele wiederverwendet'),
-          result.roles.assigned.length ? 'Admin-Rolle wurde dir fuer dieses Setup zugewiesen.' : null,
-          'IDs wurden in settings.json gespeichert. Teams, Logos, Events und Check-ins wurden nicht geloescht oder zurueckgesetzt.',
+          summarizeSetupItems(result.channels.created, 'Kanäle erstellt'),
+          summarizeSetupItems(result.channels.reused, 'Kanäle wiederverwendet'),
+          result.roles.assigned.length ? 'Admin-Rolle wurde dir für dieses Setup zugewiesen.' : null,
+          'IDs wurden in settings.json gespeichert. Teams, Logos, Events und Check-ins wurden nicht gelöscht oder zurückgesetzt.',
         ].filter(Boolean).join('\n'),
       });
       return true;
@@ -2112,7 +2112,7 @@ async function handleAdminInteraction(interaction, client) {
       const result = removeTestData();
       await refreshRegisteredTeamsOverview(client).catch(() => null);
       await refreshCheckinMessages(EVENT_KEYS, client);
-      await interaction.editReply(`Testdaten wurden entfernt: ${result.removedCheckins || 0} temporaere Check-ins entfernt und ${result.removedIds.length} alte synthetische Testteams bereinigt. Echte Teams wurden nicht geloescht.`);
+      await interaction.editReply(`Testdaten wurden entfernt: ${result.removedCheckins || 0} temporäre Check-ins entfernt und ${result.removedIds.length} alte synthetische Testteams bereinigt. Echte Teams wurden nicht gelöscht.`);
       return true;
     }
 
@@ -2126,7 +2126,7 @@ async function handleAdminInteraction(interaction, client) {
     if (actionCustomId === 'admin_team_overview_refresh') {
       await interaction.deferReply({ flags: EPHEMERAL });
       await refreshRegisteredTeamsOverview(client);
-      await interaction.editReply('Teamuebersicht wurde aktualisiert.');
+      await interaction.editReply('Teamübersicht wurde aktualisiert.');
       return true;
     }
 
@@ -2174,11 +2174,11 @@ async function handleAdminInteraction(interaction, client) {
     }
 
     if (actionCustomId === 'admin_ceremony_test') {
-      await interaction.reply({ content: 'Ceremony-Test wird in spaeterer Phase implementiert.', flags: EPHEMERAL });
+      await interaction.reply({ content: 'Ceremony-Test wird in späterer Phase implementiert.', flags: EPHEMERAL });
       return true;
     }
 
-    await interaction.reply({ content: 'Funktion folgt in spaeterer Phase.', flags: EPHEMERAL });
+    await interaction.reply({ content: 'Funktion folgt in späterer Phase.', flags: EPHEMERAL });
     return true;
   } catch (error) {
     await replyInteraction(interaction, error?.message || 'Admin-Aktion konnte nicht verarbeitet werden.', { components: [] });

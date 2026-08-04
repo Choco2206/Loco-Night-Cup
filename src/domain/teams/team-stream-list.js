@@ -27,7 +27,7 @@ function buildStreamListPages(teams = listVisibleTeams()) {
       continue;
     }
     pages.push(current);
-    if (entry.length > DISCORD_MESSAGE_LIMIT) throw new Error('Ein Streamlisten-Eintrag ueberschreitet das Discord-Zeichenlimit.');
+    if (entry.length > DISCORD_MESSAGE_LIMIT) throw new Error('Ein Streamlisten-Eintrag überschreitet das Discord-Zeichenlimit.');
     current = entry;
   }
   pages.push(current);

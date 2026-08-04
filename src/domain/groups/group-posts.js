@@ -26,8 +26,8 @@ function buildHeaderPayload(group) {
     content: [
       `**${group.name || `Gruppe ${group.groupKey}`}**`,
       '',
-      'Dieser Kanal enthaelt Teamuebersicht, Live-Tabelle und Spielplan fuer die Gruppenphase.',
-      'Ergebnisse koennen ueber die Buttons unter dem Spielplan gemeldet werden.',
+      'Dieser Kanal enthält Teamübersicht, Live-Tabelle und Spielplan für die Gruppenphase.',
+      'Ergebnisse können über die Buttons unter dem Spielplan gemeldet werden.',
     ].join('\n'),
     allowedMentions: { parse: [] },
   };
@@ -47,7 +47,7 @@ function buildScheduleButtons(group) {
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`group_replacement_open:${group.eventKey}:${group.groupKey}`)
-      .setLabel('Nachruecker einsetzen')
+      .setLabel('Nachrücker einsetzen')
       .setEmoji('\ud83d\udd01')
       .setStyle(ButtonStyle.Secondary)
   );
@@ -71,7 +71,7 @@ async function upsertMessage(channel, messageId, payload, label, { sendIfMissing
   try {
     return await channel.send(payload);
   } catch (error) {
-    console.error(`Gruppe ${label}: Message konnte nicht gesendet werden. Bitte Bot-Berechtigungen pruefen.`, error);
+    console.error(`Gruppe ${label}: Message konnte nicht gesendet werden. Bitte Bot-Berechtigungen prüfen.`, error);
     throw error;
   }
 }
@@ -121,13 +121,13 @@ async function upsertGroupPosts(channel, group, refs = {}) {
   if (headerMessageId && String(headerMessageId) !== String(teamsMessageId || '')) {
     const header = await channel.messages.fetch(headerMessageId).catch(() => null);
     if (header) await header.delete().catch(error => {
-      console.warn(`[group-posts] Alte Kopf-Nachricht fuer Gruppe ${group.groupKey} konnte nicht geloescht werden: ${error.message}`);
+      console.warn(`[group-posts] Alte Kopf-Nachricht für Gruppe ${group.groupKey} konnte nicht gelöscht werden: ${error.message}`);
     });
   }
   const teams = await upsertMessage(channel, refs.teamsMessageId || group.teamsMessageId, {
     embeds: [buildTeamOverviewEmbed(group)],
     allowedMentions: { parse: ['users'] },
-  }, `${group.groupKey} Teamuebersicht`);
+  }, `${group.groupKey} Teamübersicht`);
   const existingTableMessageId = refs.tableMessageId || group.tableMessageId || null;
   let table = existingTableMessageId ? { id: existingTableMessageId } : null;
   try {
@@ -140,14 +140,14 @@ async function upsertGroupPosts(channel, group, refs = {}) {
       { sendIfMissing: !existingTableMessageId }
     );
   } catch (error) {
-    console.error(`[live-table] Bild/Discord-Update fuer Gruppe ${group.groupKey} fehlgeschlagen.`, error);
+    console.error(`[live-table] Bild/Discord-Update für Gruppe ${group.groupKey} fehlgeschlagen.`, error);
 
     if (!existingTableMessageId) {
       table = await upsertMessage(channel, null, {
         embeds: [buildLiveTableEmbed(group)],
         allowedMentions: { parse: [] },
       }, `${group.groupKey} Live-Tabelle Fallback`).catch(fallbackError => {
-        console.error(`[live-table] Auch das Text-Fallback fuer Gruppe ${group.groupKey} ist fehlgeschlagen.`, fallbackError);
+        console.error(`[live-table] Auch das Text-Fallback für Gruppe ${group.groupKey} ist fehlgeschlagen.`, fallbackError);
         return null;
       });
     }
@@ -181,7 +181,7 @@ async function upsertGroupPosts(channel, group, refs = {}) {
       scheduleMessageId: schedule.id,
     });
   } catch (error) {
-    console.error(`[group-schedule] Bild/Discord-Update fuer Gruppe ${group.groupKey} fehlgeschlagen.`, error);
+    console.error(`[group-schedule] Bild/Discord-Update für Gruppe ${group.groupKey} fehlgeschlagen.`, error);
     schedule = await upsertMessage(channel, existingScheduleMessageId, {
       content: null,
       embeds: [buildScheduleEmbed(group)],
@@ -231,7 +231,7 @@ async function performGroupPostsRefresh({ client, eventKey, event, group }) {
   }]);
 
   await refreshLiveSchedule(client, eventKey, eventForRefresh).catch(error => {
-    console.warn(`[live-schedule] Gruppen-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+    console.warn(`[live-schedule] Gruppen-Refresh für ${eventKey} fehlgeschlagen: ${error.message}`);
   });
 
   return messageRefs;
@@ -305,4 +305,3 @@ module.exports = {
   updateGroupMessageRefs,
   upsertGroupPosts,
 };
-

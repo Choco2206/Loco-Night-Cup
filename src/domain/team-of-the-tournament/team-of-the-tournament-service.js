@@ -15,7 +15,7 @@ function normalizePosition(value) {
   if (['goalkeeper', 'gk', 'torwart'].includes(key)) return 'goalkeeper';
   if (['defender', 'defence', 'defense', 'verteidiger'].includes(key)) return 'defender';
   if (['midfielder', 'midfield', 'mittelfeldspieler'].includes(key)) return 'midfielder';
-  if (['forward', 'attacker', 'striker', 'stuermer'].includes(key)) return 'forward';
+  if (['forward', 'attacker', 'striker', 'stürmer'].includes(key)) return 'forward';
   return null;
 }
 
@@ -210,7 +210,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
     try {
       if (await captureOnce(eventKey, lncMatch)) return captureTimers.delete(key);
     } catch (error) {
-      console.warn(`[tott] EA-Daten konnten fuer ${key} nicht geladen werden: ${error.message}`);
+      console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
     }
     attempt += 1;
     if (attempt >= RETRY_DELAYS_MS.length) return captureTimers.delete(key);

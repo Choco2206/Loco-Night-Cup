@@ -2,7 +2,7 @@
 
 function assertCanLockEvent(event) {
   if (!['checkin', 'checkin_open', 'idle', 'deadline_reached', 'checkin_closed', 'draw_ready'].includes(event.status)) {
-    throw new Error('Format-Lock ist nur vor der Gruppenphase moeglich.');
+    throw new Error('Format-Lock ist nur vor der Gruppenphase möglich.');
   }
 
   if (event.format?.lockedAt) {
@@ -10,7 +10,7 @@ function assertCanLockEvent(event) {
   }
 
   if (event.groups?.status && event.groups.status !== 'not_created') {
-    throw new Error('Gruppen wurden fuer dieses Event bereits erstellt.');
+    throw new Error('Gruppen wurden für dieses Event bereits erstellt.');
   }
 }
 
@@ -33,11 +33,11 @@ function assertGroupsHaveFourSlots(groups) {
   const maximumByeCount = Math.max(...byeCounts);
 
   if (totalByeCount <= groupList.length && maximumByeCount > 1) {
-    throw new Error('Freilose muessen auf unterschiedliche Gruppen verteilt werden.');
+    throw new Error('Freilose müssen auf unterschiedliche Gruppen verteilt werden.');
   }
 
   if (maximumByeCount - minimumByeCount > 1) {
-    throw new Error('Freilose muessen moeglichst gleichmaessig auf die Gruppen verteilt werden.');
+    throw new Error('Freilose müssen möglichst gleichmäßig auf die Gruppen verteilt werden.');
   }
 }
 

@@ -39,7 +39,7 @@ function buildTeamPanelPayload() {
 function buildMyTeamPanelPayload() {
   const embed = new EmbedBuilder()
     .setTitle('Mein Team')
-    .setDescription('Oeffne deine private Teamuebersicht.')
+    .setDescription('Öffne deine private Teamübersicht.')
     .setColor(0xff0000);
 
   const row = new ActionRowBuilder().addComponents(
@@ -333,4 +333,3 @@ module.exports = {
   buildTeamPanelPayload,
   buildTwitchModal,
 };
-

@@ -29,10 +29,10 @@ function hasTeamEntry(event, teamId) {
 
 function assertManualCheckinEventEditable(event) {
   if (event.status === 'cancelled' || event.status === 'reset') {
-    throw new Error('Bei diesem Event kann der Check-in nicht manuell geaendert werden.');
+    throw new Error('Bei diesem Event kann der Check-in nicht manuell geändert werden.');
   }
   if (['groups', 'groups_running', 'knockout', 'ceremony', 'completed'].includes(event.status)) {
-    throw new Error('Dieses Event ist bereits im Turnierlauf. Check-ins bitte nicht mehr manuell aendern.');
+    throw new Error('Dieses Event ist bereits im Turnierlauf. Check-ins bitte nicht mehr manuell ändern.');
   }
 }
 
@@ -40,7 +40,7 @@ function getManualCheckinTeam(teamId, now = new Date()) {
   const team = findTeamById(teamId);
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   if (!isValidTournamentTeam(team, now)) {
-    throw new Error('Team ist nicht aktiv/vollstaendig registriert oder aktuell gesperrt.');
+    throw new Error('Team ist nicht aktiv/vollständig registriert oder aktuell gesperrt.');
   }
   return team;
 }
@@ -105,7 +105,7 @@ function withdrawTeam({ eventKey, userId, now = new Date() }) {
   assertEventSupportsPhaseThree(event);
 
   if (event.status === 'cancelled' || event.status === 'reset') {
-    throw new Error('Bei diesem Event ist keine Abmeldung moeglich.');
+    throw new Error('Bei diesem Event ist keine Abmeldung möglich.');
   }
 
   if (!getCheckinWindowState(eventKey, event, settings, now).canLeave) {

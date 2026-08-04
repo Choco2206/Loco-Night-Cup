@@ -129,13 +129,13 @@ async function ensureGroupsForTestSimulation({ eventKey, actorUserId, client, gu
   console.info('[groups-simulation] Event vor Simulation geladen.', eventGroupDebug(eventKey, event));
   if (Object.keys(event.groups?.groups || {}).length) return event;
   if (!hasTestCheckins(event)) {
-    throw new Error('Fuer dieses Event existieren keine Gruppen. Erzeuge zuerst Testdaten oder starte die Gruppen regulaer.');
+    throw new Error('Für dieses Event existieren keine Gruppen. Erzeuge zuerst Testdaten oder starte die Gruppen regulär.');
   }
 
   if (!event.format?.lockedAt) lockEventFormat(eventKey, actorUserId);
   await drawGroupsForEvent({ eventKey, actorUserId, client, guild });
   event = readEventData(eventKey);
-  console.info('[groups-simulation] Testgruppen ueber normalen Gruppenstart erzeugt.', eventGroupDebug(eventKey, event));
+  console.info('[groups-simulation] Testgruppen über normalen Gruppenstart erzeugt.', eventGroupDebug(eventKey, event));
   return event;
 }
 
@@ -149,7 +149,7 @@ async function simulateGroupPhase({ eventKey, actorUserId, client, guild = null 
     const groups = event.groups?.groups || {};
     const groupList = Object.values(groups);
     console.info('[groups-simulation] Persistierte Gruppen werden simuliert.', eventGroupDebug(eventKey, event));
-    if (!groupList.length) throw new Error('Fuer dieses Event existieren keine Gruppen.');
+    if (!groupList.length) throw new Error('Für dieses Event existieren keine Gruppen.');
 
     let simulatedMatches = 0;
     for (const group of groupList) {
@@ -195,7 +195,7 @@ async function prepareGroupScheduleVisualTest({ eventKey, actorUserId, client, g
   updateEventData(eventKey, event => {
     const group = Object.values(event.groups?.groups || {})
       .find(candidate => getMatches(candidate).filter(isRealMatch).length >= 6);
-    if (!group) throw new Error('Fuer den Grafiktest wird eine Gruppe mit vier echten Teams benoetigt.');
+    if (!group) throw new Error('Für den Grafiktest wird eine Gruppe mit vier echten Teams benötigt.');
 
     const matches = getMatches(group).filter(isRealMatch).slice(0, 6);
     for (const match of matches) {
@@ -362,7 +362,7 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
 
   updateEventData(eventKey, event => {
     if (!event.knockout || event.knockout.status === 'not_created') {
-      throw new Error('Fuer dieses Event existiert noch keine K.O.-Phase.');
+      throw new Error('Für dieses Event existiert noch keine K.O.-Phase.');
     }
 
     const rounds = event.knockout.rounds || {};
@@ -389,8 +389,8 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
 
     const finalMatch = rounds.final?.matches?.[0];
     const thirdPlaceMatch = rounds.third_place?.matches?.[0];
-    if (!finalMatch || finalMatch.status !== 'confirmed') throw new Error('K.O.-Simulation konnte das Finale nicht abschliessen.');
-    if (thirdPlaceMatch && thirdPlaceMatch.status !== 'confirmed') throw new Error('K.O.-Simulation konnte Platz 3 nicht abschliessen.');
+    if (!finalMatch || finalMatch.status !== 'confirmed') throw new Error('K.O.-Simulation konnte das Finale nicht abschließen.');
+    if (thirdPlaceMatch && thirdPlaceMatch.status !== 'confirmed') throw new Error('K.O.-Simulation konnte Platz 3 nicht abschließen.');
 
     event.knockout.status = 'completed';
     event.knockout.completedAt = event.knockout.completedAt || timestamp;
@@ -404,7 +404,7 @@ async function simulateKnockoutPhase({ eventKey, actorUserId, client, guild = nu
   const post = await upsertKnockoutPost({ client, guild, eventKey, event: outcome.event });
   const stats = applyTeamStatsForEvent(eventKey);
   if (stats.applied) {
-    console.log(`K.O.-Simulation: Teamstatistik fuer ${stats.appliedTeams.length} Teams aktualisiert.`);
+    console.log(`K.O.-Simulation: Teamstatistik für ${stats.appliedTeams.length} Teams aktualisiert.`);
   }
   const achievements = applyTeamAchievementsForEvent(eventKey);
   if (achievements.applied) {

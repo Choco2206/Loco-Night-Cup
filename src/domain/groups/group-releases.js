@@ -293,7 +293,7 @@ async function sendToGroupChannel(client, group, content, idBucketName, slot, ro
     content: roleId ? `<@&${roleId}>\n${content}` : content,
     allowedMentions: { parse: [], roles: roleId ? [roleId] : [] },
   }).catch(error => {
-    console.error(`Gruppe ${group.groupKey}: ${idBucketName} fuer Spieltag ${slot} konnte nicht gesendet werden.`, error);
+    console.error(`Gruppe ${group.groupKey}: ${idBucketName} für Spieltag ${slot} konnte nicht gesendet werden.`, error);
     return null;
   });
   return message?.id || null;
@@ -309,11 +309,11 @@ async function postReleaseMessage(client, eventKey, event, groupKey, slot) {
     '',
     `Einladezeit: ${formatHm(new Date(release.inviteStartAt))} - ${formatHm(new Date(release.inviteEndAt))} Uhr`,
     '',
-    '\u26a0\ufe0f Beide Teams muessen das Ergebnis eintragen.',
+    '\u26a0\ufe0f Beide Teams müssen das Ergebnis eintragen.',
     '',
     'Tragt eure Ergebnisse bitte direkt ein.',
     '',
-    'Sobald alle Ergebnisse dieses Spieltags in dieser Gruppe final bestaetigt sind, wird automatisch nur in dieser Gruppe der naechste Spieltag freigegeben.',
+    'Sobald alle Ergebnisse dieses Spieltags in dieser Gruppe final bestätigt sind, wird automatisch nur in dieser Gruppe der nächste Spieltag freigegeben.',
   ].join('\n');
 
   const messageId = await sendToGroupChannel(client, group, content, 'Freigabe-Post', slot, group.roleId);
@@ -445,7 +445,7 @@ async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
     return { slot, groups: [{ groupKey: 'Ligaphase', slot }] };
   }
   if (!event.groups?.groups || !Object.keys(event.groups.groups).length) {
-    throw new Error('Fuer dieses Event wurden noch keine Gruppen gezogen.');
+    throw new Error('Für dieses Event wurden noch keine Gruppen gezogen.');
   }
   if (event.groups?.status === 'completed') {
     throw new Error('Die Gruppenphase ist bereits abgeschlossen.');
@@ -573,7 +573,7 @@ function scheduleEvent(client, eventKey) {
       if (isSlotComplete(current, groupKey, slot)) continue;
       setTimer(`${eventKey}:${groupKey}:autoscore:${slot}`, activeRelease.autoScoreAt, () => {
         applyAutoScores(client, eventKey, groupKey, slot).catch(error => {
-          console.error(`Gruppen-Autowertung fuer ${eventKey} Gruppe ${groupKey} Spieltag ${slot} fehlgeschlagen:`, error);
+          console.error(`Gruppen-Autowertung für ${eventKey} Gruppe ${groupKey} Spieltag ${slot} fehlgeschlagen:`, error);
         });
       });
     }
@@ -585,7 +585,7 @@ function scheduleEvent(client, eventKey) {
     const targetAt = nextSlot === 1 && release?.plannedAt ? release.plannedAt : nowIso();
     setTimer(`${eventKey}:${groupKey}:release:${nextSlot}`, targetAt, () => {
       maybeReleaseNextSlot(client, eventKey, groupKey).catch(error => {
-        console.error(`Gruppen-Spielfreigabe fuer ${eventKey} Gruppe ${groupKey} fehlgeschlagen:`, error);
+        console.error(`Gruppen-Spielfreigabe für ${eventKey} Gruppe ${groupKey} fehlgeschlagen:`, error);
       });
     });
   }
@@ -607,8 +607,8 @@ async function initGroupReleases(client) {
     const startupEvent = readEventData(eventKey);
     if (startupEvent.leaguePhase?.phaseType === 'league') {
       const { drawLeaguePhaseForEvent, reconcileLeagueMatchday } = require('../league-phase');
-      await drawLeaguePhaseForEvent({ eventKey, client }).catch(error => console.error(`[league-phase] Wiederherstellung fuer ${eventKey} fehlgeschlagen:`, error));
-      await reconcileLeagueMatchday(client, eventKey).catch(error => console.error(`[league-phase] Spieltag-Wiederherstellung fuer ${eventKey} fehlgeschlagen:`, error));
+      await drawLeaguePhaseForEvent({ eventKey, client }).catch(error => console.error(`[league-phase] Wiederherstellung für ${eventKey} fehlgeschlagen:`, error));
+      await reconcileLeagueMatchday(client, eventKey).catch(error => console.error(`[league-phase] Spieltag-Wiederherstellung für ${eventKey} fehlgeschlagen:`, error));
       console.info(`[league-phase] ${eventKey}: vorhandene Ligaphase nach Neustart wiederhergestellt.`);
     }
     scheduleEvent(client, eventKey);
@@ -629,4 +629,3 @@ module.exports = {
   releaseSlot,
   scheduleEvent,
 };
-

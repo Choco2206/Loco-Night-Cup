@@ -25,12 +25,12 @@ test('schedules the K.O. result reminder twenty minutes after the dynamic releas
   assert.equal(getRoundReminderAt(releasedAt).toISOString(), '2026-07-17T23:30:00.000Z');
 });
 
-test('uses one dedicated GrБひenvideo channel name per K.O. round', () => {
-  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.round_of_16, 'grБひenvideo-ko-achtelfinale');
-  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.quarter_final, 'grБひenvideo-ko-viertelfinale');
-  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.semi_final, 'grБひenvideo-ko-halbfinale');
-  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.third_place, 'grБひenvideo-ko-platz-3');
-  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.final, 'grБひenvideo-ko-finale');
+test('uses one dedicated Größenvideo channel name per K.O. round', () => {
+  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.round_of_16, 'größenvideo-ko-achtelfinale');
+  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.quarter_final, 'größenvideo-ko-viertelfinale');
+  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.semi_final, 'größenvideo-ko-halbfinale');
+  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.third_place, 'größenvideo-ko-platz-3');
+  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.final, 'größenvideo-ko-finale');
 });
 
 test('releases following rounds only after the complete prerequisite round is confirmed', () => {
@@ -60,4 +60,3 @@ test('only starts a round release when a real match is open', () => {
   assert.equal(getRoundReleaseAt(round).toISOString(), '2026-07-17T23:10:00.000Z');
   assert.equal(getRoundReleaseAt({ matches: [round.matches[0]] }), null);
 });
-

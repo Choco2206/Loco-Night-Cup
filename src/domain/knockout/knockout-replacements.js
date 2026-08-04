@@ -52,14 +52,14 @@ function targetHasConcreteParticipant(event, target) {
 function assertReplacementAllowed(event, match, side) {
   if (!match) throw new Error('K.O.-Match wurde nicht gefunden.');
   if (!['home', 'away'].includes(side)) throw new Error('Zu ersetzende Match-Seite wurde nicht gefunden.');
-  if (!isTeamParticipant(match[side])) throw new Error('Dieser Slot enthaelt kein ersetzbares Team.');
+  if (!isTeamParticipant(match[side])) throw new Error('Dieser Slot enthält kein ersetzbares Team.');
 
   if (['final', 'third_place'].includes(match.roundKey) && match.status === 'confirmed') {
     throw new Error('Dieses Match ist bereits final abgeschlossen.');
   }
 
   if (match.status === 'confirmed' && (targetHasConcreteParticipant(event, match.next) || targetHasConcreteParticipant(event, match.loserNext))) {
-    throw new Error('Dieses Match ist bereits abgeschlossen und die naechste Runde wurde bereits erzeugt. Bitte erst Ergebnis zuruecksetzen oder Admin-Override nutzen.');
+    throw new Error('Dieses Match ist bereits abgeschlossen und die nächste Runde wurde bereits erzeugt. Bitte erst Ergebnis zurücksetzen oder Admin-Override nutzen.');
   }
 }
 
@@ -90,7 +90,7 @@ function candidateEntry(team, source) {
   return {
     id: String(team.id),
     label: team.clubName || String(team.id),
-    description: source === 'waitlist' ? 'Warteliste / Nachruecker' : 'Registriert, nicht aktiv im K.O.',
+    description: source === 'waitlist' ? 'Warteliste / Nachrücker' : 'Registriert, nicht aktiv im K.O.',
     source,
   };
 }
@@ -215,7 +215,7 @@ function getReplaceableMatches(eventKey, roundKey) {
       match,
       value: String(match.id),
       label: `${participantLabel(match.home)} vs ${participantLabel(match.away)}`,
-      description: match.status === 'confirmed' ? 'Bestaetigt' : `Status: ${match.status}`,
+      description: match.status === 'confirmed' ? 'Bestätigt' : `Status: ${match.status}`,
     }));
 }
 

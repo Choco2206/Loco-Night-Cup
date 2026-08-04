@@ -91,7 +91,7 @@ function buildMatchSelect(customId, entries) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(customId)
-      .setPlaceholder('K.O.-Spiel auswaehlen')
+      .setPlaceholder('K.O.-Spiel auswählen')
       .addOptions(entries.slice(0, 25).map(entry => ({
         label: matchLabel(entry.match),
         value: entry.value,
@@ -117,7 +117,7 @@ function buildReplacementSideSelect(eventKey, roundKey, match) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`ko_replace_side_select:${eventKey}:${roundKey}:${match.id}`)
-      .setPlaceholder('Zu ersetzendes Team auswaehlen')
+      .setPlaceholder('Zu ersetzendes Team auswählen')
       .addOptions([
         {
           label: `Team 1: ${participantLabel(match.home)}`.slice(0, 100),
@@ -135,7 +135,7 @@ function buildReplacementSideSelect(eventKey, roundKey, match) {
 
 function buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page = 0 }) {
   const candidates = getReplacementCandidates({ eventKey, roundKey, matchId, side });
-  if (!candidates.length) throw new Error('Kein verfuegbares Ersatzteam gefunden.');
+  if (!candidates.length) throw new Error('Kein verfügbares Ersatzteam gefunden.');
 
   const totalPages = Math.max(1, Math.ceil(candidates.length / REPLACEMENT_PAGE_SIZE));
   const currentPage = clampPage(page, totalPages);
@@ -148,7 +148,7 @@ function buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page =
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`ko_replace_team_select:${eventKey}:${roundKey}:${matchId}:${side}:${currentPage}`)
-        .setPlaceholder(totalPages === 1 ? 'Ersatzteam auswaehlen' : `Ersatzteam auswaehlen (${currentPage + 1}/${totalPages})`)
+        .setPlaceholder(totalPages === 1 ? 'Ersatzteam auswählen' : `Ersatzteam auswählen (${currentPage + 1}/${totalPages})`)
         .addOptions(pageCandidates.map(team => ({
           label: team.label.slice(0, 100),
           value: team.id,
@@ -161,7 +161,7 @@ function buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page =
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`ko_replace_team_page:${eventKey}:${roundKey}:${matchId}:${side}:${currentPage - 1}`)
-        .setLabel('Zurueck')
+        .setLabel('Zurück')
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
@@ -174,8 +174,8 @@ function buildReplacementTeamPayload({ eventKey, roundKey, matchId, side, page =
 
   return {
     content: totalPages === 1
-      ? 'Waehle das Ersatzteam aus.'
-      : `Waehle das Ersatzteam aus.\nSeite ${currentPage + 1}/${totalPages} (${candidates.length} Teams)`,
+      ? 'Wähle das Ersatzteam aus.'
+      : `Wähle das Ersatzteam aus.\nSeite ${currentPage + 1}/${totalPages} (${candidates.length} Teams)`,
     components,
   };
 }
@@ -212,14 +212,14 @@ async function handleOpenTeamResult(interaction, eventKey, roundKey) {
 
   if (!entries.length) {
     await interaction.reply({
-      content: 'Keine meldbaren K.O.-Spiele fuer dich in dieser Runde.',
+      content: 'Keine meldbaren K.O.-Spiele für dich in dieser Runde.',
       flags: EPHEMERAL,
     });
     return true;
   }
 
   await interaction.reply({
-    content: 'Waehle dein K.O.-Spiel aus. Das Endergebnis darf kein Unentschieden sein.',
+    content: 'Wähle dein K.O.-Spiel aus. Das Endergebnis darf kein Unentschieden sein.',
     components: [buildMatchSelect(`ko_result_select:${eventKey}:${roundKey}`, entries)],
     flags: EPHEMERAL,
   });
@@ -240,7 +240,7 @@ async function handleOpenAdminResult(interaction, eventKey, roundKey) {
   }
 
   await interaction.reply({
-    content: 'Waehle das K.O.-Spiel fuer das Admin-Ergebnis aus.',
+    content: 'Wähle das K.O.-Spiel für das Admin-Ergebnis aus.',
     components: [buildMatchSelect(`ko_admin_result_select:${eventKey}:${roundKey}`, entries)],
     flags: EPHEMERAL,
   });
@@ -252,7 +252,7 @@ async function handleTeamResultSelect(interaction, eventKey, roundKey) {
   const { round } = getRoundFromEvent(eventKey, roundKey);
   const entry = getUserSelectableMatches(round, interaction.user.id)
     .find(item => String(item.match.id) === String(matchId) && item.participantKeys.includes(selectedParticipantKey));
-  if (!entry) throw new Error('Dieses K.O.-Spiel ist fuer dich nicht meldbar.');
+  if (!entry) throw new Error('Dieses K.O.-Spiel ist für dich nicht meldbar.');
 
   await interaction.showModal(createScoreModal({
     customId: `ko_result_modal:${eventKey}:${roundKey}:${matchId}:${encodeURIComponent(selectedParticipantKey)}`,
@@ -285,7 +285,7 @@ async function notifyAdminDecision(interaction, match) {
   if (match.status !== 'admin_decision_required') return;
   await interaction.channel?.send({
     content: [
-      'ðŸ› ï¸ **K.O.-Admin-Entscheidung erforderlich**',
+      '🛠️ **K.O.-Admin-Entscheidung erforderlich**',
       `${labelForParticipant(match.home)} vs ${labelForParticipant(match.away)}`,
       'Die beiden Teams haben unterschiedliche Ergebnisse gemeldet.',
     ].join('\n'),
@@ -298,7 +298,7 @@ async function refreshKnockout(client, guild, eventKey, event) {
     const latestEvent = readEventData(eventKey);
     await upsertKnockoutPost({ client, guild, eventKey, event: latestEvent || event });
     await refreshLiveSchedule(client, eventKey, latestEvent || event).catch(error => {
-      console.warn(`[live-schedule] K.O.-Refresh fuer ${eventKey} fehlgeschlagen: ${error.message}`);
+      console.warn(`[live-schedule] K.O.-Refresh für ${eventKey} fehlgeschlagen: ${error.message}`);
     });
   });
 }
@@ -342,7 +342,7 @@ async function finalizeConfirmedKnockoutResult(client, eventKey, outcome, guild 
     try {
       scheduleTeamOfTheTournamentPost({ client, eventKey });
     } catch (error) {
-      console.warn(`[tott] Planung fuer ${eventKey} fehlgeschlagen; Turnierabschluss laeuft weiter: ${error.message}`);
+      console.warn(`[tott] Planung für ${eventKey} fehlgeschlagen; Turnierabschluss läuft weiter: ${error.message}`);
     }
   }
   return ceremony;
@@ -373,8 +373,8 @@ async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, s
   await notifyAdminDecision(interaction, outcome.match);
   const message = outcome.status === 'confirmed'
     ? ceremony.posted
-      ? `K.O.-Ergebnis bestaetigt. Sieger und naechste Runde wurden aktualisiert. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
-      : 'K.O.-Ergebnis bestaetigt. Sieger und naechste Runde wurden aktualisiert.'
+      ? `K.O.-Ergebnis bestätigt. Sieger und nächste Runde wurden aktualisiert. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
+      : 'K.O.-Ergebnis bestätigt. Sieger und nächste Runde wurden aktualisiert.'
     : outcome.status === 'admin_decision_required'
       ? 'Ergebnis gespeichert. Es ist eine Admin-Entscheidung erforderlich.'
       : 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.';
@@ -395,7 +395,7 @@ async function handleOpenReplacement(interaction, eventKey, roundKey) {
   }
 
   await interaction.reply({
-    content: 'Waehle die K.O.-Paarung aus, in der ein Team ersetzt werden soll.',
+    content: 'Wähle die K.O.-Paarung aus, in der ein Team ersetzt werden soll.',
     components: [buildReplacementMatchSelect(eventKey, roundKey, entries)],
     flags: EPHEMERAL,
   });
@@ -468,7 +468,7 @@ async function handleReplacementTeamSelect(interaction, eventKey, roundKey, matc
       'K.O.-Team ersetzt.',
       `Alt: **${outcome.oldTeam?.clubName || participantLabel(outcome.oldParticipant)}**`,
       `Neu: **${outcome.newTeam.clubName}**`,
-      'Ergebnis, offene Meldungen und Admin-Entscheidung fuer diese Paarung wurden zurueckgesetzt.',
+      'Ergebnis, offene Meldungen und Admin-Entscheidung für diese Paarung wurden zurückgesetzt.',
     ].join('\n'),
     components: [],
   });
@@ -500,7 +500,7 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
       ? `K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen. Siegerehrung wurde in <#${ceremony.result.channelId}> gepostet.`
       : outcome.completed
       ? 'K.O.-Admin-Ergebnis gesetzt. K.O.-Phase ist abgeschlossen und Ceremony ist vorbereitet.'
-      : 'K.O.-Admin-Ergebnis gesetzt. Sieger und naechste Runde wurden aktualisiert.',
+      : 'K.O.-Admin-Ergebnis gesetzt. Sieger und nächste Runde wurden aktualisiert.',
   });
   return true;
 }
@@ -541,4 +541,3 @@ module.exports = {
   finalizeConfirmedKnockoutResult,
   handleKnockoutInteraction,
 };
-

@@ -281,13 +281,13 @@ function submitTeamResult({ eventKey, groupKey, matchId, participantKeyValue, us
     if (!isMatchReleased(match) || getMatchSlot(match) !== getCurrentReleasedSlot(group)) throw new Error('Dieses Spiel ist noch nicht freigegeben.');
     if (!['open', 'pending_confirmation'].includes(match.status)) throw new Error('Dieses Spiel kann aktuell nicht gemeldet werden.');
     if (!isParticipantInMatch(match, participantKeyValue)) throw new Error('Du darfst dieses Spiel nicht melden.');
-    if (!getUserParticipantKeysForMatch(match, userId).includes(participantKeyValue)) throw new Error('Du bist fuer dieses Team nicht berechtigt.');
+    if (!getUserParticipantKeysForMatch(match, userId).includes(participantKeyValue)) throw new Error('Du bist für dieses Team nicht berechtigt.');
 
     const report = {
       participantKey: participantKeyValue,
       submittedByUserId: String(userId),
       homeGoals: parseGoals(homeGoals, 'Heimtore'),
-      awayGoals: parseGoals(awayGoals, 'Auswaertstore'),
+      awayGoals: parseGoals(awayGoals, 'Auswärtstore'),
       submittedAt: nowIso(),
     };
 
@@ -325,7 +325,7 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     match.confirmation = null;
     match.result = {
       homeGoals: parseGoals(homeGoals, 'Heimtore'),
-      awayGoals: parseGoals(awayGoals, 'Auswaertstore'),
+      awayGoals: parseGoals(awayGoals, 'Auswärtstore'),
       confirmedAt: nowIso(),
       source: 'admin',
       adminUserId: String(adminUserId),
@@ -396,4 +396,3 @@ module.exports = {
   submitTeamResult,
   updateGroupCompletion,
 };
-

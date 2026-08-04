@@ -39,7 +39,7 @@ function participants(size) {
 }
 
 function testPhase(size) {
-  if (!LEAGUE_PHASE_FORMATS[size]) throw new Error('Ligaphasentest unterstuetzt nur 14, 18 oder 20 Teams.');
+  if (!LEAGUE_PHASE_FORMATS[size]) throw new Error('Ligaphasentest unterstützt nur 14, 18 oder 20 Teams.');
   const phase = createLeaguePhaseDraw({ eventKey: `league_test_${size}`, participants: participants(size), random: () => 0.42 });
   let index = 0;
   for (const match of phase.matchdays.flatMap(day => day.matches)) {
@@ -55,14 +55,14 @@ function testPhase(size) {
 
 function assertNoLiveEvent() {
   const active = Object.values(readAllEvents()).find(event => BUSY_STATUSES.has(event.status));
-  if (active) throw new Error(`Ligaphasen-Test nicht moeglich: ${active.label || active.eventKey} ist aktiv (${active.status}).`);
+  if (active) throw new Error(`Ligaphasen-Test nicht möglich: ${active.label || active.eventKey} ist aktiv (${active.status}).`);
 }
 
 async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
   const size = Number(formatSize);
   const config = LEAGUE_PHASE_FORMATS[size];
-  if (!config) throw new Error('Bitte 14, 18 oder 20 waehlen.');
-  if (activeTests.has(guild.id)) throw new Error('In diesem Server laeuft bereits ein Ligaphasen-Test.');
+  if (!config) throw new Error('Bitte 14, 18 oder 20 wählen.');
+  if (activeTests.has(guild.id)) throw new Error('In diesem Server läuft bereits ein Ligaphasen-Test.');
   assertNoLiveEvent();
   const staleChannels = guild.channels.cache.filter(channel => ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name));
   for (const channel of staleChannels.values()) await channel.delete('Verwaiste Ligaphasenressource vor Integrationstest bereinigt');
@@ -93,7 +93,7 @@ async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
   await results.send({ files: [{ attachment: schedule, name: `ligaphase_schedule_${size}_results_test.png` }], components: [buildLeaguePhaseButtons(`league_test_${size}`)], allowedMentions: { parse: [] } });
 
   const access = await verifyLeaguePhaseAccess({ guild, settings, phase });
-  if (!access.ok) throw new Error(`Berechtigungspruefung fehlgeschlagen: ${JSON.stringify(access)}`);
+  if (!access.ok) throw new Error(`Berechtigungsprüfung fehlgeschlagen: ${JSON.stringify(access)}`);
   activeTests.set(guild.id, { roleId: role.id, channelIds: [overview.id, results.id], assignedMemberIds, size });
 
   const testChannel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
@@ -106,7 +106,7 @@ async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
 
 async function stopLeaguePhaseIntegrationTest({ guild }) {
   const state = activeTests.get(guild.id);
-  if (!state) throw new Error('Es laeuft kein Ligaphasen-Test.');
+  if (!state) throw new Error('Es läuft kein Ligaphasen-Test.');
   const role = await guild.roles.fetch(state.roleId).catch(() => null);
   if (role) for (const memberId of state.assignedMemberIds) {
     const member = await guild.members.fetch(memberId).catch(() => null);

@@ -259,7 +259,7 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
     resetToOpenCheckinCycle(event);
     changed = true;
   } else if (preserveActiveTestTournament && (switchedCycle || (planned.deadlineAt && now.getTime() < planned.deadlineAt.getTime()))) {
-    console.info('[checkin-schedule] Aktiver Testlauf wird ausserhalb des regulaeren Zeitfensters nicht zurueckgesetzt.', {
+    console.info('[checkin-schedule] Aktiver Testlauf wird außerhalb des regulären Zeitfensters nicht zurückgesetzt.', {
       eventKey,
       status: event.status,
       groupStatus: event.groups?.status,

@@ -32,14 +32,14 @@ function getEligibleTeamForUser(userId) {
   const memberships = teams.filter(team => isTeamMember(team, userId));
 
   if (!memberships.length) {
-    throw new Error('Du hast kein vollstaendiges Team. Nur VM oder Co-VM koennen einchecken.');
+    throw new Error('Du hast kein vollständiges Team. Nur VM oder Co-VM können einchecken.');
   }
 
   const activeTeam = memberships.find(team => team.status === 'active') || memberships[0];
-  if (!isTeamMember(activeTeam, userId)) throw new Error('Nur VM oder Co-VM koennen einchecken.');
-  if (activeTeam.status !== 'active') throw new Error('Nur aktive Teams duerfen einchecken.');
+  if (!isTeamMember(activeTeam, userId)) throw new Error('Nur VM oder Co-VM können einchecken.');
+  if (activeTeam.status !== 'active') throw new Error('Nur aktive Teams dürfen einchecken.');
   if (activeTeam.registrationStatus !== 'complete') {
-    throw new Error('Dieses Team ist noch unvollstaendig. Bitte lade zuerst ein Logo hoch.');
+    throw new Error('Dieses Team ist noch unvollständig. Bitte lade zuerst ein Logo hoch.');
   }
 
   return activeTeam;

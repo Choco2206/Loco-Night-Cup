@@ -32,7 +32,7 @@ function validateAttachment(attachment, settings) {
 
   const maxBytes = settings.teams.maxLogoFileSizeMb * 1024 * 1024;
   if (attachment.size && attachment.size > maxBytes) {
-    throw new Error(`Das Logo darf maximal ${settings.teams.maxLogoFileSizeMb} MB gross sein.`);
+    throw new Error(`Das Logo darf maximal ${settings.teams.maxLogoFileSizeMb} MB groß sein.`);
   }
 
   return ext;
@@ -49,7 +49,7 @@ function resolveTeamLogoPath(team, { optional = true } = {}) {
     path.join(TEAM_LOGOS_DIR, fileName),
   ].filter(Boolean);
   const logoPath = candidates.find(candidate => fs.existsSync(candidate)) || null;
-  if (!logoPath && !optional) throw new Error(`Logo-Datei fuer ${team.clubName} nicht gefunden: ${fileName}`);
+  if (!logoPath && !optional) throw new Error(`Logo-Datei für ${team.clubName} nicht gefunden: ${fileName}`);
   return logoPath;
 }
 
