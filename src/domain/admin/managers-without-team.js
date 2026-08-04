@@ -34,7 +34,10 @@ function getAssignedTeamUserIds() {
 async function fetchManagerMembers(guild, managerRoleId) {
   if (!guild || !managerRoleId) throw new Error('Manager-Rolle ist nicht konfiguriert.');
 
-  await guild.members.fetch();
+  // GuildMembers intent keeps this cache current. A full fetch uses gateway
+  // opcode 8 and quickly hits Discord's strict member-request rate limit
+  // when several team refreshes happen close together.
+  if (!guild.members.cache.size) await guild.members.fetch().catch(() => null);
   return [...guild.members.cache.values()]
     .filter(member => !member.user?.bot)
     .filter(member => member.roles?.cache?.has(managerRoleId))

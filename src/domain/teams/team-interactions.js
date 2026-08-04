@@ -298,6 +298,7 @@ async function handleButton(interaction, client) {
 
   if (action === 'team_leave_confirm') {
     requireTeamAccess(team, interaction.user.id);
+    await interaction.deferUpdate();
     const beforeUserId = interaction.user.id;
     const updated = leaveTeam({ teamId, userId: beforeUserId });
     await syncManagerRoleForUser(interaction.guild, beforeUserId, settings);
@@ -307,12 +308,13 @@ async function handleButton(interaction, client) {
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
-    await interaction.update({ content: 'Team verlassen.', components: [], embeds: [] });
+    await interaction.editReply({ content: 'Team verlassen.', components: [], embeds: [] });
     return true;
   }
 
   if (action === 'team_delete_confirm') {
     requireTeamAccess(team, interaction.user.id);
+    await interaction.deferUpdate();
     const userIds = [team.manager?.userId, ...team.coManagers.map(co => co.userId)].filter(Boolean);
     deleteTeam({ teamId, actorUserId: interaction.user.id });
     await removeTeamCheckinsAndRefresh({ teamId, settings, client });
@@ -321,7 +323,7 @@ async function handleButton(interaction, client) {
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
     await refreshManagersWithoutTeamMessageIfTracked({ client, guild: interaction.guild });
-    await interaction.update({ content: 'Team wurde gelöscht. Statistiken bleiben erhalten.', components: [], embeds: [] });
+    await interaction.editReply({ content: 'Team wurde gelöscht. Statistiken bleiben erhalten.', components: [], embeds: [] });
     return true;
   }
 

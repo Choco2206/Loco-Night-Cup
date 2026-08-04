@@ -581,8 +581,12 @@ function scheduleAllCheckins(client = activeClient, now = new Date()) {
 }
 
 function startCheckinReconcile(client) {
+  if (safetyReconcileTimer) {
+    activeClient = client || activeClient;
+    return safetyReconcileTimer;
+  }
+
   activeClient = client;
-  if (safetyReconcileTimer) clearInterval(safetyReconcileTimer);
   for (const eventKey of EVENT_KEYS) clearEventTimer(eventKey);
 
   reconcileAllCheckins(client).catch(error => {
