@@ -9,6 +9,7 @@ const { confirmedEventMatches, resumeRatingCaptures } = require('./team-of-the-t
 
 const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 600000, 900000, 900000, 1200000];
 const CONTINUOUS_RETRY_DELAY_MS = 15 * 60 * 1000;
+const TOTT_GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000;
 const LIVE_CHANNEL_ID = '1533394601220505641';
 const TEST_CHANNEL_ID = '1525035287971889173';
 const postTimers = new Map();
@@ -229,8 +230,10 @@ function legacyScheduleTeamOfTheTournamentPost({ client, eventKey }) {
 
 function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   if (postTimers.has(eventKey)) return false;
+  const initialState = readEventData(eventKey).ceremony?.teamOfTheTournament || {};
+  const postStartedAt = initialState.postStartedAt || new Date().toISOString();
   updatePostState(eventKey, {
-    postStatus: 'pending', postStartedAt: new Date().toISOString(),
+    postStatus: 'pending', postStartedAt,
     postCompletedAt: null, postFailureReason: null,
   });
   let attempt = 0;
@@ -253,12 +256,41 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
         return;
       }
       updatePostState(eventKey, { postLastResult: result.reason, postFailureReason: result.reason });
+      const elapsed = Date.now() - new Date(postStartedAt).getTime();
+      if (elapsed >= TOTT_GIVE_UP_AFTER_MS) {
+        const reason = `${result.reason}; ${snapshot.capturedMatches}/${snapshot.linkedMatches} `
+          + `verknÇ¬pfte Spiele erfasst; ${snapshot.selectedPlayers}/11 Spieler gewÇÏhlt`;
+        updatePostState(eventKey, {
+          postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
+          postLastResult: result.reason, postFailureReason: reason,
+          postNextAttemptAt: null, postSnapshot: snapshot,
+        });
+        console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden aufgegeben: ${reason}. `
+          + 'Die Turnierbereinigung ist jetzt freigegeben.');
+        postTimers.delete(eventKey);
+        return;
+      }
     } catch (error) {
       console.warn(`[tott] Abschluss-Post fÇ¬r ${eventKey} fehlgeschlagen: ${error.message}`);
       updatePostState(eventKey, {
         postStatus: 'pending', postLastResult: 'error',
         postFailureReason: String(error.message || 'unknown_error').slice(0, 500),
       });
+      if (Date.now() - new Date(postStartedAt).getTime() >= TOTT_GIVE_UP_AFTER_MS) {
+        const snapshot = workflowSnapshot(readEventData(eventKey));
+        const reason = `error: ${String(error.message || 'unknown_error').slice(0, 300)}; `
+          + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknÇ¬pfte Spiele erfasst; `
+          + `${snapshot.selectedPlayers}/11 Spieler gewÇÏhlt`;
+        updatePostState(eventKey, {
+          postStatus: 'failed', postCompletedAt: new Date().toISOString(),
+          postLastResult: 'error', postFailureReason: reason,
+          postNextAttemptAt: null, postSnapshot: snapshot,
+        });
+        console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden wegen eines Fehlers aufgegeben: ${reason}. `
+          + 'Die Turnierbereinigung ist jetzt freigegeben.');
+        postTimers.delete(eventKey);
+        return;
+      }
     }
     attempt += 1;
     const delay = POST_RETRY_DELAYS_MS[attempt] || CONTINUOUS_RETRY_DELAY_MS;
