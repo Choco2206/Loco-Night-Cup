@@ -6,7 +6,7 @@ const { getFriendlyMatches } = require('./ea-clubs-client');
 
 const MINIMUM_MATCHES = 3;
 const FORMATION = { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 };
-const RETRY_DELAYS_MS = [0, 30000, 120000, 300000];
+const RETRY_DELAYS_MS = [0, 30000, 120000, 300000, 600000, 900000, 900000, 1200000];
 const MAX_MATCH_TIME_DISTANCE_MS = 2 * 60 * 60 * 1000;
 const captureTimers = new Map();
 
@@ -15,7 +15,7 @@ function normalizePosition(value) {
   if (['goalkeeper', 'gk', 'torwart'].includes(key)) return 'goalkeeper';
   if (['defender', 'defence', 'defense', 'verteidiger'].includes(key)) return 'defender';
   if (['midfielder', 'midfield', 'mittelfeldspieler'].includes(key)) return 'midfielder';
-  if (['forward', 'attacker', 'striker', 'stürmer'].includes(key)) return 'forward';
+  if (['forward', 'attacker', 'striker', 'stǬrmer'].includes(key)) return 'forward';
   return null;
 }
 
@@ -210,10 +210,13 @@ function scheduleRatingCapture(eventKey, lncMatch) {
     try {
       if (await captureOnce(eventKey, lncMatch)) return captureTimers.delete(key);
     } catch (error) {
-      console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
+      console.warn(`[tott] EA-Daten konnten fǬr ${key} nicht geladen werden: ${error.message}`);
     }
     attempt += 1;
-    if (attempt >= RETRY_DELAYS_MS.length) return captureTimers.delete(key);
+    if (attempt >= RETRY_DELAYS_MS.length) {
+      console.warn(`[tott] ${key}: nach ${attempt} EA-Abfragen noch keine passenden Matchdaten gefunden.`);
+      return captureTimers.delete(key);
+    }
     const timer = setTimeout(run, RETRY_DELAYS_MS[attempt]);
     if (typeof timer.unref === 'function') timer.unref();
     captureTimers.set(key, timer);
@@ -248,3 +251,4 @@ module.exports = {
   buildSelection, confirmedEventMatches, normalizePosition, resumeRatingCaptures,
   scheduleRatingCapture, selectEaMatch,
 };
+
