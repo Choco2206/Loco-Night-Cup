@@ -333,7 +333,7 @@ async function syncReplacementDiscordResources({ client, eventKey, outcome }) {
   const roleId = outcome.group.roleId;
   const channelIds = outcome.group.phaseType === 'league'
     ? [outcome.group.overviewChannelId, outcome.group.resultsChannelId, outcome.group.videoChannelId]
-    : [outcome.group.channelId, outcome.group.videoChannelId];
+    : [outcome.group.channelId, outcome.group.resultsChannelId, outcome.group.videoChannelId];
   const channels = (await Promise.all(channelIds.filter(Boolean)
     .map(channelId => client.channels.fetch(channelId).catch(() => null)))).filter(Boolean);
   const oldUserIds = getTeamUserIds(outcome.oldTeam);
