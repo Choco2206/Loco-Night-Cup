@@ -72,22 +72,18 @@ async function deleteUserMessagesFromGroupChannel(client, group, limit = 500) {
   return { deleted, scanned };
 }
 
-async function deleteTransientMessagesFromGroupChannel(client, group, limit = 500) {
-  const channelId = group?.phaseType === 'league' ? group.resultsChannelId : group?.resultsChannelId;
+async function deleteTransientMessagesFromChannel(client, channelId, keepMessageIds, label, limit = 500) {
   if (!client || !channelId) return { deleted: 0, scanned: 0 };
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.messages?.fetch) return { deleted: 0, scanned: 0 };
-  const keepIds = new Set((group?.phaseType === 'league'
-    ? [group.messages?.resultsTableMessageId, group.messages?.resultsScheduleMessageId]
-    : [group.resultsTableMessageId, group.resultsScheduleMessageId]
-  ).filter(Boolean).map(String));
+  const keepIds = new Set((keepMessageIds || []).filter(Boolean).map(String));
   let before;
   let deleted = 0;
   let scanned = 0;
   while (scanned < limit) {
     const remaining = Math.min(100, limit - scanned);
     const messages = await channel.messages.fetch({ limit: remaining, before }).catch(error => {
-      console.error(`Gruppe ${group.groupKey}: Kanalbereinigung konnte Nachrichten nicht laden:`, error);
+      console.error(`${label}: Kanalbereinigung konnte Nachrichten nicht laden:`, error);
       return null;
     });
     if (!messages?.size) break;
@@ -96,12 +92,37 @@ async function deleteTransientMessagesFromGroupChannel(client, group, limit = 50
       before = message.id;
       if (keepIds.has(String(message.id))) continue;
       await message.delete().then(() => { deleted += 1; }).catch(error => {
-        if (error?.code !== 10008) console.error(`Gruppe ${group.groupKey}: Nachricht konnte nicht bereinigt werden:`, error);
+        if (error?.code !== 10008) console.error(`${label}: Nachricht konnte nicht bereinigt werden:`, error);
       });
     }
     if (messages.size < remaining) break;
   }
   return { deleted, scanned };
+}
+
+async function deleteTransientMessagesFromGroupChannel(client, group, limit = 500) {
+  if (group?.phaseType === 'league') {
+    return deleteTransientMessagesFromChannel(client, group.resultsChannelId, [
+      group.messages?.resultsTableMessageId,
+      group.messages?.resultsScheduleMessageId,
+    ], 'Ligaphase-Ergebnisse', limit);
+  }
+
+  const overview = await deleteTransientMessagesFromChannel(client, group?.channelId, [
+    group?.teamsMessageId,
+    group?.tableMessageId,
+    group?.scheduleMessageId,
+  ], `Gruppe ${group?.groupKey}`, limit);
+  const results = await deleteTransientMessagesFromChannel(client, group?.resultsChannelId, [
+    group?.resultsTableMessageId,
+    group?.resultsScheduleMessageId,
+  ], `Ergebnisse Gruppe ${group?.groupKey}`, limit);
+  return {
+    deleted: overview.deleted + results.deleted,
+    scanned: overview.scanned + results.scanned,
+    overview,
+    results,
+  };
 }
 
 async function deleteTransientMessagesFromLeagueOverview(client, phase, limit = 500) {
