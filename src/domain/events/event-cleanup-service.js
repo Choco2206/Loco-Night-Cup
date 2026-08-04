@@ -17,11 +17,11 @@ const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-halbfinale',
   'ko-platz-3',
   'ko-finale',
-  'grÃ¶ÃŸenvideo-ko-achtelfinale',
-  'grÃ¶ÃŸenvideo-ko-viertelfinale',
-  'grÃ¶ÃŸenvideo-ko-halbfinale',
-  'grÃ¶ÃŸenvideo-ko-platz-3',
-  'grÃ¶ÃŸenvideo-ko-finale',
+  'größenvideo-ko-achtelfinale',
+  'größenvideo-ko-viertelfinale',
+  'größenvideo-ko-halbfinale',
+  'größenvideo-ko-platz-3',
+  'größenvideo-ko-finale',
 ]);
 const KNOCKOUT_ROLE_NAMES = [
   'LNC K.O. Achtelfinale',
@@ -62,6 +62,14 @@ function collectGroupRefs(eventKey, event, messages) {
       refs.push({
         groupKey: `${group.groupKey}-video`,
         channelId: group.videoChannelId,
+        roleId: null,
+        teamIds: [],
+      });
+    }
+    if (group.resultsChannelId) {
+      refs.push({
+        groupKey: `${group.groupKey}-results`,
+        channelId: group.resultsChannelId,
         roleId: null,
         teamIds: [],
       });
@@ -452,5 +460,4 @@ module.exports = {
   schedulePendingAutoCleanups,
   resetEventForTesting,
 };
-
 
