@@ -13,7 +13,7 @@ function activeGroupChannelIds() {
     if (event.leaguePhase?.phaseType === 'league' && event.leaguePhase.status !== 'completed' && event.leaguePhase.resultsChannelId) channelIds.add(String(event.leaguePhase.resultsChannelId));
     if (!event.groups?.groups || event.groups.status === 'completed') continue;
     for (const group of Object.values(event.groups.groups)) {
-      if (group.channelId) channelIds.add(String(group.channelId));
+      if (group.resultsChannelId) channelIds.add(String(group.resultsChannelId));
     }
   }
 
@@ -36,7 +36,7 @@ async function handleGroupMessage(message) {
 }
 
 async function deleteUserMessagesFromGroupChannel(client, group, limit = 500) {
-  const channelId = group?.phaseType === 'league' ? group.resultsChannelId : group?.channelId;
+  const channelId = group?.phaseType === 'league' ? group.resultsChannelId : group?.resultsChannelId;
   if (!client || !channelId) return { deleted: 0, scanned: 0 };
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.messages?.fetch) return { deleted: 0, scanned: 0 };
@@ -73,13 +73,13 @@ async function deleteUserMessagesFromGroupChannel(client, group, limit = 500) {
 }
 
 async function deleteTransientMessagesFromGroupChannel(client, group, limit = 500) {
-  const channelId = group?.phaseType === 'league' ? group.resultsChannelId : group?.channelId;
+  const channelId = group?.phaseType === 'league' ? group.resultsChannelId : group?.resultsChannelId;
   if (!client || !channelId) return { deleted: 0, scanned: 0 };
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.messages?.fetch) return { deleted: 0, scanned: 0 };
   const keepIds = new Set((group?.phaseType === 'league'
     ? [group.messages?.resultsTableMessageId, group.messages?.resultsScheduleMessageId]
-    : [group.tableMessageId, group.scheduleMessageId]
+    : [group.resultsTableMessageId, group.resultsScheduleMessageId]
   ).filter(Boolean).map(String));
   let before;
   let deleted = 0;
