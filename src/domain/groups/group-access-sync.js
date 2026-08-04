@@ -3,8 +3,8 @@
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
-const { readEventData } = require('../events/event-repository');
-const { ensureGroupChannel, ensureGroupVideoChannel, getGroupUserIds } = require('./group-channels');
+const { readEventData, updateEventData } = require('../events/event-repository');
+const { ensureGroupChannel, ensureGroupResultsChannel, ensureGroupVideoChannel, getGroupUserIds } = require('./group-channels');
 const { getConfiguredGuild, getGroupTeamIds } = require('./group-roles');
 const { refreshGroupPosts } = require('./group-posts');
 
@@ -56,6 +56,19 @@ async function syncTeamGroupAccess({ client, guild = null, teamId, settings = re
         console.error(`Gruppe ${group.groupKey}: Gruppenrechte konnten nach Co-VM-Änderung nicht synchronisiert werden.`, error);
         return null;
       });
+      const resultsChannel = await ensureGroupResultsChannel(targetGuild, settings, group, userIds).catch(error => {
+        console.error(`Gruppe ${group.groupKey}: Ergebnis-Kanal konnte nicht synchronisiert werden.`, error);
+        return null;
+      });
+      if (resultsChannel?.id && String(group.resultsChannelId || '') !== String(resultsChannel.id)) {
+        group.resultsChannelId = resultsChannel.id;
+        updateEventData(eventKey, stored => {
+          if (stored.groups?.groups?.[group.groupKey]) {
+            stored.groups.groups[group.groupKey].resultsChannelId = resultsChannel.id;
+          }
+          return stored;
+        });
+      }
       await ensureGroupVideoChannel(targetGuild, settings, group).catch(error => {
         console.error(`Gruppe ${group.groupKey}: Größenvideo-Kanal konnte nicht synchronisiert werden.`, error);
         return null;
@@ -74,6 +87,40 @@ async function syncTeamGroupAccess({ client, guild = null, teamId, settings = re
   return { groups, rolesAssigned, postsRefreshed };
 }
 
+async function reconcileActiveGroupChannels(client) {
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const guild = await getConfiguredGuild(client, settings);
+  if (!guild) return 0;
+  let reconciled = 0;
+  for (const eventKey of EVENT_KEYS) {
+    const event = readEventData(eventKey);
+    if (!isActiveGroupPhase(event)) continue;
+    for (const group of Object.values(event.groups.groups || {})) {
+      const userIds = getGroupUserIds(group);
+      const overview = await ensureGroupChannel(guild, settings, group, userIds);
+      const results = await ensureGroupResultsChannel(guild, settings, group, userIds);
+      await ensureGroupVideoChannel(guild, settings, group);
+      updateEventData(eventKey, stored => {
+        const target = stored.groups?.groups?.[group.groupKey];
+        if (target) {
+          target.channelId = overview.id;
+          target.resultsChannelId = results.id;
+        }
+        return stored;
+      });
+      await refreshGroupPosts({
+        client,
+        eventKey,
+        event: readEventData(eventKey),
+        group: { ...group, channelId: overview.id, resultsChannelId: results.id },
+      });
+      reconciled += 1;
+    }
+  }
+  return reconciled;
+}
+
 module.exports = {
+  reconcileActiveGroupChannels,
   syncTeamGroupAccess,
 };
