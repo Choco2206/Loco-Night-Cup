@@ -15,8 +15,8 @@ const TEST_CHANNEL_ID = '1525035287971889173';
 const postTimers = new Map();
 
 function renderTeamOfTheTournament(input) {
-  // Canvas erst beim tatsÇÏchlichen Rendern laden. So bleibt Bootstrap/Recovery
-  // unabhÇÏngig von nativen Grafik-Bindings, bis wirklich ein Bild gebaut wird.
+  // Canvas erst beim tatsächlichen Rendern laden. So bleibt Bootstrap/Recovery
+  // unabhängig von nativen Grafik-Bindings, bis wirklich ein Bild gebaut wird.
   return require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input);
 }
 
@@ -64,34 +64,34 @@ function playerAwardLine(emoji, label, player, field, suffix) {
   const value = field === 'averageRating'
     ? player.averageRating.toFixed(2).replace('.', ',')
     : Number(player[field]) || 0;
-  return `${emoji} **${label}:** ${player.playerName} (${teamName}) ƒ?" ${value} ${suffix}`.trim();
+  return `${emoji} **${label}:** ${player.playerName} (${teamName}) – ${value} ${suffix}`.trim();
 }
 
 function buildAwardsText(performances) {
   const players = aggregatePlayers(performances);
   return [
-    'ÐY"¾ **LOCO NIGHT CUP ƒ?" SPECIAL AWARDS** ÐY"¾',
-    playerAwardLine('ƒs«', 'Top-TorschÇ¬tze', topPlayer(players, 'goals'), 'goals', 'Tore'),
-    playerAwardLine('ÐYZî', 'Assist-KÇônig', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
-    playerAwardLine('ÐYõû', 'Top-AbrÇÏumer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche ZweikÇÏmpfe'),
-    playerAwardLine('ÐYõÏ', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
-    playerAwardLine('ÐYõñ', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
-    playerAwardLine('ÐY¦"', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche PÇÏsse'),
-    playerAwardLine('ÐY''', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ç~-Bewertung'),
-    playerAwardLine('ƒð?', 'MOTM-KÇônig', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
+    '🔥 **LOCO NIGHT CUP – SPECIAL AWARDS** 🔥',
+    playerAwardLine('⚽', 'Top-Torschütze', topPlayer(players, 'goals'), 'goals', 'Tore'),
+    playerAwardLine('🎯', 'Assist-König', topPlayer(players, 'assists'), 'assists', 'Vorlagen'),
+    playerAwardLine('🧹', 'Top-Abräumer', topPlayer(players, 'tacklesMade'), 'tacklesMade', 'erfolgreiche Zweikämpfe'),
+    playerAwardLine('🧤', 'Sicherste Hand', topPlayer(players, 'saves'), 'saves', 'Paraden'),
+    playerAwardLine('🧱', 'Defensiv-Monster', topPlayer(players, 'cleanSheets'), 'cleanSheets', 'Clean Sheets'),
+    playerAwardLine('🪄', 'Pass-Maschine', topPlayer(players, 'passesMade'), 'passesMade', 'erfolgreiche Pässe'),
+    playerAwardLine('👑', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ø-Bewertung'),
+    playerAwardLine('⭐', 'MOTM-König', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
   ].join('\n');
 }
 
 function buildIntroText({ test = false } = {}) {
   return [
-    test ? 'ÐYõ¦ **TESTAUSGABE ƒ?" KEINE ECHTE AUSZEICHNUNG**' : null,
+    test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
     '@everyone',
-    'ÐY?Å **TEAM OF THE TOURNAMENT**',
+    '🏆 **TEAM OF THE TOURNAMENT**',
     'Elf Spieler. Eine Nacht. Maximale Aura.',
     '',
-    'Herzlichen GlÇ¬ckwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. ÐY"ïƒs®',
+    'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt abgeliefert, Spiele entschieden und echte **Loco DNA** gezeigt. 🔴⚫',
     '',
-    '**Das ist nicht einfach eine Auswahl ƒ?" das ist die Elite dieser Loco Night.**',
+    '**Das ist nicht einfach eine Auswahl – das ist die Elite dieser Loco Night.**',
   ].filter(entry => entry !== null).join('\n');
 }
 
@@ -172,62 +172,6 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   return { posted: true, serialNumber, channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id };
 }
 
-function legacyScheduleTeamOfTheTournamentPost({ client, eventKey }) {
-  if (postTimers.has(eventKey)) return false;
-  updatePostState(eventKey, {
-    postStatus: 'pending',
-    postStartedAt: new Date().toISOString(),
-    postCompletedAt: null,
-    postFailureReason: null,
-  });
-  let attempt = 0;
-  const run = async () => {
-    try {
-      const force = attempt === POST_RETRY_DELAYS_MS.length - 1;
-      const result = await postTeamOfTheTournament({ client, eventKey, force });
-      if (result.posted || result.reason === 'already_posted') {
-        postTimers.delete(eventKey);
-        return;
-      }
-      if (result.reason === 'not_enough_eligible_players' && force) {
-        updatePostState(eventKey, {
-          postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
-          postFailureReason: 'not_enough_eligible_players',
-        });
-        console.warn(`[tott] ${eventKey}: keine vollstÇÏndige Elf mit mindestens drei Spielen; Post Ç¬bersprungen.`);
-        postTimers.delete(eventKey);
-        return;
-      }
-    } catch (error) {
-      console.warn(`[tott] Abschluss-Post fÇ¬r ${eventKey} fehlgeschlagen: ${error.message}`);
-      if (attempt === POST_RETRY_DELAYS_MS.length - 1) {
-        updatePostState(eventKey, {
-          postStatus: 'failed', postCompletedAt: new Date().toISOString(),
-          postFailureReason: String(error.message || 'unknown_error').slice(0, 500),
-        });
-      }
-    }
-    attempt += 1;
-    if (attempt >= POST_RETRY_DELAYS_MS.length) {
-      const latest = readEventData(eventKey);
-      if (latest.ceremony?.teamOfTheTournament?.postStatus === 'pending') {
-        updatePostState(eventKey, {
-          postStatus: 'failed', postCompletedAt: new Date().toISOString(),
-          postFailureReason: 'retry_limit_reached',
-        });
-      }
-      return postTimers.delete(eventKey);
-    }
-    const timer = setTimeout(run, POST_RETRY_DELAYS_MS[attempt]);
-    if (typeof timer.unref === 'function') timer.unref();
-    postTimers.set(eventKey, timer);
-  };
-  const timer = setTimeout(run, POST_RETRY_DELAYS_MS[0]);
-  if (typeof timer.unref === 'function') timer.unref();
-  postTimers.set(eventKey, timer);
-  return true;
-}
-
 function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   if (postTimers.has(eventKey)) return false;
   const initialState = readEventData(eventKey).ceremony?.teamOfTheTournament || {};
@@ -248,8 +192,8 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
         postSnapshot: snapshot,
       });
       console.info(`[tott] ${eventKey}: Postversuch ${attempt + 1}; `
-        + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknÇ¬pfte Spiele erfasst, `
-        + `${snapshot.selectedPlayers}/11 Spieler gewÇÏhlt, ${resumed} EA-Abfragen gestartet.`);
+        + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknüpfte Spiele erfasst, `
+        + `${snapshot.selectedPlayers}/11 Spieler gewählt, ${resumed} EA-Abfragen gestartet.`);
       const result = await postTeamOfTheTournament({ client, eventKey });
       if (result.posted || result.reason === 'already_posted') {
         postTimers.delete(eventKey);
@@ -259,7 +203,7 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
       const elapsed = Date.now() - new Date(postStartedAt).getTime();
       if (elapsed >= TOTT_GIVE_UP_AFTER_MS) {
         const reason = `${result.reason}; ${snapshot.capturedMatches}/${snapshot.linkedMatches} `
-          + `verknÇ¬pfte Spiele erfasst; ${snapshot.selectedPlayers}/11 Spieler gewÇÏhlt`;
+          + `verknüpfte Spiele erfasst; ${snapshot.selectedPlayers}/11 Spieler gewählt`;
         updatePostState(eventKey, {
           postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
           postLastResult: result.reason, postFailureReason: reason,
@@ -271,7 +215,7 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
         return;
       }
     } catch (error) {
-      console.warn(`[tott] Abschluss-Post fÇ¬r ${eventKey} fehlgeschlagen: ${error.message}`);
+      console.warn(`[tott] Abschluss-Post für ${eventKey} fehlgeschlagen: ${error.message}`);
       updatePostState(eventKey, {
         postStatus: 'pending', postLastResult: 'error',
         postFailureReason: String(error.message || 'unknown_error').slice(0, 500),
@@ -279,8 +223,8 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
       if (Date.now() - new Date(postStartedAt).getTime() >= TOTT_GIVE_UP_AFTER_MS) {
         const snapshot = workflowSnapshot(readEventData(eventKey));
         const reason = `error: ${String(error.message || 'unknown_error').slice(0, 300)}; `
-          + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknÇ¬pfte Spiele erfasst; `
-          + `${snapshot.selectedPlayers}/11 Spieler gewÇÏhlt`;
+          + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknüpfte Spiele erfasst; `
+          + `${snapshot.selectedPlayers}/11 Spieler gewählt`;
         updatePostState(eventKey, {
           postStatus: 'failed', postCompletedAt: new Date().toISOString(),
           postLastResult: 'error', postFailureReason: reason,
@@ -314,7 +258,7 @@ async function initTeamOfTheTournament(client) {
       scheduleTeamOfTheTournamentPost({ client, eventKey });
       console.info(`[tott] ${eventKey}: Abschluss nach Neustart fortgesetzt; ${resumed} EA-Abfragen wiederhergestellt.`);
     } catch (error) {
-      console.warn(`[tott] Wiederherstellung fÇ¬r ${eventKey} fehlgeschlagen; Botstart lÇÏuft weiter: ${error.message}`);
+      console.warn(`[tott] Wiederherstellung für ${eventKey} fehlgeschlagen; Botstart läuft weiter: ${error.message}`);
     }
   }
   return true;
@@ -370,7 +314,7 @@ async function postTeamOfTheTournamentTest(client) {
     files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },
   });
   const awardsMessage = await channel.send({
-    content: `ÐYõ¦ **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
+    content: `🧪 **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
     allowedMentions: { parse: [] },
   });
   return { channelId: channel.id, messageId: message.id, awardsMessageId: awardsMessage.id, serialNumber };
@@ -381,4 +325,3 @@ module.exports = {
   initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
   workflowSnapshot,
 };
-
