@@ -433,9 +433,12 @@ function collectGroupCandidates() {
         groupKey,
         event,
         group,
-        channelId: String(group.channelId || refs.channelId || ''),
-        messageIds: groupMessageIds(group, refs),
-        liveTableMessageId: group.tableMessageId || refs.tableMessageId || null,
+        channelId: String(group.resultsChannelId || refs.resultsChannelId || ''),
+        messageIds: [
+          group.resultsTableMessageId, group.resultsScheduleMessageId,
+          refs.resultsTableMessageId, refs.resultsScheduleMessageId,
+        ].filter(Boolean).map(String),
+        liveTableMessageId: group.resultsTableMessageId || refs.resultsTableMessageId || null,
       });
     }
   }
