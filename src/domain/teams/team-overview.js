@@ -43,27 +43,27 @@ function formatTeamNumber(index) {
   return String(index + 1).padStart(2, '0');
 }
 
-function formatUser(userId, presentUserIds) {
+function formatUser(userId) {
   if (!userId) return MISSING_MEMBER_LABEL;
-  return presentUserIds.has(String(userId)) ? `<@${userId}>` : MISSING_MEMBER_LABEL;
+  return `<@${userId}>`;
 }
 
-function formatCoManagers(team, presentUserIds) {
+function formatCoManagers(team) {
   const coManagers = Array.isArray(team.coManagers) ? team.coManagers : [];
   if (!coManagers.length) return 'Keine';
   return coManagers
-    .map(coManager => formatUser(coManager?.userId, presentUserIds))
+    .map(coManager => formatUser(coManager?.userId))
     .join(', ');
 }
 
-function buildTeamBlocks(teams, presentUserIds) {
+function buildTeamBlocks(teams) {
   return teams
     .slice()
     .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de', { sensitivity: 'base' }))
     .map((team, index) => [
       `🔴 **${formatTeamNumber(index)} | ${team.clubName}**`,
-      `👑 **VM:** ${formatUser(team.manager?.userId, presentUserIds)}`,
-      `🤝 **Co-VM:** ${formatCoManagers(team, presentUserIds)}`,
+      `👑 **VM:** ${formatUser(team.manager?.userId)}`,
+      `🤝 **Co-VM:** ${formatCoManagers(team)}`,
     ].join('\n'));
 }
 
@@ -72,27 +72,31 @@ async function fetchMessage(channel, messageId) {
   return channel.messages.fetch(messageId).catch(() => null);
 }
 
-function collectTeamUserIds(teams) {
-  const userIds = new Set();
-  for (const team of teams) {
-    if (team.manager?.userId) userIds.add(String(team.manager.userId));
-    for (const coManager of team.coManagers || []) {
-      if (coManager?.userId) userIds.add(String(coManager.userId));
-    }
-  }
-  return [...userIds];
+function messagesAreOutOfOrder(messages) {
+  const timestamps = messages.map(message => Number(message?.createdTimestamp));
+  if (timestamps.some(timestamp => !Number.isFinite(timestamp) || timestamp <= 0)) return false;
+  return timestamps.some((timestamp, index) => index > 0 && timestamp < timestamps[index - 1]);
 }
 
-async function getPresentUserIds(guild, teams) {
-  const present = new Set();
-  if (!guild?.members?.cache) return present;
+function createListPayload(content) {
+  return {
+    content,
+    allowedMentions: { parse: ['users'] },
+  };
+}
 
-  for (const userId of collectTeamUserIds(teams)) {
-    const member = guild.members.cache.get(String(userId));
-    if (member) present.add(String(userId));
+async function recreateOverview(channel, header, oldMessages, teams, chunks) {
+  for (const message of [header, ...oldMessages]) {
+    if (message) await message.delete().catch(() => {});
   }
 
-  return present;
+  const nextHeader = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
+  const nextIds = [];
+  for (const chunk of chunks) {
+    const created = await channel.send(createListPayload(chunk));
+    nextIds.push(created.id);
+  }
+  return { header: nextHeader, nextIds };
 }
 
 async function refreshRegisteredTeamsOverview(client) {
@@ -107,41 +111,46 @@ async function refreshRegisteredTeamsOverview(client) {
   }
 
   const teams = listVisibleTeams();
-  const presentUserIds = await getPresentUserIds(channel.guild, teams);
-  const chunks = chunkBlocks(buildTeamBlocks(teams, presentUserIds));
+  const chunks = chunkBlocks(buildTeamBlocks(teams));
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = messages.teams.registeredTeamsOverview;
+  const oldIds = Array.isArray(state.listMessageIds) ? state.listMessageIds : [];
 
   let header = await fetchMessage(channel, state.headerMessageId);
-  if (header) {
-    await header.edit({ embeds: [buildHeaderEmbed(teams)] });
+  const oldMessages = await Promise.all(oldIds.map(messageId => fetchMessage(channel, messageId)));
+  const trackedMessageMissing = Boolean(state.headerMessageId && !header)
+    || Boolean(!state.headerMessageId && oldIds.length)
+    || oldMessages.some(message => !message);
+  const trackedMessages = [header, ...oldMessages].filter(Boolean);
+  const wrongOrder = messagesAreOutOfOrder(trackedMessages);
+
+  let nextIds = [];
+  if (trackedMessageMissing || wrongOrder) {
+    ({ header, nextIds } = await recreateOverview(channel, header, oldMessages, teams, chunks));
+    console.info(`[team-overview] Übersicht geordnet neu aufgebaut (${trackedMessageMissing ? 'Nachricht fehlte' : 'Reihenfolge war falsch'}).`);
   } else {
-    header = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
-    state.headerMessageId = header.id;
-  }
-
-  const oldIds = Array.isArray(state.listMessageIds) ? state.listMessageIds : [];
-  const nextIds = [];
-
-  for (let index = 0; index < chunks.length; index++) {
-    const oldMessage = await fetchMessage(channel, oldIds[index]);
-    const payload = {
-      content: chunks[index],
-      allowedMentions: { parse: ['users'] },
-    };
-
-    if (oldMessage) {
-      await oldMessage.edit(payload);
-      nextIds.push(oldMessage.id);
+    if (header) {
+      await header.edit({ embeds: [buildHeaderEmbed(teams)] });
     } else {
-      const created = await channel.send(payload);
-      nextIds.push(created.id);
+      header = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
     }
-  }
 
-  for (let index = chunks.length; index < oldIds.length; index++) {
-    const oldMessage = await fetchMessage(channel, oldIds[index]);
-    if (oldMessage) await oldMessage.delete().catch(() => {});
+    for (let index = 0; index < chunks.length; index++) {
+      const oldMessage = oldMessages[index];
+      const payload = createListPayload(chunks[index]);
+      if (oldMessage) {
+        await oldMessage.edit(payload);
+        nextIds.push(oldMessage.id);
+      } else {
+        const created = await channel.send(payload);
+        nextIds.push(created.id);
+      }
+    }
+
+    for (let index = chunks.length; index < oldMessages.length; index++) {
+      const oldMessage = oldMessages[index];
+      if (oldMessage) await oldMessage.delete().catch(() => {});
+    }
   }
 
   updateJson(FILES.messages, createMessagesDefault(), current => {
@@ -159,5 +168,8 @@ async function refreshRegisteredTeamsOverview(client) {
 }
 
 module.exports = {
+  buildTeamBlocks,
+  formatUser,
+  messagesAreOutOfOrder,
   refreshRegisteredTeamsOverview,
 };
