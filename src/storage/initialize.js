@@ -31,14 +31,14 @@ const { ensureDir, ensureJsonFile, readJson, writeJsonAtomic } = require('./json
 const { ensureEventCycle } = require('../domain/checkins/checkin-schedule');
 
 const UNIFIED_NIGHT_PROFILE = {
-  deadlineTime: '23:30',
-  lateWindowUntilTime: '23:45',
-  drawTime: '23:50',
-  tournamentStartTime: '00:00',
+  deadlineTime: '22:30',
+  lateWindowUntilTime: '22:45',
+  drawTime: '22:50',
+  tournamentStartTime: '23:00',
   deadlineIsNextDay: false,
   lateWindowIsNextDay: false,
   drawIsNextDay: false,
-  startIsNextDay: true,
+  startIsNextDay: false,
 };
 
 const WEEKEND_LATE_NIGHT_PROFILE = {
@@ -693,4 +693,3 @@ module.exports = {
   seedCheckinBanner,
   seedSettingsFile,
 };
-
