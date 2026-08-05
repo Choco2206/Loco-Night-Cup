@@ -419,4 +419,5 @@ module.exports = {
   ensureEventCycle,
   isAfterDeadline,
   parseDateTime,
+  toDateOnly,
 };

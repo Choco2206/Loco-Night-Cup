@@ -10,6 +10,12 @@ const {
   createCycleState,
   dateTitle,
 } = require('../src/domain/tournament-leadership');
+const { toDateOnly } = require('../src/domain/checkins/checkin-schedule');
+
+test('exports the Berlin date helper required by startup reconciliation', () => {
+  assert.equal(typeof toDateOnly, 'function');
+  assert.equal(toDateOnly(new Date('2026-08-05T22:30:00.000Z'), 'Europe/Berlin'), '2026-08-06');
+});
 
 test('uses the configured internal tournament-leadership channel', () => {
   assert.equal(INTERNAL_CHANNEL_ID, '1534523164783280158');
@@ -78,4 +84,3 @@ test('automatic group assignment preserves manual choices', () => {
 test('automatic group assignment leaves areas open without eligible users', () => {
   assert.deepEqual(balancedGroupAssignments(['A', 'B'], {}, []), {});
 });
-
