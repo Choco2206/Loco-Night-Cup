@@ -83,6 +83,8 @@ function applyPostRefs(event, post) {
     round.channelId = refs.channelId || round.channelId || null;
     round.videoChannelId = refs.videoChannelId || round.videoChannelId || null;
     round.messageId = refs.messageId || round.messageId || null;
+    round.resultsChannelId = refs.resultsChannelId || round.resultsChannelId || null;
+    round.resultsMessageId = refs.resultsMessageId || round.resultsMessageId || null;
   }
 }
 
