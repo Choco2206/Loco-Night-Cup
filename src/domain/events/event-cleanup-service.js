@@ -17,6 +17,11 @@ const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-halbfinale',
   'ko-platz-3',
   'ko-finale',
+  'ergebnisse-achtelfinale',
+  'ergebnisse-viertelfinale',
+  'ergebnisse-halbfinale',
+  'ergebnisse-platz-3',
+  'ergebnisse-finale',
   'größenvideo-ko-achtelfinale',
   'größenvideo-ko-viertelfinale',
   'größenvideo-ko-halbfinale',
@@ -92,10 +97,12 @@ function collectKnockoutChannelIds(eventKey, event, messages) {
   for (const round of Object.values(event.knockout?.rounds || {})) {
     if (round?.channelId) ids.push(round.channelId);
     if (round?.videoChannelId) ids.push(round.videoChannelId);
+    if (round?.resultsChannelId) ids.push(round.resultsChannelId);
   }
   for (const round of Object.values(knockoutMessages.rounds || {})) {
     if (round?.channelId) ids.push(round.channelId);
     if (round?.videoChannelId) ids.push(round.videoChannelId);
+    if (round?.resultsChannelId) ids.push(round.resultsChannelId);
   }
 
   return uniqueStrings(ids);
