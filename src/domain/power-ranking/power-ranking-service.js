@@ -97,6 +97,24 @@ function getRanking(weekKey) {
   return calculateWeekRanking(readPowerRankingData(), weekKey, teamsById());
 }
 
+function championContactUserIds(team) {
+  return [team?.manager?.userId, ...(team?.coManagers || []).map(coManager => coManager?.userId)]
+    .filter(Boolean)
+    .map(String)
+    .filter((userId, index, values) => values.indexOf(userId) === index);
+}
+
+function buildChampionPostContent({ champion, week, team = null, test = false }) {
+  const contactIds = championContactUserIds(team);
+  return [
+    test ? '🧪 **TEST – Champion der Woche**' : null,
+    `🏆 **${champion.teamName} ist Loco Power Ranking Champion der Woche!**`,
+    contactIds.length ? `VM/Co-VM: ${contactIds.map(userId => `<@${userId}>`).join(' ')}` : null,
+    '',
+    `Mit **${champion.points} Punkten** sichert sich das Team Platz 1 in Kalenderwoche **${week.calendarWeek}**.`,
+  ].filter(line => line !== null).join('\n');
+}
+
 function formatDate(value) {
   return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value));
 }
@@ -217,25 +235,19 @@ async function publishChampionPost(client, weekKey, { renderGraphic = renderCham
   const fileName = `power-ranking-champion-${weekKey}.png`;
   let message = await findExistingChampionPost(channel, fileName);
   if (!message) {
+    const currentTeam = teamsById().get(String(champion.teamId));
     const graphic = await renderGraphic({
       week,
       champion,
-      logoSnapshot: (() => {
-        const currentTeam = teamsById().get(String(champion.teamId));
-        return currentTeam && currentTeam.status !== 'deleted' && currentTeam.logo
-          ? currentTeam.logo
-          : latestLogoSnapshot(data, weekKey, champion.teamId);
-      })(),
+      logoSnapshot: currentTeam && currentTeam.status !== 'deleted' && currentTeam.logo
+        ? currentTeam.logo
+        : latestLogoSnapshot(data, weekKey, champion.teamId),
     });
     console.log(`[PowerRanking] Champion-Grafik erstellt: ${weekKey}`);
     message = await channel.send({
-      content: [
-        `🏆 **${champion.teamName} ist Loco Power Ranking Champion der Woche!**`,
-        '',
-        `Mit **${champion.points} Punkten** sichert sich das Team Platz 1 in Kalenderwoche **${week.calendarWeek}**.`,
-      ].join('\n'),
+      content: buildChampionPostContent({ champion, week, team: currentTeam }),
       files: [new AttachmentBuilder(graphic.buffer, { name: graphic.fileName })],
-      allowedMentions: { parse: [] },
+      allowedMentions: { parse: [], users: championContactUserIds(currentTeam) },
     });
   }
   updatePowerRankingData(current => {
@@ -387,6 +399,8 @@ async function initPowerRanking(client) {
 
 module.exports = {
   calculateWeekRanking,
+  buildChampionPostContent,
+  championContactUserIds,
   createWeekRecord,
   evaluateAndStoreTournament,
   finalizeWeek,

@@ -114,7 +114,7 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
   stats.forEach(stat => {
     ctx.fillStyle = stat.color;
     ctx.font = `700 ${45 * scaleY}px Oxanium`;
-    ctx.fillText(String(stat.value), stat.x * scaleX, 1030 * scaleY);
+    ctx.fillText(String(stat.value), stat.x * scaleX, 1090 * scaleY);
   });
 
   const weekText = `KW ${week.calendarWeek}  •  ${formatGermanDate(week.startsAt)} – ${formatGermanDate(week.endsAt)}`;
