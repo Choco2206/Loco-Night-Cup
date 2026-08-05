@@ -26,6 +26,7 @@ function team(teamId) {
   return { type: 'team', teamId: String(teamId), displayName: `Team ${teamId}`, participantKey: `team:${teamId}` };
 }
 
+
 function confirmedLoser(roundKey, loserId) {
   return { roundKey, status: 'confirmed', loser: team(loserId) };
 }
@@ -101,7 +102,8 @@ test('uses the Sunday event date for a cup finishing after midnight', () => {
     eventKey: 'sunday', eventDate: '2026-08-09', finishedAt: '2026-08-09T23:45:00.000Z',
   });
   assert.equal(evaluation.week.weekKey, '2026-W32');
-  assert.equal(getWeekWindow(new Date('2026-08-10T00:30:00.000Z')).weekKey, '2026-W33');
+  assert.equal(getWeekWindow(new Date('2026-08-10T00:30:00.000Z')).weekKey, '2026-W32');
+  assert.equal(getWeekWindow(new Date('2026-08-10T05:00:00.000Z')).weekKey, '2026-W33');
 });
 
 test('applies every deterministic ranking tiebreaker', () => {

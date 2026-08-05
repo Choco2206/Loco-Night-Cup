@@ -29,6 +29,8 @@ function createWeekRecord(week, timestamp = nowIso()) {
     calendarWeek: week.calendarWeek,
     startsAt: week.startsAt,
     endsAt: week.endsAt,
+    startDate: week.startDate,
+    endDate: week.endDate,
     status: 'ACTIVE',
     championTeamId: null,
     championTeamNameSnapshot: null,
@@ -126,10 +128,25 @@ function formatDateTime(value) {
 }
 
 function rankingPages(ranking, week) {
+  const separator = '━'.repeat(24);
+  const endDate = week.endDate
+    ? new Date(`${week.endDate}T12:00:00.000Z`)
+    : new Date(new Date(week.endsAt).getTime() - 7 * 60 * 60 * 1000);
   const header = [
-    '💎 **LOCO POWER RANKING**',
+    '⚡ **LOCO POWER RANKING**',
     `Kalenderwoche **${week.calendarWeek}**`,
-    `${formatDate(week.startsAt)} bis ${formatDate(week.endsAt)}`,
+    `${formatDate(week.startsAt)} bis ${formatDate(endDate)}`,
+    '',
+    '**Punktevergabe:**',
+    '🏆 Turniersieg: **10 Punkte**',
+    '🥈 Platz 2: **8 Punkte**',
+    '🥉 Platz 3: **6 Punkte**',
+    '4. Platz / Halbfinale: **5 Punkte**',
+    'Viertelfinale: **3 Punkte**',
+    'Achtelfinale: **2 Punkte**',
+    'Gruppen- oder Ligaphase: **1 Punkt**',
+    '',
+    separator,
     '',
   ].join('\n');
   const entries = ranking.teams.map(team => [
@@ -139,9 +156,13 @@ function rankingPages(ranking, week) {
   if (!entries.length) entries.push('Noch kein Cup wurde in dieser Kalenderwoche gewertet.');
   const footer = [
     '',
+    separator,
+    '',
     `Cups dieser Woche: **${ranking.cups}**`,
     `Letzte Aktualisierung: ${ranking.lastUpdatedAt ? formatDateTime(ranking.lastUpdatedAt) : 'noch keine'}`,
-    `Nächster Reset: Montag, 00:00 Uhr`,
+    `Nächster Reset: Montag, 07:00 Uhr`,
+    '',
+    separator,
   ].join('\n');
   const pages = [];
   let current = header;

@@ -3,6 +3,7 @@
 const { parseDateTime } = require('../checkins/checkin-schedule');
 
 const TIMEZONE = 'Europe/Berlin';
+const WEEK_RESET_HOUR = 7;
 const STAGE_POINTS = Object.freeze({
   group_or_league: 1,
   round_of_16: 2,
@@ -27,7 +28,10 @@ function dateValueFromUtcDate(date) {
 }
 
 function getWeekWindow(date = new Date(), timeZone = TIMEZONE) {
-  const local = zonedDateParts(date, timeZone);
+  // Die Ranking-Woche wechselt erst nach dem Sonntagsturnier samt Nachbereitung.
+  // Durch den 07:00-Uhr-Cutoff gehört die Nacht von Sonntag auf Montag noch zur Vorwoche.
+  const rankingDate = new Date(date.getTime() - WEEK_RESET_HOUR * 60 * 60 * 1000);
+  const local = zonedDateParts(rankingDate, timeZone);
   const localDate = new Date(Date.UTC(local.year, local.month - 1, local.day, 12));
   const weekday = localDate.getUTCDay() || 7;
   const monday = new Date(localDate);
@@ -45,13 +49,16 @@ function getWeekWindow(date = new Date(), timeZone = TIMEZONE) {
   const weekKey = `${isoYear}-W${String(calendarWeek).padStart(2, '0')}`;
   const mondayValue = dateValueFromUtcDate(monday);
   const sundayValue = dateValueFromUtcDate(sunday);
-  const endMinute = parseDateTime(sundayValue, '23:59', false, timeZone);
+  const nextMonday = new Date(sunday);
+  nextMonday.setUTCDate(nextMonday.getUTCDate() + 1);
+  const nextMondayValue = dateValueFromUtcDate(nextMonday);
+  const endMinute = parseDateTime(nextMondayValue, '06:59', false, timeZone);
 
   return {
     weekKey,
     year: isoYear,
     calendarWeek,
-    startsAt: parseDateTime(mondayValue, '00:00', false, timeZone).toISOString(),
+    startsAt: parseDateTime(mondayValue, '07:00', false, timeZone).toISOString(),
     endsAt: new Date(endMinute.getTime() + 59999).toISOString(),
     startDate: mondayValue,
     endDate: sundayValue,
@@ -254,6 +261,7 @@ function calculateWeekRanking(data, weekKey, currentTeamsById = new Map()) {
 
 module.exports = {
   STAGE_POINTS,
+  WEEK_RESET_HOUR,
   calculateWeekRanking,
   collectRealParticipants,
   compareRanking,
