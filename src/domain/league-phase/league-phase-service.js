@@ -155,6 +155,8 @@ async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = 
   const accessCheck = await verifyLeaguePhaseAccess({ guild: targetGuild, settings, phase: result.leaguePhase });
   if (!accessCheck.ok) throw new Error(`Ligaphasen-Rollen-/Berechtigungsprüfung fehlgeschlagen: ${JSON.stringify(accessCheck)}`);
   console.info(`[league-phase] ${eventKey}: Ligaphasenrolle und -kanäle erstellt/wiederverwendet.`); await refreshLeaguePhasePosts(client, eventKey);
+  const { ensureAssignmentForEvent } = require('../tournament-leadership');
+  await ensureAssignmentForEvent({ client, eventKey }).catch(error => console.warn(`[tournament-leadership] Zuweisung nach Liga-Auslosung für ${eventKey} fehlgeschlagen: ${error.message}`));
   const { scheduleLeaguePhase } = require('./league-phase-releases');
   scheduleLeaguePhase(client, eventKey);
   return { ...result, event: readEventData(eventKey), leaguePhase: readEventData(eventKey).leaguePhase };

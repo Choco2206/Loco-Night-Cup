@@ -26,6 +26,7 @@ const FILES = {
   checkinBanner: path.join(DATA_ASSETS_DIR, 'check-in.png'),
   tottHistory: path.join(DATA_DIR, 'team-of-the-tournament-history.json'),
   powerRanking: path.join(DATA_DIR, 'power-ranking.json'),
+  tournamentLeadership: path.join(DATA_DIR, 'tournament-leadership.json'),
   events: Object.fromEntries(
     EVENT_KEYS.map(eventKey => [eventKey, path.join(EVENTS_DIR, `${eventKey}.json`)])
   ),

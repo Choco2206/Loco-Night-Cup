@@ -124,6 +124,13 @@ async function createKnockoutPhase({ eventKey, actorUserId = null, client = null
     console.warn(`[live-schedule] Refresh nach K.O.-Erstellung für ${eventKey} fehlgeschlagen: ${error.message}`);
   });
 
+  if (client) {
+    const { syncPhaseInfoChannels } = require('../tournament-leadership');
+    await syncPhaseInfoChannels(client, eventKey).catch(error => {
+      console.warn(`[tournament-leadership] K.O.-Info-Kanäle für ${eventKey} konnten nicht synchronisiert werden: ${error.message}`);
+    });
+  }
+
   return {
     ...result,
     event: readEventData(eventKey),

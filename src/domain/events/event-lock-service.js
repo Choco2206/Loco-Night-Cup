@@ -316,6 +316,13 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
     })),
   });
 
+  if (client) {
+    const { ensureAssignmentForEvent } = require('../tournament-leadership');
+    await ensureAssignmentForEvent({ client, eventKey }).catch(error => {
+      console.warn(`[tournament-leadership] Zuweisung nach Gruppenziehung für ${eventKey} fehlgeschlagen: ${error.message}`);
+    });
+  }
+
   await maybeReleaseNextSlot(client, eventKey, now);
   scheduleEvent(client, eventKey);
   await refreshLiveSchedule(client, eventKey).catch(error => {

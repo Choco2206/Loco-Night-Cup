@@ -348,6 +348,11 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
     console.warn(`Event cleanup could not clean live schedule for ${eventKey}: ${error.message}`);
     return { cleaned: false, deletedMessageIds: [] };
   });
+  const { cleanupEvent: cleanupTournamentLeadership } = require('../tournament-leadership');
+  summary.tournamentLeadership = await cleanupTournamentLeadership(client, eventKey).catch(error => {
+    console.warn(`[tournament-leadership] Bereinigung für ${eventKey} fehlgeschlagen: ${error.message}`);
+    return { cleaned: false, error: error.message };
+  });
 
   resetEventRuntime(eventKey, actorUserId, { openNextCheckin: false });
   summary.eventReset = true;

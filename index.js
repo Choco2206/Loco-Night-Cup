@@ -14,6 +14,7 @@ const teamOfTheTournamentSystem = require('./src/domain/team-of-the-tournament')
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
 const { initPendingResultConfirmations } = require('./src/domain/results/result-confirmation-service');
 const { initPowerRanking } = require('./src/domain/power-ranking');
+const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
 
 const EPHEMERAL = 64;
 
@@ -72,6 +73,7 @@ async function main() {
       console.log(`Bot online as ${readyClient.user.tag}`);
       await runStartupStep('Teams', () => teamSystem.init(client));
       await runStartupStep('Check-ins', () => checkinSystem.init(client));
+      await runStartupStep('Turnierleitung', () => tournamentLeadershipSystem.init(client));
       await runStartupStep('Admin', () => adminSystem.init(client));
       await runStartupStep('Rollen', () => roleSystem.init(client));
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
@@ -92,6 +94,7 @@ async function main() {
 
   client.on(Events.InteractionCreate, async interaction => {
     try {
+      if (await tournamentLeadershipSystem.handleInteraction(interaction, client)) return;
       if (await adminSystem.handleInteraction(interaction, client)) return;
       if (await groupSystem.handleGroupInteraction(interaction, client)) return;
       if (await knockoutSystem.handleKnockoutInteraction(interaction, client)) return;

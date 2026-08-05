@@ -57,6 +57,10 @@ function createPowerRankingDefault() {
   };
 }
 
+function createTournamentLeadershipDefault() {
+  return { version: DATA_VERSION, cycles: {}, meta: emptyTimestampMeta() };
+}
+
 function createBansDefault() {
   return {
     version: DATA_VERSION,
@@ -369,6 +373,7 @@ function createSettingsDefault() {
       teamOfTheTournamentTestChannelId: '1525035287971889173',
       powerRankingChannelId: '1534485406488203324',
       powerRankingChampionChannelId: '1534485575543816305',
+      tournamentLeadershipChannelId: '1534523164783280158',
       logChannelId: null,
       rulebookChannelId: null,
       chatChannelId: null,
@@ -384,6 +389,7 @@ function createSettingsDefault() {
     },
     assets: {
       checkinBannerPath: 'data/assets/check-in.png',
+      tournamentLeadershipBannerPath: 'assets/tournament-leadership/tournament-leadership-banner.png',
     },
     categories: {
       welcomeCategoryId: null,
@@ -544,6 +550,7 @@ module.exports = {
   createEventDefault,
   createMessagesDefault,
   createPowerRankingDefault,
+  createTournamentLeadershipDefault,
   createSettingsDefault,
   createTeamHistoryDefault,
   createTottHistoryDefault,

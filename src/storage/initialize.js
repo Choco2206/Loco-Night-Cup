@@ -25,6 +25,7 @@ const {
   createMessagesDefault,
   createPowerRankingDefault,
   createSettingsDefault,
+  createTournamentLeadershipDefault,
   createTottHistoryDefault,
   createTeamsDefault,
 } = require('./defaults');
@@ -686,6 +687,7 @@ function initializeStorage() {
   ensureJsonFile(FILES.messages, createMessagesDefault);
   ensureJsonFile(FILES.tottHistory, createTottHistoryDefault);
   ensureJsonFile(FILES.powerRanking, createPowerRankingDefault);
+  ensureJsonFile(FILES.tournamentLeadership, createTournamentLeadershipDefault);
 
   for (const eventKey of EVENT_KEYS) {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));

@@ -51,6 +51,7 @@
     "teamOfTheTournamentTestChannelId": "1525035287971889173",
     "powerRankingChannelId": "1534485406488203324",
     "powerRankingChampionChannelId": "1534485575543816305",
+    "tournamentLeadershipChannelId": "1534523164783280158",
     "logChannelId": "1517040860942962749",
     "rulebookChannelId": null,
     "chatChannelId": null,
@@ -88,7 +89,8 @@
     }
   },
   "assets": {
-    "checkinBannerPath": "data/assets/check-in.png"
+    "checkinBannerPath": "data/assets/check-in.png",
+    "tournamentLeadershipBannerPath": "assets/tournament-leadership/tournament-leadership-banner.png"
   },
   "categories": {
     "welcomeCategoryId": null,
