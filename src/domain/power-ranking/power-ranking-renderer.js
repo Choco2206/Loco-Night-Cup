@@ -30,9 +30,9 @@ function resolveLogoPath(logoSnapshot) {
   return candidates.find(candidate => fs.existsSync(candidate)) || null;
 }
 
-function fittedFontSize(ctx, text, maxWidth, maximum, minimum = 24) {
+function fittedFontSize(ctx, text, maxWidth, maximum, minimum = 24, family = 'Open Sans') {
   for (let size = maximum; size >= minimum; size -= 2) {
-    ctx.font = `700 ${size}px "Open Sans"`;
+    ctx.font = `700 ${size}px "${family}"`;
     if (ctx.measureText(String(text)).width <= maxWidth) return size;
   }
   return minimum;
@@ -95,8 +95,8 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffffff';
-  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 54 * scaleY, 26 * scaleY);
-  ctx.font = `700 ${nameSize}px "Open Sans"`;
+  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 54 * scaleY, 26 * scaleY, 'Oxanium');
+  ctx.font = `700 ${nameSize}px Oxanium`;
   ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
   ctx.shadowBlur = 8 * scaleY;
   ctx.fillText(champion.teamName, 627 * scaleX, 752 * scaleY);
