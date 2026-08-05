@@ -48,6 +48,15 @@ function createTottHistoryDefault() {
   return { version: DATA_VERSION, lastSerialNumber: 0, posts: [] };
 }
 
+function createPowerRankingDefault() {
+  return {
+    version: DATA_VERSION,
+    tournamentResults: {},
+    weeks: {},
+    meta: emptyTimestampMeta(),
+  };
+}
+
 function createBansDefault() {
   return {
     version: DATA_VERSION,
@@ -286,6 +295,12 @@ function createMessagesDefault() {
       createdAt: null,
       updatedAt: null,
     },
+    powerRanking: {
+      weekKey: null,
+      channelId: null,
+      messageIds: [],
+      updatedAt: null,
+    },
     groups: createEventMap(() => emptyGroupMessages()),
     leaguePhase: createEventMap(() => ({ cycleKey: null })),
     knockout: createEventMap(() => emptyKnockoutMessages()),
@@ -352,6 +367,8 @@ function createSettingsDefault() {
       hallOfFameChannelId: null,
       teamOfTheTournamentChannelId: '1533394601220505641',
       teamOfTheTournamentTestChannelId: '1525035287971889173',
+      powerRankingChannelId: '1534485406488203324',
+      powerRankingChampionChannelId: '1534485575543816305',
       logChannelId: null,
       rulebookChannelId: null,
       chatChannelId: null,
@@ -382,6 +399,7 @@ function createSettingsDefault() {
       groupCategoryId: null,
       knockoutCategoryId: null,
       archiveCategoryId: null,
+      powerRankingCategoryId: '1534485070428115016',
     },
     permissions: {
       adminRoleIds: [],
@@ -525,6 +543,7 @@ module.exports = {
   createBansDefault,
   createEventDefault,
   createMessagesDefault,
+  createPowerRankingDefault,
   createSettingsDefault,
   createTeamHistoryDefault,
   createTottHistoryDefault,

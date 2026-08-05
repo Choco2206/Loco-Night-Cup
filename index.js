@@ -13,6 +13,7 @@ const liveScheduleSystem = require('./src/domain/live-schedule');
 const teamOfTheTournamentSystem = require('./src/domain/team-of-the-tournament');
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
 const { initPendingResultConfirmations } = require('./src/domain/results/result-confirmation-service');
+const { initPowerRanking } = require('./src/domain/power-ranking');
 
 const EPHEMERAL = 64;
 
@@ -68,18 +69,20 @@ async function main() {
   client.once(Events.ClientReady, async readyClient => {
     try {
       runBootstrap();
-      await teamSystem.init(client);
-      await checkinSystem.init(client);
-      await adminSystem.init(client);
-      await roleSystem.init(client);
-      await banSystem.initBanService(client);
-      await groupSystem.init(client);
-      await knockoutSystem.initKnockoutReleases(client);
-      await teamOfTheTournamentSystem.initTeamOfTheTournament(client);
-      initPendingResultConfirmations(client);
-      await liveScheduleSystem.refreshLiveScheduleForActiveEvents(client);
-      schedulePendingAutoCleanups(client);
       console.log(`Bot online as ${readyClient.user.tag}`);
+      await runStartupStep('Teams', () => teamSystem.init(client));
+      await runStartupStep('Check-ins', () => checkinSystem.init(client));
+      await runStartupStep('Admin', () => adminSystem.init(client));
+      await runStartupStep('Rollen', () => roleSystem.init(client));
+      await runStartupStep('Sperren', () => banSystem.initBanService(client));
+      await runStartupStep('Gruppen', () => groupSystem.init(client));
+      await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
+      await runStartupStep('Team of the Tournament', () => teamOfTheTournamentSystem.initTeamOfTheTournament(client));
+      await runStartupStep('Loco Power Ranking', () => initPowerRanking(client));
+      initPendingResultConfirmations(client);
+      await runStartupStep('Live-Spielplan', () => liveScheduleSystem.refreshLiveScheduleForActiveEvents(client));
+      schedulePendingAutoCleanups(client);
+      console.log('[startup] Alle Systeme initialisiert');
     } catch (error) {
       console.error('Startup validation failed:', error);
       process.exitCode = 1;

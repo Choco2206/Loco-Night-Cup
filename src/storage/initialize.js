@@ -23,6 +23,7 @@ const {
   createBansDefault,
   createEventDefault,
   createMessagesDefault,
+  createPowerRankingDefault,
   createSettingsDefault,
   createTottHistoryDefault,
   createTeamsDefault,
@@ -587,6 +588,21 @@ function normalizeMessagesFile() {
     changed = true;
   }
 
+  if (!messages.powerRanking) {
+    messages.powerRanking = {
+      weekKey: null,
+      channelId: null,
+      messageIds: [],
+      updatedAt: null,
+    };
+    changed = true;
+  }
+
+  if (!Array.isArray(messages.powerRanking.messageIds)) {
+    messages.powerRanking.messageIds = [];
+    changed = true;
+  }
+
   changed = ensureEventKeys(messages.checkins, () => ({
     channelId: null,
     mainMessageId: null,
@@ -669,6 +685,7 @@ function initializeStorage() {
   ensureJsonFile(FILES.bans, createBansDefault);
   ensureJsonFile(FILES.messages, createMessagesDefault);
   ensureJsonFile(FILES.tottHistory, createTottHistoryDefault);
+  ensureJsonFile(FILES.powerRanking, createPowerRankingDefault);
 
   for (const eventKey of EVENT_KEYS) {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));

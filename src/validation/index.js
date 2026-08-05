@@ -7,6 +7,7 @@ const { validateEvent } = require('./events.schema');
 const { validateMessages } = require('./messages.schema');
 const { validateSettings } = require('./settings.schema');
 const { validateTeams } = require('./teams.schema');
+const { validatePowerRanking } = require('./power-ranking.schema');
 
 function throwIfInvalid(label, errors) {
   if (!errors.length) return;
@@ -21,11 +22,13 @@ function validateAllStorage() {
   const bans = readJson(FILES.bans);
   const messages = readJson(FILES.messages);
   const settings = readJson(FILES.settings);
+  const powerRanking = readJson(FILES.powerRanking);
 
   throwIfInvalid('teams.json', validateTeams(teams));
   throwIfInvalid('bans.json', validateBans(bans));
   throwIfInvalid('messages.json', validateMessages(messages));
   throwIfInvalid('settings.json', validateSettings(settings));
+  throwIfInvalid('power-ranking.json', validatePowerRanking(powerRanking));
 
   for (const eventKey of EVENT_KEYS) {
     const event = readJson(FILES.events[eventKey]);
@@ -41,4 +44,5 @@ module.exports = {
   validateMessages,
   validateSettings,
   validateTeams,
+  validatePowerRanking,
 };

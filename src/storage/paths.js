@@ -25,6 +25,7 @@ const FILES = {
   checkinBannerSeed: path.join(CONFIG_ASSETS_DIR, 'check-in.png'),
   checkinBanner: path.join(DATA_ASSETS_DIR, 'check-in.png'),
   tottHistory: path.join(DATA_DIR, 'team-of-the-tournament-history.json'),
+  powerRanking: path.join(DATA_DIR, 'power-ranking.json'),
   events: Object.fromEntries(
     EVENT_KEYS.map(eventKey => [eventKey, path.join(EVENTS_DIR, `${eventKey}.json`)])
   ),
@@ -44,4 +45,3 @@ module.exports = {
   TEAM_LOGOS_DIR,
   TEAMS_DIR,
 };
-

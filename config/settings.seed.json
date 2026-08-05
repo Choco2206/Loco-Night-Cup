@@ -49,6 +49,8 @@
     "hallOfFameChannelId": "1517040877787287653",
     "teamOfTheTournamentChannelId": "1533394601220505641",
     "teamOfTheTournamentTestChannelId": "1525035287971889173",
+    "powerRankingChannelId": "1534485406488203324",
+    "powerRankingChampionChannelId": "1534485575543816305",
     "logChannelId": "1517040860942962749",
     "rulebookChannelId": null,
     "chatChannelId": null,
@@ -101,7 +103,8 @@
     "checkinCategoryId": "1516390944268750890",
     "groupCategoryId": "1516423873233424384",
     "knockoutCategoryId": "1516945162222178407",
-    "archiveCategoryId": null
+    "archiveCategoryId": null,
+    "powerRankingCategoryId": "1534485070428115016"
   },
   "permissions": {
     "adminRoleIds": ["1516427696526200902"],

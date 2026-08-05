@@ -63,6 +63,8 @@ function validateSettings(data) {
       'hallOfFameChannelId',
       'teamOfTheTournamentChannelId',
       'teamOfTheTournamentTestChannelId',
+      'powerRankingChannelId',
+      'powerRankingChampionChannelId',
       'logChannelId',
       'rulebookChannelId',
       'chatChannelId',
@@ -100,6 +102,7 @@ function validateSettings(data) {
       'groupCategoryId',
       'knockoutCategoryId',
       'archiveCategoryId',
+      'powerRankingCategoryId',
     ].forEach(field => {
       requireSnowflakeOrNull(errors, data.categories[field], `categories.${field}`);
     });

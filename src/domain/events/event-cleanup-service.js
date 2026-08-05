@@ -9,7 +9,7 @@ const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { cleanupLiveScheduleForEvent } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
 const { EVENT_KEYS } = require('../../app/constants');
-const { AUTO_CLEANUP_DELAY_MS, TOTT_CLEANUP_RECHECK_MS, isTeamOfTheTournamentSettled } = require('./event-completion-policy');
+const { AUTO_CLEANUP_DELAY_MS, TOTT_CLEANUP_RECHECK_MS, isPowerRankingSettled, isTeamOfTheTournamentSettled } = require('./event-completion-policy');
 const KNOCKOUT_CHANNEL_NAMES = new Set([
   'ko-phase',
   'ko-achtelfinale',
@@ -399,6 +399,26 @@ async function runAutoCleanup({ eventKey, client, guild = null, scheduledAt = nu
     return { skipped: true, reason: 'not_pending' };
   }
 
+  if (!isPowerRankingSettled(event)) {
+    try {
+      const { processCompletedTournament } = require('../power-ranking');
+      await processCompletedTournament({ client, eventKey, event });
+    } catch (error) {
+      console.warn(`[PowerRanking] Auto-Cleanup wartet auf dauerhafte Turnierwertung für ${eventKey}: ${error.message}`);
+    }
+    if (!isPowerRankingSettled(event)) {
+      const nextCheckAt = new Date(Date.now() + TOTT_CLEANUP_RECHECK_MS).toISOString();
+      updateJson(FILES.events[eventKey], createEventDefault(eventKey), stored => {
+        stored.ceremony = stored.ceremony || {};
+        stored.ceremony.cleanupScheduledAt = nextCheckAt;
+        stored.ceremony.cleanupStatus = 'scheduled';
+        return stored;
+      });
+      scheduleAutoCleanupForEvent({ eventKey, client, guild, scheduledAt: nextCheckAt });
+      return { skipped: true, reason: 'power_ranking_pending', rescheduledAt: nextCheckAt };
+    }
+  }
+
   if (!isTeamOfTheTournamentSettled(event)) {
     const nextCheckAt = new Date(Date.now() + TOTT_CLEANUP_RECHECK_MS).toISOString();
     updateJson(FILES.events[eventKey], createEventDefault(eventKey), stored => {
@@ -462,6 +482,7 @@ module.exports = {
   TOTT_CLEANUP_RECHECK_MS,
   getAutoCleanupScheduledAt,
   isTeamOfTheTournamentSettled,
+  isPowerRankingSettled,
   markCeremonyAutoCleanupScheduled,
   scheduleAutoCleanupForEvent,
   schedulePendingAutoCleanups,

@@ -72,6 +72,14 @@ function validateMessages(data) {
     }
   }
 
+  if (requireObject(errors, data.powerRanking, 'powerRanking')) {
+    requireSnowflakeOrNull(errors, data.powerRanking.channelId, 'powerRanking.channelId');
+    requireArray(errors, data.powerRanking.messageIds, 'powerRanking.messageIds');
+    if (data.powerRanking.weekKey !== null && typeof data.powerRanking.weekKey !== 'string') {
+      errors.push('powerRanking.weekKey must be string or null');
+    }
+  }
+
   if (validateEventMap(errors, data.groups, 'groups')) {
     EVENT_KEYS.forEach(eventKey => {
       const eventGroups = data.groups[eventKey];
@@ -130,4 +138,3 @@ function validateMessages(data) {
 module.exports = {
   validateMessages,
 };
-
