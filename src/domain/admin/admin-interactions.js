@@ -57,7 +57,7 @@ const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-test');
 const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = require('../league-phase/league-phase-test');
 const { postTeamOfTheTournamentTest } = require('../team-of-the-tournament');
-const { postPowerRankingChampionTest } = require('../power-ranking');
+const { postPowerRankingChampionTest, postPowerRankingTest } = require('../power-ranking');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -82,6 +82,7 @@ const ADMIN_ACTIONS = new Set([
   'admin_ceremony_test',
   'admin_ceremony_post',
   'admin_hof_test',
+  'admin_power_ranking_test',
   'admin_power_ranking_champion_test',
   'admin_tott_test',
   'admin_bye_add',
@@ -2201,6 +2202,15 @@ async function handleAdminInteraction(interaction, client) {
       await interaction.reply({
         ...buildPowerRankingTestTeamSelectPayload(0),
         flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    if (actionCustomId === 'admin_power_ranking_test') {
+      await interaction.deferReply({ flags: EPHEMERAL });
+      const result = await postPowerRankingTest({ guild: interaction.guild });
+      await interaction.editReply({
+        content: `Power-Ranking-Test mit ${result.teamCount} Teams wurde in <#${result.channelId}> gepostet (${result.messageCount} Ranking-Nachricht${result.messageCount === 1 ? '' : 'en'}).`,
       });
       return true;
     }
