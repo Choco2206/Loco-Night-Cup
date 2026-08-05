@@ -10,6 +10,7 @@ const CHAMPION_TEMPLATE_PATH = 'assets/power-ranking/power-ranking-champion.png'
 function registerFonts(canvas) {
   if (fontsRegistered) return;
   const fonts = [
+    ['assets/fonts/RubikSprayPaint-Regular.ttf', 'Rubik Spray Paint'],
     ['assets/fonts/Oxanium-VariableFont_wght.ttf', 'Oxanium'],
     ['assets/fonts/OpenSans-VariableFont_wdth,wght.ttf', 'Open Sans'],
   ];
@@ -30,9 +31,9 @@ function resolveLogoPath(logoSnapshot) {
   return candidates.find(candidate => fs.existsSync(candidate)) || null;
 }
 
-function fittedFontSize(ctx, text, maxWidth, maximum, minimum = 24, family = 'Open Sans') {
+function fittedFontSize(ctx, text, maxWidth, maximum, minimum = 24, family = 'Open Sans', weight = 700) {
   for (let size = maximum; size >= minimum; size -= 2) {
-    ctx.font = `700 ${size}px "${family}"`;
+    ctx.font = `${weight} ${size}px "${family}"`;
     if (ctx.measureText(String(text)).width <= maxWidth) return size;
   }
   return minimum;
@@ -95,16 +96,16 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffffff';
-  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 54 * scaleY, 26 * scaleY, 'Oxanium');
-  ctx.font = `700 ${nameSize}px Oxanium`;
+  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 50 * scaleY, 24 * scaleY, 'Rubik Spray Paint', 400);
+  ctx.font = `400 ${nameSize}px "Rubik Spray Paint"`;
   ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
   ctx.shadowBlur = 8 * scaleY;
   ctx.fillText(champion.teamName, 627 * scaleX, 752 * scaleY);
   ctx.shadowBlur = 0;
 
   ctx.fillStyle = '#ffd33d';
-  ctx.font = `700 ${55 * scaleY}px Oxanium`;
-  ctx.fillText(String(champion.points), 627 * scaleX, 906 * scaleY);
+  ctx.font = `400 ${52 * scaleY}px "Rubik Spray Paint"`;
+  ctx.fillText(String(champion.points), 627 * scaleX, 944 * scaleY);
 
   const stats = [
     { value: champion.wins, x: 287, color: '#ff4545' },
@@ -113,7 +114,7 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
   ];
   stats.forEach(stat => {
     ctx.fillStyle = stat.color;
-    ctx.font = `700 ${45 * scaleY}px Oxanium`;
+    ctx.font = `400 ${42 * scaleY}px "Rubik Spray Paint"`;
     ctx.fillText(String(stat.value), stat.x * scaleX, 1090 * scaleY);
   });
 
