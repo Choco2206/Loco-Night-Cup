@@ -206,6 +206,40 @@ function buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue,
   ));
 }
 
+function replacementLetter(team) {
+  const first = String(team.label || '').trim().charAt(0).toLocaleUpperCase('de-DE');
+  return /^[A-ZÄÖÜ]$/.test(first) ? first : '#';
+}
+
+function buildReplacementLetterRows(eventKey, groupKey, participantKeyValue, teams) {
+  const letters = [...new Set(teams.map(replacementLetter))].sort((a, b) => a.localeCompare(b, 'de'));
+  return chunk(letters, SELECT_OPTION_LIMIT).map((letterChunk, index) => new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`group_replacement_letter:${eventKey}:${groupKey}:${encodeURIComponent(participantKeyValue)}:${index}`)
+      .setPlaceholder(letters.length <= SELECT_OPTION_LIMIT ? 'Anfangsbuchstaben auswählen' : `Anfangsbuchstaben (${index + 1})`)
+      .addOptions(letterChunk.map(letter => ({ label: letter, value: letter })))
+  ));
+}
+
+function buildReplacementLetterPayload(eventKey, groupKey, participantKeyValue, teams) {
+  return { content: 'Wähle zuerst den Anfangsbuchstaben des Ersatzteams aus.', components: buildReplacementLetterRows(eventKey, groupKey, participantKeyValue, teams) };
+}
+
+function buildReplacementPagePayload(eventKey, groupKey, participantKeyValue, teams, letter) {
+  const filtered = teams.filter(team => replacementLetter(team) === letter);
+  const pages = chunk(filtered, SELECT_OPTION_LIMIT);
+  if (pages.length <= 1) return { content: `Ersatzteams mit **${letter}**:`, components: buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, filtered) };
+  return {
+    content: `Für **${letter}** wurden ${filtered.length} Teams gefunden. Wähle eine Seite aus.`,
+    components: [new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`group_replacement_page:${eventKey}:${groupKey}:${encodeURIComponent(participantKeyValue)}:${encodeURIComponent(letter)}`)
+        .setPlaceholder('Seite auswählen')
+        .addOptions(pages.map((page, index) => ({ label: `Seite ${index + 1}`, value: String(index), description: `${page[0].label} bis ${page.at(-1).label}`.slice(0, 100) })))
+    )],
+  };
+}
+
 async function handleOpenReplacement(interaction, eventKey, groupKey) {
   if (!await isAdminAllowed(interaction)) {
     await interaction.reply({ content: 'Du darfst keinen Nachrücker einsetzen.', flags: EPHEMERAL });
@@ -244,8 +278,25 @@ async function handleReplacementTargetSelect(interaction, eventKey, groupKey) {
 
   await interaction.update({
     content: 'Wähle das Ersatzteam aus.',
-    components: buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, teams),
+    components: buildReplacementLetterRows(eventKey, groupKey, participantKeyValue, teams),
   });
+  return true;
+}
+
+async function handleReplacementLetterSelect(interaction, eventKey, groupKey, encodedParticipantKey) {
+  const participantKeyValue = decodeURIComponent(encodedParticipantKey);
+  const teams = getAvailableReplacementTeams({ eventKey, groupKey, participantKeyValue });
+  await interaction.update(buildReplacementPagePayload(eventKey, groupKey, participantKeyValue, teams, interaction.values?.[0]));
+  return true;
+}
+
+async function handleReplacementPageSelect(interaction, eventKey, groupKey, encodedParticipantKey, encodedLetter) {
+  const participantKeyValue = decodeURIComponent(encodedParticipantKey);
+  const letter = decodeURIComponent(encodedLetter);
+  const teams = getAvailableReplacementTeams({ eventKey, groupKey, participantKeyValue }).filter(team => replacementLetter(team) === letter);
+  const pages = chunk(teams, SELECT_OPTION_LIMIT);
+  const page = Math.max(0, Math.min(Number(interaction.values?.[0]) || 0, pages.length - 1));
+  await interaction.update({ content: `**${letter}**, Seite ${page + 1}/${pages.length}: Wähle das Ersatzteam aus.`, components: buildReplacementTeamSelectRows(eventKey, groupKey, participantKeyValue, pages[page]) });
   return true;
 }
 
@@ -570,12 +621,14 @@ async function handleGroupInteraction(interaction, client) {
 
   if (interaction.isStringSelectMenu?.()) {
     const [action, parsedEventKey, parsedGroupKey, extraValue] = customId.split(':');
-    if (!['group_result_select', 'group_admin_result_matchday', 'group_admin_result_select', 'group_replacement_target', 'group_replacement_team'].includes(action)) return false;
+    if (!['group_result_select', 'group_admin_result_matchday', 'group_admin_result_select', 'group_replacement_target', 'group_replacement_letter', 'group_replacement_page', 'group_replacement_team'].includes(action)) return false;
     const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_select') return handleTeamResultSelect(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_matchday') return handleAdminMatchdaySelect(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_select') return handleAdminResultSelect(interaction, eventKey, groupKey, extraValue);
     if (action === 'group_replacement_target') return handleReplacementTargetSelect(interaction, eventKey, groupKey);
+    if (action === 'group_replacement_letter') return handleReplacementLetterSelect(interaction, eventKey, groupKey, extraValue);
+    if (action === 'group_replacement_page') return handleReplacementPageSelect(interaction, eventKey, groupKey, extraValue, customId.split(':')[4]);
     if (action === 'group_replacement_team') return handleReplacementTeamSelect(interaction, eventKey, groupKey, extraValue, client);
   }
 
