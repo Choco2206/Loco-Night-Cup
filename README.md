@@ -31,7 +31,7 @@ Es wird genau ein finaler Wert pro echtem Teilnehmer gespeichert. Freilose werde
 
 Der Sonntags-Cup finalisiert seine Woche erst nach bestätigt abgeschlossenem Finale und Spiel um Platz 3. Läuft der Cup über Mitternacht, bleibt er durch sein Eventdatum in der Sonntagswoche. Für ausgefallene oder abgesagte Sonntags-Cups prüft der Reconcile-Dienst ab Montag 07:00 Uhr, dass kein Sonntags-Cup mehr läuft, und finalisiert erst dann. Fehlgeschlagene Discord- und Champion-Posts werden beim nächsten Reconcile erneut versucht; gespeicherte Wertungen werden dabei nicht zurückgerollt.
 
-Die Champion-Grafik wird ohne zwingende Hintergrundvorlage dynamisch als PNG mit den vorhandenen Fonts erstellt. Fehlt ein Teamlogo, zeichnet der Renderer einen neutralen Diamant-Platzhalter.
+Die Champion-Grafik verwendet `assets/power-ranking/power-ranking-champion.png` als feste Hintergrundvorlage und setzt Logo, Teamname, Punkte, Siege, Finalteilnahmen, Cups sowie Kalenderwoche dynamisch ein. Fehlt ein Teamlogo, zeichnet der Renderer einen neutralen Diamant-Platzhalter.
 
 ### Manuelle Neuberechnung
 

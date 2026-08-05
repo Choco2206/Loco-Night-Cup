@@ -5,6 +5,7 @@ const path = require('path');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../../storage');
 
 let fontsRegistered = false;
+const CHAMPION_TEMPLATE_PATH = 'assets/power-ranking/power-ranking-champion.png';
 
 function registerFonts(canvas) {
   if (fontsRegistered) return;
@@ -72,63 +73,56 @@ async function drawLogoOrPlaceholder(canvas, ctx, logoSnapshot, x, y, size) {
 async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
   const canvas = require('canvas');
   registerFonts(canvas);
-  const width = 1600;
-  const height = 900;
+  const templatePath = path.resolve(ROOT_DIR, CHAMPION_TEMPLATE_PATH);
+  if (!fs.existsSync(templatePath)) throw new Error(`Power-Ranking-Vorlage fehlt: ${CHAMPION_TEMPLATE_PATH}`);
+  const template = await canvas.loadImage(templatePath);
+  const width = template.naturalWidth || template.width;
+  const height = template.naturalHeight || template.height;
+  const scaleX = width / 1254;
+  const scaleY = height / 1254;
   const surface = canvas.createCanvas(width, height);
   const ctx = surface.getContext('2d');
-  const background = ctx.createLinearGradient(0, 0, width, height);
-  background.addColorStop(0, '#090d1b');
-  background.addColorStop(0.55, '#101a38');
-  background.addColorStop(1, '#070910');
-  ctx.fillStyle = background;
-  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(template, 0, 0, width, height);
 
-  ctx.strokeStyle = '#42d6ff';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(28, 28, width - 56, height - 56);
-  ctx.fillStyle = '#ffffff';
+  await drawLogoOrPlaceholder(
+    canvas,
+    ctx,
+    logoSnapshot,
+    437 * scaleX,
+    326 * scaleY,
+    380 * Math.min(scaleX, scaleY),
+  );
+
   ctx.textAlign = 'center';
-  ctx.font = '700 72px Oxanium';
-  ctx.fillText('LOCO POWER RANKING', width / 2, 105);
-  ctx.fillStyle = '#53dcff';
-  ctx.font = '700 42px Oxanium';
-  ctx.fillText('CHAMPION DER WOCHE', width / 2, 165);
-
-  await drawLogoOrPlaceholder(canvas, ctx, logoSnapshot, 120, 230, 440);
-  ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
-  const nameSize = fittedFontSize(ctx, champion.teamName, 830, 68, 34);
+  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 54 * scaleY, 26 * scaleY);
   ctx.font = `700 ${nameSize}px "Open Sans"`;
-  ctx.fillText(champion.teamName, 650, 315);
-  ctx.fillStyle = '#53dcff';
-  ctx.font = '700 82px Oxanium';
-  ctx.fillText(`${champion.points} PUNKTE`, 650, 420);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+  ctx.shadowBlur = 8 * scaleY;
+  ctx.fillText(champion.teamName, 627 * scaleX, 752 * scaleY);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#ffd33d';
+  ctx.font = `700 ${55 * scaleY}px Oxanium`;
+  ctx.fillText(String(champion.points), 627 * scaleX, 906 * scaleY);
 
   const stats = [
-    ['GESPIELTE CUPS', champion.cups],
-    ['TURNIERSIEGE', champion.wins],
-    ['FINALTEILNAHMEN', champion.finalAppearances],
+    { value: champion.wins, x: 287, color: '#ff4545' },
+    { value: champion.finalAppearances, x: 627, color: '#bb55ff' },
+    { value: champion.cups, x: 968, color: '#45a7ff' },
   ];
-  stats.forEach(([label, value], index) => {
-    const x = 650 + index * 285;
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(x, 485, 255, 145);
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.font = '700 52px Oxanium';
-    ctx.fillText(String(value), x + 127, 550);
-    ctx.fillStyle = '#b8c7eb';
-    ctx.font = '600 19px "Open Sans"';
-    ctx.fillText(label, x + 127, 602);
+  stats.forEach(stat => {
+    ctx.fillStyle = stat.color;
+    ctx.font = `700 ${45 * scaleY}px Oxanium`;
+    ctx.fillText(String(stat.value), stat.x * scaleX, 1030 * scaleY);
   });
 
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '700 32px Oxanium';
-  ctx.fillText(`KALENDERWOCHE ${week.calendarWeek}`, width / 2, 750);
-  ctx.fillStyle = '#b8c7eb';
-  ctx.font = '600 28px "Open Sans"';
-  ctx.fillText(`${formatGermanDate(week.startsAt)} bis ${formatGermanDate(week.endsAt)}`, width / 2, 800);
+  const weekText = `KW ${week.calendarWeek}  •  ${formatGermanDate(week.startsAt)} – ${formatGermanDate(week.endsAt)}`;
+  ctx.fillStyle = '#ffe478';
+  const weekSize = fittedFontSize(ctx, weekText, 650 * scaleX, 34 * scaleY, 20 * scaleY);
+  ctx.font = `700 ${weekSize}px "Open Sans"`;
+  ctx.textAlign = 'left';
+  ctx.fillText(weekText, 455 * scaleX, 1194 * scaleY);
 
   return {
     buffer: surface.toBuffer('image/png'),
@@ -140,4 +134,4 @@ function formatGermanDate(value) {
   return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value));
 }
 
-module.exports = { renderChampionGraphic, resolveLogoPath };
+module.exports = { CHAMPION_TEMPLATE_PATH, renderChampionGraphic, resolveLogoPath };
