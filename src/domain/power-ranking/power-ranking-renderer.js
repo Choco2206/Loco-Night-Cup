@@ -10,6 +10,7 @@ const CHAMPION_TEMPLATE_PATH = 'assets/power-ranking/power-ranking-champion.png'
 function registerFonts(canvas) {
   if (fontsRegistered) return;
   const fonts = [
+    ['assets/fonts/BlackOpsOne-Regular.ttf', 'Black Ops One'],
     ['assets/fonts/RubikSprayPaint-Regular.ttf', 'Rubik Spray Paint'],
     ['assets/fonts/Oxanium-VariableFont_wght.ttf', 'Oxanium'],
     ['assets/fonts/OpenSans-VariableFont_wdth,wght.ttf', 'Open Sans'],
@@ -95,26 +96,26 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
   );
 
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#ffffff';
-  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 50 * scaleY, 24 * scaleY, 'Rubik Spray Paint', 400);
-  ctx.font = `400 ${nameSize}px "Rubik Spray Paint"`;
+  ctx.fillStyle = '#ffe478';
+  const nameSize = fittedFontSize(ctx, champion.teamName, 760 * scaleX, 50 * scaleY, 24 * scaleY, 'Black Ops One', 400);
+  ctx.font = `400 ${nameSize}px "Black Ops One"`;
   ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
   ctx.shadowBlur = 8 * scaleY;
-  ctx.fillText(champion.teamName, 627 * scaleX, 752 * scaleY);
+  ctx.fillText(champion.teamName, 627 * scaleX, 782 * scaleY);
   ctx.shadowBlur = 0;
 
-  ctx.fillStyle = '#ffd33d';
-  ctx.font = `400 ${52 * scaleY}px "Rubik Spray Paint"`;
+  ctx.fillStyle = '#ffe478';
+  ctx.font = `400 ${52 * scaleY}px "Black Ops One"`;
   ctx.fillText(String(champion.points), 627 * scaleX, 944 * scaleY);
 
   const stats = [
-    { value: champion.wins, x: 287, color: '#ff4545' },
-    { value: champion.finalAppearances, x: 627, color: '#bb55ff' },
-    { value: champion.cups, x: 968, color: '#45a7ff' },
+    { value: champion.wins, x: 287 },
+    { value: champion.finalAppearances, x: 627 },
+    { value: champion.cups, x: 968 },
   ];
   stats.forEach(stat => {
-    ctx.fillStyle = stat.color;
-    ctx.font = `400 ${42 * scaleY}px "Rubik Spray Paint"`;
+    ctx.fillStyle = '#ffe478';
+    ctx.font = `400 ${42 * scaleY}px "Black Ops One"`;
     ctx.fillText(String(stat.value), stat.x * scaleX, 1090 * scaleY);
   });
 
