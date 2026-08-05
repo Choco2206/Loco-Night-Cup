@@ -126,23 +126,33 @@
       "tuesday": "weekend_night",
       "wednesday": "weekend_night",
       "thursday": "weekend_night",
-      "friday": "weekend_night",
-      "saturday": "weekend_night",
+      "friday": "weekend_late_night",
+      "saturday": "weekend_late_night",
       "sunday": "weekend_night"
     },
     "profiles": {
       "early": {
-        "deadlineTime": "23:30",
-        "lateWindowUntilTime": "23:45",
-        "drawTime": "23:50",
-        "tournamentStartTime": "00:00",
-        "startIsNextDay": true
+        "deadlineTime": "22:30",
+        "lateWindowUntilTime": "22:45",
+        "drawTime": "22:50",
+        "tournamentStartTime": "23:00",
+        "startIsNextDay": false
       },
       "weekend_night": {
-        "deadlineTime": "23:30",
-        "lateWindowUntilTime": "23:45",
-        "drawTime": "23:50",
-        "tournamentStartTime": "00:00",
+        "deadlineTime": "22:30",
+        "lateWindowUntilTime": "22:45",
+        "drawTime": "22:50",
+        "tournamentStartTime": "23:00",
+        "startIsNextDay": false
+      },
+      "weekend_late_night": {
+        "deadlineTime": "23:45",
+        "lateWindowUntilTime": "00:00",
+        "drawTime": "00:05",
+        "tournamentStartTime": "00:15",
+        "deadlineIsNextDay": false,
+        "lateWindowIsNextDay": true,
+        "drawIsNextDay": true,
         "startIsNextDay": true
       }
     }
