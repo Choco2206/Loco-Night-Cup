@@ -4,6 +4,7 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { autoConfirmFirstReport: autoConfirmGroupResult } = require('../groups/group-results');
+const { autoConfirmFirstReport: autoConfirmKnockoutResult } = require('../knockout/knockout-results');
 
 const pendingTimers = new Map();
 
@@ -91,7 +92,9 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
     content: [
       mentions,
       descriptor.phase === 'knockout'
-        ? `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. In der K.-o.-Phase erfolgt keine automatische Wertung.`
+        ? `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** `
+          + `(**${participantLabel(match.home)} : ${participantLabel(match.away)}**) eingetragen. `
+          + 'Bitte tragt euer Ergebnis innerhalb von 5 Minuten ein. Ohne Gegenmeldung wird das Spiel so gewertet, wie der Gegner es angegeben hat.'
         : `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. Ohne Rückmeldung wird dieses Ergebnis in 2 Minuten übernommen.`,
     ].filter(Boolean).join('\n'),
     allowedMentions: { users: userIds },
@@ -104,9 +107,9 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
 async function finalizeAutomaticResult(client, descriptor, channelId) {
   const pendingMatch = getMatch(readEventData(descriptor.eventKey), descriptor);
   const notice = pendingMatch?.confirmation || null;
-  const outcome = autoConfirmGroupResult({
-    eventKey: descriptor.eventKey, groupKey: descriptor.phaseKey, matchId: descriptor.matchId,
-  });
+  const outcome = descriptor.phase === 'knockout'
+    ? autoConfirmKnockoutResult({ eventKey: descriptor.eventKey, roundKey: descriptor.phaseKey, matchId: descriptor.matchId })
+    : autoConfirmGroupResult({ eventKey: descriptor.eventKey, groupKey: descriptor.phaseKey, matchId: descriptor.matchId });
   if (!outcome) return false;
 
   await deleteOpponentReminder(client, notice, channelId);
@@ -117,8 +120,13 @@ async function finalizeAutomaticResult(client, descriptor, channelId) {
     allowedMentions: { parse: [] },
   }).catch(() => null);
 
-  const { finalizeConfirmedGroupResult } = require('../groups/group-interactions');
-  await finalizeConfirmedGroupResult(client, descriptor.eventKey, descriptor.phaseKey, outcome);
+  if (descriptor.phase === 'knockout') {
+    const { finalizeConfirmedKnockoutResult } = require('../knockout/knockout-interactions');
+    await finalizeConfirmedKnockoutResult(client, descriptor.eventKey, outcome);
+  } else {
+    const { finalizeConfirmedGroupResult } = require('../groups/group-interactions');
+    await finalizeConfirmedGroupResult(client, descriptor.eventKey, descriptor.phaseKey, outcome);
+  }
   return true;
 }
 
@@ -147,7 +155,6 @@ async function handleResultOutcome({ client, eventKey, phase, phaseKey, outcome,
   }
   const targetChannelId = channelId || outcome.match.confirmation?.channelId;
   await sendOpponentReminder({ client, descriptor, match: outcome.match, channelId: targetChannelId });
-  if (phase === 'knockout') return true;
   const currentMatch = getMatch(readEventData(eventKey), descriptor) || outcome.match;
   scheduleTimer(client, descriptor, currentMatch, targetChannelId);
   return true;
@@ -162,10 +169,13 @@ function pendingDescriptors(eventKey, event) {
     }
   };
   for (const group of Object.values(event.groups?.groups || {})) {
-    addMatches('group', group.groupKey, (group.matchdays || []).flatMap(day => day.matches || []), group.channelId);
+    addMatches('group', group.groupKey, (group.matchdays || []).flatMap(day => day.matches || []), group.resultsChannelId || group.channelId);
   }
   if (event.leaguePhase?.phaseType === 'league') {
     addMatches('group', 'league', (event.leaguePhase.matchdays || []).flatMap(day => day.matches || []), event.leaguePhase.resultsChannelId);
+  }
+  for (const [roundKey, round] of Object.entries(event.knockout?.rounds || {})) {
+    addMatches('knockout', roundKey, round.matches || [], round.resultsChannelId || round.channelId);
   }
   return entries;
 }
