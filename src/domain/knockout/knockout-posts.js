@@ -27,6 +27,13 @@ const ROUND_CHANNEL_NAMES = {
   third_place: 'ko-platz-3',
   final: 'ko-finale',
 };
+const ROUND_RESULTS_CHANNEL_NAMES = {
+  round_of_16: 'ergebnisse-achtelfinale',
+  quarter_final: 'ergebnisse-viertelfinale',
+  semi_final: 'ergebnisse-halbfinale',
+  third_place: 'ergebnisse-platz-3',
+  final: 'ergebnisse-finale',
+};
 const ROUND_ROLE_NAMES = {
   round_of_16: 'LNC K.O. Achtelfinale',
   quarter_final: 'LNC K.O. Viertelfinale',
@@ -495,7 +502,7 @@ async function buildOverviewImagePayload(eventKey, event) {
   };
 }
 
-async function buildRoundImagePayload(eventKey, event, roundKey) {
+async function buildRoundImagePayload(eventKey, event, roundKey, { includeButtons = true } = {}) {
   const round = event.knockout?.rounds?.[roundKey];
   const image = await renderKoImage({
     phase: roundKey,
@@ -510,7 +517,7 @@ async function buildRoundImagePayload(eventKey, event, roundKey) {
       .setColor(roundKey === event.knockout?.firstRoundKey ? 0xf2c94c : 0x5865f2)],
     attachments: [],
     files: [{ attachment: image.buffer, name: image.fileName }],
-    components: [buildRoundButtons(eventKey, roundKey)],
+    components: includeButtons ? [buildRoundButtons(eventKey, roundKey)] : [],
     allowedMentions: { parse: [] },
   };
 }
@@ -663,6 +670,8 @@ function updateKnockoutMessageState({ eventKey, event, categoryId, overview, rou
         channelId: post.channelId || previous.channelId || null,
         videoChannelId: post.videoChannelId || previous.videoChannelId || null,
         messageId: post.messageId || previous.messageId || null,
+        resultsChannelId: post.resultsChannelId || previous.resultsChannelId || null,
+        resultsMessageId: post.resultsMessageId || previous.resultsMessageId || null,
         releaseMessageId: previous.releaseMessageId || null,
         releasedAt: previous.releasedAt || null,
         reminderAt: previous.reminderAt || null,
@@ -729,9 +738,17 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
       roleIds: roundRoles[roundKey] ? [roundRoles[roundKey]] : [],
       existingChannelId: round.videoChannelId || null,
     });
+    const resultsChannel = await ensureTextChannel({
+      guild: targetGuild,
+      settings,
+      name: ROUND_RESULTS_CHANNEL_NAMES[roundKey],
+      category,
+      roleIds: roundRoles[roundKey] ? [roundRoles[roundKey]] : [],
+      existingChannelId: round.resultsChannelId || null,
+    });
     let message;
     try {
-      message = await upsertMessage(channel, round.messageId || null, await buildRoundImagePayload(eventKey, event, roundKey));
+      message = await upsertMessage(channel, round.messageId || null, await buildRoundImagePayload(eventKey, event, roundKey, { includeButtons: false }));
     } catch (error) {
       console.error('[KO IMAGE ERROR]', {
         phase: roundKey, eventId: eventKey, template: ROUND_CHANNEL_NAMES[roundKey], error: error.message,
@@ -740,11 +757,23 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
         content: null,
         embeds: [buildRoundEmbed(eventKey, event, roundKey)],
         attachments: [],
-        components: [buildRoundButtons(eventKey, roundKey)],
+        components: [],
         allowedMentions: { parse: [] },
       });
     }
-    roundPosts[roundKey] = { channelId: channel.id, videoChannelId: videoChannel.id, messageId: message.id };
+    let resultsMessage;
+    try {
+      resultsMessage = await upsertMessage(resultsChannel, round.resultsMessageId || null, await buildRoundImagePayload(eventKey, event, roundKey));
+    } catch (error) {
+      resultsMessage = await upsertMessage(resultsChannel, round.resultsMessageId || null, {
+        content: null, embeds: [buildRoundEmbed(eventKey, event, roundKey)], attachments: [],
+        components: [buildRoundButtons(eventKey, roundKey)], allowedMentions: { parse: [] },
+      });
+    }
+    roundPosts[roundKey] = {
+      channelId: channel.id, videoChannelId: videoChannel.id, messageId: message.id,
+      resultsChannelId: resultsChannel.id, resultsMessageId: resultsMessage.id,
+    };
     roundChannels[roundKey] = channel.id;
     roundChannelObjects[roundKey] = channel;
   }
@@ -768,6 +797,8 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
       round.channelId = refs.channelId;
       round.videoChannelId = refs.videoChannelId;
       round.messageId = refs.messageId;
+      round.resultsChannelId = refs.resultsChannelId;
+      round.resultsMessageId = refs.resultsMessageId;
     }
     current.knockout.meta = { ...(current.knockout.meta || {}), updatedAt: nowIso() };
     current.meta = { ...(current.meta || {}), updatedAt: nowIso() };
@@ -810,6 +841,7 @@ module.exports = {
   KNOCKOUT_CATEGORY_NAME,
   KNOCKOUT_OVERVIEW_CHANNEL_NAME,
   ROUND_CHANNEL_NAMES,
+  ROUND_RESULTS_CHANNEL_NAMES,
   ROUND_VIDEO_CHANNEL_NAMES,
   ROUND_ROLE_NAMES,
   buildOverviewEmbed,
