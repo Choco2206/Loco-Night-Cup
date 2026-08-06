@@ -15,17 +15,12 @@ const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
 const { findTeamById } = require('../teams/team-service');
 
 const INTERNAL_CHANNEL_ID = '1534523164783280158';
+const RULEBOOK_CHANNEL_ID = '1517040886007992452';
 const TIMEZONE = 'Europe/Berlin';
 const BANNER_NAME = 'turnierleitung-banner.png';
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const DAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-const ROUND_INFO = {
-  round_of_16: ['Achtelfinale', 'nightcup-info-achtelfinale'],
-  quarter_final: ['Viertelfinale', 'nightcup-info-viertelfinale'],
-  semi_final: ['Halbfinale', 'nightcup-info-halbfinale'],
-  third_place: ['Platz 3', 'nightcup-info-platz-3'],
-  final: ['Finale', 'nightcup-info-finale'],
-};
+const LEGACY_KNOCKOUT_INFO_NAMES = ['nightcup-info-achtelfinale', 'nightcup-info-viertelfinale', 'nightcup-info-halbfinale', 'nightcup-info-platz-3', 'nightcup-info-finale'];
 const locks = new Map();
 let activeClient = null;
 let reconcileTimer = null;
@@ -76,7 +71,7 @@ function createCycleState(eventKey, eventDate, cycleKey, endsAt) {
     cycleKey, eventKey, eventDate, status: 'active', createdAt: nowIso(), updatedAt: nowIso(),
     availability: { status: 'open', channelId: null, messageId: null, endsAt, yesUserIds: [], noUserIds: [] },
     assignment: { status: 'not_created', type: null, messageId: null, groups: {}, leagueUserIds: [], knockoutUserIds: [], remindedAt: null, lockedAt: null },
-    infoChannels: { groups: {}, league: null, knockout: {} }, systemMessageIds: [],
+    infoChannels: { groups: {}, league: null, knockout: null }, systemMessageIds: [],
   };
 }
 function bannerPath(settings) { return path.resolve(ROOT_DIR, settings.assets?.tournamentLeadershipBannerPath || 'assets/tournament-leadership/tournament-leadership-banner.png'); }
@@ -216,46 +211,61 @@ async function postWarning(client, state, text) {
   updateCycle(state.cycleKey, current => ({ ...current, systemMessageIds: unique([...(current.systemMessageIds || []), message.id]) })); return message;
 }
 function infoEmbed(label, leadIds, settings) {
-  const rulesId = settings.channels?.rulebookChannelId || settings.channels?.rulesChannelId;
+  const rulesId = settings.channels?.rulebookChannelId || RULEBOOK_CHANNEL_ID;
   return new EmbedBuilder().setColor(0xc51f33).setTitle(`Night Cup Informationen \u2013 ${label}`).addFields(
     { name: 'Zust\u00e4ndige Turnierleitung', value: mentionUsers(leadIds) },
-    { name: 'Regelwerk', value: rulesId ? `<#${rulesId}>` : 'Bitte beachtet das aktuelle Loco-Night-Cup-Regelwerk.' },
+    { name: 'Regelwerk', value: `<#${rulesId}>` },
     { name: 'Wichtiger Hinweis', value: 'Bei Fragen, Problemen oder Protesten bitte ausschlie\u00dflich die hier genannte Turnierleitung pingen. Bitte nicht gleichzeitig weitere Moderatoren oder Admins anschreiben, damit es keine unterschiedlichen Aussagen gibt.' },
   );
 }
 async function ensureInfoChannel({ guild, settings, name, parentId, overwrites, existing, label, leadIds }) {
+  const candidates = [...guild.channels.cache.values()].filter(item => item.name === name && item.parentId === parentId && item.type === ChannelType.GuildText);
   let channel = existing?.channelId ? await guild.channels.fetch(existing.channelId).catch(() => null) : null;
-  if (!channel) channel = guild.channels.cache.find(item => item.name === name && item.parentId === parentId) || null;
+  if (!channel || channel.name !== name || channel.parentId !== parentId) channel = candidates.sort((a, b) => String(a.id).localeCompare(String(b.id)))[0] || null;
+  const created = !channel;
   if (!channel) channel = await guild.channels.create({ name, type: ChannelType.GuildText, parent: parentId || undefined, permissionOverwrites: overwrites, reason: 'Loco Night Cup Turnierleitungs-Info' });
   else await applyGroupChannelPermissionOverwrites(channel, overwrites);
+  for (const duplicate of candidates.filter(item => item.id !== channel.id)) await duplicate.delete('Doppelten Night-Cup-Info-Kanal bereinigt').catch(() => null);
+  const title = `Night Cup Informationen \u2013 ${label}`;
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   let message = existing?.messageId ? await channel.messages.fetch(existing.messageId).catch(() => null) : null;
+  if (!message && recent) message = recent.find(item => item.author?.id === guild.client.user.id && item.embeds?.[0]?.title === title) || null;
   const payload = { embeds: [infoEmbed(label, leadIds, settings)], allowedMentions: { parse: [], users: unique(leadIds) } };
   message = message ? await message.edit(payload) : await channel.send(payload);
-  return { channel, message };
+  if (recent) for (const duplicate of recent.filter(item => item.id !== message.id && item.author?.id === guild.client.user.id && item.embeds?.[0]?.title === title).values()) await duplicate.delete().catch(() => null);
+  return { channel, message, created };
 }
 function groupTeamUsers(group) { return unique((group.slots || []).filter(slot => slot.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId)))); }
 function leagueTeamUsers(phase) { return unique((phase.slots || []).filter(slot => slot.type === 'team').flatMap(slot => getTeamUserIds(findTeamById(slot.teamId)))); }
 function roundTeamUsers(round) { return unique((round?.matches || []).flatMap(match => [match.home, match.away]).filter(item => item?.type === 'team').flatMap(item => getTeamUserIds(findTeamById(item.teamId)))); }
-async function orderChannels(channels) { const existing = channels.filter(Boolean); if (!existing.length) return; const base = Math.min(...existing.map(channel => Number(channel.position || 0))); for (let index = 0; index < existing.length; index += 1) if (typeof existing[index].setPosition === 'function') await existing[index].setPosition(base + index).catch(() => null); }
 async function syncPhaseInfoChannels(client, eventKey) {
   const event = readEventData(eventKey); const state = getCycle(event.cycle?.cycleKey); if (!state || state.assignment.status !== 'locked') return null;
-  const settings = readSettings(); const guild = await getConfiguredGuild(client, settings); if (!guild) return null; const refs = JSON.parse(JSON.stringify(state.infoChannels || { groups: {}, league: null, knockout: {} }));
-  if (state.assignment.type === 'groups') for (const [key, group] of Object.entries(event.groups?.groups || {})) {
-    const leadIds = state.assignment.groups?.[key] ? [state.assignment.groups[key]] : []; if (!leadIds.length) continue;
-    const main = await guild.channels.fetch(group.channelId).catch(() => null); if (!main) continue;
-    const overwrites = buildGroupChannelPermissionOverwrites({ guild, settings, roleId: group.roleId, userIds: unique([...groupTeamUsers(group), ...leadIds]) });
-    const info = await ensureInfoChannel({ guild, settings, name: `nightcup-info-gruppe-${key.toLowerCase()}`, parentId: main.parentId, overwrites, existing: refs.groups?.[key], label: `Gruppe ${key}`, leadIds });
-    refs.groups[key] = { channelId: info.channel.id, messageId: info.message.id }; const results = await guild.channels.fetch(group.resultsChannelId).catch(() => null); const video = await guild.channels.fetch(group.videoChannelId).catch(() => null); await orderChannels([info.channel, main, results, video]);
-  }
-  if (state.assignment.type === 'league' && state.assignment.leagueUserIds.length) {
-    const phase = event.leaguePhase; const main = await guild.channels.fetch(phase.overviewChannelId).catch(() => null); if (main) { const overwrites = buildGroupChannelPermissionOverwrites({ guild, settings, roleId: phase.roleId, userIds: unique([...leagueTeamUsers(phase), ...state.assignment.leagueUserIds]) }); const info = await ensureInfoChannel({ guild, settings, name: 'nightcup-info-liga', parentId: main.parentId, overwrites, existing: refs.league, label: 'Liga', leadIds: state.assignment.leagueUserIds }); refs.league = { channelId: info.channel.id, messageId: info.message.id }; await orderChannels([info.channel, main, await guild.channels.fetch(phase.resultsChannelId).catch(() => null), await guild.channels.fetch(phase.videoChannelId).catch(() => null)]); }
-  }
-  if (event.knockout?.status !== 'not_created' && state.assignment.knockoutUserIds.length) for (const [roundKey, [label, name]] of Object.entries(ROUND_INFO)) {
-    const round = event.knockout?.rounds?.[roundKey]; if (!round?.matches?.length || round.status === 'not_needed') continue; const main = await guild.channels.fetch(round.channelId).catch(() => null); if (!main) continue;
-    const roleId = settings.roles?.knockoutRoleIds?.[roundKey] || null; const overwrites = buildGroupChannelPermissionOverwrites({ guild, settings, roleId, userIds: unique([...roundTeamUsers(round), ...state.assignment.knockoutUserIds]) });
-    const info = await ensureInfoChannel({ guild, settings, name, parentId: main.parentId, overwrites, existing: refs.knockout?.[roundKey], label, leadIds: state.assignment.knockoutUserIds }); refs.knockout[roundKey] = { channelId: info.channel.id, messageId: info.message.id }; await orderChannels([info.channel, main, await guild.channels.fetch(round.resultsChannelId).catch(() => null), await guild.channels.fetch(round.videoChannelId).catch(() => null)]);
-  }
-  updateCycle(state.cycleKey, current => ({ ...current, infoChannels: refs, updatedAt: nowIso() })); console.log(`[tournament-leadership] Info-Kan\u00e4le synchronisiert: ${state.cycleKey}`); return refs;
+  return withLock(`info:${state.cycleKey}`, async () => {
+    const latest = getCycle(state.cycleKey); const settings = readSettings(); const guild = await getConfiguredGuild(client, settings); if (!guild) return null;
+    const refs = JSON.parse(JSON.stringify(latest.infoChannels || { groups: {}, league: null, knockout: null })); refs.groups = refs.groups || {};
+    if (latest.assignment.type === 'groups') for (const [key, group] of Object.entries(event.groups?.groups || {})) {
+      const leadIds = latest.assignment.groups?.[key] ? [latest.assignment.groups[key]] : []; if (!leadIds.length) continue;
+      const main = await guild.channels.fetch(group.channelId).catch(() => null); if (!main) continue;
+      const overwrites = buildGroupChannelPermissionOverwrites({ guild, settings, roleId: group.roleId, userIds: unique([...groupTeamUsers(group), ...leadIds]) });
+      const info = await ensureInfoChannel({ guild, settings, name: `nightcup-info-gruppe-${key.toLowerCase()}`, parentId: main.parentId, overwrites, existing: refs.groups[key], label: `Gruppe ${key}`, leadIds });
+      refs.groups[key] = { channelId: info.channel.id, messageId: info.message.id };
+      if (info.created && typeof info.channel.setPosition === 'function') await info.channel.setPosition(main.position).catch(() => null);
+    }
+    if (latest.assignment.type === 'league' && latest.assignment.leagueUserIds.length) {
+      const phase = event.leaguePhase; const main = await guild.channels.fetch(phase.overviewChannelId).catch(() => null);
+      if (main) { const overwrites = buildGroupChannelPermissionOverwrites({ guild, settings, roleId: phase.roleId, userIds: unique([...leagueTeamUsers(phase), ...latest.assignment.leagueUserIds]) }); const info = await ensureInfoChannel({ guild, settings, name: 'nightcup-info-liga', parentId: main.parentId, overwrites, existing: refs.league, label: 'Liga', leadIds: latest.assignment.leagueUserIds }); refs.league = { channelId: info.channel.id, messageId: info.message.id }; if (info.created && typeof info.channel.setPosition === 'function') await info.channel.setPosition(main.position).catch(() => null); }
+    }
+    if (event.knockout?.status !== 'not_created' && latest.assignment.knockoutUserIds.length && event.knockout.categoryId) {
+      for (const channel of [...guild.channels.cache.values()].filter(item => item.parentId === event.knockout.categoryId && LEGACY_KNOCKOUT_INFO_NAMES.includes(item.name))) await channel.delete('Alten rundenbezogenen Night-Cup-Info-Kanal bereinigt').catch(() => null);
+      const participantIds = unique(Object.values(event.knockout.rounds || {}).flatMap(round => round?.matches?.length ? roundTeamUsers(round) : []));
+      const overwrites = buildGroupChannelPermissionOverwrites({ guild, settings, userIds: unique([...participantIds, ...latest.assignment.knockoutUserIds]) });
+      const existing = refs.knockout?.channelId ? refs.knockout : null;
+      const info = await ensureInfoChannel({ guild, settings, name: 'nightcup-info-ko-phase', parentId: event.knockout.categoryId, overwrites, existing, label: 'K.O.-Phase', leadIds: latest.assignment.knockoutUserIds });
+      refs.knockout = { channelId: info.channel.id, messageId: info.message.id };
+      const overview = await guild.channels.fetch(event.knockout.overviewChannelId).catch(() => null); if (info.created && overview && typeof info.channel.setPosition === 'function') await info.channel.setPosition(overview.position).catch(() => null);
+    }
+    updateCycle(state.cycleKey, current => ({ ...current, infoChannels: refs, updatedAt: nowIso() })); console.log(`[tournament-leadership] Info-Kan\u00e4le synchronisiert: ${state.cycleKey}`); return refs;
+  });
 }
 async function handleInteraction(interaction, client) {
   const id = String(interaction.customId || ''); if (!id.startsWith('tl_')) return false; const settings = readSettings();
@@ -273,11 +283,12 @@ async function cleanupEvent(client, eventKey) {
   const event = readEventData(eventKey); const cycleKey = event.cycle?.cycleKey; const state = cycleKey ? getCycle(cycleKey) : null; if (!state || state.status === 'cleaned') return { cleaned: false };
   const settings = readSettings(); const channel = await getInternalChannel(client, settings).catch(() => null); const deletedMessages = [];
   for (const id of unique(state.systemMessageIds)) { const message = channel ? await channel.messages.fetch(id).catch(() => null) : null; if (message && await message.delete().then(() => true).catch(() => false)) deletedMessages.push(id); }
-  const channelIds = unique([...Object.values(state.infoChannels?.groups || {}).map(item => item.channelId), state.infoChannels?.league?.channelId, ...Object.values(state.infoChannels?.knockout || {}).map(item => item.channelId)]); const deletedChannels = [];
+  const knockoutRefs = state.infoChannels?.knockout?.channelId ? [state.infoChannels.knockout] : Object.values(state.infoChannels?.knockout || {});
+  const channelIds = unique([...Object.values(state.infoChannels?.groups || {}).map(item => item.channelId), state.infoChannels?.league?.channelId, ...knockoutRefs.map(item => item?.channelId)]); const deletedChannels = [];
   for (const id of channelIds) { const info = await client.channels.fetch(id).catch(() => null); if (info && await info.delete('Loco Night Cup Turnierleitungs-Reset').then(() => true).catch(() => false)) deletedChannels.push(id); }
-  updateCycle(cycleKey, current => ({ cycleKey, eventKey, eventDate: current.eventDate, status: 'cleaned', cleanedAt: nowIso(), availability: { status: 'cleared', yesUserIds: [], noUserIds: [] }, assignment: { status: 'cleared', groups: {}, leagueUserIds: [], knockoutUserIds: [] }, infoChannels: { groups: {}, league: null, knockout: {} }, systemMessageIds: [] }));
+  updateCycle(cycleKey, current => ({ cycleKey, eventKey, eventDate: current.eventDate, status: 'cleaned', cleanedAt: nowIso(), availability: { status: 'cleared', yesUserIds: [], noUserIds: [] }, assignment: { status: 'cleared', groups: {}, leagueUserIds: [], knockoutUserIds: [] }, infoChannels: { groups: {}, league: null, knockout: null }, systemMessageIds: [] }));
   console.log(`[tournament-leadership] Reset abgeschlossen: ${cycleKey}, Nachrichten=${deletedMessages.length}, Kan\u00e4le=${deletedChannels.length}`); return { cleaned: true, deletedMessages, deletedChannels };
 }
 async function init(client) { activeClient = client; await reconcile(client, new Date(), { startup: true }); if (!reconcileTimer) { reconcileTimer = setInterval(() => reconcile(client).catch(error => console.error('[tournament-leadership] Reconcile fehlgeschlagen:', error)), 60 * 1000); if (reconcileTimer.unref) reconcileTimer.unref(); } return true; }
 
-module.exports = { INTERNAL_CHANNEL_ID, assignmentComponents, autoAssignAtStart, availabilityComponents, balancedGroupAssignments, cleanupEvent, closeAvailability, createCycleState, dateTitle, ensureAssignmentForEvent, ensureDailyAvailability, handleInteraction, init, reconcile, syncPhaseInfoChannels };
+module.exports = { INTERNAL_CHANNEL_ID, assignmentComponents, autoAssignAtStart, availabilityComponents, balancedGroupAssignments, cleanupEvent, closeAvailability, createCycleState, dateTitle, ensureAssignmentForEvent, ensureDailyAvailability, handleInteraction, infoEmbed, init, reconcile, syncPhaseInfoChannels };

@@ -375,7 +375,7 @@ function createSettingsDefault() {
       powerRankingChampionChannelId: '1534485575543816305',
       tournamentLeadershipChannelId: '1534523164783280158',
       logChannelId: null,
-      rulebookChannelId: null,
+      rulebookChannelId: '1517040886007992452',
       chatChannelId: null,
       cooperationChannelId: null,
       feedbackChannelId: null,

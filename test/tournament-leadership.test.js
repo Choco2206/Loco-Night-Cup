@@ -9,6 +9,7 @@ const {
   balancedGroupAssignments,
   createCycleState,
   dateTitle,
+  infoEmbed,
 } = require('../src/domain/tournament-leadership');
 const { toDateOnly } = require('../src/domain/checkins/checkin-schedule');
 
@@ -21,6 +22,18 @@ test('uses the configured internal tournament-leadership channel', () => {
   assert.equal(INTERNAL_CHANNEL_ID, '1534523164783280158');
 });
 
+test('info embeds always link the configured rulebook channel', () => {
+  const embed = infoEmbed('Gruppe A', ['123'], { channels: { rulebookChannelId: '1517040886007992452' } }).toJSON();
+  assert.equal(embed.fields.find(field => field.name === 'Regelwerk').value, '<#1517040886007992452>');
+});
+
+test('KO info uses one shared phase channel and no recurring channel ordering', () => {
+  const source = require('node:fs').readFileSync(require.resolve('../src/domain/tournament-leadership/tournament-leadership-service'), 'utf8');
+  assert.match(source, /name: 'nightcup-info-ko-phase'/);
+  assert.match(source, /withLock\(`info:\$\{state\.cycleKey\}`/);
+  assert.doesNotMatch(source, /async function orderChannels/);
+});
+
 test('formats a German weekday and short date', () => {
   assert.equal(dateTitle('2026-08-05'), 'Mittwoch, 05.08.26');
 });
@@ -30,7 +43,7 @@ test('creates restart-safe initial state for one event cycle', () => {
   assert.equal(state.status, 'active');
   assert.equal(state.availability.status, 'open');
   assert.equal(state.assignment.status, 'not_created');
-  assert.deepEqual(state.infoChannels, { groups: {}, league: null, knockout: {} });
+  assert.deepEqual(state.infoChannels, { groups: {}, league: null, knockout: null });
 });
 
 test('availability exposes exactly one yes and one no button', () => {
