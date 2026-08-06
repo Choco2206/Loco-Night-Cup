@@ -14,6 +14,7 @@ const teamOfTheTournamentSystem = require('./src/domain/team-of-the-tournament')
 const { schedulePendingAutoCleanups } = require('./src/domain/events/event-cleanup-service');
 const { initPendingResultConfirmations } = require('./src/domain/results/result-confirmation-service');
 const { initPowerRanking } = require('./src/domain/power-ranking');
+const { initLegacyRanking } = require('./src/domain/legacy-ranking');
 const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
 
 const EPHEMERAL = 64;
@@ -81,6 +82,7 @@ async function main() {
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
       await runStartupStep('Team of the Tournament', () => teamOfTheTournamentSystem.initTeamOfTheTournament(client));
       await runStartupStep('Loco Power Ranking', () => initPowerRanking(client));
+      await runStartupStep('Loco Legacy Ranking', () => initLegacyRanking(client));
       initPendingResultConfirmations(client);
       await runStartupStep('Live-Spielplan', () => liveScheduleSystem.refreshLiveScheduleForActiveEvents(client));
       schedulePendingAutoCleanups(client);

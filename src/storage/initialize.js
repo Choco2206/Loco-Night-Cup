@@ -24,6 +24,7 @@ const {
   createEventDefault,
   createMessagesDefault,
   createPowerRankingDefault,
+  createLegacyRankingDefault,
   createSettingsDefault,
   createTournamentLeadershipDefault,
   createTottHistoryDefault,
@@ -604,6 +605,15 @@ function normalizeMessagesFile() {
     changed = true;
   }
 
+  if (!messages.legacyRanking) {
+    messages.legacyRanking = { channelId: null, messageIds: [], updatedAt: null };
+    changed = true;
+  }
+  if (!Array.isArray(messages.legacyRanking.messageIds)) {
+    messages.legacyRanking.messageIds = [];
+    changed = true;
+  }
+
   changed = ensureEventKeys(messages.checkins, () => ({
     channelId: null,
     mainMessageId: null,
@@ -687,6 +697,7 @@ function initializeStorage() {
   ensureJsonFile(FILES.messages, createMessagesDefault);
   ensureJsonFile(FILES.tottHistory, createTottHistoryDefault);
   ensureJsonFile(FILES.powerRanking, createPowerRankingDefault);
+  ensureJsonFile(FILES.legacyRanking, createLegacyRankingDefault);
   ensureJsonFile(FILES.tournamentLeadership, createTournamentLeadershipDefault);
 
   for (const eventKey of EVENT_KEYS) {

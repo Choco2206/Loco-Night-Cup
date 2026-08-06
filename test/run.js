@@ -16,3 +16,4 @@ require('./league-replacement.test');
 require('./attendance.test');
 require('./german-ui-text.test');
 require('./tournament-leadership.test');
+require('./legacy-ranking.test');

@@ -57,6 +57,10 @@ function createPowerRankingDefault() {
   };
 }
 
+function createLegacyRankingDefault() {
+  return { version: DATA_VERSION, teams: {}, meta: emptyTimestampMeta() };
+}
+
 function createTournamentLeadershipDefault() {
   return { version: DATA_VERSION, cycles: {}, meta: emptyTimestampMeta() };
 }
@@ -305,6 +309,11 @@ function createMessagesDefault() {
       messageIds: [],
       updatedAt: null,
     },
+    legacyRanking: {
+      channelId: null,
+      messageIds: [],
+      updatedAt: null,
+    },
     groups: createEventMap(() => emptyGroupMessages()),
     leaguePhase: createEventMap(() => ({ cycleKey: null })),
     knockout: createEventMap(() => emptyKnockoutMessages()),
@@ -373,6 +382,7 @@ function createSettingsDefault() {
       teamOfTheTournamentTestChannelId: '1525035287971889173',
       powerRankingChannelId: '1534485406488203324',
       powerRankingChampionChannelId: '1534485575543816305',
+      legacyRankingChannelId: '1534844186803830835',
       tournamentLeadershipChannelId: '1534523164783280158',
       logChannelId: null,
       rulebookChannelId: '1517040886007992452',
@@ -550,6 +560,7 @@ module.exports = {
   createEventDefault,
   createMessagesDefault,
   createPowerRankingDefault,
+  createLegacyRankingDefault,
   createTournamentLeadershipDefault,
   createSettingsDefault,
   createTeamHistoryDefault,

@@ -80,6 +80,11 @@ function validateMessages(data) {
     }
   }
 
+  if (requireObject(errors, data.legacyRanking, 'legacyRanking')) {
+    requireSnowflakeOrNull(errors, data.legacyRanking.channelId, 'legacyRanking.channelId');
+    requireArray(errors, data.legacyRanking.messageIds, 'legacyRanking.messageIds');
+  }
+
   if (validateEventMap(errors, data.groups, 'groups')) {
     EVENT_KEYS.forEach(eventKey => {
       const eventGroups = data.groups[eventKey];

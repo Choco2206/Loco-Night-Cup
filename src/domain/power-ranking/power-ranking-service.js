@@ -328,6 +328,12 @@ async function processCompletedTournament({ client, eventKey, event = null }) {
   } catch (error) {
     console.warn(`[PowerRanking] Discord-Ranking konnte nicht aktualisiert werden; Daten bleiben gespeichert: ${error.message}`);
   }
+  try {
+    const { refreshLegacyRanking } = require('../legacy-ranking');
+    await refreshLegacyRanking(client);
+  } catch (error) {
+    console.warn(`[LegacyRanking] Aktualisierung wird später erneut versucht: ${error.message}`);
+  }
   if (eventKey === 'sunday') {
     const finalized = finalizeWeekData(evaluation.week.weekKey);
     try {
