@@ -16,9 +16,17 @@ const {
   finalizeWeekData,
   processCompletedTournament,
   publishChampionPost,
+  rankingPages: powerRankingPages,
   recordTournamentEvaluation,
   refreshRankingMessage,
 } = require('../src/domain/power-ranking/power-ranking-service');
+
+test('renders the weekly Power Ranking in the compact table design', () => {
+  const pages = powerRankingPages({ cups: 2, lastUpdatedAt: '2026-08-05T12:00:00.000Z', teams: [{ rank: 1, teamName: 'Loco Squad', points: 18, change: 1, cups: 2, wins: 1, finalAppearances: 2, semifinalOrBetter: 2 }] }, { calendarWeek: 32, startsAt: '2026-08-03T05:00:00.000Z', endDate: '2026-08-09', endsAt: '2026-08-10T04:59:59.999Z' });
+  assert.match(pages[0], /PL TEAM\s+PKT\s+BEW CUPS/);
+  assert.match(pages[0], /Loco Squad\s+18\s+\+1/);
+  assert.ok(pages.every(page => page.length <= 2000));
+});
 const { resolveLogoPath } = require('../src/domain/power-ranking/power-ranking-renderer');
 const { isPowerRankingSettled } = require('../src/domain/events/event-completion-policy');
 

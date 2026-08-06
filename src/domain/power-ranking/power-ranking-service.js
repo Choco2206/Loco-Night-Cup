@@ -127,8 +127,23 @@ function formatDateTime(value) {
   }).format(new Date(value));
 }
 
+function rankingTeamName(name, width = 20) {
+  const value = String(name || 'Unbekannt');
+  return value.length > width ? `${value.slice(0, width - 1)}…` : value;
+}
+
+function rankingMovement(team) {
+  if (team.change === null || team.change === undefined) return 'NEU';
+  if (team.change > 0) return `+${team.change}`;
+  if (team.change < 0) return String(team.change);
+  return '=';
+}
+
+function rankingTableRow(team) {
+  return `${String(team.rank).padStart(2)} ${rankingTeamName(team.teamName).padEnd(20)} ${String(team.points).padStart(4)} ${rankingMovement(team).padStart(4)} ${String(team.cups).padStart(4)} ${String(team.wins).padStart(3)} ${String(team.finalAppearances).padStart(3)} ${String(team.semifinalOrBetter).padStart(3)}`;
+}
+
 function rankingPages(ranking, week) {
-  const separator = '━'.repeat(24);
   const endDate = week.endDate
     ? new Date(`${week.endDate}T12:00:00.000Z`)
     : new Date(new Date(week.endsAt).getTime() - 7 * 60 * 60 * 1000);
@@ -145,40 +160,26 @@ function rankingPages(ranking, week) {
     'Viertelfinale: **3 Punkte**',
     'Achtelfinale: **2 Punkte**',
     'Gruppen- oder Ligaphase: **1 Punkt**',
-    '',
-    separator,
-    '',
+    '', '```',
+    'PL TEAM                  PKT  BEW CUPS  TS FIN HF+',
   ].join('\n');
-  const entries = ranking.teams.map(team => [
-    `**#${team.rank} ${team.teamName}** • **${team.points} Punkte** • ${team.changeLabel}`,
-    `${team.cups} Cups | ${team.wins} Siege | ${team.finalAppearances} Finals | ${team.semifinalOrBetter} Halbfinals+`,
-  ].join('\n'));
-  if (!entries.length) entries.push('Noch kein Cup wurde in dieser Kalenderwoche gewertet.');
+  const entries = ranking.teams.length ? ranking.teams.map(rankingTableRow) : ['Noch kein Cup wurde in dieser Kalenderwoche gewertet.'];
   const footer = [
-    '',
-    separator,
-    '',
+    '', '```', '',
     `Cups dieser Woche: **${ranking.cups}**`,
     `Letzte Aktualisierung: ${ranking.lastUpdatedAt ? formatDateTime(ranking.lastUpdatedAt) : 'noch keine'}`,
-    `Nächster Reset: Montag, 07:00 Uhr`,
-    '',
-    separator,
+    'Nächster Reset: Montag, 07:00 Uhr',
   ].join('\n');
   const pages = [];
   let current = header;
   for (const entry of entries) {
-    const next = `${current}${current.endsWith('\n\n') ? '' : '\n\n'}${entry}`;
-    if (next.length > 1800 && current !== header) {
-      pages.push(current);
-      current = entry;
+    const next = `${current}\n${entry}`;
+    if (`${next}${footer}`.length > 1950 && current !== header) {
+      pages.push(`${current}\n\`\`\``);
+      current = `\`\`\`\nPL TEAM                  PKT  BEW CUPS  TS FIN HF+\n${entry}`;
     } else current = next;
   }
-  if (`${current}${footer}`.length <= 1950) current += footer;
-  else {
-    pages.push(current);
-    current = footer.trim();
-  }
-  pages.push(current);
+  pages.push(`${current}${footer}`);
   return pages;
 }
 
