@@ -109,8 +109,14 @@ function preserveLockedFormat(event) {
   const waitlistSet = new Set(existingWaitlistIds);
   const byeCount = getManualByeCount(event);
   const lockedSize = Number(event.format?.size || 0);
-  const activeByeCount = 0;
-  const waitlistByeCount = byeCount;
+  const availableActiveSlots = Math.max(0, lockedSize - activeTeamIds.length);
+  const storedActiveByeCount = Number(event.format?.activeByeCount);
+  const activeByeCount = Math.min(
+    byeCount,
+    availableActiveSlots,
+    Number.isFinite(storedActiveByeCount) ? Math.max(0, storedActiveByeCount) : availableActiveSlots,
+  );
+  const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   for (const teamId of entryIds) {
     if (activeTeamIds.includes(teamId) || waitlistSet.has(teamId)) continue;
