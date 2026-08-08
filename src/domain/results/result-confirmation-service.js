@@ -91,11 +91,9 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
   const message = await channel.send({
     content: [
       mentions,
-      descriptor.phase === 'knockout'
-        ? `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** `
-          + `(**${participantLabel(match.home)} : ${participantLabel(match.away)}**) eingetragen. `
-          + 'Bitte tragt euer Ergebnis innerhalb von 5 Minuten ein. Ohne Gegenmeldung wird das Spiel so gewertet, wie der Gegner es angegeben hat.'
-        : `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** gemeldet. Bitte meldet das Ergebnis ebenfalls. Ohne Rückmeldung wird dieses Ergebnis in 2 Minuten übernommen.`,
+      `**${participantLabel(reporter)}** hat **${report.homeGoals}:${report.awayGoals}** `
+        + `(**${participantLabel(match.home)} : ${participantLabel(match.away)}**) eingetragen. `
+        + 'Bitte tragt euer Ergebnis innerhalb von 2 Minuten ein. Ohne Gegenmeldung wird das Spiel so gewertet, wie der Gegner es angegeben hat.',
     ].filter(Boolean).join('\n'),
     allowedMentions: { users: userIds },
   }).catch(() => null);
