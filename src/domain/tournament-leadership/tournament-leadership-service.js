@@ -211,7 +211,7 @@ async function postWarning(client, state, text) {
   updateCycle(state.cycleKey, current => ({ ...current, systemMessageIds: unique([...(current.systemMessageIds || []), message.id]) })); return message;
 }
 function infoEmbed(label, leadIds, settings) {
-  const rulesId = settings.channels?.rulebookChannelId || RULEBOOK_CHANNEL_ID;
+  const rulesId = RULEBOOK_CHANNEL_ID;
   return new EmbedBuilder().setColor(0xc51f33).setTitle(`Night Cup Informationen \u2013 ${label}`).addFields(
     { name: 'Zust\u00e4ndige Turnierleitung', value: mentionUsers(leadIds) },
     { name: 'Regelwerk', value: `<#${rulesId}>` },
