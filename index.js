@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { Client, Events, GatewayIntentBits } = require('discord.js');
+const { Client, EmbedBuilder, Events, GatewayIntentBits } = require('discord.js');
 const { bootstrapPhaseOne } = require('./src/app/bootstrap');
 const teamSystem = require('./src/domain/teams');
 const checkinSystem = require('./src/domain/checkins');
@@ -18,6 +18,52 @@ const { initLegacyRanking } = require('./src/domain/legacy-ranking');
 const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
 
 const EPHEMERAL = 64;
+const WELCOME_CHANNEL_ID = '1516390719839932576';
+const ROLE_SELECT_CHANNEL_ID = '1516543498113908866';
+
+function buildWelcomeEmbed(member) {
+  return new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle('🌙 Willkommen beim Loco Night Cup!')
+    .setDescription([
+      `Hey <@${member.id}> – schön, dass du am Start bist!`,
+      '',
+      'Bei uns geht es kompetitiv zu, aber immer **respektvoll, fair und erwachsen**. Wer den Cup nicht ernst nimmt, trollt oder dauerhaft negative Vibes verbreitet, ist hier falsch.',
+      '',
+      `## 🎭 Wähle zuerst deine Rolle in <#${ROLE_SELECT_CHANNEL_ID}>`,
+      '',
+      '**🎮 Spieler**',
+      'Du möchtest mitspielen, aber kein eigenes Team registrieren. Du erhältst Zugriff auf die allgemeinen Bereiche, die Team- und Spielersuche sowie die Übersichten der täglichen Cup-Anmeldungen.',
+      '',
+      '**🧠 Manager**',
+      'Du möchtest dein Team für den Loco Night Cup registrieren. Nach erfolgreicher Teamregistrierung erhältst du erweiterten Zugriff.',
+      '',
+      '> Wichtig: Die Teamregistrierung ist **noch keine Cup-Anmeldung**. Für einen Cup meldest du dein Team im jeweiligen Tageskanal an. Dort findest du selbstständig alle wichtigen Informationen: Startzeit, Auslosung, angemeldete Teams und den aktuellen Anmeldeplatz deines Teams.',
+      '',
+      'Im Kanal **Mein Team** kannst du dein Team eigenständig verwalten – zum Beispiel Co-Manager hinzufügen oder euer Logo ändern. Bitte nutze die vorhandenen Möglichkeiten und organisiere dein Team so selbstständig wie möglich.',
+      '',
+      '**Bleib fair, bring gute Energie mit und respektiere die Community. Genau das ist uns wichtig.**',
+      '',
+      'Willkommen in der Loco Night Cup Community – wir wünschen dir viel Erfolg in der Nacht! 🐺🏆',
+    ].join('\n'))
+    .setFooter({ text: 'Dein Loco Night Cup Team' })
+    .setTimestamp();
+}
+
+async function sendWelcomeMessage(member) {
+  if (member.user?.bot) return;
+
+  const channel = await member.guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
+  if (!channel?.send) {
+    console.warn(`Welcome channel ${WELCOME_CHANNEL_ID} was not found or is not writable.`);
+    return;
+  }
+
+  await channel.send({
+    embeds: [buildWelcomeEmbed(member)],
+    allowedMentions: { users: [member.id] },
+  });
+}
 
 function runBootstrap() {
   const result = bootstrapPhaseOne();
@@ -114,6 +160,14 @@ async function main() {
       if (await teamSystem.handleMessage(message, client)) return;
     } catch (error) {
       console.error('Message handling failed:', error);
+    }
+  });
+
+  client.on(Events.GuildMemberAdd, async member => {
+    try {
+      await sendWelcomeMessage(member);
+    } catch (error) {
+      console.error('Welcome message failed:', error);
     }
   });
 
