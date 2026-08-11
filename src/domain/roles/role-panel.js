@@ -1,6 +1,5 @@
 'use strict';
 
-const { PermissionFlagsBits } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { buildRoleSelectPayload } = require('./role-components');
@@ -38,7 +37,7 @@ async function ensureRolelessChannelVisibility(guild, settings) {
     if (!channel?.permissionOverwrites?.edit) continue;
 
     await channel.permissionOverwrites.edit(everyoneRoleId, {
-      [PermissionFlagsBits.ViewChannel]: publicChannelIds.has(channel.id),
+      ViewChannel: publicChannelIds.has(channel.id),
     });
   }
 }
