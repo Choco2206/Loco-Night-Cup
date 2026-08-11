@@ -26,7 +26,7 @@ function buildWelcomeEmbed(member) {
     .setColor(0xf1c40f)
     .setTitle('🌙 Willkommen beim Loco Night Cup!')
     .setDescription([
-      `Hey <@${member.id}> – schön, dass du am Start bist!`,
+      `Hey **${member.displayName}** – schön, dass du am Start bist!`,
       '',
       'Bei uns geht es kompetitiv zu, aber immer **respektvoll, fair und erwachsen**. Wer den Cup nicht ernst nimmt, trollt oder dauerhaft negative Vibes verbreitet, ist hier falsch.',
       '',
