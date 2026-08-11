@@ -20,28 +20,6 @@ function getRolePanelState(messages) {
   return messages.roles.roleSelectPanel;
 }
 
-async function ensureRolelessChannelVisibility(guild, settings) {
-  const publicChannelIds = new Set(
-    [
-      settings.channels?.welcomeChannelId,
-      settings.channels?.roleSelectChannelId,
-    ]
-      .filter(Boolean)
-      .map(String)
-  );
-
-  const channels = await guild.channels.fetch();
-  const everyoneRoleId = guild.roles.everyone.id;
-
-  for (const channel of channels.values()) {
-    if (!channel?.permissionOverwrites?.edit) continue;
-
-    await channel.permissionOverwrites.edit(everyoneRoleId, {
-      ViewChannel: publicChannelIds.has(channel.id),
-    });
-  }
-}
-
 async function ensureRoleSelectPanel(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const channelId = settings.channels?.roleSelectChannelId;
@@ -49,8 +27,6 @@ async function ensureRoleSelectPanel(client) {
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) return false;
-
-  await ensureRolelessChannelVisibility(channel.guild, settings);
 
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = getRolePanelState(messages);
@@ -85,5 +61,4 @@ async function ensureRoleSelectPanel(client) {
 
 module.exports = {
   ensureRoleSelectPanel,
-  ensureRolelessChannelVisibility,
 };
