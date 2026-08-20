@@ -22,7 +22,12 @@ function getKoTemplate({ phase, qualifiedTeamCount }) {
     if (![4, 8, 16].includes(Number(qualifiedTeamCount))) throw new Error(`Keine K.O.-Uebersicht fuer ${qualifiedTeamCount} Teams.`);
     return `qualification_${Number(qualifiedTeamCount)}`;
   }
-  if (!['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(phase)) {
+  if (![
+    'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final',
+    'royal_8_kings_round_1', 'royal_8_kings_round_2', 'royal_8_kings_final',
+    'royal_8_shadows_round_1', 'royal_8_shadows_round_2', 'royal_8_shadows_round_3', 'royal_8_shadows_final',
+    'royal_grand_final', 'royal_grand_final_reset',
+  ].includes(phase)) {
     throw new Error(`Unbekannte K.O.-Bildphase: ${phase}`);
   }
   return phase;

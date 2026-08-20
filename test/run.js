@@ -5,6 +5,7 @@ require('./team-overview.test');
 require('./event-schedule-times.test');
 require('./power-ranking.test');
 require('./knockout-release.test');
+require('./knockout-royale-images.test');
 require('./group-video-channel.test');
 require('./result-auto-confirm.test');
 require('./team-of-the-tournament.test');
