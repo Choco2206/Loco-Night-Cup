@@ -9,6 +9,7 @@ const { checkInRoyaleTeam, withdrawRoyaleTeam } = require('./royale-service');
 const { refreshRoyaleCheckin } = require('./royale-checkin-panel');
 const { readRoyale, updateRoyale } = require('./royale-repository');
 const { syncRoyaleRoundResources } = require('./royale-rounds');
+const { postRoyaleCeremony } = require('./royale-ceremony');
 
 function manages(userId, participant) {
   const team = findTeamById(participant?.teamId);
@@ -68,6 +69,7 @@ async function submitAdminResult(interaction, client, roundKey, matchId) {
   let outcome;
   updateRoyale(event => { outcome = require('./royale-bracket').recordRoyaleResult(event.bracket, { roundKey, matchId, homeGoals: interaction.fields.getTextInputValue('home_goals'), awayGoals: interaction.fields.getTextInputValue('away_goals') }); event.status = event.bracket.status === 'completed' ? 'completed' : 'running'; return event; });
   await syncRoyaleRoundResources(client);
+  if (readRoyale().bracket?.status === 'completed') await postRoyaleCeremony(client);
   await interaction.editReply(outcome.eliminated ? 'Admin-Ergebnis gesetzt; das unterlegene Team ist ausgeschieden.' : 'Admin-Ergebnis gesetzt; der Turnierbaum wurde aktualisiert.');
   return true;
 }
@@ -82,7 +84,10 @@ async function submitResult(interaction, client, roundKey, matchId) {
     outcome = submitRoyaleReport(event.bracket, { roundKey, matchId, reporterTeamId, reportedByUserId: interaction.user.id, homeGoals: interaction.fields.getTextInputValue('home_goals'), awayGoals: interaction.fields.getTextInputValue('away_goals') });
     event.status = event.bracket.status === 'completed' ? 'completed' : 'running'; event.meta.updatedAt = new Date().toISOString(); return event;
   });
-  if (outcome.status === 'confirmed') await syncRoyaleRoundResources(client);
+  if (outcome.status === 'confirmed') {
+    await syncRoyaleRoundResources(client);
+    if (readRoyale().bracket?.status === 'completed') await postRoyaleCeremony(client);
+  }
   await interaction.editReply(outcome.status === 'pending'
     ? 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.'
     : outcome.status === 'admin_decision_required'

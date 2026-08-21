@@ -9,6 +9,7 @@ const { getAllowedSizes } = require('../src/domain/checkins/checkin-format');
 const { createSettingsDefault } = require('../src/storage/defaults');
 const { createEventDefault } = require('../src/storage/defaults');
 const { validateEvent } = require('../src/validation/events.schema');
+const { buildRoyaleCeremonyText } = require('../src/domain/royale/royale-ceremony');
 
 assert.equal(getLastSaturday(2026, 8), '2026-08-29');
 assert.equal(getRoyaleEventDate(2026, 8), '2026-08-22');
@@ -26,6 +27,16 @@ const royaleSaturday = createEventDefault('saturday');
 royaleSaturday.meta.eventMode = 'knockout_royale';
 royaleSaturday.format.allowedSizes = [8, 16, 32];
 assert.deepEqual(validateEvent(royaleSaturday, 'saturday'), []);
+
+const ceremonyText = buildRoyaleCeremonyText({
+  clubName: 'Wolfsrudel FC',
+  manager: { userId: '1001' },
+  coManagers: [{ userId: '1002' }, { userId: '1003' }],
+});
+assert.ok(ceremonyText.startsWith('@everyone'));
+assert.ok(ceremonyText.includes('**Wolfsrudel FC**'));
+assert.ok(ceremonyText.includes('<@1001>'));
+assert.ok(ceremonyText.includes('<@1002>, <@1003>'));
 
 const august = buildRoyaleSchedule('2026-08-22');
 assert.equal(august.checkinOpenAt, '2026-08-15T05:00:00.000Z');
