@@ -25,6 +25,7 @@ const {
   createMessagesDefault,
   createPowerRankingDefault,
   createLegacyRankingDefault,
+  createKnockoutRoyaleDefault,
   createSettingsDefault,
   createTournamentLeadershipDefault,
   createTottHistoryDefault,
@@ -699,6 +700,7 @@ function initializeStorage() {
   ensureJsonFile(FILES.powerRanking, createPowerRankingDefault);
   ensureJsonFile(FILES.legacyRanking, createLegacyRankingDefault);
   ensureJsonFile(FILES.tournamentLeadership, createTournamentLeadershipDefault);
+  ensureJsonFile(FILES.knockoutRoyale, createKnockoutRoyaleDefault);
 
   for (const eventKey of EVENT_KEYS) {
     ensureJsonFile(FILES.events[eventKey], () => createEventDefault(eventKey));

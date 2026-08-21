@@ -54,6 +54,15 @@ const KNOCKOUT_ROUNDS = [
   'final',
 ];
 
+const ROYALE_FORMAT_SIZES = [8, 16, 32];
+
+const ROYALE_ROLE_KEYS = [
+  'kings_round_1', 'kings_round_2', 'kings_round_3', 'kings_round_4', 'kings_final',
+  'shadows_round_1', 'shadows_round_2', 'shadows_round_3', 'shadows_round_4',
+  'shadows_round_5', 'shadows_round_6', 'shadows_round_7', 'shadows_round_8',
+  'shadows_round_9', 'shadows_final', 'grand_final', 'grand_final_reset',
+];
+
 const EVENT_STATUSES = [
   'idle',
   'checkin',
@@ -107,6 +116,8 @@ module.exports = {
   LEAGUE_PHASE_FORMATS,
   LEAGUE_PHASE_VIDEO_CHANNEL_NAME,
   REGISTRATION_STATUSES,
+  ROYALE_FORMAT_SIZES,
+  ROYALE_ROLE_KEYS,
   TEAM_STATUSES,
   TOURNAMENT_FORMAT_SIZES,
   TOURNAMENT_FORMATS,

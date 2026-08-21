@@ -24,10 +24,12 @@ const FILES = {
   settingsSeed: path.join(CONFIG_DIR, 'settings.seed.json'),
   checkinBannerSeed: path.join(CONFIG_ASSETS_DIR, 'check-in.png'),
   checkinBanner: path.join(DATA_ASSETS_DIR, 'check-in.png'),
+  knockoutRoyaleCheckinBanner: path.join(ROOT_DIR, 'assets', 'knockout-royale', 'royale-check-in.png'),
   tottHistory: path.join(DATA_DIR, 'team-of-the-tournament-history.json'),
   powerRanking: path.join(DATA_DIR, 'power-ranking.json'),
   legacyRanking: path.join(DATA_DIR, 'legacy-ranking.json'),
   tournamentLeadership: path.join(DATA_DIR, 'tournament-leadership.json'),
+  knockoutRoyale: path.join(EVENTS_DIR, 'knockout-royale.json'),
   events: Object.fromEntries(
     EVENT_KEYS.map(eventKey => [eventKey, path.join(EVENTS_DIR, `${eventKey}.json`)])
   ),

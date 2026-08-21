@@ -16,6 +16,7 @@ const { initPendingResultConfirmations } = require('./src/domain/results/result-
 const { initPowerRanking } = require('./src/domain/power-ranking');
 const { initLegacyRanking } = require('./src/domain/legacy-ranking');
 const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
+const royaleSystem = require('./src/domain/royale');
 
 const EPHEMERAL = 64;
 const WELCOME_CHANNEL_ID = '1516390719839932576';
@@ -119,6 +120,7 @@ async function main() {
       console.log(`Bot online as ${readyClient.user.tag}`);
       await runStartupStep('Teams', () => teamSystem.init(client));
       await runStartupStep('Check-ins', () => checkinSystem.init(client));
+      await runStartupStep('Knockout Royale', () => royaleSystem.init(client));
       await runStartupStep('Turnierleitung', () => tournamentLeadershipSystem.init(client));
       await runStartupStep('Admin', () => adminSystem.init(client));
       await runStartupStep('Rollen', () => roleSystem.init(client));
@@ -148,6 +150,7 @@ async function main() {
       if (await roleSystem.handleInteraction(interaction, client)) return;
       if (await teamSystem.handleInteraction(interaction, client)) return;
       if (await checkinSystem.handleInteraction(interaction, client)) return;
+      if (await royaleSystem.handleRoyaleInteraction(interaction, client)) return;
     } catch (error) {
       await handleInteractionError(interaction, error);
     }

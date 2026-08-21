@@ -65,6 +65,22 @@ function createTournamentLeadershipDefault() {
   return { version: DATA_VERSION, cycles: {}, meta: emptyTimestampMeta() };
 }
 
+function createKnockoutRoyaleDefault() {
+  return {
+    version: DATA_VERSION,
+    eventKey: 'knockout_royale',
+    label: 'Loco Knockout Royale',
+    status: 'idle',
+    cycle: { cycleKey: null, eventDate: null, timezone: 'Europe/Berlin' },
+    schedule: {},
+    format: { allowedSizes: [8, 16, 32], size: null, lockedAt: null, participants: [] },
+    checkin: { isOpen: false, openedAt: null, closedAt: null, entries: [], activeTeamIds: [], waitlistTeamIds: [] },
+    bracket: null,
+    resources: { categoryId: null, checkinChannelId: null, overviewChannelId: null },
+    meta: emptyTimestampMeta(),
+  };
+}
+
 function createBansDefault() {
   return {
     version: DATA_VERSION,
@@ -561,6 +577,7 @@ module.exports = {
   createMessagesDefault,
   createPowerRankingDefault,
   createLegacyRankingDefault,
+  createKnockoutRoyaleDefault,
   createTournamentLeadershipDefault,
   createSettingsDefault,
   createTeamHistoryDefault,
