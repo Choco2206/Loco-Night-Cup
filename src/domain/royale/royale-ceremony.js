@@ -1,14 +1,12 @@
 'use strict';
 
-const path = require('path');
-const { FILES, ROOT_DIR, readJson } = require('../../storage');
+const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { findTeamById } = require('../teams/team-service');
 const { readRoyale, updateRoyale } = require('./royale-repository');
+const { renderRoyaleCeremony } = require('./royale-ceremony-renderer');
 
 const ROYALE_CEREMONY_CHANNEL_ID = '1517040877787287653';
-const ROYALE_CEREMONY_IMAGE = path.join(ROOT_DIR, 'assets', 'knockout-royale', 'royale-ceremony.png');
-
 let posting = false;
 
 function userIds(team) {
@@ -22,13 +20,13 @@ function mentions(ids) {
   return ids.length ? ids.map(id => `<@${id}>`).join(', ') : 'nicht hinterlegt';
 }
 
-function buildRoyaleCeremonyText(team) {
+function buildRoyaleCeremonyText(team, winnerNumber = null) {
   const managerId = team?.manager?.userId ? [String(team.manager.userId)] : [];
   const coManagerIds = (team?.coManagers || []).map(item => String(item.userId)).filter(Boolean);
   return [
     '@everyone',
     '',
-    '# 👑 DER THRON HAT SEINEN CHAMPION',
+    `# 👑 DER THRON HAT SEINEN CHAMPION${winnerNumber ? ` #${winnerNumber}` : ''}`,
     '',
     `## 🏆 **${team.clubName}** gewinnt das **Loco Knockout Royale**!`,
     '',
@@ -62,10 +60,12 @@ async function postRoyaleCeremony(client) {
 
   posting = true;
   try {
+    const winnerNumber = Number(event.ceremony?.winnerNumber || event.history?.completedCount || 0) + (event.ceremony?.winnerNumber ? 0 : 1);
+    const graphic = await renderRoyaleCeremony({ team, winnerNumber });
     const allowedUserIds = userIds(team);
     const message = await channel.send({
-      content: buildRoyaleCeremonyText(team),
-      files: [{ attachment: ROYALE_CEREMONY_IMAGE, name: 'loco-knockout-royale-siegerehrung.png' }],
+      content: buildRoyaleCeremonyText(team, winnerNumber),
+      files: [{ attachment: graphic.buffer, name: graphic.fileName }],
       allowedMentions: { parse: ['everyone'], users: allowedUserIds },
     });
     const timestamp = new Date().toISOString();
@@ -76,11 +76,18 @@ async function postRoyaleCeremony(client) {
         channelId: String(channel.id),
         messageId: String(message.id),
         championTeamId: String(team.id),
+        winnerNumber,
       };
+      current.history = current.history || { completedCount: 0, winners: [] };
+      current.history.completedCount = Math.max(Number(current.history.completedCount || 0), winnerNumber);
+      current.history.winners = Array.isArray(current.history.winners) ? current.history.winners : [];
+      if (!current.history.winners.some(winner => Number(winner.number) === winnerNumber)) {
+        current.history.winners.push({ number: winnerNumber, teamId: String(team.id), clubName: team.clubName, cycleKey: current.cycle?.cycleKey || null, postedAt: timestamp });
+      }
       current.meta = { ...(current.meta || {}), updatedAt: timestamp };
       return current;
     });
-    return { posted: true, messageId: message.id, championTeamId: String(team.id) };
+    return { posted: true, messageId: message.id, championTeamId: String(team.id), winnerNumber };
   } finally {
     posting = false;
   }

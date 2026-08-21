@@ -18,7 +18,7 @@ function resetForSchedule(event, schedule, now = new Date()) {
   event.format = { allowedSizes: [8, 16, 32], size: null, lockedAt: null, participants: [] };
   event.checkin = { isOpen: event.status === 'checkin_open', openedAt: event.status === 'checkin_open' ? nowIso(now) : null, closedAt: null, entries: [], activeTeamIds: [], waitlistTeamIds: [] };
   event.bracket = null;
-  event.ceremony = { status: 'not_posted', postedAt: null, channelId: null, messageId: null, championTeamId: null };
+  event.ceremony = { status: 'not_posted', postedAt: null, channelId: null, messageId: null, championTeamId: null, winnerNumber: null };
   event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
   return event;
 }
@@ -130,7 +130,7 @@ function createRoyaleFromSaturdayCheckin({ saturdayEvent, actorUserId = null, no
     if (teams.length !== formatSize) throw new Error(`Für das ${formatSize}er Royale fehlen aktive Teams.`);
     event.format = { allowedSizes: [8, 16, 32], size: formatSize, lockedAt: nowIso(now), lockedByUserId: actorUserId ? String(actorUserId) : null, participants: teams };
     event.bracket = buildRoyaleBracket({ teams, createdAt: nowIso(now) });
-    event.ceremony = { status: 'not_posted', postedAt: null, channelId: null, messageId: null, championTeamId: null };
+    event.ceremony = { status: 'not_posted', postedAt: null, channelId: null, messageId: null, championTeamId: null, winnerNumber: null };
     event.status = 'bracket_created';
     event.meta = { ...(event.meta || {}), sourceEventKey: 'saturday', updatedAt: nowIso(now) };
     result = { event, bracket: event.bracket };

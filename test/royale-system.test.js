@@ -32,11 +32,12 @@ const ceremonyText = buildRoyaleCeremonyText({
   clubName: 'Wolfsrudel FC',
   manager: { userId: '1001' },
   coManagers: [{ userId: '1002' }, { userId: '1003' }],
-});
+}, 23);
 assert.ok(ceremonyText.startsWith('@everyone'));
 assert.ok(ceremonyText.includes('**Wolfsrudel FC**'));
 assert.ok(ceremonyText.includes('<@1001>'));
 assert.ok(ceremonyText.includes('<@1002>, <@1003>'));
+assert.ok(ceremonyText.includes('#23'));
 
 const august = buildRoyaleSchedule('2026-08-22');
 assert.equal(august.checkinOpenAt, '2026-08-15T05:00:00.000Z');
