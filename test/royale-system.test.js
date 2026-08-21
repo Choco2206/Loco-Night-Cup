@@ -7,6 +7,8 @@ const { buildRoyaleSchedule, getLastSaturday, getRoyaleEventDate, isRoyaleEventD
 const { getPlannedSchedule } = require('../src/domain/checkins/checkin-schedule');
 const { getAllowedSizes } = require('../src/domain/checkins/checkin-format');
 const { createSettingsDefault } = require('../src/storage/defaults');
+const { createEventDefault } = require('../src/storage/defaults');
+const { validateEvent } = require('../src/validation/events.schema');
 
 assert.equal(getLastSaturday(2026, 8), '2026-08-29');
 assert.equal(getRoyaleEventDate(2026, 8), '2026-08-22');
@@ -19,6 +21,11 @@ assert.equal(saturdayPlan.eventMode, 'knockout_royale');
 assert.equal(saturdayPlan.eventDate, '2026-08-22');
 assert.equal(saturdayPlan.drawAt.toISOString(), '2026-08-22T22:05:00.000Z');
 assert.deepEqual(getAllowedSizes(createSettingsDefault(), { meta: { eventMode: 'knockout_royale' }, format: { allowedSizes: [8, 16, 32] } }), [8, 16, 32]);
+
+const royaleSaturday = createEventDefault('saturday');
+royaleSaturday.meta.eventMode = 'knockout_royale';
+royaleSaturday.format.allowedSizes = [8, 16, 32];
+assert.deepEqual(validateEvent(royaleSaturday, 'saturday'), []);
 
 const august = buildRoyaleSchedule('2026-08-22');
 assert.equal(august.checkinOpenAt, '2026-08-15T05:00:00.000Z');

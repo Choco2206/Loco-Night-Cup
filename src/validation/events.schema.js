@@ -43,12 +43,14 @@ function validateEvent(data, expectedEventKey = null) {
   }
 
   if (requireObject(errors, data.format, 'format')) {
+    const isRoyale = data.eventKey === 'saturday' && data.meta?.eventMode === 'knockout_royale';
+    const allowedFormatSizes = isRoyale ? [8, 16, 32] : TOURNAMENT_FORMAT_SIZES;
     if (data.format.minimumRealTeams !== 8) errors.push('format.minimumRealTeams must be 8');
-    if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify(TOURNAMENT_FORMAT_SIZES)) {
-      errors.push(`format.allowedSizes must be [${TOURNAMENT_FORMAT_SIZES.join(',')}]`);
+    if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify(allowedFormatSizes)) {
+      errors.push(`format.allowedSizes must be [${allowedFormatSizes.join(',')}]`);
     }
-    if (data.format.size !== null && !TOURNAMENT_FORMAT_SIZES.includes(data.format.size)) {
-      errors.push(`format.size must be null or one of ${TOURNAMENT_FORMAT_SIZES.join(', ')}`);
+    if (data.format.size !== null && !allowedFormatSizes.includes(data.format.size)) {
+      errors.push(`format.size must be null or one of ${allowedFormatSizes.join(', ')}`);
     }
   }
 
