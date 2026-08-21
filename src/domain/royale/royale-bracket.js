@@ -25,6 +25,8 @@ function roundLabel(path, number, isFinal = false) {
 
 function link(source, target, field, sourceIndex, targetIndex, side) {
   source.matches[sourceIndex][field] = { roundKey: target.roundKey, matchId: target.matches[targetIndex].id, side };
+  const origin = field === 'winnerNext' ? 'Sieger' : 'Verlierer';
+  target.matches[targetIndex][side] = placeholder(`${origin} ${source.label} · Spiel ${sourceIndex + 1}`);
 }
 
 function makeRound(eventKey, roundKey, label, count, sourceLabel) {
@@ -143,18 +145,18 @@ function placeParticipant(bracket, pointer, value) {
   if (teamId(target.home) && teamId(target.away)) target.status = 'ready';
 }
 
-function activateNextRound(bracket) {
-  const active = bracket.sequence.some(key => bracket.rounds[key]?.status === 'open');
-  if (active) return null;
+function activateReadyRounds(bracket) {
+  const activated = [];
   for (const key of bracket.sequence) {
     const round = bracket.rounds[key];
     if (!round || ['completed', 'not_needed'].includes(round.status)) continue;
-    if (!round.matches.every(match => teamId(match.home) && teamId(match.away))) return null;
+    if (round.status === 'open') continue;
+    if (!round.matches.every(match => teamId(match.home) && teamId(match.away))) continue;
     round.status = 'open';
     round.matches.forEach(match => { if (match.status === 'ready') match.status = 'open'; });
-    return round;
+    activated.push(round);
   }
-  return null;
+  return activated;
 }
 
 function recordRoyaleResult(bracket, { roundKey, matchId, homeGoals, awayGoals }) {
@@ -185,7 +187,7 @@ function recordRoyaleResult(bracket, { roundKey, matchId, homeGoals, awayGoals }
   }
 
   if (round.matches.every(item => item.status === 'confirmed')) round.status = 'completed';
-  if (bracket.status !== 'completed' && roundKey !== 'grand_final') activateNextRound(bracket);
+  if (bracket.status !== 'completed' && roundKey !== 'grand_final') activateReadyRounds(bracket);
   bracket.eliminatedTeamIds = [...new Set(bracket.eliminatedTeamIds)];
   return { winner, loser, eliminated: bracket.losses[loserId] >= 2, resetRequired: bracket.rounds.grand_final_reset.status === 'open' };
 }
@@ -209,4 +211,4 @@ function submitRoyaleReport(bracket, { roundKey, matchId, reporterTeamId, homeGo
   return { status: 'confirmed', match, ...outcome };
 }
 
-module.exports = { activateNextRound, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport };
+module.exports = { activateReadyRounds, activateNextRound: activateReadyRounds, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport };

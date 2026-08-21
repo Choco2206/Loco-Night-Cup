@@ -58,7 +58,8 @@ function asParticipant(entry) {
 }
 
 function participantName(participant) {
-  if (!participant || participant.type === 'placeholder') return '';
+  if (!participant) return '';
+  if (participant.type === 'placeholder') return participant.displayName || '';
   if (participant.type === 'bye') return 'Freilos';
   return participant.displayName || findTeamById(participant.teamId)?.clubName || participant.teamId || '';
 }

@@ -72,7 +72,14 @@ for (const size of [8, 16, 32]) {
   assert.equal(bracket.rounds.shadows_final.matches.length, 1);
   assert.equal(bracket.rounds.grand_final.matches.length, 1);
   assert.equal(bracket.rounds.grand_final_reset.status, 'not_needed');
+  assert.match(bracket.rounds.kings_round_2.matches[0].home.displayName, /^Sieger Pfad des Königs/);
 }
+
+const parallel = buildRoyaleBracket({ teams: teams(8) });
+for (const match of parallel.rounds.kings_round_1.matches) recordRoyaleResult(parallel, { roundKey: 'kings_round_1', matchId: match.id, homeGoals: 1, awayGoals: 0 });
+assert.equal(parallel.rounds.kings_round_2.status, 'open');
+assert.equal(parallel.rounds.shadows_round_1.status, 'open');
+assert.equal(parallel.rounds.shadows_round_2.status, 'locked');
 
 function nextOpenMatch(bracket) {
   for (const round of Object.values(bracket.rounds)) {

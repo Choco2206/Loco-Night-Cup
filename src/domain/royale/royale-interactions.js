@@ -10,6 +10,8 @@ const { refreshRoyaleCheckin } = require('./royale-checkin-panel');
 const { readRoyale, updateRoyale } = require('./royale-repository');
 const { syncRoyaleRoundResources } = require('./royale-rounds');
 const { postRoyaleCeremony } = require('./royale-ceremony');
+const { cleanupRoyaleResources } = require('./royale-rounds');
+const { syncRoyalePublicSchedule } = require('./royale-public-schedule');
 
 function manages(userId, participant) {
   const team = findTeamById(participant?.teamId);
@@ -63,13 +65,62 @@ async function selectAdminResult(interaction, roundKey) {
   return true;
 }
 
+async function openReplacement(interaction, roundKey) {
+  if (!isAdmin(interaction)) throw new Error('Du darfst kein Royal-Team ersetzen.');
+  const round = readRoyale().bracket?.rounds?.[roundKey];
+  const matches = (round?.matches || []).filter(match => ['open', 'admin_decision_required'].includes(match.status));
+  if (!matches.length) throw new Error('In dieser Runde gibt es kein ersetzbares Spiel.');
+  await interaction.reply({ content: 'Wähle zuerst das Spiel.', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`royale_replace_match:${roundKey}`).setPlaceholder('Spiel auswählen').addOptions(matches.map(match => ({ label: matchLabel(match), value: match.id }))))], flags: 64 });
+  return true;
+}
+
+async function selectReplacementMatch(interaction, roundKey) {
+  if (!isAdmin(interaction)) throw new Error('Du darfst kein Royal-Team ersetzen.');
+  const matchId = interaction.values?.[0];
+  await interaction.update({ content: 'Welche Seite soll ersetzt werden?', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`royale_replace_side:${roundKey}:${matchId}`).setPlaceholder('Team-Seite auswählen').addOptions([
+    { label: 'Heimteam', description: 'Das links/oben geführte Team ersetzen', value: 'home' }, { label: 'Auswärtsteam', description: 'Das rechts/unten geführte Team ersetzen', value: 'away' },
+  ]))] });
+  return true;
+}
+
+async function selectReplacementSide(interaction, roundKey, matchId) {
+  if (!isAdmin(interaction)) throw new Error('Du darfst kein Royal-Team ersetzen.');
+  const side = interaction.values?.[0]; const event = readRoyale(); const match = event.bracket?.rounds?.[roundKey]?.matches.find(item => item.id === matchId);
+  if (!match || !['home', 'away'].includes(side)) throw new Error('Spiel oder Seite wurde nicht gefunden.');
+  const options = (event.checkin?.waitlistTeamIds || []).map(teamId => findTeamById(teamId)).filter(Boolean).slice(0, 25).map(team => ({ label: team.clubName.slice(0, 100), value: String(team.id) }));
+  if (!options.length) throw new Error('Es steht kein Ersatzteam zur Auswahl.');
+  await interaction.update({ content: `Ersatz für **${match[side].displayName}** auswählen.`, components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`royale_replace_team:${roundKey}:${matchId}:${side}`).setPlaceholder('Ersatzteam auswählen').addOptions(options))] });
+  return true;
+}
+
+async function applyReplacement(interaction, client, roundKey, matchId, side) {
+  if (!isAdmin(interaction)) throw new Error('Du darfst kein Royal-Team ersetzen.');
+  const replacementId = interaction.values?.[0]; let replacementName;
+  updateRoyale(event => {
+    const round = event.bracket?.rounds?.[roundKey]; const match = round?.matches.find(item => item.id === matchId);
+    if (!round || round.status !== 'open' || !match || !['open', 'admin_decision_required'].includes(match.status)) throw new Error('Das Spiel ist nicht mehr ersetzbar.');
+    const selected = findTeamById(replacementId);
+    if (!selected) throw new Error('Das Ersatzteam gehört nicht zu diesem Turnier.');
+    if (!(event.checkin?.waitlistTeamIds || []).map(String).includes(String(replacementId))) throw new Error('Das Ersatzteam gehört nicht zur Warteliste dieses Turniers.');
+    const removedId = String(match[side].teamId); replacementName = selected.clubName;
+    match[side] = { type: 'team', teamId: String(selected.id), displayName: replacementName }; match.reports = []; match.status = 'open';
+    event.format.participants = event.format.participants.map(team => String(team.teamId) === removedId ? { teamId: String(selected.id), displayName: replacementName } : team);
+    event.checkin.waitlistTeamIds = event.checkin.waitlistTeamIds.filter(id => String(id) !== String(selected.id)); event.checkin.waitlistTeamIds.push(removedId);
+    event.bracket.losses[String(selected.id)] = Number(event.bracket.losses[removedId] || 0); delete event.bracket.losses[removedId];
+    return event;
+  });
+  await syncRoyaleRoundResources(client); await syncRoyalePublicSchedule(client);
+  await interaction.update({ content: `Team erfolgreich durch **${replacementName}** ersetzt.`, components: [] }); return true;
+}
+
 async function submitAdminResult(interaction, client, roundKey, matchId) {
   await interaction.deferReply({ flags: 64 });
   if (!isAdmin(interaction)) throw new Error('Du darfst kein Royal-Admin-Ergebnis setzen.');
   let outcome;
   updateRoyale(event => { outcome = require('./royale-bracket').recordRoyaleResult(event.bracket, { roundKey, matchId, homeGoals: interaction.fields.getTextInputValue('home_goals'), awayGoals: interaction.fields.getTextInputValue('away_goals') }); event.status = event.bracket.status === 'completed' ? 'completed' : 'running'; return event; });
   await syncRoyaleRoundResources(client);
-  if (readRoyale().bracket?.status === 'completed') await postRoyaleCeremony(client);
+  await syncRoyalePublicSchedule(client);
+  if (readRoyale().bracket?.status === 'completed') { await postRoyaleCeremony(client); await cleanupRoyaleResources(client); }
   await interaction.editReply(outcome.eliminated ? 'Admin-Ergebnis gesetzt; das unterlegene Team ist ausgeschieden.' : 'Admin-Ergebnis gesetzt; der Turnierbaum wurde aktualisiert.');
   return true;
 }
@@ -86,7 +137,8 @@ async function submitResult(interaction, client, roundKey, matchId) {
   });
   if (outcome.status === 'confirmed') {
     await syncRoyaleRoundResources(client);
-    if (readRoyale().bracket?.status === 'completed') await postRoyaleCeremony(client);
+    await syncRoyalePublicSchedule(client);
+    if (readRoyale().bracket?.status === 'completed') { await postRoyaleCeremony(client); await cleanupRoyaleResources(client); }
   }
   await interaction.editReply(outcome.status === 'pending'
     ? 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.'
@@ -100,8 +152,12 @@ async function handleRoyaleInteraction(interaction, client) {
   const customId = interaction.customId || '';
   if (interaction.isButton() && customId.startsWith('royale_result_open:')) return openResult(interaction, customId.split(':')[1]);
   if (interaction.isButton() && customId.startsWith('royale_admin_result_open:')) return openAdminResult(interaction, customId.split(':')[1]);
+  if (interaction.isButton() && customId.startsWith('royale_replace_open:')) return openReplacement(interaction, customId.split(':')[1]);
   if (interaction.isStringSelectMenu?.() && customId.startsWith('royale_result_select:')) return selectResult(interaction, customId.split(':')[1]);
   if (interaction.isStringSelectMenu?.() && customId.startsWith('royale_admin_result_select:')) return selectAdminResult(interaction, customId.split(':')[1]);
+  if (interaction.isStringSelectMenu?.() && customId.startsWith('royale_replace_match:')) return selectReplacementMatch(interaction, customId.split(':')[1]);
+  if (interaction.isStringSelectMenu?.() && customId.startsWith('royale_replace_side:')) { const [, roundKey, matchId] = customId.split(':'); return selectReplacementSide(interaction, roundKey, matchId); }
+  if (interaction.isStringSelectMenu?.() && customId.startsWith('royale_replace_team:')) { const [, roundKey, matchId, side] = customId.split(':'); return applyReplacement(interaction, client, roundKey, matchId, side); }
   if (interaction.isModalSubmit?.() && customId.startsWith('royale_result_modal:')) { const [, roundKey, matchId] = customId.split(':'); return submitResult(interaction, client, roundKey, matchId); }
   if (interaction.isModalSubmit?.() && customId.startsWith('royale_admin_result_modal:')) { const [, roundKey, matchId] = customId.split(':'); return submitAdminResult(interaction, client, roundKey, matchId); }
   if (!interaction.isButton() || !['royale_checkin_join', 'royale_checkin_leave'].includes(customId)) return false;
