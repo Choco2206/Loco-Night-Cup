@@ -1,9 +1,12 @@
 'use strict';
 
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { ROYALE_ROLE_KEYS } = require('../../app/constants');
+
+const ROYALE_CHANNEL_CATEGORY_ID = '1527234632406401034';
+const SATURDAY_CHECKIN_CHANNEL_ID = '1517070714941866075';
 
 function titlePart(key) {
   if (key === 'grand_final') return 'Grand Finale';
@@ -20,14 +23,17 @@ async function ensureRoyaleBaseResources(client) {
   const guildId = settings.guild?.guildId;
   const guild = guildId ? await client.guilds.fetch(guildId).catch(() => null) : client.guilds.cache.first();
   if (!guild) throw new Error('Discord-Server für die Knockout Royale wurde nicht gefunden.');
-  await guild.roles.fetch(); await guild.channels.fetch();
+  await guild.roles.fetch();
+  await guild.channels.fetch();
 
-  const categoryName = '🐺 LOCO KNOCKOUT ROYALE';
-  let category = settings.categories?.knockoutRoyaleCategoryId
-    ? await guild.channels.fetch(settings.categories.knockoutRoyaleCategoryId).catch(() => null)
-    : null;
-  category = category || guild.channels.cache.find(channel => channel.type === ChannelType.GuildCategory && channel.name === categoryName);
-  if (!category) category = await guild.channels.create({ name: categoryName, type: ChannelType.GuildCategory, reason: 'Knockout Royale einrichten' });
+  const category = await guild.channels.fetch(ROYALE_CHANNEL_CATEGORY_ID).catch(() => null);
+  if (!category || category.type !== ChannelType.GuildCategory) {
+    throw new Error(`Royale-Kategorie ${ROYALE_CHANNEL_CATEGORY_ID} wurde nicht gefunden.`);
+  }
+  const checkin = await guild.channels.fetch(SATURDAY_CHECKIN_CHANNEL_ID).catch(() => null);
+  if (!checkin?.isTextBased?.()) {
+    throw new Error(`Samstags-Check-in-Kanal ${SATURDAY_CHECKIN_CHANNEL_ID} wurde nicht gefunden.`);
+  }
 
   const roleIds = {};
   for (const key of ROYALE_ROLE_KEYS) {
@@ -38,31 +44,21 @@ async function ensureRoyaleBaseResources(client) {
     roleIds[key] = role.id;
   }
 
-  const checkinName = '🐺│knockout-royale-check-in';
-  let checkin = settings.channels?.knockoutRoyaleCheckinChannelId
-    ? await guild.channels.fetch(settings.channels.knockoutRoyaleCheckinChannelId).catch(() => null)
-    : null;
-  checkin = checkin || guild.channels.cache.find(channel => channel.type === ChannelType.GuildText && channel.name === checkinName);
-  if (!checkin) {
-    checkin = await guild.channels.create({
-      name: checkinName, type: ChannelType.GuildText, parent: category.id,
-      permissionOverwrites: [{
-        id: guild.roles.everyone.id,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-        deny: [PermissionFlagsBits.SendMessages],
-      }],
-      reason: 'Knockout Royale Check-in einrichten',
-    });
-  } else if (checkin.parentId !== category.id) await checkin.setParent(category.id, { lockPermissions: false }).catch(() => null);
-
   updateJson(FILES.settings, createSettingsDefault(), current => {
-    current.categories = current.categories || {}; current.channels = current.channels || {}; current.roles = current.roles || {};
-    current.categories.knockoutRoyaleCategoryId = category.id;
-    current.channels.knockoutRoyaleCheckinChannelId = checkin.id;
+    current.categories = current.categories || {};
+    current.channels = current.channels || {};
+    current.roles = current.roles || {};
+    current.categories.knockoutRoyaleCategoryId = ROYALE_CHANNEL_CATEGORY_ID;
+    current.channels.knockoutRoyaleCheckinChannelId = SATURDAY_CHECKIN_CHANNEL_ID;
     current.roles.knockoutRoyaleRoleIds = roleIds;
     return current;
   });
   return { guild, category, checkin, roleIds };
 }
 
-module.exports = { ensureRoyaleBaseResources, roleName };
+module.exports = {
+  ROYALE_CHANNEL_CATEGORY_ID,
+  SATURDAY_CHECKIN_CHANNEL_ID,
+  ensureRoyaleBaseResources,
+  roleName,
+};

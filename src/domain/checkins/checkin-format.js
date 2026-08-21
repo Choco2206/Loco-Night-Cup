@@ -49,7 +49,9 @@ function getManualByeCount(event) {
 }
 
 function getAllowedSizes(settings, event) {
-  const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
+  const allowedSizes = event.meta?.eventMode === 'knockout_royale' && Array.isArray(event.format?.allowedSizes)
+    ? event.format.allowedSizes
+    : Array.isArray(settings.tournament?.allowedSizes)
     ? settings.tournament.allowedSizes
     : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
   return [...allowedSizes].filter(size => TOURNAMENT_FORMAT_SIZES.includes(Number(size))).map(Number).sort((a, b) => a - b);

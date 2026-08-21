@@ -24,6 +24,12 @@ function getRoyaleEventDate(year, month, overrides = SPECIAL_EVENT_DATES) {
   return overrides[key] || getLastSaturday(year, month);
 }
 
+function isRoyaleEventDate(eventDate, overrides = SPECIAL_EVENT_DATES) {
+  const match = String(eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  return getRoyaleEventDate(Number(match[1]), Number(match[2]), overrides) === eventDate;
+}
+
 function getTimeZoneOffsetMinutes(timeZone, date) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -93,4 +99,5 @@ module.exports = {
   getLastSaturday,
   getNextRoyaleSchedule,
   getRoyaleEventDate,
+  isRoyaleEventDate,
 };

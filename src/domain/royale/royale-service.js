@@ -6,6 +6,7 @@ const { findTeamById } = require('../teams/team-service');
 const { buildRoyaleBracket } = require('./royale-bracket');
 const { calculateRoyaleCheckin } = require('./royale-format');
 const { getNextRoyaleSchedule } = require('./royale-schedule');
+const { buildRoyaleSchedule } = require('./royale-schedule');
 const { readRoyale, updateRoyale } = require('./royale-repository');
 
 function nowIso(now = new Date()) { return now.toISOString(); }
@@ -102,9 +103,43 @@ function lockRoyaleAndCreateBracket({ actorUserId = null, now = new Date() } = {
   return result;
 }
 
+function createRoyaleFromSaturdayCheckin({ saturdayEvent, actorUserId = null, now = new Date() }) {
+  if (saturdayEvent?.meta?.eventMode !== 'knockout_royale') throw new Error('Der Samstags-Cup ist kein Knockout Royale.');
+  const eventDate = saturdayEvent.cycle?.eventDate;
+  const schedule = buildRoyaleSchedule(eventDate);
+  let result;
+  updateRoyale(event => {
+    event.cycle = { cycleKey: schedule.cycleKey, eventDate, timezone: schedule.timezone };
+    event.schedule = schedule;
+    event.checkin = {
+      isOpen: false,
+      openedAt: saturdayEvent.checkin?.openedAt || null,
+      closedAt: nowIso(now),
+      entries: (saturdayEvent.checkin?.entries || []).map(entry => ({ ...entry })),
+      activeTeamIds: [...(saturdayEvent.checkin?.activeTeamIds || [])],
+      waitlistTeamIds: [...(saturdayEvent.checkin?.waitlistTeamIds || [])],
+    };
+    const formatSize = Number(saturdayEvent.format?.size || 0);
+    if (![8, 16, 32].includes(formatSize)) throw new Error('Für das Knockout Royale ist kein gültiges 8er-, 16er- oder 32er-Format gelockt.');
+    const teams = event.checkin.activeTeamIds.slice(0, formatSize).map(teamId => {
+      const team = findTeamById(teamId);
+      if (!team) throw new Error(`Royal-Team wurde nicht gefunden: ${teamId}`);
+      return { teamId: String(team.id), displayName: team.clubName };
+    });
+    if (teams.length !== formatSize) throw new Error(`Für das ${formatSize}er Royale fehlen aktive Teams.`);
+    event.format = { allowedSizes: [8, 16, 32], size: formatSize, lockedAt: nowIso(now), lockedByUserId: actorUserId ? String(actorUserId) : null, participants: teams };
+    event.bracket = buildRoyaleBracket({ teams, createdAt: nowIso(now) });
+    event.status = 'bracket_created';
+    event.meta = { ...(event.meta || {}), sourceEventKey: 'saturday', updatedAt: nowIso(now) };
+    result = { event, bracket: event.bracket };
+    return event;
+  });
+  return result;
+}
+
 function getRoyaleState(now = new Date()) {
   ensureRoyaleCycle(now);
   return readRoyale();
 }
 
-module.exports = { checkInRoyaleTeam, ensureRoyaleCycle, getRoyaleState, lockRoyaleAndCreateBracket, withdrawRoyaleTeam };
+module.exports = { checkInRoyaleTeam, createRoyaleFromSaturdayCheckin, ensureRoyaleCycle, getRoyaleState, lockRoyaleAndCreateBracket, withdrawRoyaleTeam };

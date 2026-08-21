@@ -31,6 +31,10 @@ function teamName(teamId) {
   return team?.clubName || `Unbekanntes Team (${teamId})`;
 }
 
+function isRoyaleEvent(event) {
+  return event.meta?.eventMode === 'knockout_royale';
+}
+
 function uniqueStrings(values) {
   const seen = new Set();
   const result = [];
@@ -180,13 +184,14 @@ function formatMilestoneLine(size) {
 function formatSlotLines(slotState) {
   const lines = [];
   const playableSlotCount = slotState.playableSlotCount;
+  const milestones = slotState.isRoyale ? [8, 16, 32] : TOURNAMENT_MILESTONES;
 
   for (let slot = 1; slot <= MAX_DISPLAY_SLOTS; slot += 1) {
     const label = slotState.participantLabels[slot - 1];
     const isWaitlistSlot = Boolean(playableSlotCount && slot > playableSlotCount && label);
     lines.push(`${slot}. ${label ? `${label}${isWaitlistSlot ? ' (WL)' : ''}` : '—'}`);
 
-    if (TOURNAMENT_MILESTONES.includes(slot)) {
+    if (milestones.includes(slot)) {
       lines.push(formatMilestoneLine(slot));
     }
   }
@@ -204,8 +209,10 @@ function formatWaitlistSection(slotState) {
   ].join('\n');
 }
 
-function getBannerAttachment(settings) {
-  const configuredPath = settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
+function getBannerAttachment(settings, event) {
+  const configuredPath = isRoyaleEvent(event)
+    ? 'assets/knockout-royale/royale-check-in.png'
+    : settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
   const absolutePath = path.isAbsolute(configuredPath)
     ? configuredPath
     : path.join(ROOT_DIR, configuredPath);
@@ -238,6 +245,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const drawAt = getDrawAt(eventKey, event, settings, now);
   const tournamentStartAt = getTournamentStartAt(eventKey, event, settings, now);
   const slotState = buildSlotState(event, settings);
+  slotState.isRoyale = isRoyaleEvent(event);
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
   const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
   const waitlistSection = formatWaitlistSection(slotState);
@@ -248,7 +256,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
     '',
     `⏰ Offizieller Anmeldeschluss: ${formatTime(deadlineAt)}`,
     `🕒 Late-Check-in bis: ${formatTime(lateWindowUntil)}`,
-    `🎲 Gruppenauslosung: ${formatTime(drawAt)}`,
+    `${isRoyaleEvent(event) ? '🌳 Turnierbaum-Erstellung' : '🎲 Gruppenauslosung'}: ${formatTime(drawAt)}`,
     '',
     `🚀 Turnierstart: ${formatTime(tournamentStartAt)}`,
     nightHint,
@@ -267,7 +275,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
   ].filter(line => line !== null && line !== undefined).join('\n');
 
   return new EmbedBuilder()
-    .setTitle(`🌕 Loco NightCup ${label}`)
+    .setTitle(isRoyaleEvent(event) ? '🐺 Loco Knockout Royale' : `🌕 Loco NightCup ${label}`)
     .setColor(0xff0000)
     .setDescription(description)
     .setTimestamp(now);
@@ -297,7 +305,7 @@ function buildCheckinButtons(eventKey, event, settings) {
 }
 
 function buildCheckinMessagePayload(eventKey, event, settings) {
-  const bannerAttachment = getBannerAttachment(settings);
+  const bannerAttachment = getBannerAttachment(settings, event);
   const bannerEmbed = buildBannerEmbed(bannerAttachment);
   const embeds = [bannerEmbed, buildCheckinEmbed(eventKey, event, settings)].filter(Boolean);
 

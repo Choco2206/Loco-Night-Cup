@@ -22,6 +22,7 @@ const EVENT_WEEKDAY_INDEX = {
 };
 
 const DEFAULT_TIMEZONE = 'Europe/Berlin';
+const { buildRoyaleSchedule, isRoyaleEventDate } = require('../royale/royale-schedule');
 
 function getTimeZone(settings, event = {}) {
   return event.cycle?.timezone || settings.timeProfiles?.timezone || DEFAULT_TIMEZONE;
@@ -159,6 +160,18 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
   const profile = getProfileForEvent(eventKey, settings, event);
   const eventDate = getEventDateValue(eventKey, event, now, settings);
   const timeZone = getTimeZone(settings, event);
+  if (eventKey === 'saturday' && isRoyaleEventDate(eventDate)) {
+    const royale = buildRoyaleSchedule(eventDate);
+    return {
+      cycleKey: buildCycleKey(eventKey, eventDate), eventDate, timeZone,
+      deadlineAt: new Date(royale.deadlineAt),
+      lateWindowUntil: new Date(royale.lateWindowUntil),
+      drawAt: new Date(royale.bracketAt),
+      tournamentStartAt: new Date(royale.tournamentStartAt),
+      resetAt: new Date(royale.resetAt),
+      eventMode: 'knockout_royale',
+    };
+  }
   const deadlineAt = parseDateTime(
     eventDate,
     profile?.deadlineTime || event.schedule?.deadlineTime,
@@ -194,6 +207,7 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
     drawAt,
     tournamentStartAt,
     resetAt,
+    eventMode: 'night_cup',
   };
 }
 
@@ -208,6 +222,7 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
   event.cycle = event.cycle || {};
   event.schedule = event.schedule || {};
   event.reset = event.reset || {};
+  event.meta = event.meta || {};
 
   const next = {
     cycleKey: planned.cycleKey,
@@ -219,6 +234,18 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
     tournamentStartAt: planned.tournamentStartAt?.toISOString() || null,
     resetAt: planned.resetAt?.toISOString() || null,
   };
+
+  if (event.meta.eventMode !== planned.eventMode) {
+    event.meta.eventMode = planned.eventMode;
+    changed = true;
+  }
+  const allowedSizes = planned.eventMode === 'knockout_royale'
+    ? [8, 16, 32]
+    : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
+  if (JSON.stringify(event.format?.allowedSizes) !== JSON.stringify(allowedSizes)) {
+    event.format = { ...(event.format || {}), allowedSizes };
+    changed = true;
+  }
 
   if (event.cycle.cycleKey !== next.cycleKey) {
     event.cycle.cycleKey = next.cycleKey;

@@ -3,11 +3,22 @@
 const assert = require('assert');
 const { buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport } = require('../src/domain/royale/royale-bracket');
 const { calculateRoyaleCheckin, chooseRoyaleFormat } = require('../src/domain/royale/royale-format');
-const { buildRoyaleSchedule, getLastSaturday, getRoyaleEventDate } = require('../src/domain/royale/royale-schedule');
+const { buildRoyaleSchedule, getLastSaturday, getRoyaleEventDate, isRoyaleEventDate } = require('../src/domain/royale/royale-schedule');
+const { getPlannedSchedule } = require('../src/domain/checkins/checkin-schedule');
+const { getAllowedSizes } = require('../src/domain/checkins/checkin-format');
+const { createSettingsDefault } = require('../src/storage/defaults');
 
 assert.equal(getLastSaturday(2026, 8), '2026-08-29');
 assert.equal(getRoyaleEventDate(2026, 8), '2026-08-22');
 assert.equal(getRoyaleEventDate(2026, 9), '2026-09-26');
+assert.equal(isRoyaleEventDate('2026-08-22'), true);
+assert.equal(isRoyaleEventDate('2026-08-29'), false);
+
+const saturdayPlan = getPlannedSchedule('saturday', {}, createSettingsDefault(), new Date('2026-08-20T12:00:00.000Z'));
+assert.equal(saturdayPlan.eventMode, 'knockout_royale');
+assert.equal(saturdayPlan.eventDate, '2026-08-22');
+assert.equal(saturdayPlan.drawAt.toISOString(), '2026-08-22T22:05:00.000Z');
+assert.deepEqual(getAllowedSizes(createSettingsDefault(), { meta: { eventMode: 'knockout_royale' }, format: { allowedSizes: [8, 16, 32] } }), [8, 16, 32]);
 
 const august = buildRoyaleSchedule('2026-08-22');
 assert.equal(august.checkinOpenAt, '2026-08-15T05:00:00.000Z');

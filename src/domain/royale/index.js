@@ -1,7 +1,6 @@
 'use strict';
 
 const { ensureRoyaleBaseResources } = require('./royale-resources');
-const { refreshRoyaleCheckin } = require('./royale-checkin-panel');
 const { handleRoyaleInteraction } = require('./royale-interactions');
 const { ensureRoyaleCycle } = require('./royale-service');
 const { getRoyaleState, lockRoyaleAndCreateBracket } = require('./royale-service');
@@ -17,7 +16,6 @@ async function reconcile(client, now = new Date()) {
     try { lockRoyaleAndCreateBracket({ actorUserId: 'automatic', now }); } catch (error) { console.warn(`[royale] Turnierbaum noch nicht erstellt: ${error.message}`); }
     event = getRoyaleState(now);
   }
-  await refreshRoyaleCheckin(client);
   if (event.bracket && now.getTime() >= new Date(event.schedule.tournamentStartAt).getTime()) await syncRoyaleRoundResources(client);
 }
 

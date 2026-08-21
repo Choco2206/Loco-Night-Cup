@@ -16,7 +16,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage, refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
 const { adminCheckInTeam, adminWithdrawTeam, removeTeamFromAllEvents } = require('../checkins/checkin-service');
-const { readAllEvents, updateEventData } = require('../checkins/checkin-repository');
+const { readAllEvents, readEventData, updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
 const { refreshTeamStreamList } = require('../teams/team-stream-list');
 const {
@@ -58,8 +58,7 @@ const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-t
 const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = require('../league-phase/league-phase-test');
 const { postTeamOfTheTournamentTest } = require('../team-of-the-tournament');
 const { postPowerRankingChampionTest, postPowerRankingTest } = require('../power-ranking');
-const { getRoyaleState, lockRoyaleAndCreateBracket } = require('../royale/royale-service');
-const { refreshRoyaleCheckin } = require('../royale/royale-checkin-panel');
+const { createRoyaleFromSaturdayCheckin, getRoyaleState } = require('../royale/royale-service');
 const { syncRoyaleRoundResources } = require('../royale/royale-rounds');
 
 const EPHEMERAL = 64;
@@ -2068,8 +2067,8 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_royale_lock') {
       await interaction.deferReply({ flags: EPHEMERAL });
-      const result = lockRoyaleAndCreateBracket({ actorUserId: interaction.user.id });
-      await refreshRoyaleCheckin(interaction.client);
+      const result = createRoyaleFromSaturdayCheckin({ saturdayEvent: readEventData('saturday'), actorUserId: interaction.user.id });
+      await refreshCheckinMessage('saturday', interaction.client);
       await syncRoyaleRoundResources(interaction.client);
       await interaction.editReply(`Knockout Royale als **${result.bracket.formatSize}er-Format** gelockt. Runde 1 – Pfad des Königs wurde vorbereitet.`);
       return true;
@@ -2077,7 +2076,7 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_royale_sync') {
       await interaction.deferReply({ flags: EPHEMERAL });
-      await refreshRoyaleCheckin(interaction.client);
+      await refreshCheckinMessage('saturday', interaction.client);
       const resource = await syncRoyaleRoundResources(interaction.client);
       await interaction.editReply(resource ? `Royal synchronisiert: **${resource.roundKey}**.` : 'Royal-Check-in synchronisiert; aktuell ist keine Runde offen.');
       return true;
