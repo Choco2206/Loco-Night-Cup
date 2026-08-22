@@ -107,7 +107,7 @@ module.exports = Object.freeze({
   royal_16_kings_final: royalRows('winner-16-round-final.png', [742], { homeLogoX: 180, homeNameX: 454, awayNameX: 1219, awayLogoX: 1498, scoreX: 836, logoSize: 112, nameWidth: 430, scoreWidth: 145 }),
   royal_16_shadows_round_1: royalRows('shadow-16-round1.png', [366, 497, 628, 759], { homeLogoX: 288, homeNameX: 500, awayNameX: 1173, awayLogoX: 1375, scoreX: 834, logoSize: 92, nameWidth: 350, scoreWidth: 125 }),
   royal_16_shadows_round_2: royalRows('shadow-16-round2.png', [371, 502, 633, 764], { homeLogoX: 288, homeNameX: 500, awayNameX: 1173, awayLogoX: 1375, scoreX: 834, logoSize: 92, nameWidth: 350, scoreWidth: 125 }),
-  royal_16_shadows_round_3: royalRows('shadow-16-round3.png', [547, 805], { homeLogoX: 288, homeNameX: 500, awayNameX: 1173, awayLogoX: 1383, scoreX: 835, logoSize: 92, nameWidth: 350, scoreWidth: 125 }),
+  royal_16_shadows_round_3: royalRows('shadow-16-round3.png', [646, 784], { homeLogoX: 345, homeNameX: 540, awayNameX: 1130, awayLogoX: 1320, scoreX: 836, logoSize: 92, nameWidth: 330, scoreWidth: 125 }),
   royal_16_shadows_round_4: royalRows('shadow-16-round4.png', [648, 789], { homeLogoX: 342, homeNameX: 540, awayNameX: 1138, awayLogoX: 1328, scoreX: 835, logoSize: 92, nameWidth: 330, scoreWidth: 125 }),
   royal_16_shadows_round_5: royalRows('shadow-16-round5.png', [760], { homeLogoX: 281, homeNameX: 505, awayNameX: 1182, awayLogoX: 1405, scoreX: 836, logoSize: 104, nameWidth: 370, scoreWidth: 135 }),
   royal_16_shadows_final: royalRows('shadow-16-final.png', [753], { homeLogoX: 280, homeNameX: 504, awayNameX: 1174, awayLogoX: 1390, scoreX: 835, logoSize: 104, nameWidth: 370, scoreWidth: 135 }),
