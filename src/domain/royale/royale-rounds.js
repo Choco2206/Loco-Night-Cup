@@ -10,7 +10,12 @@ const { readRoyale, updateRoyale } = require('./royale-repository');
 const ROUND_LIMIT_MS = 25 * 60 * 1000;
 function slug(value) { return value.toLowerCase().replace(/[ö]/g, 'oe').replace(/[ä]/g, 'ae').replace(/[ü]/g, 'ue').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 function label(value) { return value?.displayName || findTeamById(value?.teamId)?.clubName || 'Noch offen'; }
-function teamIds(round) { return [...new Set(round.matches.flatMap(match => [match.home?.teamId, match.away?.teamId]).filter(Boolean).map(String))]; }
+function pendingTeamIds(round) {
+  return [...new Set(round.matches.flatMap(match => match.status === 'confirmed'
+    ? []
+    : [match.home?.teamId, match.away?.teamId]
+  ).filter(Boolean).map(String))];
+}
 function roundSignature(round) { return JSON.stringify({ status: round.status, matches: round.matches.map(match => [match.home, match.away, match.status, match.result]) }); }
 function userIdsForTeams(ids) { return [...new Set(ids.flatMap(id => { const team = findTeamById(id); return [team?.manager?.userId, ...(team?.coManagers || []).map(co => co.userId)].filter(Boolean).map(String); }))]; }
 
@@ -67,8 +72,10 @@ async function syncOneRound({ event, round, guild, settings, now }) {
   const timing = roundTiming(event, round, now);
   const released = timing.released;
   const disabled = round.status !== 'open' || !released;
-  const content = round.status !== 'open'
+  const content = round.status === 'completed'
     ? `**${round.label}** ist abgeschlossen.`
+    : round.status !== 'open'
+      ? `**${round.label}** ist vorbereitet. Die Freigabe erfolgt, sobald alle Begegnungen feststehen.`
     : released
       ? `Ergebnisse für **${round.label}** melden:`
       : `**${round.label}** ist vorbereitet. Die Freigabe erfolgt zum Turnierstart.`;
@@ -96,12 +103,12 @@ async function guildAndSettings(client) {
 
 async function syncRoyaleRoundResources(client, now = new Date()) {
   const event = readRoyale(); if (!event.bracket) return [];
-  const allRounds = Object.values(event.bracket.rounds); const openRounds = allRounds.filter(item => item.status === 'open');
-  const resourceRounds = allRounds.filter(round => round.status === 'open' || (round.channelId && round.privateSignature !== roundSignature(round)));
+  const allRounds = Object.values(event.bracket.rounds);
+  const resourceRounds = allRounds.filter(round => !round.channelId || round.privateSignature !== roundSignature(round));
   const { guild, settings } = await guildAndSettings(client); if (!guild) return [];
   await guild.channels.fetch(); await guild.roles.fetch();
   const roleMap = settings.roles?.knockoutRoyaleRoleIds || {}; const desired = new Map();
-  for (const round of openRounds) for (const userId of userIdsForTeams(teamIds(round))) {
+  for (const round of allRounds) for (const userId of userIdsForTeams(pendingTeamIds(round))) {
     if (!desired.has(userId)) desired.set(userId, new Set());
     if (roleMap[round.roleKey]) desired.get(userId).add(String(roleMap[round.roleKey]));
   }

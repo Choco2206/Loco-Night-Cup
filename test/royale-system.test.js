@@ -87,7 +87,13 @@ for (const size of [8, 16, 32]) {
 }
 
 const parallel = buildRoyaleBracket({ teams: teams(8) });
-for (const match of parallel.rounds.kings_round_1.matches) recordRoyaleResult(parallel, { roundKey: 'kings_round_1', matchId: match.id, homeGoals: 1, awayGoals: 0 });
+const firstKingsMatch = parallel.rounds.kings_round_1.matches[0];
+recordRoyaleResult(parallel, { roundKey: 'kings_round_1', matchId: firstKingsMatch.id, homeGoals: 1, awayGoals: 0 });
+assert.equal(parallel.rounds.kings_round_2.matches[0].home.teamId, firstKingsMatch.home.teamId);
+assert.equal(parallel.rounds.shadows_round_1.matches[0].home.teamId, firstKingsMatch.away.teamId);
+assert.equal(parallel.rounds.kings_round_2.status, 'locked');
+assert.equal(parallel.rounds.shadows_round_1.status, 'locked');
+for (const match of parallel.rounds.kings_round_1.matches.slice(1)) recordRoyaleResult(parallel, { roundKey: 'kings_round_1', matchId: match.id, homeGoals: 1, awayGoals: 0 });
 assert.equal(parallel.rounds.kings_round_2.status, 'open');
 assert.equal(parallel.rounds.shadows_round_1.status, 'open');
 assert.equal(parallel.rounds.shadows_round_2.status, 'locked');
