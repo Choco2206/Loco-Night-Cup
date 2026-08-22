@@ -13,6 +13,7 @@ const { postRoyaleCeremony } = require('./royale-ceremony');
 const { cleanupRoyaleResources } = require('./royale-rounds');
 const { syncRoyalePublicSchedule } = require('./royale-public-schedule');
 const { handleResultOutcome } = require('../results/result-confirmation-service');
+const { handleRoyaleAttendanceInteraction } = require('./royale-attendance');
 
 function manages(userId, participant) {
   const team = findTeamById(participant?.teamId);
@@ -175,6 +176,7 @@ async function submitResult(interaction, client, roundKey, matchId) {
 
 async function handleRoyaleInteraction(interaction, client) {
   const customId = interaction.customId || '';
+  if (await handleRoyaleAttendanceInteraction(interaction, client)) return true;
   if (interaction.isButton() && customId.startsWith('royale_result_open:')) return openResult(interaction, customId.split(':')[1]);
   if (interaction.isButton() && customId.startsWith('royale_admin_result_open:')) return openAdminResult(interaction, customId.split(':')[1]);
   if (interaction.isButton() && customId.startsWith('royale_replace_open:')) return openReplacement(interaction, customId.split(':')[1]);

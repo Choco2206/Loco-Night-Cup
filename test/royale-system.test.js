@@ -12,6 +12,7 @@ const { validateEvent } = require('../src/validation/events.schema');
 const { buildRoyaleCeremonyText } = require('../src/domain/royale/royale-ceremony');
 const { roundTiming } = require('../src/domain/royale/royale-rounds');
 const { royalePendingDescriptors } = require('../src/domain/results/result-confirmation-service');
+const { ATTENDANCE_CLOSE_OFFSET_MS, buildRoyaleAttendancePayload } = require('../src/domain/royale/royale-attendance');
 
 assert.equal(getLastSaturday(2026, 8), '2026-08-29');
 assert.equal(getRoyaleEventDate(2026, 8), '2026-08-22');
@@ -48,6 +49,7 @@ assert.equal(august.lateWindowUntil, '2026-08-22T22:00:00.000Z');
 assert.equal(august.bracketAt, '2026-08-22T22:05:00.000Z');
 assert.equal(august.tournamentStartAt, '2026-08-22T22:15:00.000Z');
 assert.equal(august.firstReleaseUntil, '2026-08-22T22:20:00.000Z');
+assert.equal(ATTENDANCE_CLOSE_OFFSET_MS, 2 * 60 * 1000);
 
 const preparedTiming = roundTiming({ schedule: august }, {}, new Date('2026-08-22T22:05:00.000Z'));
 assert.equal(preparedTiming.released, false);
@@ -74,6 +76,15 @@ assert.equal(checkin.nextMilestone, 32);
 function teams(size) {
   return Array.from({ length: size }, (_, index) => ({ teamId: `team-${index + 1}`, displayName: `Team ${index + 1}` }));
 }
+
+const attendanceEvent = {
+  format: { participants: teams(8) },
+  bracket: { rounds: { kings_round_1: { attendance: { presentTeamIds: ['team-1'] } } } },
+};
+const attendancePayload = buildRoyaleAttendancePayload(attendanceEvent);
+assert.match(attendancePayload.embeds[0].toJSON().title, /PFAD DES KÖNIGS/);
+assert.match(attendancePayload.embeds[0].toJSON().description, /1\/8 Teams anwesend/);
+assert.equal(attendancePayload.components[0].toJSON().components[0].custom_id, 'royale_attendance:kings_round_1');
 
 for (const size of [8, 16, 32]) {
   const bracket = buildRoyaleBracket({ teams: teams(size) });

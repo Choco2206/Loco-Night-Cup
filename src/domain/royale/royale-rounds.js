@@ -6,6 +6,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { findTeamById } = require('../teams/team-service');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 const { readRoyale, updateRoyale } = require('./royale-repository');
+const { ensureRoyaleAttendancePost } = require('./royale-attendance');
 
 const ROUND_LIMIT_MS = 25 * 60 * 1000;
 function slug(value) { return value.toLowerCase().replace(/[ö]/g, 'oe').replace(/[ä]/g, 'ae').replace(/[ü]/g, 'ue').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
@@ -126,6 +127,7 @@ async function syncRoyaleRoundResources(client, now = new Date()) {
   const synced = [];
   for (const round of resourceRounds) synced.push({ roundKey: round.roundKey, ...(await syncOneRound({ event, round, guild, settings, now })) });
   if (synced.length) updateRoyale(current => { for (const item of synced) Object.assign(current.bracket.rounds[item.roundKey], item); return current; });
+  await ensureRoyaleAttendancePost(client);
   return synced;
 }
 
