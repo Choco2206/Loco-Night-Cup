@@ -25,7 +25,7 @@ async function ensureChannel(guild, name, parentId, roleId, staffIds) {
 
 function phaseFor(roundKey, size) {
   if (['grand_final', 'grand_final_reset'].includes(roundKey)) return `royal_${roundKey}`;
-  return size === 8 ? `royal_8_${roundKey}` : null;
+  return [8, 32].includes(size) ? `royal_${size}_${roundKey}` : null;
 }
 
 async function syncOneRound({ event, round, guild, settings, now }) {

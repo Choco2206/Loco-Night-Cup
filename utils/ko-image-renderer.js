@@ -26,6 +26,9 @@ function getKoTemplate({ phase, qualifiedTeamCount }) {
     'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final',
     'royal_8_kings_round_1', 'royal_8_kings_round_2', 'royal_8_kings_final',
     'royal_8_shadows_round_1', 'royal_8_shadows_round_2', 'royal_8_shadows_round_3', 'royal_8_shadows_final',
+    'royal_32_kings_round_1', 'royal_32_kings_round_2', 'royal_32_kings_round_3', 'royal_32_kings_round_4', 'royal_32_kings_final',
+    'royal_32_shadows_round_1', 'royal_32_shadows_round_2', 'royal_32_shadows_round_3', 'royal_32_shadows_round_4',
+    'royal_32_shadows_round_5', 'royal_32_shadows_round_6', 'royal_32_shadows_round_7', 'royal_32_shadows_final',
     'royal_grand_final', 'royal_grand_final_reset',
   ].includes(phase)) {
     throw new Error(`Unbekannte K.O.-Bildphase: ${phase}`);
