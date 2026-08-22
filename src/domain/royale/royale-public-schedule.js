@@ -6,6 +6,8 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { readRoyale, updateRoyale } = require('./royale-repository');
 
 const FALLBACK_CHANNEL_ID = '1516429776070508555';
+let publicSyncPromise = null;
+let pendingPublicSyncClient = null;
 function name(value) { return value?.displayName || 'Noch offen'; }
 function status(round) {
   if (round.status === 'completed') return '✅ Abgeschlossen';
@@ -30,23 +32,43 @@ function embedFor(round, size) {
     .setFooter({ text: `${size}er-Format · Der Spielplan aktualisiert sich automatisch` });
 }
 
-async function syncRoyalePublicSchedule(client) {
+async function performPublicScheduleSync(client) {
   const event = readRoyale(); if (!event.bracket) return [];
   const settings = readJson(FILES.settings, createSettingsDefault());
   const channelId = settings.channels?.liveScheduleChannelId || FALLBACK_CHANNEL_ID;
   const channel = await client.channels.fetch(channelId).catch(() => null); if (!channel?.isTextBased()) return [];
+  const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
   const changed = [];
   for (const key of Object.keys(event.bracket.rounds)) {
     const round = event.bracket.rounds[key]; if (!round) continue;
     const signature = JSON.stringify({ status: round.status, openedAt: round.openedAt, matches: round.matches.map(match => [match.home, match.away, match.status, match.result]) });
-    if (round.publicMessageId && round.publicSignature === signature) continue;
+    const title = `Loco Knockout Royale · ${round.label}`;
+    const existing = recent ? [...recent.values()].filter(item => item.embeds?.some(embed => embed.title === title)) : [];
+    let message = existing.sort((first, second) => Number(second.createdTimestamp || 0) - Number(first.createdTimestamp || 0))[0] || null;
+    if (round.publicMessageId && round.publicSignature === signature && (!message || String(message.id) === String(round.publicMessageId))) continue;
     const payload = { embeds: [embedFor(round, event.bracket.formatSize)], components: [], allowedMentions: { parse: [] } };
-    let message = round.publicMessageId ? await channel.messages.fetch(round.publicMessageId).catch(() => null) : null;
+    if (!message && round.publicMessageId) message = await channel.messages.fetch(round.publicMessageId).catch(() => null);
     if (message) await message.edit(payload); else message = await channel.send(payload);
-    changed.push({ roundKey: key, publicMessageId: message.id, publicSignature: signature });
+    const item = { roundKey: key, publicMessageId: message.id, publicSignature: signature };
+    changed.push(item);
+    updateRoyale(current => { Object.assign(current.bracket.rounds[item.roundKey], { publicMessageId: item.publicMessageId, publicSignature: item.publicSignature }); current.publicScheduleChannelId = channel.id; return current; });
   }
-  if (changed.length) updateRoyale(current => { for (const item of changed) Object.assign(current.bracket.rounds[item.roundKey], { publicMessageId: item.publicMessageId, publicSignature: item.publicSignature }); current.publicScheduleChannelId = channel.id; return current; });
   return changed;
+}
+
+function syncRoyalePublicSchedule(client) {
+  pendingPublicSyncClient = client;
+  if (!publicSyncPromise) {
+    publicSyncPromise = (async () => {
+      let result = [];
+      while (pendingPublicSyncClient) {
+        const targetClient = pendingPublicSyncClient; pendingPublicSyncClient = null;
+        result = await performPublicScheduleSync(targetClient);
+      }
+      return result;
+    })().finally(() => { publicSyncPromise = null; });
+  }
+  return publicSyncPromise;
 }
 
 module.exports = { syncRoyalePublicSchedule };
