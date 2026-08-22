@@ -11,12 +11,15 @@ const ROUND_LIMIT_MS = 25 * 60 * 1000;
 function slug(value) { return value.toLowerCase().replace(/[ö]/g, 'oe').replace(/[ä]/g, 'ae').replace(/[ü]/g, 'ue').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 function label(value) { return value?.displayName || findTeamById(value?.teamId)?.clubName || 'Noch offen'; }
 function pendingTeamIds(round) {
-  return [...new Set(round.matches.flatMap(match => match.status === 'confirmed'
+  return [...new Set([
+    ...(round.pendingParticipants || []).map(item => item?.teamId),
+    ...round.matches.flatMap(match => match.status === 'confirmed'
     ? []
     : [match.home?.teamId, match.away?.teamId]
-  ).filter(Boolean).map(String))];
+    ),
+  ].filter(Boolean).map(String))];
 }
-function roundSignature(round) { return JSON.stringify({ status: round.status, matches: round.matches.map(match => [match.home, match.away, match.status, match.result]) }); }
+function roundSignature(round) { return JSON.stringify({ status: round.status, drawnAt: round.drawnAt, matches: round.matches.map(match => [match.home, match.away, match.status, match.result]) }); }
 function userIdsForTeams(ids) { return [...new Set(ids.flatMap(id => { const team = findTeamById(id); return [team?.manager?.userId, ...(team?.coManagers || []).map(co => co.userId)].filter(Boolean).map(String); }))]; }
 
 function roundTiming(event, round, now = new Date()) {

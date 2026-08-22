@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { autoConfirmRoyaleFirstReport, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport } = require('../src/domain/royale/royale-bracket');
+const { autoConfirmRoyaleFirstReport, buildRoyaleBracket, drawRound, recordRoyaleResult, submitRoyaleReport } = require('../src/domain/royale/royale-bracket');
 const { calculateRoyaleCheckin, chooseRoyaleFormat } = require('../src/domain/royale/royale-format');
 const { buildRoyaleSchedule, getLastSaturday, getRoyaleEventDate, isRoyaleEventDate } = require('../src/domain/royale/royale-schedule');
 const { getPlannedSchedule } = require('../src/domain/checkins/checkin-schedule');
@@ -83,20 +83,38 @@ for (const size of [8, 16, 32]) {
   assert.equal(bracket.rounds.shadows_final.matches.length, 1);
   assert.equal(bracket.rounds.grand_final.matches.length, 1);
   assert.equal(bracket.rounds.grand_final_reset.status, 'not_needed');
-  assert.match(bracket.rounds.kings_round_2.matches[0].home.displayName, /^Sieger Pfad des Königs/);
+  assert.equal(bracket.rounds.kings_round_2.matches[0].home.displayName, '');
 }
 
 const parallel = buildRoyaleBracket({ teams: teams(8) });
 const firstKingsMatch = parallel.rounds.kings_round_1.matches[0];
 recordRoyaleResult(parallel, { roundKey: 'kings_round_1', matchId: firstKingsMatch.id, homeGoals: 1, awayGoals: 0 });
-assert.equal(parallel.rounds.kings_round_2.matches[0].home.teamId, firstKingsMatch.home.teamId);
-assert.equal(parallel.rounds.shadows_round_1.matches[0].home.teamId, firstKingsMatch.away.teamId);
+assert.equal(parallel.rounds.kings_round_2.matches[0].home.type, 'placeholder');
+assert.equal(parallel.rounds.shadows_round_1.matches[0].home.type, 'placeholder');
+assert.equal(parallel.rounds.kings_round_2.pendingParticipants[0].teamId, firstKingsMatch.home.teamId);
+assert.equal(parallel.rounds.shadows_round_1.pendingParticipants[0].teamId, firstKingsMatch.away.teamId);
 assert.equal(parallel.rounds.kings_round_2.status, 'locked');
 assert.equal(parallel.rounds.shadows_round_1.status, 'locked');
 for (const match of parallel.rounds.kings_round_1.matches.slice(1)) recordRoyaleResult(parallel, { roundKey: 'kings_round_1', matchId: match.id, homeGoals: 1, awayGoals: 0 });
 assert.equal(parallel.rounds.kings_round_2.status, 'open');
 assert.equal(parallel.rounds.shadows_round_1.status, 'open');
 assert.equal(parallel.rounds.shadows_round_2.status, 'locked');
+assert.ok(parallel.rounds.kings_round_2.matches.every(match => match.home.type === 'team' && match.away.type === 'team'));
+assert.ok(parallel.rounds.shadows_round_1.matches.every(match => match.home.type === 'team' && match.away.type === 'team'));
+
+const noRematch = buildRoyaleBracket({ teams: teams(8), random: () => 0.5 });
+const sourceMatches = noRematch.rounds.kings_round_1.matches.slice(0, 2);
+for (const match of sourceMatches) {
+  match.status = 'confirmed';
+  match.result = { homeGoals: 1, awayGoals: 0 };
+}
+const redraw = noRematch.rounds.shadows_round_2;
+redraw.pendingParticipants = sourceMatches.flatMap(match => [match.home, match.away]);
+assert.equal(drawRound(noRematch, redraw, () => 0.5), true);
+assert.ok(redraw.matches.every(match => !sourceMatches.some(previous => {
+  const previousIds = [previous.home.teamId, previous.away.teamId].sort().join(':');
+  return [match.home.teamId, match.away.teamId].sort().join(':') === previousIds;
+})));
 
 function nextOpenMatch(bracket) {
   for (const round of Object.values(bracket.rounds)) {
@@ -106,21 +124,23 @@ function nextOpenMatch(bracket) {
   return null;
 }
 
-const completed = buildRoyaleBracket({ teams: teams(8) });
-let guard = 0;
-while (completed.status !== 'completed' && guard < 100) {
-  const open = nextOpenMatch(completed);
-  assert.ok(open, 'Es muss bis zum Turnierende immer ein offenes Spiel geben.');
-  recordRoyaleResult(completed, { roundKey: open.roundKey, matchId: open.match.id, homeGoals: 1, awayGoals: 0 });
-  guard += 1;
+for (const size of [8, 16, 32]) {
+  const completed = buildRoyaleBracket({ teams: teams(size) });
+  let completionGuard = 0;
+  while (completed.status !== 'completed' && completionGuard < 300) {
+    const open = nextOpenMatch(completed);
+    assert.ok(open, `Im ${size}er-Format muss bis zum Turnierende immer ein offenes Spiel bestehen.`);
+    recordRoyaleResult(completed, { roundKey: open.roundKey, matchId: open.match.id, homeGoals: 1, awayGoals: 0 });
+    completionGuard += 1;
+  }
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.eliminatedTeamIds.length, size - 1);
+  assert.ok(completed.championTeamId);
+  assert.equal(completed.rounds.grand_final_reset.status, 'not_needed');
 }
-assert.equal(completed.status, 'completed');
-assert.equal(completed.eliminatedTeamIds.length, 7);
-assert.ok(completed.championTeamId);
-assert.equal(completed.rounds.grand_final_reset.status, 'not_needed');
 
 const resetBracket = buildRoyaleBracket({ teams: teams(8) });
-guard = 0;
+let guard = 0;
 while (resetBracket.rounds.grand_final.matches[0].status !== 'open' && guard < 100) {
   const open = nextOpenMatch(resetBracket);
   recordRoyaleResult(resetBracket, { roundKey: open.roundKey, matchId: open.match.id, homeGoals: 1, awayGoals: 0 });

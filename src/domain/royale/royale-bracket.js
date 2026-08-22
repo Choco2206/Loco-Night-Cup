@@ -10,6 +10,15 @@ function participant(team) {
   return { type: 'team', teamId: String(team.teamId || team.id), displayName: team.displayName || team.clubName };
 }
 
+function shuffle(values, random = Math.random) {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [result[index], result[target]] = [result[target], result[index]];
+  }
+  return result;
+}
+
 function createMatch(id, roundKey, index, home, away) {
   return {
     id, roundKey, matchIndex: index + 1, home, away,
@@ -25,22 +34,25 @@ function roundLabel(path, number, isFinal = false) {
 
 function link(source, target, field, sourceIndex, targetIndex, side) {
   source.matches[sourceIndex][field] = { roundKey: target.roundKey, matchId: target.matches[targetIndex].id, side };
-  const origin = field === 'winnerNext' ? 'Sieger' : 'Verlierer';
-  target.matches[targetIndex][side] = placeholder(`${origin} ${source.label} · Spiel ${sourceIndex + 1}`);
+  target.matches[targetIndex][side] = placeholder('');
+}
+
+function linkToDraw(source, target, field) {
+  source.matches.forEach(match => { match[field] = { roundKey: target.roundKey, draw: true }; });
 }
 
 function makeRound(eventKey, roundKey, label, count, sourceLabel) {
   return {
-    roundKey, label, status: 'locked', roleKey: roundKey,
+    roundKey, label, status: 'locked', roleKey: roundKey, pendingParticipants: [], drawnAt: null,
     channelId: null, resultsChannelId: null, videoChannelId: null, messageId: null,
     matches: Array.from({ length: count }, (_, index) => createMatch(
       `${eventKey}_${roundKey}_${index + 1}`, roundKey, index,
-      placeholder(`${sourceLabel} ${index * 2 + 1}`), placeholder(`${sourceLabel} ${index * 2 + 2}`)
+      placeholder(''), placeholder('')
     )),
   };
 }
 
-function buildRoyaleBracket({ eventKey = 'knockout_royale', teams, createdAt = new Date().toISOString() }) {
+function buildRoyaleBracket({ eventKey = 'knockout_royale', teams, createdAt = new Date().toISOString(), random = Math.random }) {
   const size = teams.length;
   if (!ROYALE_FORMAT_SIZES.includes(size)) throw new Error(`Knockout Royale unterstützt nur ${ROYALE_FORMAT_SIZES.join(', ')} Teams.`);
   const depth = Math.log2(size);
@@ -57,9 +69,10 @@ function buildRoyaleBracket({ eventKey = 'knockout_royale', teams, createdAt = n
   }
 
   const first = kings[0];
+  const firstRoundTeams = shuffle(teams, random);
   first.matches = Array.from({ length: size / 2 }, (_, index) => createMatch(
     `${eventKey}_${first.roundKey}_${index + 1}`, first.roundKey, index,
-    participant(teams[index * 2]), participant(teams[index * 2 + 1])
+    participant(firstRoundTeams[index * 2]), participant(firstRoundTeams[index * 2 + 1])
   ));
   first.status = 'open';
   first.matches.forEach(match => { match.status = 'open'; });
@@ -67,16 +80,14 @@ function buildRoyaleBracket({ eventKey = 'knockout_royale', teams, createdAt = n
   for (let index = 1; index < kings.length; index += 1) {
     const previous = kings[index - 1];
     const current = kings[index];
-    previous.matches.forEach((match, matchIndex) => {
-      link(previous, current, 'winnerNext', matchIndex, Math.floor(matchIndex / 2), matchIndex % 2 ? 'away' : 'home');
-    });
+    linkToDraw(previous, current, 'winnerNext');
   }
 
   let shadowNumber = 1;
   const shadowFirst = makeRound(eventKey, `shadows_round_${shadowNumber}`, roundLabel('shadows', shadowNumber), size / 4, 'Verlierer Königsrunde 1');
   rounds[shadowFirst.roundKey] = shadowFirst;
   shadows.push(shadowFirst);
-  first.matches.forEach((match, index) => link(first, shadowFirst, 'loserNext', index, Math.floor(index / 2), index % 2 ? 'away' : 'home'));
+  linkToDraw(first, shadowFirst, 'loserNext');
 
   let previousShadow = shadowFirst;
   for (let kingsIndex = 1; kingsIndex < kings.length; kingsIndex += 1) {
@@ -87,8 +98,8 @@ function buildRoyaleBracket({ eventKey = 'knockout_royale', teams, createdAt = n
     const cross = makeRound(eventKey, crossKey, roundLabel('shadows', shadowNumber, isLastCross), kingsRound.matches.length, 'Weiter');
     rounds[cross.roundKey] = cross;
     shadows.push(cross);
-    previousShadow.matches.forEach((match, index) => link(previousShadow, cross, 'winnerNext', index, index, 'home'));
-    kingsRound.matches.forEach((match, index) => link(kingsRound, cross, 'loserNext', index, index, 'away'));
+    linkToDraw(previousShadow, cross, 'winnerNext');
+    linkToDraw(kingsRound, cross, 'loserNext');
     previousShadow = cross;
 
     if (!isLastCross) {
@@ -96,7 +107,7 @@ function buildRoyaleBracket({ eventKey = 'knockout_royale', teams, createdAt = n
       const reduction = makeRound(eventKey, `shadows_round_${shadowNumber}`, roundLabel('shadows', shadowNumber), cross.matches.length / 2, 'Sieger Schatten');
       rounds[reduction.roundKey] = reduction;
       shadows.push(reduction);
-      cross.matches.forEach((match, index) => link(cross, reduction, 'winnerNext', index, Math.floor(index / 2), index % 2 ? 'away' : 'home'));
+      linkToDraw(cross, reduction, 'winnerNext');
       previousShadow = reduction;
     }
   }
@@ -138,8 +149,66 @@ function findMatch(bracket, roundKey, matchId) {
   return { round, match };
 }
 
+function playedBefore(bracket, first, second) {
+  const firstId = teamId(first); const secondId = teamId(second);
+  return Object.values(bracket.rounds).some(round => round.matches.some(match => {
+    if (match.status !== 'confirmed') return false;
+    const homeId = teamId(match.home); const awayId = teamId(match.away);
+    return (homeId === firstId && awayId === secondId) || (homeId === secondId && awayId === firstId);
+  }));
+}
+
+function strictPairing(bracket, participants, random) {
+  if (!participants.length) return [];
+  const ordered = shuffle(participants, random);
+  const first = ordered[0];
+  const candidates = shuffle(ordered.slice(1), random).filter(candidate => !playedBefore(bracket, first, candidate));
+  for (const opponent of candidates) {
+    const remaining = ordered.slice(1).filter(candidate => teamId(candidate) !== teamId(opponent));
+    const rest = strictPairing(bracket, remaining, random);
+    if (rest) return [[first, opponent], ...rest];
+  }
+  return null;
+}
+
+function fallbackPairing(bracket, participants, random) {
+  let best = null; let bestRepeats = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const ordered = shuffle(participants, random);
+    const pairs = [];
+    let repeats = 0;
+    for (let index = 0; index < ordered.length; index += 2) {
+      const pair = [ordered[index], ordered[index + 1]];
+      if (playedBefore(bracket, pair[0], pair[1])) repeats += 1;
+      pairs.push(pair);
+    }
+    if (repeats < bestRepeats) { best = pairs; bestRepeats = repeats; }
+    if (repeats === 0) break;
+  }
+  return best;
+}
+
+function drawRound(bracket, round, random = Math.random) {
+  const required = round.matches.length * 2;
+  const participants = [...new Map((round.pendingParticipants || []).map(item => [teamId(item), item])).values()];
+  if (participants.length !== required) return false;
+  const pairs = strictPairing(bracket, participants, random) || fallbackPairing(bracket, participants, random);
+  round.matches.forEach((match, index) => {
+    match.home = pairs[index][0]; match.away = pairs[index][1]; match.status = 'ready';
+  });
+  round.pendingParticipants = [];
+  round.drawnAt = new Date().toISOString();
+  return true;
+}
+
 function placeParticipant(bracket, pointer, value) {
   if (!pointer) return;
+  if (pointer.draw) {
+    const round = bracket.rounds[pointer.roundKey];
+    if (!round.pendingParticipants.some(item => teamId(item) === teamId(value))) round.pendingParticipants.push(value);
+    drawRound(bracket, round);
+    return;
+  }
   const target = findMatch(bracket, pointer.roundKey, pointer.matchId).match;
   target[pointer.side] = value;
   if (teamId(target.home) && teamId(target.away)) target.status = 'ready';
@@ -233,4 +302,4 @@ function autoConfirmRoyaleFirstReport(bracket, { roundKey, matchId, now = new Da
   return { status: 'confirmed', match, confirmationNotice, automatic: true, ...outcome };
 }
 
-module.exports = { activateReadyRounds, activateNextRound: activateReadyRounds, autoConfirmRoyaleFirstReport, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport };
+module.exports = { activateReadyRounds, activateNextRound: activateReadyRounds, autoConfirmRoyaleFirstReport, buildRoyaleBracket, drawRound, recordRoyaleResult, submitRoyaleReport };
