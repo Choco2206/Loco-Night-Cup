@@ -101,6 +101,16 @@ module.exports = Object.freeze({
   royal_8_shadows_round_2: royalRound('royal-8-shadows-round-2.png', [424, 588].map(centerY => ({ centerY, homeLogoX: 177, homeNameX: 451, awayNameX: 1221, awayLogoX: 1490, scoreX: 825 }))),
   royal_8_shadows_round_3: royalRound('royal-8-shadows-round-3.png', [{ centerY: 400, homeLogoX: 137, homeNameX: 448, awayNameX: 1222, awayLogoX: 1532, scoreX: 834 }]),
   royal_8_shadows_final: royalRound('royal-8-shadows-final.png', [{ centerY: 560, homeLogoX: 152, homeNameX: 449, awayNameX: 1226, awayLogoX: 1512, scoreX: 839 }]),
+  royal_16_kings_round_1: royalRows('winner-16-round1.png', [280, 365, 449, 533, 616, 699, 781, 864], { homeLogoX: 319, homeNameX: 515, awayNameX: 1128, awayLogoX: 1255, scoreX: 812, logoSize: 58, nameWidth: 300, scoreWidth: 105 }),
+  royal_16_kings_round_2: royalRows('winner-16-round2.png', [377, 508, 639, 770], { homeLogoX: 284, homeNameX: 500, awayNameX: 1172, awayLogoX: 1387, scoreX: 836, logoSize: 92, nameWidth: 360, scoreWidth: 125 }),
+  royal_16_kings_round_3: royalRows('winner-16-round3.png', [613, 760], { homeLogoX: 260, homeNameX: 485, awayNameX: 1187, awayLogoX: 1400, scoreX: 834, logoSize: 98, nameWidth: 365, scoreWidth: 130 }),
+  royal_16_kings_final: royalRows('winner-16-round-final.png', [742], { homeLogoX: 180, homeNameX: 454, awayNameX: 1219, awayLogoX: 1498, scoreX: 836, logoSize: 112, nameWidth: 430, scoreWidth: 145 }),
+  royal_16_shadows_round_1: royalRows('shadow-16-round1.png', [366, 497, 628, 759], { homeLogoX: 288, homeNameX: 500, awayNameX: 1173, awayLogoX: 1375, scoreX: 834, logoSize: 92, nameWidth: 350, scoreWidth: 125 }),
+  royal_16_shadows_round_2: royalRows('shadow-16-round2.png', [371, 502, 633, 764], { homeLogoX: 288, homeNameX: 500, awayNameX: 1173, awayLogoX: 1375, scoreX: 834, logoSize: 92, nameWidth: 350, scoreWidth: 125 }),
+  royal_16_shadows_round_3: royalRows('shadow-16-round3.png', [547, 805], { homeLogoX: 288, homeNameX: 500, awayNameX: 1173, awayLogoX: 1383, scoreX: 835, logoSize: 92, nameWidth: 350, scoreWidth: 125 }),
+  royal_16_shadows_round_4: royalRows('shadow-16-round4.png', [648, 789], { homeLogoX: 342, homeNameX: 540, awayNameX: 1138, awayLogoX: 1328, scoreX: 835, logoSize: 92, nameWidth: 330, scoreWidth: 125 }),
+  royal_16_shadows_round_5: royalRows('shadow-16-round5.png', [760], { homeLogoX: 281, homeNameX: 505, awayNameX: 1182, awayLogoX: 1405, scoreX: 836, logoSize: 104, nameWidth: 370, scoreWidth: 135 }),
+  royal_16_shadows_final: royalRows('shadow-16-final.png', [753], { homeLogoX: 280, homeNameX: 504, awayNameX: 1174, awayLogoX: 1390, scoreX: 835, logoSize: 104, nameWidth: 370, scoreWidth: 135 }),
   royal_32_kings_round_1: Object.freeze({
     template: 'assets/knockout-royale/winner-32-round1.png', reference: Object.freeze({ width: 1672, height: 941 }), kind: 'round',
     matches: Object.freeze([
