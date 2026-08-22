@@ -10,6 +10,7 @@ const { createSettingsDefault } = require('../src/storage/defaults');
 const { createEventDefault } = require('../src/storage/defaults');
 const { validateEvent } = require('../src/validation/events.schema');
 const { buildRoyaleCeremonyText } = require('../src/domain/royale/royale-ceremony');
+const { roundTiming } = require('../src/domain/royale/royale-rounds');
 
 assert.equal(getLastSaturday(2026, 8), '2026-08-29');
 assert.equal(getRoyaleEventDate(2026, 8), '2026-08-22');
@@ -46,6 +47,15 @@ assert.equal(august.lateWindowUntil, '2026-08-22T22:00:00.000Z');
 assert.equal(august.bracketAt, '2026-08-22T22:05:00.000Z');
 assert.equal(august.tournamentStartAt, '2026-08-22T22:15:00.000Z');
 assert.equal(august.firstReleaseUntil, '2026-08-22T22:20:00.000Z');
+
+const preparedTiming = roundTiming({ schedule: august }, {}, new Date('2026-08-22T22:05:00.000Z'));
+assert.equal(preparedTiming.released, false);
+assert.equal(preparedTiming.openedAt, null);
+assert.equal(preparedTiming.reminderAt, '2026-08-22T22:40:00.000Z');
+const releasedTiming = roundTiming({ schedule: august }, { ...preparedTiming }, new Date('2026-08-22T22:15:00.000Z'));
+assert.equal(releasedTiming.released, true);
+assert.equal(releasedTiming.openedAt, '2026-08-22T22:15:00.000Z');
+assert.equal(releasedTiming.reminderAt, '2026-08-22T22:40:00.000Z');
 
 assert.equal(chooseRoyaleFormat(7), null);
 assert.equal(chooseRoyaleFormat(8), 8);

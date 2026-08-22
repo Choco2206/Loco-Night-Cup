@@ -14,6 +14,18 @@ function teamIds(round) { return [...new Set(round.matches.flatMap(match => [mat
 function roundSignature(round) { return JSON.stringify({ status: round.status, matches: round.matches.map(match => [match.home, match.away, match.status, match.result]) }); }
 function userIdsForTeams(ids) { return [...new Set(ids.flatMap(id => { const team = findTeamById(id); return [team?.manager?.userId, ...(team?.coManagers || []).map(co => co.userId)].filter(Boolean).map(String); }))]; }
 
+function roundTiming(event, round, now = new Date()) {
+  const tournamentStartAt = new Date(event.schedule?.tournamentStartAt || 0);
+  const released = now.getTime() >= tournamentStartAt.getTime();
+  const reminderBase = Math.max(now.getTime(), tournamentStartAt.getTime());
+  return {
+    released,
+    preparedAt: round.preparedAt || now.toISOString(),
+    openedAt: round.openedAt || (released ? now.toISOString() : null),
+    reminderAt: round.reminderAt || new Date(reminderBase + ROUND_LIMIT_MS).toISOString(),
+  };
+}
+
 async function ensureChannel(guild, name, parentId, roleId, staffIds) {
   let channel = guild.channels.cache.find(item => item.type === ChannelType.GuildText && item.name === name && item.parentId === parentId);
   if (channel) return channel;
@@ -45,14 +57,28 @@ async function syncOneRound({ event, round, guild, settings, now }) {
   let mainMessage = round.messageId ? await main.messages.fetch(round.messageId).catch(() => null) : null;
   if (mainMessage) await mainMessage.edit({ ...mainPayload, attachments: [] }); else mainMessage = await main.send(mainPayload);
   let resultMessage = round.resultsMessageId ? await results.messages.fetch(round.resultsMessageId).catch(() => null) : null;
-  const disabled = round.status !== 'open';
-  const payload = { content: disabled ? `**${round.label}** ist abgeschlossen.` : `Ergebnisse für **${round.label}** melden:`, components: [new ActionRowBuilder().addComponents(
+  const timing = roundTiming(event, round, now);
+  const released = timing.released;
+  const disabled = round.status !== 'open' || !released;
+  const content = round.status !== 'open'
+    ? `**${round.label}** ist abgeschlossen.`
+    : released
+      ? `Ergebnisse für **${round.label}** melden:`
+      : `**${round.label}** ist vorbereitet. Die Freigabe erfolgt zum Turnierstart.`;
+  const payload = { content, components: [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`royale_result_open:${round.roundKey}`).setLabel('Ergebnis melden').setStyle(ButtonStyle.Primary).setDisabled(disabled),
     new ButtonBuilder().setCustomId(`royale_admin_result_open:${round.roundKey}`).setLabel('Admin-Ergebnis').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
     new ButtonBuilder().setCustomId(`royale_replace_open:${round.roundKey}`).setLabel('Team ersetzen').setStyle(ButtonStyle.Danger).setDisabled(disabled),
   )] };
   if (resultMessage) await resultMessage.edit(payload); else resultMessage = await results.send(payload);
-  return { channelId: main.id, resultsChannelId: results.id, videoChannelId: video.id, messageId: mainMessage.id, resultsMessageId: resultMessage.id, privateSignature: roundSignature(round), openedAt: round.openedAt || now.toISOString(), reminderAt: round.reminderAt || new Date(now.getTime() + ROUND_LIMIT_MS).toISOString() };
+  return {
+    channelId: main.id, resultsChannelId: results.id, videoChannelId: video.id,
+    messageId: mainMessage.id, resultsMessageId: resultMessage.id,
+    privateSignature: roundSignature(round),
+    preparedAt: timing.preparedAt,
+    openedAt: timing.openedAt,
+    reminderAt: timing.reminderAt,
+  };
 }
 
 async function guildAndSettings(client) {
@@ -114,4 +140,4 @@ async function cleanupRoyaleResources(client) {
   updateRoyale(current => { current.resourcesCleanedAt = new Date().toISOString(); return current; }); return true;
 }
 
-module.exports = { cleanupRoyaleResources, sendRoyaleRoundReminders, syncRoyaleRoundResources };
+module.exports = { cleanupRoyaleResources, roundTiming, sendRoyaleRoundReminders, syncRoyaleRoundResources };

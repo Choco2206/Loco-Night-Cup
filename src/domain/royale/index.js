@@ -18,8 +18,10 @@ async function reconcile(client, now = new Date()) {
     try { lockRoyaleAndCreateBracket({ actorUserId: 'automatic', now }); } catch (error) { console.warn(`[royale] Turnierbaum noch nicht erstellt: ${error.message}`); }
     event = getRoyaleState(now);
   }
-  if (event.bracket && now.getTime() >= new Date(event.schedule.tournamentStartAt).getTime()) {
+  if (event.bracket && now.getTime() >= new Date(event.schedule.bracketAt).getTime()) {
     await syncRoyaleRoundResources(client, now);
+  }
+  if (event.bracket && now.getTime() >= new Date(event.schedule.tournamentStartAt).getTime()) {
     await sendRoyaleRoundReminders(client, now);
   }
   if (event.bracket) await syncRoyalePublicSchedule(client);
