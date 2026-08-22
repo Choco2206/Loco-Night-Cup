@@ -64,6 +64,24 @@ function hasButton(message, customId) {
   return message.components?.some(row => row.components?.some(component => component.customId === customId || component.custom_id === customId));
 }
 
+async function cleanupLockedRoundChannelDuplicates(guild, parentId, rounds) {
+  const removed = [];
+  for (const round of rounds.filter(item => ['locked', 'not_needed'].includes(item.status))) {
+    const base = slug(round.label);
+    const expected = [[base, round.channelId], [`${base}-ergebnisse`, round.resultsChannelId], [`${base}-groessenvideo`, round.videoChannelId]];
+    for (const [name, preferredId] of expected) {
+      const matches = matchingChannels(guild, name, parentId);
+      const keep = matches.find(item => String(item.id) === String(preferredId))
+        || matches.sort((first, second) => Number(first.createdTimestamp || 0) - Number(second.createdTimestamp || 0))[0];
+      for (const duplicate of matches.filter(item => item.id !== keep?.id)) {
+        const deleted = await duplicate.delete('Duplikat einer noch gesperrten Knockout-Royale-Runde bereinigen').catch(() => null);
+        if (deleted) removed.push(duplicate.id);
+      }
+    }
+  }
+  return removed;
+}
+
 function phaseFor(roundKey, size) {
   if (['grand_final', 'grand_final_reset'].includes(roundKey)) return `royal_${roundKey}`;
   return [8, 16, 32].includes(size) ? `royal_${size}_${roundKey}` : null;
@@ -132,6 +150,7 @@ async function performRoyaleRoundResourceSync(client, now = new Date()) {
   const resourceRounds = allRounds.filter(round => !round.channelId || round.privateSignature !== roundSignature(round));
   const { guild, settings } = await guildAndSettings(client); if (!guild) return [];
   await guild.channels.fetch(); await guild.roles.fetch();
+  await cleanupLockedRoundChannelDuplicates(guild, settings.categories.knockoutRoyaleCategoryId, allRounds);
   const roleMap = settings.roles?.knockoutRoyaleRoleIds || {}; const desired = new Map();
   for (const round of allRounds) for (const userId of userIdsForTeams(pendingTeamIds(round))) {
     if (!desired.has(userId)) desired.set(userId, new Set());
