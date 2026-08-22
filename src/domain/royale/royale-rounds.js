@@ -57,6 +57,13 @@ async function syncOneRound({ event, round, guild, settings, now }) {
   let mainMessage = round.messageId ? await main.messages.fetch(round.messageId).catch(() => null) : null;
   if (mainMessage) await mainMessage.edit({ ...mainPayload, attachments: [] }); else mainMessage = await main.send(mainPayload);
   let resultMessage = round.resultsMessageId ? await results.messages.fetch(round.resultsMessageId).catch(() => null) : null;
+  let resultsGraphicMessage = round.resultsGraphicMessageId ? await results.messages.fetch(round.resultsGraphicMessageId).catch(() => null) : null;
+  if (!resultsGraphicMessage && resultMessage) {
+    await resultMessage.delete().catch(() => null);
+    resultMessage = null;
+  }
+  if (resultsGraphicMessage) await resultsGraphicMessage.edit({ ...mainPayload, attachments: [] });
+  else resultsGraphicMessage = await results.send(mainPayload);
   const timing = roundTiming(event, round, now);
   const released = timing.released;
   const disabled = round.status !== 'open' || !released;
@@ -73,7 +80,7 @@ async function syncOneRound({ event, round, guild, settings, now }) {
   if (resultMessage) await resultMessage.edit(payload); else resultMessage = await results.send(payload);
   return {
     channelId: main.id, resultsChannelId: results.id, videoChannelId: video.id,
-    messageId: mainMessage.id, resultsMessageId: resultMessage.id,
+    messageId: mainMessage.id, resultsGraphicMessageId: resultsGraphicMessage.id, resultsMessageId: resultMessage.id,
     privateSignature: roundSignature(round),
     preparedAt: timing.preparedAt,
     openedAt: timing.openedAt,

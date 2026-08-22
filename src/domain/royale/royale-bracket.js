@@ -161,13 +161,13 @@ function activateReadyRounds(bracket) {
 
 function recordRoyaleResult(bracket, { roundKey, matchId, homeGoals, awayGoals }) {
   const { round, match } = findMatch(bracket, roundKey, matchId);
-  if (!['open', 'admin_decision_required'].includes(match.status)) throw new Error('Dieses Royal-Spiel ist nicht offen.');
+  if (!['open', 'pending_confirmation', 'admin_decision_required'].includes(match.status)) throw new Error('Dieses Royal-Spiel ist nicht offen.');
   const home = Number(homeGoals); const away = Number(awayGoals);
   if (!Number.isFinite(home) || !Number.isFinite(away) || home === away) throw new Error('Royal-Ergebnisse müssen einen eindeutigen Sieger haben.');
   const winner = home > away ? match.home : match.away;
   const loser = home > away ? match.away : match.home;
   const winnerId = teamId(winner); const loserId = teamId(loser);
-  match.status = 'confirmed'; match.result = { homeGoals: home, awayGoals: away }; match.winner = winner; match.loser = loser;
+  match.status = 'confirmed'; match.result = { homeGoals: home, awayGoals: away }; match.winner = winner; match.loser = loser; match.confirmation = null;
   bracket.losses[loserId] = Number(bracket.losses[loserId] || 0) + 1;
 
   if (roundKey === 'grand_final') {
@@ -194,21 +194,43 @@ function recordRoyaleResult(bracket, { roundKey, matchId, homeGoals, awayGoals }
 
 function submitRoyaleReport(bracket, { roundKey, matchId, reporterTeamId, homeGoals, awayGoals, reportedByUserId = null }) {
   const { match } = findMatch(bracket, roundKey, matchId);
-  if (match.status !== 'open' && match.status !== 'admin_decision_required') throw new Error('Dieses Royal-Spiel ist nicht meldbar.');
+  if (!['open', 'pending_confirmation', 'admin_decision_required'].includes(match.status)) throw new Error('Dieses Royal-Spiel ist nicht meldbar.');
   const reporter = String(reporterTeamId);
   if (![teamId(match.home), teamId(match.away)].includes(reporter)) throw new Error('Das meldende Team gehört nicht zu diesem Spiel.');
   const home = Number(homeGoals); const away = Number(awayGoals);
   if (!Number.isFinite(home) || !Number.isFinite(away) || home === away) throw new Error('Royal-Ergebnisse müssen einen eindeutigen Sieger haben.');
   match.reports = (match.reports || []).filter(report => String(report.reporterTeamId) !== reporter);
-  match.reports.push({ reporterTeamId: reporter, reportedByUserId: reportedByUserId ? String(reportedByUserId) : null, homeGoals: home, awayGoals: away, reportedAt: new Date().toISOString() });
-  if (match.reports.length < 2) return { status: 'pending', match };
+  const reportedAt = new Date().toISOString();
+  match.reports.push({ participantKey: `team:${reporter}`, reporterTeamId: reporter, reportedByUserId: reportedByUserId ? String(reportedByUserId) : null, homeGoals: home, awayGoals: away, reportedAt, submittedAt: reportedAt });
+  if (match.reports.length < 2) {
+    match.status = 'pending_confirmation';
+    match.confirmation = {
+      ...(match.confirmation || {}),
+      startedAt: match.confirmation?.startedAt || reportedAt,
+      expiresAt: match.confirmation?.expiresAt || new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+    };
+    return { status: 'pending_confirmation', match };
+  }
+  const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
   const [first, second] = match.reports;
   if (first.homeGoals !== second.homeGoals || first.awayGoals !== second.awayGoals) {
     match.status = 'admin_decision_required';
-    return { status: 'admin_decision_required', match };
+    match.confirmation = null;
+    return { status: 'admin_decision_required', match, confirmationNotice };
   }
   const outcome = recordRoyaleResult(bracket, { roundKey, matchId, homeGoals: home, awayGoals: away });
-  return { status: 'confirmed', match, ...outcome };
+  return { status: 'confirmed', match, confirmationNotice, ...outcome };
 }
 
-module.exports = { activateReadyRounds, activateNextRound: activateReadyRounds, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport };
+function autoConfirmRoyaleFirstReport(bracket, { roundKey, matchId, now = new Date() }) {
+  const { match } = findMatch(bracket, roundKey, matchId);
+  const reports = match.reports || [];
+  const expiresAt = match.confirmation?.expiresAt ? new Date(match.confirmation.expiresAt) : null;
+  if (match.status !== 'pending_confirmation' || reports.length !== 1 || !expiresAt || now < expiresAt) return null;
+  const confirmationNotice = { ...(match.confirmation || {}) };
+  const report = reports[0];
+  const outcome = recordRoyaleResult(bracket, { roundKey, matchId, homeGoals: report.homeGoals, awayGoals: report.awayGoals });
+  return { status: 'confirmed', match, confirmationNotice, automatic: true, ...outcome };
+}
+
+module.exports = { activateReadyRounds, activateNextRound: activateReadyRounds, autoConfirmRoyaleFirstReport, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport };

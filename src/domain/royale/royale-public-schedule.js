@@ -14,7 +14,13 @@ function status(round) {
   return '🔒 Noch nicht freigegeben';
 }
 function matchLine(match, index) {
-  const score = match.result ? ` — **${match.result.homeGoals}:${match.result.awayGoals}**` : ' — offen';
+  const score = match.result
+    ? ` — **${match.result.homeGoals}:${match.result.awayGoals}**`
+    : match.status === 'pending_confirmation'
+      ? ' — ⏳ wartet auf Gegner'
+      : match.status === 'admin_decision_required'
+        ? ' — 🛠️ Admin-Entscheidung erforderlich'
+        : ' — offen';
   return `**Spiel ${index + 1}:** ${name(match.home)} vs. ${name(match.away)}${score}`;
 }
 function embedFor(round, size) {

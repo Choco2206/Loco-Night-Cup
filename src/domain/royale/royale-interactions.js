@@ -12,6 +12,7 @@ const { syncRoyaleRoundResources } = require('./royale-rounds');
 const { postRoyaleCeremony } = require('./royale-ceremony');
 const { cleanupRoyaleResources } = require('./royale-rounds');
 const { syncRoyalePublicSchedule } = require('./royale-public-schedule');
+const { handleResultOutcome } = require('../results/result-confirmation-service');
 
 function manages(userId, participant) {
   const team = findTeamById(participant?.teamId);
@@ -29,7 +30,7 @@ function isAdmin(interaction) {
 async function openResult(interaction, roundKey) {
   const event = readRoyale(); const round = event.bracket?.rounds?.[roundKey];
   if (!round || round.status !== 'open') throw new Error('Diese Royal-Runde ist nicht geöffnet.');
-  const matches = round.matches.filter(match => match.status === 'open' && (manages(interaction.user.id, match.home) || manages(interaction.user.id, match.away)));
+  const matches = round.matches.filter(match => ['open', 'pending_confirmation'].includes(match.status) && (manages(interaction.user.id, match.home) || manages(interaction.user.id, match.away)));
   if (!matches.length) throw new Error('Für dein Team gibt es in dieser Runde kein meldbares Spiel.');
   await interaction.reply({ content: 'Wähle das Spiel aus.', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`royale_result_select:${roundKey}`).setPlaceholder('Royal-Spiel auswählen').addOptions(matches.map(match => ({ label: matchLabel(match), value: match.id }))))], flags: 64 });
   return true;
@@ -37,7 +38,7 @@ async function openResult(interaction, roundKey) {
 
 async function selectResult(interaction, roundKey) {
   const event = readRoyale(); const match = event.bracket?.rounds?.[roundKey]?.matches.find(item => item.id === interaction.values?.[0]);
-  if (!match || (!manages(interaction.user.id, match.home) && !manages(interaction.user.id, match.away))) throw new Error('Dieses Royal-Spiel ist nicht meldbar.');
+  if (!match || !['open', 'pending_confirmation'].includes(match.status) || (!manages(interaction.user.id, match.home) && !manages(interaction.user.id, match.away))) throw new Error('Dieses Royal-Spiel ist nicht meldbar.');
   await interaction.showModal(new ModalBuilder().setCustomId(`royale_result_modal:${roundKey}:${match.id}`).setTitle('Royal-Ergebnis').addComponents(
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('home_goals').setLabel(`${match.home.displayName} Tore`.slice(0, 45)).setStyle(TextInputStyle.Short).setRequired(true)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('away_goals').setLabel(`${match.away.displayName} Tore`.slice(0, 45)).setStyle(TextInputStyle.Short).setRequired(true)),
@@ -117,11 +118,27 @@ async function submitAdminResult(interaction, client, roundKey, matchId) {
   await interaction.deferReply({ flags: 64 });
   if (!isAdmin(interaction)) throw new Error('Du darfst kein Royal-Admin-Ergebnis setzen.');
   let outcome;
-  updateRoyale(event => { outcome = require('./royale-bracket').recordRoyaleResult(event.bracket, { roundKey, matchId, homeGoals: interaction.fields.getTextInputValue('home_goals'), awayGoals: interaction.fields.getTextInputValue('away_goals') }); event.status = event.bracket.status === 'completed' ? 'completed' : 'running'; return event; });
+  updateRoyale(event => {
+    const match = event.bracket?.rounds?.[roundKey]?.matches.find(item => item.id === matchId);
+    const confirmationNotice = match?.confirmation ? { ...match.confirmation } : null;
+    outcome = require('./royale-bracket').recordRoyaleResult(event.bracket, { roundKey, matchId, homeGoals: interaction.fields.getTextInputValue('home_goals'), awayGoals: interaction.fields.getTextInputValue('away_goals') });
+    outcome.confirmationNotice = confirmationNotice;
+    event.status = event.bracket.status === 'completed' ? 'completed' : 'running'; return event;
+  });
+  await handleResultOutcome({ client, eventKey: 'knockout_royale', phase: 'royale', phaseKey: roundKey, outcome, channelId: interaction.channelId });
+  await finalizeConfirmedRoyaleResult(client, outcome);
+  await interaction.editReply(outcome.eliminated ? 'Admin-Ergebnis gesetzt; das unterlegene Team ist ausgeschieden.' : 'Admin-Ergebnis gesetzt; der Turnierbaum wurde aktualisiert.');
+  return true;
+}
+
+async function finalizeConfirmedRoyaleResult(client, outcome) {
+  if (!outcome || outcome.status !== 'confirmed') return false;
   await syncRoyaleRoundResources(client);
   await syncRoyalePublicSchedule(client);
-  if (readRoyale().bracket?.status === 'completed') { await postRoyaleCeremony(client); await cleanupRoyaleResources(client); }
-  await interaction.editReply(outcome.eliminated ? 'Admin-Ergebnis gesetzt; das unterlegene Team ist ausgeschieden.' : 'Admin-Ergebnis gesetzt; der Turnierbaum wurde aktualisiert.');
+  if (readRoyale().bracket?.status === 'completed') {
+    await postRoyaleCeremony(client);
+    await cleanupRoyaleResources(client);
+  }
   return true;
 }
 
@@ -135,12 +152,20 @@ async function submitResult(interaction, client, roundKey, matchId) {
     outcome = submitRoyaleReport(event.bracket, { roundKey, matchId, reporterTeamId, reportedByUserId: interaction.user.id, homeGoals: interaction.fields.getTextInputValue('home_goals'), awayGoals: interaction.fields.getTextInputValue('away_goals') });
     event.status = event.bracket.status === 'completed' ? 'completed' : 'running'; event.meta.updatedAt = new Date().toISOString(); return event;
   });
-  if (outcome.status === 'confirmed') {
+  await handleResultOutcome({ client, eventKey: 'knockout_royale', phase: 'royale', phaseKey: roundKey, outcome, channelId: interaction.channelId });
+  if (outcome.status === 'confirmed') await finalizeConfirmedRoyaleResult(client, outcome);
+  else {
     await syncRoyaleRoundResources(client);
     await syncRoyalePublicSchedule(client);
-    if (readRoyale().bracket?.status === 'completed') { await postRoyaleCeremony(client); await cleanupRoyaleResources(client); }
   }
-  await interaction.editReply(outcome.status === 'pending'
+  if (outcome.status === 'admin_decision_required') {
+    const match = outcome.match;
+    await interaction.channel?.send({
+      content: ['🛠️ **Royal-Admin-Entscheidung erforderlich**', `${match.home.displayName} vs ${match.away.displayName}`, 'Die beiden Teams haben unterschiedliche Ergebnisse gemeldet.'].join('\n'),
+      allowedMentions: { parse: [] },
+    }).catch(() => null);
+  }
+  await interaction.editReply(outcome.status === 'pending_confirmation'
     ? 'Ergebnis gespeichert. Es wartet auf die Meldung des Gegners.'
     : outcome.status === 'admin_decision_required'
       ? 'Die Meldungen unterscheiden sich. Eine Admin-Entscheidung ist erforderlich.'
@@ -172,4 +197,4 @@ async function handleRoyaleInteraction(interaction, client) {
   return true;
 }
 
-module.exports = { handleRoyaleInteraction };
+module.exports = { finalizeConfirmedRoyaleResult, handleRoyaleInteraction };

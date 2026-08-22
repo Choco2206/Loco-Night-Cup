@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport } = require('../src/domain/royale/royale-bracket');
+const { autoConfirmRoyaleFirstReport, buildRoyaleBracket, recordRoyaleResult, submitRoyaleReport } = require('../src/domain/royale/royale-bracket');
 const { calculateRoyaleCheckin, chooseRoyaleFormat } = require('../src/domain/royale/royale-format');
 const { buildRoyaleSchedule, getLastSaturday, getRoyaleEventDate, isRoyaleEventDate } = require('../src/domain/royale/royale-schedule');
 const { getPlannedSchedule } = require('../src/domain/checkins/checkin-schedule');
@@ -11,6 +11,7 @@ const { createEventDefault } = require('../src/storage/defaults');
 const { validateEvent } = require('../src/validation/events.schema');
 const { buildRoyaleCeremonyText } = require('../src/domain/royale/royale-ceremony');
 const { roundTiming } = require('../src/domain/royale/royale-rounds');
+const { royalePendingDescriptors } = require('../src/domain/results/result-confirmation-service');
 
 assert.equal(getLastSaturday(2026, 8), '2026-08-29');
 assert.equal(getRoyaleEventDate(2026, 8), '2026-08-22');
@@ -128,8 +129,21 @@ assert.equal(resetBracket.status, 'completed');
 
 const reports = buildRoyaleBracket({ teams: teams(8) });
 const reportMatch = reports.rounds.kings_round_1.matches[0];
-assert.equal(submitRoyaleReport(reports, { roundKey: 'kings_round_1', matchId: reportMatch.id, reporterTeamId: reportMatch.home.teamId, homeGoals: 2, awayGoals: 1 }).status, 'pending');
+assert.equal(submitRoyaleReport(reports, { roundKey: 'kings_round_1', matchId: reportMatch.id, reporterTeamId: reportMatch.home.teamId, homeGoals: 2, awayGoals: 1 }).status, 'pending_confirmation');
 assert.equal(submitRoyaleReport(reports, { roundKey: 'kings_round_1', matchId: reportMatch.id, reporterTeamId: reportMatch.away.teamId, homeGoals: 1, awayGoals: 2 }).status, 'admin_decision_required');
 assert.equal(submitRoyaleReport(reports, { roundKey: 'kings_round_1', matchId: reportMatch.id, reporterTeamId: reportMatch.away.teamId, homeGoals: 2, awayGoals: 1 }).status, 'confirmed');
+
+const automatic = buildRoyaleBracket({ teams: teams(8) });
+const automaticMatch = automatic.rounds.kings_round_1.matches[0];
+submitRoyaleReport(automatic, { roundKey: 'kings_round_1', matchId: automaticMatch.id, reporterTeamId: automaticMatch.home.teamId, homeGoals: 4, awayGoals: 2 });
+automatic.rounds.kings_round_1.resultsChannelId = 'royale-results-1';
+const restartEntries = royalePendingDescriptors({ bracket: automatic });
+assert.equal(restartEntries.length, 1);
+assert.equal(restartEntries[0].descriptor.phase, 'royale');
+assert.equal(restartEntries[0].channelId, 'royale-results-1');
+assert.equal(autoConfirmRoyaleFirstReport(automatic, { roundKey: 'kings_round_1', matchId: automaticMatch.id, now: new Date(new Date(automaticMatch.confirmation.expiresAt).getTime() - 1) }), null);
+const automaticOutcome = autoConfirmRoyaleFirstReport(automatic, { roundKey: 'kings_round_1', matchId: automaticMatch.id, now: new Date(new Date(automaticMatch.confirmation.expiresAt).getTime() + 1) });
+assert.equal(automaticOutcome.status, 'confirmed');
+assert.deepEqual(automaticMatch.result, { homeGoals: 4, awayGoals: 2 });
 
 console.log('royale-system.test.js passed');
