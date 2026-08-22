@@ -9,6 +9,8 @@ const { readRoyale, updateRoyale } = require('./royale-repository');
 const { ensureRoyaleAttendancePost } = require('./royale-attendance');
 
 const ROUND_LIMIT_MS = 25 * 60 * 1000;
+let resourceSyncPromise = null;
+let pendingResourceSync = null;
 function slug(value) { return value.toLowerCase().replace(/[ö]/g, 'oe').replace(/[ä]/g, 'ae').replace(/[ü]/g, 'ue').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 function label(value) { return value?.displayName || findTeamById(value?.teamId)?.clubName || 'Noch offen'; }
 function pendingTeamIds(round) {
@@ -35,13 +37,31 @@ function roundTiming(event, round, now = new Date()) {
   };
 }
 
-async function ensureChannel(guild, name, parentId, roleId, staffIds) {
-  let channel = guild.channels.cache.find(item => item.type === ChannelType.GuildText && item.name === name && item.parentId === parentId);
+function matchingChannels(guild, name, parentId) {
+  return [...guild.channels.cache.values()].filter(item => item.type === ChannelType.GuildText && item.name === name && item.parentId === parentId);
+}
+
+async function ensureChannel(guild, name, parentId, roleId, staffIds, preferredId = null) {
+  const matches = matchingChannels(guild, name, parentId);
+  let channel = matches.find(item => String(item.id) === String(preferredId))
+    || matches.sort((first, second) => Number(first.createdTimestamp || 0) - Number(second.createdTimestamp || 0))[0];
   if (channel) return channel;
   const allowed = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks];
   return guild.channels.create({ name, type: ChannelType.GuildText, parent: parentId, permissionOverwrites: [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: roleId, allow: allowed }, ...staffIds.map(id => ({ id, allow: allowed })),
   ], reason: 'Knockout Royale Runde freigeben' });
+}
+
+async function findExistingMessage(channel, preferredId, predicate) {
+  const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  const matches = fetched ? [...fetched.values()].filter(predicate) : [];
+  let message = preferredId ? matches.find(item => String(item.id) === String(preferredId)) : null;
+  return message || matches.sort((first, second) => Number(second.createdTimestamp || 0) - Number(first.createdTimestamp || 0))[0] || null;
+}
+
+function hasGraphicTitle(message, title) { return message.embeds?.some(embed => embed.title === title); }
+function hasButton(message, customId) {
+  return message.components?.some(row => row.components?.some(component => component.customId === customId || component.custom_id === customId));
 }
 
 function phaseFor(roundKey, size) {
@@ -55,18 +75,19 @@ async function syncOneRound({ event, round, guild, settings, now }) {
   if (!role) throw new Error(`Royal-Rolle fehlt: ${round.roleKey}`);
   const staffIds = [...new Set([...(settings.roles?.adminRoleIds || []), ...(settings.roles?.cupLeadRoleIds || [])].map(String))];
   const base = slug(round.label); const parentId = settings.categories.knockoutRoyaleCategoryId;
-  const main = await ensureChannel(guild, base, parentId, role.id, staffIds);
-  const results = await ensureChannel(guild, `${base}-ergebnisse`, parentId, role.id, staffIds);
-  const video = await ensureChannel(guild, `${base}-groessenvideo`, parentId, role.id, staffIds);
+  const main = await ensureChannel(guild, base, parentId, role.id, staffIds, round.channelId);
+  const results = await ensureChannel(guild, `${base}-ergebnisse`, parentId, role.id, staffIds, round.resultsChannelId);
+  const video = await ensureChannel(guild, `${base}-groessenvideo`, parentId, role.id, staffIds, round.videoChannelId);
   const embed = new EmbedBuilder().setColor(0x8f2cff).setTitle(`🐺 ${round.label}`).setDescription(round.matches.map((match, index) => `${index + 1}. **${label(match.home)}** vs. **${label(match.away)}**`).join('\n'));
   const phase = phaseFor(round.roundKey, event.bracket.formatSize);
   const image = phase ? await renderKoImage({ phase, matches: round.matches, eventId: event.cycle?.cycleKey || 'royale' }).catch(() => null) : null;
   if (image) embed.setImage(`attachment://${image.fileName}`);
   const mainPayload = { embeds: [embed], files: image ? [{ attachment: image.buffer, name: image.fileName }] : [], allowedMentions: { parse: [] } };
-  let mainMessage = round.messageId ? await main.messages.fetch(round.messageId).catch(() => null) : null;
+  const graphicTitle = `🐺 ${round.label}`;
+  let mainMessage = await findExistingMessage(main, round.messageId, message => hasGraphicTitle(message, graphicTitle));
   if (mainMessage) await mainMessage.edit({ ...mainPayload, attachments: [] }); else mainMessage = await main.send(mainPayload);
-  let resultMessage = round.resultsMessageId ? await results.messages.fetch(round.resultsMessageId).catch(() => null) : null;
-  let resultsGraphicMessage = round.resultsGraphicMessageId ? await results.messages.fetch(round.resultsGraphicMessageId).catch(() => null) : null;
+  let resultMessage = await findExistingMessage(results, round.resultsMessageId, message => hasButton(message, `royale_result_open:${round.roundKey}`));
+  let resultsGraphicMessage = await findExistingMessage(results, round.resultsGraphicMessageId, message => hasGraphicTitle(message, graphicTitle));
   if (!resultsGraphicMessage && resultMessage) {
     await resultMessage.delete().catch(() => null);
     resultMessage = null;
@@ -105,7 +126,7 @@ async function guildAndSettings(client) {
   return { guild, settings };
 }
 
-async function syncRoyaleRoundResources(client, now = new Date()) {
+async function performRoyaleRoundResourceSync(client, now = new Date()) {
   const event = readRoyale(); if (!event.bracket) return [];
   const allRounds = Object.values(event.bracket.rounds);
   const resourceRounds = allRounds.filter(round => !round.channelId || round.privateSignature !== roundSignature(round));
@@ -125,10 +146,29 @@ async function syncRoyaleRoundResources(client, now = new Date()) {
     if (add.length) await member.roles.add(add, 'Knockout Royale Rundenfreigabe').catch(() => null);
   }
   const synced = [];
-  for (const round of resourceRounds) synced.push({ roundKey: round.roundKey, ...(await syncOneRound({ event, round, guild, settings, now })) });
-  if (synced.length) updateRoyale(current => { for (const item of synced) Object.assign(current.bracket.rounds[item.roundKey], item); return current; });
+  for (const round of resourceRounds) {
+    const item = { roundKey: round.roundKey, ...(await syncOneRound({ event, round, guild, settings, now })) };
+    synced.push(item);
+    updateRoyale(current => { Object.assign(current.bracket.rounds[item.roundKey], item); return current; });
+    if (round.roundKey === 'kings_round_1') await ensureRoyaleAttendancePost(client);
+  }
   await ensureRoyaleAttendancePost(client);
   return synced;
+}
+
+function syncRoyaleRoundResources(client, now = new Date()) {
+  pendingResourceSync = { client, now };
+  if (!resourceSyncPromise) {
+    resourceSyncPromise = (async () => {
+      let result = [];
+      while (pendingResourceSync) {
+        const request = pendingResourceSync; pendingResourceSync = null;
+        result = await performRoyaleRoundResourceSync(request.client, request.now);
+      }
+      return result;
+    })().finally(() => { resourceSyncPromise = null; });
+  }
+  return resourceSyncPromise;
 }
 
 async function sendRoyaleRoundReminders(client, now = new Date()) {

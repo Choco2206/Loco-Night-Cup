@@ -59,6 +59,15 @@ async function channelFor(client, event) {
 async function ensureRoyaleAttendancePost(client) {
   let event = readRoyale();
   if (!roundOne(event) || roundOne(event).attendance?.status === 'finalized') return null;
+  const deadline = closeAt(event);
+  if (!roundOne(event).attendance?.messageId && deadline && deadline.getTime() <= Date.now()) {
+    updateRoyale(current => {
+      const state = ensureState(current);
+      state.status = 'finalized'; state.finalizedAt = new Date().toISOString(); state.skippedLate = true;
+      return current;
+    });
+    return null;
+  }
   updateRoyale(current => { ensureState(current); return current; });
   event = readRoyale();
   const channel = await channelFor(client, event); if (!channel?.isTextBased?.()) return null;

@@ -9,8 +9,10 @@ const { postRoyaleCeremony } = require('./royale-ceremony');
 const { syncRoyalePublicSchedule } = require('./royale-public-schedule');
 
 let reconcileTimer = null;
+let reconcilePromise = null;
+let pendingReconcile = null;
 
-async function reconcile(client, now = new Date()) {
+async function performReconcile(client, now = new Date()) {
   ensureRoyaleCycle(now);
   let event = getRoyaleState(now);
   if (!event.bracket && event.schedule?.bracketAt && now.getTime() >= new Date(event.schedule.bracketAt).getTime()
@@ -26,6 +28,19 @@ async function reconcile(client, now = new Date()) {
   }
   if (event.bracket) await syncRoyalePublicSchedule(client);
   if (event.bracket?.status === 'completed') { await postRoyaleCeremony(client); await cleanupRoyaleResources(client); }
+}
+
+function reconcile(client, now = new Date()) {
+  pendingReconcile = { client, now };
+  if (!reconcilePromise) {
+    reconcilePromise = (async () => {
+      while (pendingReconcile) {
+        const request = pendingReconcile; pendingReconcile = null;
+        await performReconcile(request.client, request.now);
+      }
+    })().finally(() => { reconcilePromise = null; });
+  }
+  return reconcilePromise;
 }
 
 async function init(client) {
