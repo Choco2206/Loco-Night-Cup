@@ -3,6 +3,7 @@
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { listVisibleTeams } = require('../teams/team-service');
+const { getTeamHistoryStats } = require('../teams/team-achievements');
 
 const EPHEMERAL = 64;
 const TARGET_CHANNEL_ID = '1542532323386327080';
@@ -42,19 +43,28 @@ function registrationDate(team) {
   };
 }
 
+function participationStats(team) {
+  const historyStats = getTeamHistoryStats(team);
+  return {
+    cupsPlayed: Number(historyStats.cupsPlayed || 0),
+    matchesPlayed: Number(historyStats.matches?.played || 0),
+  };
+}
+
 function teamsWithoutCupParticipation() {
   return listVisibleTeams()
     .filter(team => team?.status === 'active')
     .filter(team => !team?.isTestTeam)
-    .filter(team => Number(team?.stats?.matches || 0) === 0)
+    .filter(team => participationStats(team).matchesPlayed === 0)
     .sort((a, b) => String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de', { sensitivity: 'base' }));
 }
 
 function teamLine(team, index) {
   const managerId = team?.manager?.userId ? String(team.manager.userId) : null;
   const registered = registrationDate(team);
+  const stats = participationStats(team);
   const age = registered.days === null ? '' : ` | seit ${registered.days} Tag${registered.days === 1 ? '' : 'en'}`;
-  return `${index + 1}. **${team.clubName || team.id}**${managerId ? ` — <@${managerId}>` : ''}\n   Registriert: ${registered.text}${age} | bestätigte Cup-Spiele: **0**`;
+  return `${index + 1}. **${team.clubName || team.id}**${managerId ? ` — <@${managerId}>` : ''}\n   Registriert: ${registered.text}${age} | Cups: **${stats.cupsPlayed}** | Spiele: **${stats.matchesPlayed}**`;
 }
 
 function buildChunks(teams) {
@@ -65,7 +75,7 @@ function buildChunks(teams) {
   const intro = [
     '🔍 **Teams ohne Cup-Teilnahme**',
     '',
-    'Folgende Teams sind aktuell registriert, haben aber bisher **kein bestätigtes Spiel im Loco Night Cup** in ihren dauerhaften Team-Statistiken.',
+    'Folgende Teams sind aktuell registriert, haben aber bisher **kein bestätigtes Spiel im Loco Night Cup** in derselben dauerhaften Team-Historie, die auch unter **Mein Team** angezeigt wird.',
     '',
     'Die Liste dient nur zur Kontrolle. Es wird **nichts automatisch gelöscht**.',
     '',
