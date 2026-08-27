@@ -3,6 +3,7 @@
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { getFriendlyMatches } = require('./ea-clubs-client');
+const { sendTracker } = require('./tott-tracker');
 
 const MINIMUM_MATCHES = 3;
 const FORMATION = { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 };
@@ -171,6 +172,7 @@ function buildSelection(performances) {
 
 function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
   let stored = false;
+  let storedRows = [];
   updateEventData(eventKey, event => {
     event.ceremony = event.ceremony || {};
     const state = event.ceremony.teamOfTheTournament || { performances: [], capturedMatches: [], selection: null };
@@ -182,23 +184,46 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
     state.selection = buildSelection(state.performances);
     state.updatedAt = new Date().toISOString();
     event.ceremony.teamOfTheTournament = state;
+    storedRows = rows;
     stored = true;
     return event;
   });
-  return stored;
+  return { stored, rows: storedRows };
+}
+
+function teamName(teamId) {
+  return findTeamById(teamId)?.clubName || `Team ${teamId || '?'}`;
+}
+
+function matchLabel(lncMatch) {
+  const homeName = teamName(lncMatch?.home?.teamId);
+  const awayName = teamName(lncMatch?.away?.teamId);
+  const homeGoals = lncMatch?.result?.homeGoals ?? '?';
+  const awayGoals = lncMatch?.result?.awayGoals ?? '?';
+  return `${homeName} **${homeGoals}:${awayGoals}** ${awayName}`;
+}
+
+function linkedStatus(lncMatch) {
+  return [lncMatch?.home?.teamId, lncMatch?.away?.teamId].map(teamId => {
+    const team = findTeamById(teamId);
+    return `${team?.eaClub?.clubId ? '✅' : '❌'} ${team?.clubName || `Team ${teamId || '?'}`}`;
+  }).join('\n');
 }
 
 async function captureOnce(eventKey, lncMatch) {
   const teams = [lncMatch?.home?.teamId, lncMatch?.away?.teamId].map(findTeamById).filter(Boolean);
   const linked = teams.filter(team => team.eaClub?.clubId);
-  if (!linked.length || !lncMatch?.result) return false;
+  if (!linked.length || !lncMatch?.result) return { captured: false, reason: 'no_linked_teams' };
   const teamByEaClubId = new Map(linked.map(team => [String(team.eaClub.clubId), String(team.id)]));
   for (const team of linked) {
     const matches = await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform);
     const candidate = selectEaMatch(matches, lncMatch, linked);
-    if (candidate && persistMatch(eventKey, lncMatch, candidate, teamByEaClubId)) return true;
+    if (candidate) {
+      const result = persistMatch(eventKey, lncMatch, candidate, teamByEaClubId);
+      if (result.stored) return { captured: true, candidate, rows: result.rows, linked };
+    }
   }
-  return false;
+  return { captured: false, reason: 'match_not_found', linked };
 }
 
 function scheduleRatingCapture(eventKey, lncMatch) {
@@ -206,16 +231,63 @@ function scheduleRatingCapture(eventKey, lncMatch) {
   const key = `${eventKey}:${lncMatch.id}`;
   if (captureTimers.has(key)) return false;
   let attempt = 0;
+  let firstWarningSent = false;
   const run = async () => {
+    let lastError = null;
     try {
-      if (await captureOnce(eventKey, lncMatch)) return captureTimers.delete(key);
+      const result = await captureOnce(eventKey, lncMatch);
+      if (result.captured) {
+        const counts = new Map();
+        for (const row of result.rows || []) counts.set(row.teamId, (counts.get(row.teamId) || 0) + 1);
+        const details = [lncMatch?.home?.teamId, lncMatch?.away?.teamId]
+          .map(teamId => `${teamName(teamId)}: **${counts.get(String(teamId)) || 0} Spielerwerte**`)
+          .join('\n');
+        await sendTracker([
+          '✅ **TOTT MATCH ERFASST**',
+          matchLabel(lncMatch),
+          '',
+          `EA Match-ID: **${eaMatchId(result.candidate)}**`,
+          linkedStatus(lncMatch),
+          details,
+          '**Gespeichert:** ✅',
+        ].join('\n'));
+        captureTimers.delete(key);
+        return;
+      }
+      if (result.reason === 'no_linked_teams') {
+        captureTimers.delete(key);
+        return;
+      }
     } catch (error) {
+      lastError = error;
       console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
     }
+
     attempt += 1;
+    if (!firstWarningSent) {
+      firstWarningSent = true;
+      await sendTracker([
+        '⚠️ **TOTT MATCH NOCH NICHT ERFASST**',
+        matchLabel(lncMatch),
+        '',
+        linkedStatus(lncMatch),
+        lastError ? `EA-Fehler: **${lastError.message}**` : 'EA erreichbar, aber das passende Match wurde noch nicht gefunden.',
+        '**Weitere Versuche laufen automatisch.**',
+      ].join('\n'));
+    }
+
     if (attempt >= RETRY_DELAYS_MS.length) {
       console.warn(`[tott] ${key}: nach ${attempt} EA-Abfragen noch keine passenden Matchdaten gefunden.`);
-      return captureTimers.delete(key);
+      await sendTracker([
+        '🔴 **TOTT MATCH NICHT ERFASST**',
+        matchLabel(lncMatch),
+        '',
+        linkedStatus(lncMatch),
+        `Nach **${attempt} Versuchen** konnten keine passenden EA-Matchdaten gespeichert werden.`,
+        lastError ? `Letzter EA-Fehler: **${lastError.message}**` : 'EA hat kein eindeutig passendes Match geliefert.',
+      ].join('\n'));
+      captureTimers.delete(key);
+      return;
     }
     const timer = setTimeout(run, RETRY_DELAYS_MS[attempt]);
     if (typeof timer.unref === 'function') timer.unref();
