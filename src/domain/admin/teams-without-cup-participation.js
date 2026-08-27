@@ -33,13 +33,14 @@ async function requireAdmin(interaction) {
 
 function registrationDate(team) {
   const raw = team?.meta?.createdAt;
-  if (!raw) return { text: 'unbekannt', days: null };
+  if (!raw) return { text: 'unbekannt', days: null, timestamp: Number.POSITIVE_INFINITY };
   const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return { text: 'unbekannt', days: null };
+  if (Number.isNaN(date.getTime())) return { text: 'unbekannt', days: null, timestamp: Number.POSITIVE_INFINITY };
   const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
   return {
     text: date.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }),
     days,
+    timestamp: date.getTime(),
   };
 }
 
@@ -56,14 +57,21 @@ function teamsWithoutCupParticipation() {
     .filter(team => team?.status === 'active')
     .filter(team => !team?.isTestTeam)
     .filter(team => participationStats(team).matchesPlayed === 0)
-    .sort((a, b) => String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de', { sensitivity: 'base' }));
+    .sort((a, b) => {
+      const aRegistration = registrationDate(a);
+      const bRegistration = registrationDate(b);
+      if (aRegistration.timestamp !== bRegistration.timestamp) {
+        return aRegistration.timestamp - bRegistration.timestamp;
+      }
+      return String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de', { sensitivity: 'base' });
+    });
 }
 
 function teamLine(team, index) {
   const managerId = team?.manager?.userId ? String(team.manager.userId) : null;
   const registered = registrationDate(team);
   const stats = participationStats(team);
-  const age = registered.days === null ? '' : ` | seit ${registered.days} Tag${registered.days === 1 ? '' : 'en'}`;
+  const age = registered.days === null ? '' : ` | seit **${registered.days} Tag${registered.days === 1 ? '' : 'en'}**`;
   return `${index + 1}. **${team.clubName || team.id}**${managerId ? ` — <@${managerId}>` : ''}\n   Registriert: ${registered.text}${age} | Cups: **${stats.cupsPlayed}** | Spiele: **${stats.matchesPlayed}**`;
 }
 
@@ -75,7 +83,7 @@ function buildChunks(teams) {
   const intro = [
     '🔍 **Teams ohne Cup-Teilnahme**',
     '',
-    'Folgende Teams sind aktuell registriert, haben aber bisher **kein bestätigtes Spiel im Loco Night Cup** in derselben dauerhaften Team-Historie, die auch unter **Mein Team** angezeigt wird.',
+    'Folgende Teams sind aktuell registriert, haben aber bisher **kein bestätigtes Spiel im Loco Night Cup**. Die Teams mit der längsten Registrierungsdauer stehen oben.',
     '',
     'Die Liste dient nur zur Kontrolle. Es wird **nichts automatisch gelöscht**.',
     '',
@@ -100,10 +108,32 @@ function buildChunks(teams) {
   return chunks;
 }
 
+async function clearPreviousReportMessages(channel) {
+  let before;
+  let deleted = 0;
+  do {
+    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+    if (!batch?.size) break;
+    const ownMessages = batch.filter(message => message.author?.id === channel.client.user?.id);
+    for (const message of ownMessages.values()) {
+      await message.delete().catch(() => null);
+      deleted += 1;
+    }
+    before = batch.last()?.id;
+    if (batch.size < 100) break;
+  } while (before);
+  return deleted;
+}
+
 async function postTeamsWithoutCupParticipation({ client, guild }) {
   const channel = await client?.channels?.fetch?.(TARGET_CHANNEL_ID).catch(() => null)
     || await guild?.channels?.fetch?.(TARGET_CHANNEL_ID).catch(() => null);
   if (!channel?.send) throw new Error(`Kanal ${TARGET_CHANNEL_ID} wurde nicht gefunden oder ist nicht beschreibbar.`);
+
+  // Dieser Kanal ist ausschließlich für diese Admin-Auswertung vorgesehen.
+  // Bei jedem manuellen Refresh werden nur die alten Bot-Ausgaben entfernt und
+  // anschließend genau eine aktuelle Liste aufgebaut. So entsteht kein Spam.
+  await clearPreviousReportMessages(channel);
 
   const teams = teamsWithoutCupParticipation();
   const chunks = buildChunks(teams);
@@ -128,7 +158,7 @@ async function handleTeamsWithoutCupParticipationInteraction(interaction, client
     await interaction.deferReply({ flags: EPHEMERAL });
     const result = await postTeamsWithoutCupParticipation({ client, guild: interaction.guild });
     await interaction.editReply([
-      `✅ Liste wurde in <#${result.channelId}> gepostet.`,
+      `✅ Liste in <#${result.channelId}> wurde aktualisiert.`,
       `Teams ohne bestätigte Cup-Teilnahme: **${result.affectedCount}**`,
       `Nachrichten: **${result.messageIds.length}**`,
     ].join('\n'));
