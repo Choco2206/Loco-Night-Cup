@@ -133,14 +133,34 @@ function playersForClub(match, clubKey, clubId) {
   return [];
 }
 
-function playerLine([playerId, player]) {
+function playerRating([, player]) {
+  const value = Number(player?.rating);
+  return Number.isFinite(value) ? value : -1;
+}
+
+function rankPlayers(players) {
+  return players.slice().sort((a, b) => (
+    playerRating(b) - playerRating(a)
+    || (Number(b[1]?.goals) || 0) - (Number(a[1]?.goals) || 0)
+    || (Number(b[1]?.assists) || 0) - (Number(a[1]?.assists) || 0)
+    || String(a[1]?.playername ?? a[1]?.playerName ?? a[1]?.name ?? a[0]).localeCompare(
+      String(b[1]?.playername ?? b[1]?.playerName ?? b[1]?.name ?? b[0]),
+      'de',
+      { sensitivity: 'base' }
+    )
+  ));
+}
+
+function playerLine([playerId, player], index) {
   const name = player?.playername ?? player?.playerName ?? player?.name ?? playerId;
   const rating = player?.rating ?? '-';
   const position = player?.pos ?? player?.position ?? '-';
   const goalsValue = Number(player?.goals) || 0;
   const assists = Number(player?.assists) || 0;
   const saves = Number(player?.saves ?? player?.gkSaves) || 0;
-  return `• **${String(name).slice(0, 35)}** | ${position} | ⭐ ${rating} | ⚽ ${goalsValue} | 🎯 ${assists}${saves ? ` | 🧤 ${saves}` : ''}`;
+  const rank = index + 1;
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `**${rank}.**`;
+  return `${medal} **${String(name).slice(0, 35)}** | ${position} | ⭐ ${rating} | ⚽ ${goalsValue} | 🎯 ${assists}${saves ? ` | 🧤 ${saves}` : ''}`;
 }
 
 function matchEmbed(match, team, index) {
@@ -151,7 +171,8 @@ function matchEmbed(match, team, index) {
   const opponent = clubs.find(([key]) => String(key) !== String(selectedKey));
   const opponentData = opponent?.[1] || {};
   const selectedPlayers = playersForClub(match, selectedKey, team.eaClub.clubId);
-  const lines = selectedPlayers.map(playerLine);
+  const rankedPlayers = rankPlayers(selectedPlayers);
+  const lines = rankedPlayers.map(playerLine);
   const playerText = lines.length ? lines.join('\n').slice(0, 3900) : '⚠️ Keine Spielerstatistiken für diesen Club im Match-Datensatz gefunden.';
   return new EmbedBuilder()
     .setTitle(`Spiel ${index + 1}: ${clubName(selectedData, team.clubName)} ${goals(selectedData)}:${goals(opponentData)} ${clubName(opponentData)}`)
@@ -187,7 +208,7 @@ async function runEaStatsTest({ interaction, client, teamId }) {
       `**Antwortzeit:** ${(durationMs / 1000).toFixed(2).replace('.', ',')} Sekunden`,
       `**Friendly Matches erhalten:** ${matches.length}`,
       '',
-      'Unten siehst du die letzten bis zu fünf von EA gelieferten Spiele inklusive der Spielerwerte, die das TOTT-System auswerten kann.',
+      'Unten siehst du die letzten bis zu fünf von EA gelieferten Spiele. Die Spieler sind je Match nach EA-Rating gerankt.',
     ].join('\n'))
     .setColor(matches.length ? 0x2ecc71 : 0xf39c12)
     .setTimestamp();
