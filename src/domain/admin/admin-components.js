@@ -47,6 +47,7 @@ const ADMIN_CATEGORIES = {
       ['admin_nickname_sync', 'Nicknames synchronisieren', 'Team-Nicknames neu synchronisieren'],
       ['admin_managers_without_team', 'Manager ohne Team', 'Manager-ohne-Team-Liste aktualisieren'],
       ['admin_teams_without_ea', 'Teams ohne EA-ID', 'Teams ohne verbundenen EA Club posten'],
+      ['admin_teams_without_cup', 'Teams ohne Cup-Teilnahme', 'Teams ohne bisheriges bestätigtes Cup-Spiel anzeigen'],
       ['admin_stream_list_sync', '📺 Streamliste synchronisieren', 'Zentrale Team-Streamliste neu aufbauen'],
     ],
   },
@@ -104,7 +105,7 @@ function buildAdminPanelPayload(selectedCategory = null) {
       '**📅 Event:** Check-in öffnen/schließen/verwalten, Event-Reset und Freilose',
       '**🏆 Turnier:** Format, Gruppenauslosung, Spieltag-Freigabe und K.O.-Phase',
       '**👥 Teams:** Teamliste, Teamdetails sowie Sperren',
-      '**🛠️ Verwaltung:** Serverstruktur, Nicknames, Manager ohne Team und Teams ohne EA-ID',
+      '**🛠️ Verwaltung:** Serverstruktur, Nicknames, Manager ohne Team, Teams ohne EA-ID und Teams ohne Cup-Teilnahme',
       '**🧪 Tests:** Refreshs, Testdaten, Simulationen, EA-Statistik und Siegerehrung',
       '**🏅 Erfolge:** Team-Erfolge manuell vergeben',
     ].join('\n'))
