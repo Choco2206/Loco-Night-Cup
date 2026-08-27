@@ -65,49 +65,42 @@ function teamSelectPayload(page = 0) {
   ];
   if (pageCount > 1) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`admin_ea_stats_page:${safePage - 1}`)
-        .setLabel('Zurück')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage <= 0),
-      new ButtonBuilder()
-        .setCustomId(`admin_ea_stats_page:${safePage + 1}`)
-        .setLabel('Weiter')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(safePage >= pageCount - 1)
+      new ButtonBuilder().setCustomId(`admin_ea_stats_page:${safePage - 1}`).setLabel('Zurück').setStyle(ButtonStyle.Secondary).setDisabled(safePage <= 0),
+      new ButtonBuilder().setCustomId(`admin_ea_stats_page:${safePage + 1}`).setLabel('Weiter').setStyle(ButtonStyle.Secondary).setDisabled(safePage >= pageCount - 1)
     ));
   }
   return {
     content: `🧪 **EA-Statistik testen**\nWähle ein Team mit hinterlegter EA Club-ID aus. Seite ${safePage + 1}/${pageCount}.`,
-    embeds: [],
-    components: rows,
+    embeds: [], components: rows,
   };
 }
 
-function clubMap(match) {
-  return match?.clubs || match?.teams || {};
-}
-
+function clubMap(match) { return match?.clubs || match?.teams || {}; }
 function selectedClubEntry(match, clubId) {
   return Object.entries(clubMap(match)).find(([key, club]) => (
-    String(key) === String(clubId)
-    || String(club?.clubId ?? club?.club_id ?? '') === String(clubId)
+    String(key) === String(clubId) || String(club?.clubId ?? club?.club_id ?? '') === String(clubId)
   )) || null;
 }
-
-function clubName(club, fallback = 'Unbekannter Club') {
-  return String(club?.name ?? club?.clubName ?? club?.club_name ?? fallback);
+function entryClubId([key, club] = []) { return String(club?.clubId ?? club?.club_id ?? key ?? ''); }
+function clubName(club, fallback = 'Unbekannter Club') { return String(club?.name ?? club?.clubName ?? club?.club_name ?? fallback); }
+function registeredTeamByEaClubId(clubId) {
+  if (!clubId) return null;
+  return listVisibleTeams().find(team => String(team?.eaClub?.clubId || '') === String(clubId)) || null;
 }
-
+function resolvedClubName(entry, fallback = 'Unbekannter Club') {
+  if (!entry) return fallback;
+  const rawName = clubName(entry[1], '');
+  if (rawName) return rawName;
+  const clubId = entryClubId(entry);
+  const registered = registeredTeamByEaClubId(clubId);
+  if (registered?.clubName) return registered.clubName;
+  return clubId ? `EA Club ${clubId}` : fallback;
+}
 function goals(club) {
   const value = Number(club?.goals ?? club?.score ?? club?.goalsFor);
   return Number.isFinite(value) ? value : '?';
 }
-
-function matchId(match) {
-  return String(match?.matchId ?? match?.match_id ?? match?.id ?? 'unbekannt');
-}
-
+function matchId(match) { return String(match?.matchId ?? match?.match_id ?? match?.id ?? 'unbekannt'); }
 function matchTime(match) {
   const raw = match?.timestamp ?? match?.matchTimestamp ?? match?.match_timestamp ?? match?.date;
   if (raw === null || raw === undefined || raw === '') return 'unbekannt';
@@ -115,9 +108,7 @@ function matchTime(match) {
   if (/^\d+$/.test(String(raw))) {
     const number = Number(raw);
     date = new Date(number < 100000000000 ? number * 1000 : number);
-  } else {
-    date = new Date(raw);
-  }
+  } else date = new Date(raw);
   return Number.isNaN(date.getTime()) ? String(raw) : date.toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
 }
 
@@ -132,25 +123,15 @@ function playersForClub(match, clubKey, clubId) {
   }
   return [];
 }
-
-function playerRating([, player]) {
-  const value = Number(player?.rating);
-  return Number.isFinite(value) ? value : -1;
-}
-
+function playerRating([, player]) { const value = Number(player?.rating); return Number.isFinite(value) ? value : -1; }
 function rankPlayers(players) {
   return players.slice().sort((a, b) => (
     playerRating(b) - playerRating(a)
     || (Number(b[1]?.goals) || 0) - (Number(a[1]?.goals) || 0)
     || (Number(b[1]?.assists) || 0) - (Number(a[1]?.assists) || 0)
-    || String(a[1]?.playername ?? a[1]?.playerName ?? a[1]?.name ?? a[0]).localeCompare(
-      String(b[1]?.playername ?? b[1]?.playerName ?? b[1]?.name ?? b[0]),
-      'de',
-      { sensitivity: 'base' }
-    )
+    || String(a[1]?.playername ?? a[1]?.playerName ?? a[1]?.name ?? a[0]).localeCompare(String(b[1]?.playername ?? b[1]?.playerName ?? b[1]?.name ?? b[0]), 'de', { sensitivity: 'base' })
   ));
 }
-
 function playerLine([playerId, player], index) {
   const name = player?.playername ?? player?.playerName ?? player?.name ?? playerId;
   const rating = player?.rating ?? '-';
@@ -175,10 +156,11 @@ function matchEmbed(match, team, index) {
   const lines = rankedPlayers.map(playerLine);
   const playerText = lines.length ? lines.join('\n').slice(0, 3900) : '⚠️ Keine Spielerstatistiken für diesen Club im Match-Datensatz gefunden.';
   return new EmbedBuilder()
-    .setTitle(`Spiel ${index + 1}: ${clubName(selectedData, team.clubName)} ${goals(selectedData)}:${goals(opponentData)} ${clubName(opponentData)}`)
+    .setTitle(`Spiel ${index + 1}: ${resolvedClubName(selected, team.clubName)} ${goals(selectedData)}:${goals(opponentData)} ${resolvedClubName(opponent)}`)
     .setDescription(playerText)
     .addFields(
       { name: 'EA Match-ID', value: matchId(match), inline: true },
+      { name: 'Gegner Club-ID', value: opponent ? entryClubId(opponent) || 'unbekannt' : 'unbekannt', inline: true },
       { name: 'Zeitpunkt', value: matchTime(match), inline: true },
       { name: 'Spieler gefunden', value: String(selectedPlayers.length), inline: true }
     )
@@ -190,71 +172,41 @@ async function runEaStatsTest({ interaction, client, teamId }) {
   const team = findTeamById(teamId);
   if (!team || team.status === 'deleted') throw new Error('Team wurde nicht gefunden.');
   if (!team.eaClub?.clubId) throw new Error(`Für **${team.clubName}** ist keine EA Club-ID hinterlegt.`);
-
   const started = Date.now();
   const matches = await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform, 5);
   const durationMs = Date.now() - started;
   const channelId = settings.channels?.teamOfTheTournamentTestChannelId || TEST_CHANNEL_ID;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) throw new Error(`EA-Testkanal ${channelId} wurde nicht gefunden oder ist nicht beschreibbar.`);
-
   const header = new EmbedBuilder()
     .setTitle('🧪 EA-STATISTIK TEST')
     .setDescription([
-      `**Team:** ${team.clubName}`,
-      `**EA Club-ID:** ${team.eaClub.clubId}`,
-      `**Plattform:** ${team.eaClub.platform || 'common-gen5'}`,
+      `**Team:** ${team.clubName}`, `**EA Club-ID:** ${team.eaClub.clubId}`, `**Plattform:** ${team.eaClub.platform || 'common-gen5'}`,
       `**EA-Verbindung:** ${matches.length ? '✅ Antwort erhalten' : '⚠️ Antwort erhalten, aber keine Friendly Matches gefunden'}`,
-      `**Antwortzeit:** ${(durationMs / 1000).toFixed(2).replace('.', ',')} Sekunden`,
-      `**Friendly Matches erhalten:** ${matches.length}`,
-      '',
+      `**Antwortzeit:** ${(durationMs / 1000).toFixed(2).replace('.', ',')} Sekunden`, `**Friendly Matches erhalten:** ${matches.length}`, '',
       'Unten siehst du die letzten bis zu fünf von EA gelieferten Spiele. Die Spieler sind je Match nach EA-Rating gerankt.',
-    ].join('\n'))
-    .setColor(matches.length ? 0x2ecc71 : 0xf39c12)
-    .setTimestamp();
-
+    ].join('\n')).setColor(matches.length ? 0x2ecc71 : 0xf39c12).setTimestamp();
   await channel.send({ embeds: [header], allowedMentions: { parse: [] } });
   for (const [index, match] of matches.slice(0, 5).entries()) {
     await channel.send({ embeds: [matchEmbed(match, team, index)], allowedMentions: { parse: [] } });
   }
-
   return { channelId, matchCount: matches.length, durationMs };
 }
 
 async function handleEaStatsTestInteraction(interaction, client) {
-  const selectedAction = interaction.isStringSelectMenu?.()
-    && interaction.customId === 'admin_panel_action_select'
-    ? interaction.values?.[0]
-    : null;
+  const selectedAction = interaction.isStringSelectMenu?.() && interaction.customId === 'admin_panel_action_select' ? interaction.values?.[0] : null;
   const action = selectedAction || interaction.customId || '';
-  const relevant = action === 'admin_ea_stats_test'
-    || action.startsWith('admin_ea_stats_page:')
-    || action.startsWith('admin_ea_stats_team_select:');
+  const relevant = action === 'admin_ea_stats_test' || action.startsWith('admin_ea_stats_page:') || action.startsWith('admin_ea_stats_team_select:');
   if (!relevant) return false;
-
   try {
     await requireAdmin(interaction);
-
-    if (action === 'admin_ea_stats_test') {
-      await interaction.reply({ ...teamSelectPayload(0), flags: EPHEMERAL });
-      return true;
-    }
-
-    if (action.startsWith('admin_ea_stats_page:')) {
-      const page = Number(action.split(':')[1]) || 0;
-      await interaction.update(teamSelectPayload(page));
-      return true;
-    }
-
+    if (action === 'admin_ea_stats_test') { await interaction.reply({ ...teamSelectPayload(0), flags: EPHEMERAL }); return true; }
+    if (action.startsWith('admin_ea_stats_page:')) { const page = Number(action.split(':')[1]) || 0; await interaction.update(teamSelectPayload(page)); return true; }
     if (action.startsWith('admin_ea_stats_team_select:')) {
       const teamId = interaction.values?.[0];
       await interaction.deferUpdate();
       const result = await runEaStatsTest({ interaction, client, teamId });
-      await interaction.editReply({
-        content: `✅ EA-Test abgeschlossen. ${result.matchCount} Friendly Match${result.matchCount === 1 ? '' : 'es'} wurden in <#${result.channelId}> gepostet.`,
-        embeds: [],
-        components: [],
-      });
+      await interaction.editReply({ content: `✅ EA-Test abgeschlossen. ${result.matchCount} Friendly Match${result.matchCount === 1 ? '' : 'es'} wurden in <#${result.channelId}> gepostet.`, embeds: [], components: [] });
       return true;
     }
   } catch (error) {
@@ -263,7 +215,6 @@ async function handleEaStatsTestInteraction(interaction, client) {
     else await interaction.reply({ content, flags: EPHEMERAL }).catch(() => null);
     return true;
   }
-
   return false;
 }
 
