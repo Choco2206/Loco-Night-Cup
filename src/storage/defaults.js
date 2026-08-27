@@ -398,6 +398,7 @@ function createSettingsDefault() {
       hallOfFameChannelId: null,
       teamOfTheTournamentChannelId: '1533394601220505641',
       teamOfTheTournamentTestChannelId: '1525035287971889173',
+      teamOfTheTournamentTrackerChannelId: '1542489791600529408',
       powerRankingChannelId: '1534485406488203324',
       powerRankingChampionChannelId: '1534485575543816305',
       legacyRankingChannelId: '1534844186803830835',
