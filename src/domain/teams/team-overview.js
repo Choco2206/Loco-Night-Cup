@@ -7,6 +7,7 @@ const { listVisibleTeams } = require('./team-service');
 
 const TEAM_LIST_CHUNK_LIMIT = 1850;
 const MISSING_MEMBER_LABEL = '⚠️ Nicht mehr auf dem Server';
+const REGISTERED_TEAMS_CHANNEL_ID = '1516429682843848935';
 
 function chunkBlocks(blocks, maxLength = TEAM_LIST_CHUNK_LIMIT) {
   const chunks = [];
@@ -24,6 +25,42 @@ function chunkBlocks(blocks, maxLength = TEAM_LIST_CHUNK_LIMIT) {
 
   if (current) chunks.push(current);
   return chunks.length ? chunks : ['Noch keine Teams registriert.'];
+}
+
+function normalizeTeamName(value) {
+  return String(value || '').trim().toLocaleLowerCase('de-DE').replace(/\s+/g, ' ');
+}
+
+function uniqueSortedTeams(teams) {
+  const byId = new Map();
+  for (const team of teams || []) {
+    if (!team?.id) continue;
+    byId.set(String(team.id), team);
+  }
+
+  const byName = new Map();
+  for (const team of byId.values()) {
+    const key = normalizeTeamName(team.clubName) || String(team.id);
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, team);
+      continue;
+    }
+
+    // Falls alte Daten doch einmal denselben Club doppelt enthalten, gewinnt
+    // defensiv der zuletzt aktualisierte Datensatz. Es werden dabei keine
+    // Teamdaten gelöscht, nur die öffentliche Übersicht wird eindeutig.
+    const existingUpdated = new Date(existing.meta?.updatedAt || existing.meta?.createdAt || 0).getTime() || 0;
+    const currentUpdated = new Date(team.meta?.updatedAt || team.meta?.createdAt || 0).getTime() || 0;
+    if (currentUpdated >= existingUpdated) byName.set(key, team);
+  }
+
+  return [...byName.values()].sort((a, b) => (
+    String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de', {
+      sensitivity: 'base',
+      numeric: true,
+    })
+  ));
 }
 
 function buildHeaderEmbed(teams) {
@@ -51,31 +88,18 @@ function formatUser(userId) {
 function formatCoManagers(team) {
   const coManagers = Array.isArray(team.coManagers) ? team.coManagers : [];
   if (!coManagers.length) return 'Keine';
-  return coManagers
-    .map(coManager => formatUser(coManager?.userId))
-    .join(', ');
+
+  const uniqueUserIds = [...new Set(coManagers.map(coManager => String(coManager?.userId || '')).filter(Boolean))];
+  if (!uniqueUserIds.length) return 'Keine';
+  return uniqueUserIds.map(formatUser).join(', ');
 }
 
 function buildTeamBlocks(teams) {
-  return teams
-    .slice()
-    .sort((a, b) => a.clubName.localeCompare(b.clubName, 'de', { sensitivity: 'base' }))
-    .map((team, index) => [
-      `🔴 **${formatTeamNumber(index)} | ${team.clubName}**`,
-      `👑 **VM:** ${formatUser(team.manager?.userId)}`,
-      `🤝 **Co-VM:** ${formatCoManagers(team)}`,
-    ].join('\n'));
-}
-
-async function fetchMessage(channel, messageId) {
-  if (!messageId) return null;
-  return channel.messages.fetch(messageId).catch(() => null);
-}
-
-function messagesAreOutOfOrder(messages) {
-  const timestamps = messages.map(message => Number(message?.createdTimestamp));
-  if (timestamps.some(timestamp => !Number.isFinite(timestamp) || timestamp <= 0)) return false;
-  return timestamps.some((timestamp, index) => index > 0 && timestamp < timestamps[index - 1]);
+  return uniqueSortedTeams(teams).map((team, index) => [
+    `🔴 **${formatTeamNumber(index)} | ${team.clubName}**`,
+    `👑 **VM:** ${formatUser(team.manager?.userId)}`,
+    `🤝 **Co-VM:** ${formatCoManagers(team)}`,
+  ].join('\n'));
 }
 
 function createListPayload(content) {
@@ -85,23 +109,40 @@ function createListPayload(content) {
   };
 }
 
-async function recreateOverview(channel, header, oldMessages, teams, chunks) {
-  for (const message of [header, ...oldMessages]) {
-    if (message) await message.delete().catch(() => {});
+function looksLikeRegisteredTeamsOverviewMessage(message, clientUserId) {
+  if (!message || String(message.author?.id || '') !== String(clientUserId || '')) return false;
+  if (message.embeds?.some(embed => String(embed?.title || '').includes('REGISTRIERTE TEAMS'))) return true;
+  const content = String(message.content || '');
+  return content.includes('🔴 **') && content.includes('👑 **VM:**');
+}
+
+async function deleteOldOverviewMessages(channel, clientUserId) {
+  let before;
+  let deleted = 0;
+
+  // Mehrere Seiten ablaufen, damit auch ältere liegengebliebene Listenblöcke
+  // verschwinden. Es werden ausschließlich Nachrichten dieses Bots gelöscht,
+  // die eindeutig wie die Teamübersicht aussehen.
+  for (let page = 0; page < 10; page += 1) {
+    const fetched = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+    if (!fetched?.size) break;
+
+    for (const message of fetched.values()) {
+      if (!looksLikeRegisteredTeamsOverviewMessage(message, clientUserId)) continue;
+      if (await message.delete().then(() => true).catch(() => false)) deleted += 1;
+    }
+
+    const oldest = fetched.last();
+    if (!oldest?.id || fetched.size < 100) break;
+    before = oldest.id;
   }
 
-  const nextHeader = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
-  const nextIds = [];
-  for (const chunk of chunks) {
-    const created = await channel.send(createListPayload(chunk));
-    nextIds.push(created.id);
-  }
-  return { header: nextHeader, nextIds };
+  return deleted;
 }
 
 async function refreshRegisteredTeamsOverview(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const channelId = settings.channels.registeredTeamsChannelId;
+  const channelId = settings.channels.registeredTeamsChannelId || REGISTERED_TEAMS_CHANNEL_ID;
   if (!channelId) return false;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -110,47 +151,15 @@ async function refreshRegisteredTeamsOverview(client) {
     return false;
   }
 
-  const teams = listVisibleTeams();
+  const teams = uniqueSortedTeams(listVisibleTeams());
   const chunks = chunkBlocks(buildTeamBlocks(teams));
-  const messages = readJson(FILES.messages, createMessagesDefault());
-  const state = messages.teams.registeredTeamsOverview;
-  const oldIds = Array.isArray(state.listMessageIds) ? state.listMessageIds : [];
 
-  let header = await fetchMessage(channel, state.headerMessageId);
-  const oldMessages = await Promise.all(oldIds.map(messageId => fetchMessage(channel, messageId)));
-  const trackedMessageMissing = Boolean(state.headerMessageId && !header)
-    || Boolean(!state.headerMessageId && oldIds.length)
-    || oldMessages.some(message => !message);
-  const trackedMessages = [header, ...oldMessages].filter(Boolean);
-  const wrongOrder = messagesAreOutOfOrder(trackedMessages);
-
-  let nextIds = [];
-  if (trackedMessageMissing || wrongOrder) {
-    ({ header, nextIds } = await recreateOverview(channel, header, oldMessages, teams, chunks));
-    console.info(`[team-overview] Übersicht geordnet neu aufgebaut (${trackedMessageMissing ? 'Nachricht fehlte' : 'Reihenfolge war falsch'}).`);
-  } else {
-    if (header) {
-      await header.edit({ embeds: [buildHeaderEmbed(teams)] });
-    } else {
-      header = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
-    }
-
-    for (let index = 0; index < chunks.length; index++) {
-      const oldMessage = oldMessages[index];
-      const payload = createListPayload(chunks[index]);
-      if (oldMessage) {
-        await oldMessage.edit(payload);
-        nextIds.push(oldMessage.id);
-      } else {
-        const created = await channel.send(payload);
-        nextIds.push(created.id);
-      }
-    }
-
-    for (let index = chunks.length; index < oldMessages.length; index++) {
-      const oldMessage = oldMessages[index];
-      if (oldMessage) await oldMessage.delete().catch(() => {});
-    }
+  const deleted = await deleteOldOverviewMessages(channel, client.user?.id);
+  const header = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
+  const nextIds = [];
+  for (const chunk of chunks) {
+    const created = await channel.send(createListPayload(chunk));
+    nextIds.push(created.id);
   }
 
   updateJson(FILES.messages, createMessagesDefault(), current => {
@@ -164,12 +173,13 @@ async function refreshRegisteredTeamsOverview(client) {
     return current;
   });
 
+  console.info(`[team-overview] Übersicht sauber neu aufgebaut: ${teams.length} eindeutige Teams, ${deleted} alte Übersichts-Nachrichten entfernt.`);
   return true;
 }
 
 module.exports = {
   buildTeamBlocks,
   formatUser,
-  messagesAreOutOfOrder,
   refreshRegisteredTeamsOverview,
+  uniqueSortedTeams,
 };
