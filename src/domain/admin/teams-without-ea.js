@@ -1,10 +1,35 @@
 'use strict';
 
+const { FILES, readJson } = require('../../storage');
+const { createSettingsDefault } = require('../../storage/defaults');
 const { listVisibleTeams } = require('../teams/team-service');
 
+const EPHEMERAL = 64;
 const TARGET_CHANNEL_ID = '1521071200808206356';
 const MY_TEAM_CHANNEL_ID = '1522775227703103589';
 const MESSAGE_LIMIT = 1900;
+
+function readSettings() {
+  return readJson(FILES.settings, createSettingsDefault());
+}
+
+function hasAnyRole(member, roleIds) {
+  return roleIds.filter(Boolean).some(roleId => member.roles.cache.has(String(roleId)));
+}
+
+async function requireAdmin(interaction) {
+  const settings = readSettings();
+  const roleIds = [
+    ...(settings.roles?.adminRoleIds || []),
+    ...(settings.roles?.cupLeadRoleIds || []),
+    ...(settings.permissions?.adminRoleIds || []),
+    ...(settings.permissions?.cupLeadRoleIds || []),
+  ];
+  const member = await interaction.guild?.members.fetch(interaction.user.id).catch(() => interaction.member);
+  if (!member || !hasAnyRole(member, [...new Set(roleIds.map(String))])) {
+    throw new Error('Du darfst dieses Admin-Panel nicht verwenden.');
+  }
+}
 
 function teamsWithoutEa() {
   return listVisibleTeams()
@@ -71,4 +96,32 @@ async function postTeamsWithoutEa({ client, guild }) {
   return { affectedCount: teams.length, messageIds, channelId: TARGET_CHANNEL_ID };
 }
 
-module.exports = { postTeamsWithoutEa, teamsWithoutEa };
+async function handleTeamsWithoutEaInteraction(interaction, client) {
+  const selectedAction = interaction.isStringSelectMenu?.()
+    && interaction.customId === 'admin_panel_action_select'
+    ? interaction.values?.[0]
+    : null;
+  if (selectedAction !== 'admin_teams_without_ea') return false;
+
+  try {
+    await requireAdmin(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const result = await postTeamsWithoutEa({ client, guild: interaction.guild });
+    await interaction.editReply([
+      `✅ Liste wurde in <#${result.channelId}> gepostet.`,
+      `Teams ohne EA-ID: **${result.affectedCount}**`,
+      `Nachrichten: **${result.messageIds.length}**`,
+    ].join('\n'));
+  } catch (error) {
+    const content = `❌ EA-ID-Abfrage fehlgeschlagen: ${error.message}`;
+    if (interaction.deferred || interaction.replied) await interaction.editReply(content).catch(() => null);
+    else await interaction.reply({ content, flags: EPHEMERAL }).catch(() => null);
+  }
+  return true;
+}
+
+module.exports = {
+  handleTeamsWithoutEaInteraction,
+  postTeamsWithoutEa,
+  teamsWithoutEa,
+};
