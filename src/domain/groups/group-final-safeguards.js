@@ -20,10 +20,14 @@ function disableFinalMatchdayAutoScore(eventKey) {
       if (!group || group.status === 'completed') continue;
       const release = finalSlotRelease(event, groupKey);
       if (!release?.releasedAt) continue;
-      if (release.autoScoreDisabled === true && !release.autoScoreAt) continue;
+      if (release.autoScoreDisabled === true && !release.autoScoreAt && release.autoScoredAt) continue;
+      const timestamp = new Date().toISOString();
       release.autoScoreAt = null;
+      // normalizeSlotRelease behandelt autoScoredAt als endgültig erledigten Timer.
+      // Hier bedeutet es bewusst: kein Auto-Score am finalen Gruppenspieltag.
+      release.autoScoredAt = release.autoScoredAt || timestamp;
       release.autoScoreDisabled = true;
-      release.autoScoreDisabledAt = release.autoScoreDisabledAt || new Date().toISOString();
+      release.autoScoreDisabledAt = release.autoScoreDisabledAt || timestamp;
       changed = true;
     }
     return event;
@@ -97,8 +101,8 @@ async function reconcile(client) {
     if (!event.groups?.groups || !Object.keys(event.groups.groups).length) continue;
 
     if (disableFinalMatchdayAutoScore(eventKey)) {
-      // scheduleEvent löscht auch bereits gesetzte 25-Minuten-Timer und baut nur
-      // die weiterhin erlaubten Timer neu auf.
+      // scheduleEvent löscht einen eventuell schon gesetzten 25-Minuten-Timer.
+      // Durch autoScoredAt wird für Spieltag 3 anschließend kein neuer erzeugt.
       groupReleases.scheduleEvent(client, eventKey);
       console.info(`[groups] ${eventKey}: automatische 25-Minuten-Wertung am letzten Gruppenspieltag deaktiviert.`);
     }
