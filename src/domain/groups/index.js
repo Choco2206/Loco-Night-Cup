@@ -3,6 +3,7 @@
 const groupReleases = require('./group-releases');
 const attendance = require('./attendance-service');
 const groupAccess = require('./group-access-sync');
+const finalSafeguards = require('./group-final-safeguards');
 
 module.exports = {
   ...require('./group-channels'),
@@ -19,11 +20,13 @@ module.exports = {
   ...groupReleases,
   ...require('./group-results'),
   ...require('./group-roles'),
+  ...finalSafeguards,
   init: async client => {
     await groupAccess.reconcileActiveGroupChannels(client).catch(error => {
       console.error('Gruppenkanäle konnten beim Start nicht vollständig wiederhergestellt werden:', error);
     });
     await attendance.initAttendance(client);
     await groupReleases.initGroupReleases(client);
+    await finalSafeguards.initGroupFinalSafeguards(client);
   },
 };
