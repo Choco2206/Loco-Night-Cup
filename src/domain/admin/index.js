@@ -3,6 +3,7 @@
 const { ensureAdminPanel } = require('./admin-panel');
 const { handleAdminInteraction } = require('./admin-interactions');
 const { handleEaStatsTestInteraction } = require('./ea-stats-test');
+const { handleTeamsWithoutCupParticipationInteraction } = require('./teams-without-cup-participation');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { syncAllTeamNicknames } = require('../nicknames');
@@ -41,6 +42,7 @@ async function init(client) {
 
 async function handleInteraction(interaction, client) {
   if (await handleEaStatsTestInteraction(interaction, client)) return true;
+  if (await handleTeamsWithoutCupParticipationInteraction(interaction, client)) return true;
 
   if (interaction.isButton() && interaction.customId === 'admin_nickname_sync') {
     const settings = readJson(FILES.settings, createSettingsDefault());
