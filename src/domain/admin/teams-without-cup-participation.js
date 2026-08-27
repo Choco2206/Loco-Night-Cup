@@ -8,6 +8,7 @@ const { getTeamHistoryStats } = require('../teams/team-achievements');
 const EPHEMERAL = 64;
 const TARGET_CHANNEL_ID = '1542532323386327080';
 const MESSAGE_LIMIT = 1900;
+const MAX_CUP_PARTICIPATIONS = 5;
 
 function readSettings() {
   return readJson(FILES.settings, createSettingsDefault());
@@ -56,13 +57,16 @@ function teamsWithoutCupParticipation() {
   return listVisibleTeams()
     .filter(team => team?.status === 'active')
     .filter(team => !team?.isTestTeam)
-    .filter(team => participationStats(team).matchesPlayed === 0)
+    .filter(team => participationStats(team).cupsPlayed <= MAX_CUP_PARTICIPATIONS)
     .sort((a, b) => {
       const aRegistration = registrationDate(a);
       const bRegistration = registrationDate(b);
       if (aRegistration.timestamp !== bRegistration.timestamp) {
         return aRegistration.timestamp - bRegistration.timestamp;
       }
+      const aStats = participationStats(a);
+      const bStats = participationStats(b);
+      if (aStats.cupsPlayed !== bStats.cupsPlayed) return aStats.cupsPlayed - bStats.cupsPlayed;
       return String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de', { sensitivity: 'base' });
     });
 }
@@ -77,13 +81,13 @@ function teamLine(team, index) {
 
 function buildChunks(teams) {
   if (!teams.length) {
-    return ['✅ **Keine Teams ohne Cup-Teilnahme gefunden.**\nAlle aktuell aktiven Teams haben bereits mindestens ein bestätigtes Cup-Spiel.'];
+    return [`✅ **Keine Teams mit höchstens ${MAX_CUP_PARTICIPATIONS} Cup-Teilnahmen gefunden.**`];
   }
 
   const intro = [
     '🔍 **Teams ohne Cup-Teilnahme**',
     '',
-    'Folgende Teams sind aktuell registriert, haben aber bisher **kein bestätigtes Spiel im Loco Night Cup**. Die Teams mit der längsten Registrierungsdauer stehen oben.',
+    `Aufgeführt werden aktive Teams mit **maximal ${MAX_CUP_PARTICIPATIONS} bisherigen Cup-Teilnahmen**. Die am längsten registrierten Teams stehen ganz oben.`,
     '',
     'Die Liste dient nur zur Kontrolle. Es wird **nichts automatisch gelöscht**.',
     '',
@@ -130,9 +134,6 @@ async function postTeamsWithoutCupParticipation({ client, guild }) {
     || await guild?.channels?.fetch?.(TARGET_CHANNEL_ID).catch(() => null);
   if (!channel?.send) throw new Error(`Kanal ${TARGET_CHANNEL_ID} wurde nicht gefunden oder ist nicht beschreibbar.`);
 
-  // Dieser Kanal ist ausschließlich für diese Admin-Auswertung vorgesehen.
-  // Bei jedem manuellen Refresh werden nur die alten Bot-Ausgaben entfernt und
-  // anschließend genau eine aktuelle Liste aufgebaut. So entsteht kein Spam.
   await clearPreviousReportMessages(channel);
 
   const teams = teamsWithoutCupParticipation();
@@ -159,7 +160,7 @@ async function handleTeamsWithoutCupParticipationInteraction(interaction, client
     const result = await postTeamsWithoutCupParticipation({ client, guild: interaction.guild });
     await interaction.editReply([
       `✅ Liste in <#${result.channelId}> wurde aktualisiert.`,
-      `Teams ohne bestätigte Cup-Teilnahme: **${result.affectedCount}**`,
+      `Teams mit höchstens ${MAX_CUP_PARTICIPATIONS} Cup-Teilnahmen: **${result.affectedCount}**`,
       `Nachrichten: **${result.messageIds.length}**`,
     ].join('\n'));
   } catch (error) {
