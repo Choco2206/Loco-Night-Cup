@@ -51,13 +51,11 @@ function buildWelcomeEmbed(member) {
 
 async function sendWelcomeMessage(member) {
   if (member.user?.bot) return;
-
   const channel = await member.guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
   if (!channel?.send) {
     console.warn(`Welcome channel ${WELCOME_CHANNEL_ID} was not found or is not writable.`);
     return;
   }
-
   await channel.send({
     content: `Hey <@${member.id}> – schön, dass du am Start bist!`,
     embeds: [buildWelcomeEmbed(member)],
@@ -85,7 +83,6 @@ async function replyInteractionError(interaction, message) {
     await interaction.editReply({ content: message, components: [], embeds: [] }).catch(() => {});
     return;
   }
-
   await interaction.reply({ content: message, flags: EPHEMERAL }).catch(() => {});
 }
 
@@ -94,7 +91,6 @@ async function handleInteractionError(interaction, error) {
     await replyInteractionError(interaction, error.message);
     return;
   }
-
   console.error('Interaction handling failed:', error);
 }
 
@@ -106,12 +102,7 @@ async function main() {
   }
 
   const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMembers,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-    ],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
   });
 
   client.once(Events.ClientReady, async readyClient => {
@@ -127,6 +118,7 @@ async function main() {
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Gruppen', () => groupSystem.init(client));
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
+      await runStartupStep('TOTT Tracker', () => teamOfTheTournamentSystem.initTottTracker(client));
       await runStartupStep('Team of the Tournament', () => teamOfTheTournamentSystem.initTeamOfTheTournament(client));
       await runStartupStep('Loco Power Ranking', () => initPowerRanking(client));
       await runStartupStep('Loco Legacy Ranking', () => initLegacyRanking(client));
@@ -166,19 +158,11 @@ async function main() {
   });
 
   client.on(Events.GuildMemberAdd, async member => {
-    try {
-      await sendWelcomeMessage(member);
-    } catch (error) {
-      console.error('Welcome message failed:', error);
-    }
+    try { await sendWelcomeMessage(member); } catch (error) { console.error('Welcome message failed:', error); }
   });
 
   client.on(Events.GuildMemberRemove, async member => {
-    try {
-      await teamSystem.handleGuildMemberRemove(member, client);
-    } catch (error) {
-      console.error('Guild member remove handling failed:', error);
-    }
+    try { await teamSystem.handleGuildMemberRemove(member, client); } catch (error) { console.error('Guild member remove handling failed:', error); }
   });
 
   await client.login(process.env.DISCORD_TOKEN);
