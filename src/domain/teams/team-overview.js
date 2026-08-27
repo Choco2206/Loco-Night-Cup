@@ -47,9 +47,6 @@ function uniqueSortedTeams(teams) {
       continue;
     }
 
-    // Falls alte Daten doch einmal denselben Club doppelt enthalten, gewinnt
-    // defensiv der zuletzt aktualisierte Datensatz. Es werden dabei keine
-    // Teamdaten gelöscht, nur die öffentliche Übersicht wird eindeutig.
     const existingUpdated = new Date(existing.meta?.updatedAt || existing.meta?.createdAt || 0).getTime() || 0;
     const currentUpdated = new Date(team.meta?.updatedAt || team.meta?.createdAt || 0).getTime() || 0;
     if (currentUpdated >= existingUpdated) byName.set(key, team);
@@ -105,43 +102,54 @@ function buildTeamBlocks(teams) {
 function createListPayload(content) {
   return {
     content,
+    embeds: [],
     allowedMentions: { parse: ['users'] },
   };
 }
 
-function looksLikeRegisteredTeamsOverviewMessage(message, clientUserId) {
-  if (!message || String(message.author?.id || '') !== String(clientUserId || '')) return false;
-  if (message.embeds?.some(embed => String(embed?.title || '').includes('REGISTRIERTE TEAMS'))) return true;
-  const content = String(message.content || '');
-  return content.includes('🔴 **') && content.includes('👑 **VM:**');
+async function fetchTrackedMessage(channel, messageId) {
+  if (!messageId) return null;
+  return channel.messages.fetch(String(messageId)).catch(() => null);
 }
 
-async function deleteOldOverviewMessages(channel, clientUserId) {
-  let before;
-  let deleted = 0;
+async function syncHeaderMessage(channel, trackedId, teams) {
+  const payload = { content: null, embeds: [buildHeaderEmbed(teams)], allowedMentions: { parse: [] } };
+  const existing = await fetchTrackedMessage(channel, trackedId);
+  if (existing) {
+    await existing.edit(payload);
+    return existing;
+  }
+  return channel.send(payload);
+}
 
-  // Mehrere Seiten ablaufen, damit auch ältere liegengebliebene Listenblöcke
-  // verschwinden. Es werden ausschließlich Nachrichten dieses Bots gelöscht,
-  // die eindeutig wie die Teamübersicht aussehen.
-  for (let page = 0; page < 10; page += 1) {
-    const fetched = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
-    if (!fetched?.size) break;
+async function syncListMessages(channel, trackedIds, chunks) {
+  const ids = Array.isArray(trackedIds) ? trackedIds.map(String) : [];
+  const nextIds = [];
 
-    for (const message of fetched.values()) {
-      if (!looksLikeRegisteredTeamsOverviewMessage(message, clientUserId)) continue;
-      if (await message.delete().then(() => true).catch(() => false)) deleted += 1;
+  for (let index = 0; index < chunks.length; index += 1) {
+    const existing = await fetchTrackedMessage(channel, ids[index]);
+    if (existing) {
+      await existing.edit(createListPayload(chunks[index]));
+      nextIds.push(String(existing.id));
+    } else {
+      const created = await channel.send(createListPayload(chunks[index]));
+      nextIds.push(String(created.id));
     }
-
-    const oldest = fetched.last();
-    if (!oldest?.id || fetched.size < 100) break;
-    before = oldest.id;
   }
 
-  return deleted;
+  // Wenn durch gelöschte Teams weniger Blöcke benötigt werden, nur die
+  // überzähligen bisher getrackten Listen-Nachrichten entfernen.
+  for (let index = chunks.length; index < ids.length; index += 1) {
+    const obsolete = await fetchTrackedMessage(channel, ids[index]);
+    if (obsolete) await obsolete.delete().catch(() => null);
+  }
+
+  return nextIds;
 }
 
 async function refreshRegisteredTeamsOverview(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
+  const messages = readJson(FILES.messages, createMessagesDefault());
   const channelId = settings.channels.registeredTeamsChannelId || REGISTERED_TEAMS_CHANNEL_ID;
   if (!channelId) return false;
 
@@ -153,14 +161,10 @@ async function refreshRegisteredTeamsOverview(client) {
 
   const teams = uniqueSortedTeams(listVisibleTeams());
   const chunks = chunkBlocks(buildTeamBlocks(teams));
+  const tracked = messages.teams?.registeredTeamsOverview || {};
 
-  const deleted = await deleteOldOverviewMessages(channel, client.user?.id);
-  const header = await channel.send({ embeds: [buildHeaderEmbed(teams)] });
-  const nextIds = [];
-  for (const chunk of chunks) {
-    const created = await channel.send(createListPayload(chunk));
-    nextIds.push(created.id);
-  }
+  const header = await syncHeaderMessage(channel, tracked.headerMessageId, teams);
+  const nextIds = await syncListMessages(channel, tracked.listMessageIds, chunks);
 
   updateJson(FILES.messages, createMessagesDefault(), current => {
     current.teams.registeredTeamsOverview.channelId = channel.id;
@@ -173,7 +177,7 @@ async function refreshRegisteredTeamsOverview(client) {
     return current;
   });
 
-  console.info(`[team-overview] Übersicht sauber neu aufgebaut: ${teams.length} eindeutige Teams, ${deleted} alte Übersichts-Nachrichten entfernt.`);
+  console.info(`[team-overview] Übersicht synchronisiert: ${teams.length} eindeutige Teams in ${nextIds.length} Listenblock/-blöcken.`);
   return true;
 }
 
