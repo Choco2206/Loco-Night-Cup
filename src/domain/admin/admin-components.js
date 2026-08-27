@@ -10,9 +10,7 @@ const {
 
 const ADMIN_CATEGORIES = {
   event: {
-    label: 'Event',
-    emoji: '📅',
-    description: 'Check-in, Reset und Freilose',
+    label: 'Event', emoji: '📅', description: 'Check-in, Reset und Freilose',
     actions: [
       ['admin_checkin_open', 'Check-in öffnen', 'Check-in für ein Event starten'],
       ['admin_checkin_close', 'Check-in schließen', 'Check-in für ein Event beenden'],
@@ -23,9 +21,7 @@ const ADMIN_CATEGORIES = {
     ],
   },
   tournament: {
-    label: 'Turnier',
-    emoji: '🏆',
-    description: 'Format, Gruppen und K.O.-Phase',
+    label: 'Turnier', emoji: '🏆', description: 'Format, Gruppen und K.O.-Phase',
     actions: [
       ['admin_format_lock', 'Format locken', 'Turnierformat verbindlich festlegen'],
       ['admin_groups_draw', 'Gruppen ziehen', 'Gruppen für das Event auslosen'],
@@ -36,9 +32,7 @@ const ADMIN_CATEGORIES = {
     ],
   },
   teams: {
-    label: 'Teams',
-    emoji: '👥',
-    description: 'Teams anzeigen und verwalten',
+    label: 'Teams', emoji: '👥', description: 'Teams anzeigen und verwalten',
     actions: [
       ['admin_teams_list', 'Teams anzeigen', 'Registrierte Teams auflisten'],
       ['admin_team_details', 'Teamdetails', 'Ein Team anzeigen und verwalten'],
@@ -47,9 +41,7 @@ const ADMIN_CATEGORIES = {
     ],
   },
   administration: {
-    label: 'Verwaltung',
-    emoji: '🛠️',
-    description: 'Serverstruktur, Nicknames und Manager',
+    label: 'Verwaltung', emoji: '🛠️', description: 'Serverstruktur, Nicknames und Manager',
     actions: [
       ['admin_server_setup', 'Serverstruktur einrichten', 'Kanäle und Rollen prüfen'],
       ['admin_nickname_sync', 'Nicknames synchronisieren', 'Team-Nicknames neu synchronisieren'],
@@ -58,9 +50,7 @@ const ADMIN_CATEGORIES = {
     ],
   },
   tests: {
-    label: 'Tests',
-    emoji: '🧪',
-    description: 'Refresh, Testdaten und Simulationen',
+    label: 'Tests', emoji: '🧪', description: 'Refresh, Testdaten und Simulationen',
     actions: [
       ['admin_checkin_refresh', 'Check-in Refresh', 'Alle Check-in-Panels aktualisieren'],
       ['admin_team_overview_refresh', 'Teamübersicht Refresh', 'Teamübersicht aktualisieren'],
@@ -76,48 +66,31 @@ const ADMIN_CATEGORIES = {
       ['admin_hof_test', 'Hall of Fame testen', 'Siegerehrung im Testkanal prüfen'],
       ['admin_power_ranking_test', 'Power Ranking testen', 'Wochenranking mit 20 Teams im Testkanal prüfen'],
       ['admin_power_ranking_champion_test', 'Champion der Woche testen', 'Power-Ranking-Champion-Grafik im Testkanal prüfen'],
+      ['admin_ea_stats_test', 'EA-Statistik testen', 'EA-Verbindung und letzte Clubspiele prüfen'],
       ['admin_tott_test', 'TOTT-Grafik testen', 'Team-of-the-Tournament-Grafik mit Zufallsdaten posten'],
       ['admin_ceremony_post', 'Siegerehrung posten', 'Echte Siegerehrung für ein Event posten'],
     ],
   },
   achievements: {
-    label: 'Erfolge',
-    emoji: '🏅',
-    description: 'Team-Erfolge manuell vergeben',
-    actions: [
-      ['admin_team_achievement_manual', 'Team-Erfolg vergeben', 'Einem Team einen Erfolg hinzufügen'],
-    ],
+    label: 'Erfolge', emoji: '🏅', description: 'Team-Erfolge manuell vergeben',
+    actions: [['admin_team_achievement_manual', 'Team-Erfolg vergeben', 'Einem Team einen Erfolg hinzufügen']],
   },
 };
 
 function buildCategoryButtons(selectedCategory = null) {
   const buttons = Object.entries(ADMIN_CATEGORIES).map(([key, category]) => (
-    new ButtonBuilder()
-      .setCustomId(`admin_panel_category:${key}`)
-      .setLabel(category.label)
-      .setEmoji(category.emoji)
+    new ButtonBuilder().setCustomId(`admin_panel_category:${key}`).setLabel(category.label).setEmoji(category.emoji)
       .setStyle(key === selectedCategory ? ButtonStyle.Primary : ButtonStyle.Secondary)
   ));
-
-  return [
-    new ActionRowBuilder().addComponents(buttons.slice(0, 5)),
-    new ActionRowBuilder().addComponents(buttons.slice(5)),
-  ];
+  return [new ActionRowBuilder().addComponents(buttons.slice(0, 5)), new ActionRowBuilder().addComponents(buttons.slice(5))];
 }
 
 function buildActionSelect(categoryKey) {
   const category = ADMIN_CATEGORIES[categoryKey];
   if (!category) return null;
-
   return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('admin_panel_action_select')
-      .setPlaceholder(`${category.label}: Aktion auswählen`)
-      .addOptions(category.actions.map(([value, label, description]) => ({
-        label,
-        value,
-        description,
-      })))
+    new StringSelectMenuBuilder().setCustomId('admin_panel_action_select').setPlaceholder(`${category.label}: Aktion auswählen`)
+      .addOptions(category.actions.map(([value, label, description]) => ({ label, value, description })))
   );
 }
 
@@ -126,41 +99,26 @@ function buildAdminPanelPayload(selectedCategory = null) {
   const embed = new EmbedBuilder()
     .setTitle('Loco Night Cup Admin Panel')
     .setDescription([
-      'Wähle zuerst eine Hauptkategorie und danach die gewünschte Aktion im Menü.',
-      '',
+      'Wähle zuerst eine Hauptkategorie und danach die gewünschte Aktion im Menü.', '',
       '**📅 Event:** Check-in öffnen/schließen/verwalten, Event-Reset und Freilose',
       '**🏆 Turnier:** Format, Gruppenauslosung, Spieltag-Freigabe und K.O.-Phase',
       '**👥 Teams:** Teamliste, Teamdetails sowie Sperren',
       '**🛠️ Verwaltung:** Serverstruktur, Nicknames und Manager ohne Team',
-      '**🧪 Tests:** Refreshs, Testdaten, Simulationen und Siegerehrung',
+      '**🧪 Tests:** Refreshs, Testdaten, Simulationen, EA-Statistik und Siegerehrung',
       '**🏅 Erfolge:** Team-Erfolge manuell vergeben',
     ].join('\n'))
     .setColor(0xff0000)
     .setFooter({ text: 'Alle Aktionen sind weiterhin nur für berechtigte Admins und Cup-Leads nutzbar.' })
     .setTimestamp(new Date());
-
   const components = buildCategoryButtons(category ? selectedCategory : null);
   const actionSelect = buildActionSelect(selectedCategory);
   if (actionSelect) components.push(actionSelect);
   if (selectedCategory === 'tests') {
-    components.push(
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('admin_tott_test')
-          .setLabel('TOTT-Grafik testen')
-          .setEmoji('⭐')
-          .setStyle(ButtonStyle.Danger)
-      )
-    );
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin_tott_test').setLabel('TOTT-Grafik testen').setEmoji('⭐').setStyle(ButtonStyle.Danger)
+    ));
   }
-
-  return {
-    embeds: [embed],
-    components,
-  };
+  return { embeds: [embed], components };
 }
 
-module.exports = {
-  ADMIN_CATEGORIES,
-  buildAdminPanelPayload,
-};
+module.exports = { ADMIN_CATEGORIES, buildAdminPanelPayload };
