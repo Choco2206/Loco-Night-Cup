@@ -2,6 +2,7 @@
 
 const { ensureAdminPanel } = require('./admin-panel');
 const { handleAdminInteraction } = require('./admin-interactions');
+const { handleEaStatsTestInteraction } = require('./ea-stats-test');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { syncAllTeamNicknames } = require('../nicknames');
@@ -39,6 +40,8 @@ async function init(client) {
 }
 
 async function handleInteraction(interaction, client) {
+  if (await handleEaStatsTestInteraction(interaction, client)) return true;
+
   if (interaction.isButton() && interaction.customId === 'admin_nickname_sync') {
     const settings = readJson(FILES.settings, createSettingsDefault());
     const member = await interaction.guild?.members.fetch(interaction.user.id).catch(() => interaction.member);
@@ -64,7 +67,4 @@ async function handleInteraction(interaction, client) {
   return handleAdminInteraction(interaction, client);
 }
 
-module.exports = {
-  handleInteraction,
-  init,
-};
+module.exports = { handleInteraction, init };
