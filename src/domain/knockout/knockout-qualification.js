@@ -3,6 +3,7 @@
 const { findTeamById } = require('../teams/team-service');
 const { TOURNAMENT_FORMATS } = require('../../app/constants');
 const { compareThirdPlaceRows, rankGroupRows } = require('../groups/group-ranking');
+const { recalculateGroupStandings } = require('../groups/group-results');
 
 const QUALIFICATION_RULES = TOURNAMENT_FORMATS;
 
@@ -54,7 +55,35 @@ function createQualifiedTeam(row, groupKey, groupRank, seedBucket, seedIndex) {
 }
 
 function rankedGroupRows(group, groupKey) {
+  // Sicherheitsnetz: Direkt vor der K.O.-Qualifikation wird die Tabelle
+  // ausschließlich aus den final bestätigten Ergebnissen neu aufgebaut.
+  // So kann kein veralteter Stand in die Best-Third-/Best-Fourth-Auswahl rutschen.
+  recalculateGroupStandings(group);
   return rankGroupRows(group).map(row => ({ ...row, groupKey }));
+}
+
+function crossGroupRow(team) {
+  return {
+    ...team.statsSnapshot,
+    displayName: team.displayName,
+    groupKey: team.groupKey,
+    teamId: team.teamId,
+  };
+}
+
+function sortCrossGroupCandidates(teams) {
+  return teams.slice().sort((a, b) => compareThirdPlaceRows(crossGroupRow(a), crossGroupRow(b)));
+}
+
+function qualificationAudit(label, candidates, selectedCount) {
+  const ranked = sortCrossGroupCandidates(candidates);
+  console.info(`[qualification] ${label}: ` + ranked.map((team, index) => {
+    const s = team.statsSnapshot;
+    const marker = index < selectedCount ? 'QUALI' : 'OUT';
+    const gd = s.goalDifference >= 0 ? `+${s.goalDifference}` : String(s.goalDifference);
+    return `${marker} ${team.displayName} (${team.groupKey}) ${s.points}P ${gd}TD ${s.goalsFor}:${s.goalsAgainst}`;
+  }).join(' | '));
+  return ranked;
 }
 
 function qualifyTeams(event) {
@@ -80,24 +109,14 @@ function qualifyTeams(event) {
 
   let qualifiedTeams = [...winners, ...runnersUp];
   if (config.bestThirds > 0) {
-    const bestThirds = thirds
-      .slice()
-      .sort((a, b) => compareThirdPlaceRows(
-        { ...a.statsSnapshot, displayName: a.displayName, groupKey: a.groupKey, teamId: a.teamId },
-        { ...b.statsSnapshot, displayName: b.displayName, groupKey: b.groupKey, teamId: b.teamId }
-      ))
+    const bestThirds = qualificationAudit('Beste Drittplatzierte', thirds, config.bestThirds)
       .slice(0, config.bestThirds)
       .map((team, index) => ({ ...team, seed: winners.length + runnersUp.length + index + 1 }));
     qualifiedTeams = [...qualifiedTeams, ...bestThirds];
   }
 
   if (config.bestFourths > 0) {
-    const bestFourths = fourths
-      .slice()
-      .sort((a, b) => compareThirdPlaceRows(
-        { ...a.statsSnapshot, displayName: a.displayName, groupKey: a.groupKey, teamId: a.teamId },
-        { ...b.statsSnapshot, displayName: b.displayName, groupKey: b.groupKey, teamId: b.teamId }
-      ))
+    const bestFourths = qualificationAudit('Beste Viertplatzierte', fourths, config.bestFourths)
       .slice(0, config.bestFourths)
       .map((team, index) => ({ ...team, seed: qualifiedTeams.length + index + 1 }));
     qualifiedTeams = [...qualifiedTeams, ...bestFourths];
