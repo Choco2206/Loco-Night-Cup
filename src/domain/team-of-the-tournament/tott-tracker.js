@@ -17,35 +17,6 @@ async function getTrackerChannel() {
   return trackerChannel;
 }
 
-function seconds(ms) {
-  return `${(Number(ms || 0) / 1000).toFixed(1).replace('.', ',')} s`;
-}
-
-function formatDiagnostic(event) {
-  const club = event.clubId ? `Club-ID: **${event.clubId}**` : null;
-  if (event.type === 'request_started') {
-    return event.operation === 'friendly_matches' && event.attempt === 1
-      ? `🟡 **EA-ABFRAGE GESTARTET**\n${club || 'EA Clubs'}\nMatchdaten werden abgefragt.`
-      : null;
-  }
-  if (event.type === 'request_succeeded') {
-    return `🟢 **EA ANTWORT ERHALTEN**\n${club || 'EA Clubs'}\nAntwortzeit: **${seconds(event.durationMs)}**\nVersuch: **${event.attempt}**`;
-  }
-  if (event.type === 'request_timeout') {
-    return `🔴 **EA TIMEOUT**\n${club || 'EA Clubs'}\nVersuch: **${event.attempt}/3**\n${event.error || 'EA hat nicht rechtzeitig geantwortet.'}`;
-  }
-  if (event.type === 'request_failed') {
-    return `🔴 **EA FEHLER**\n${club || 'EA Clubs'}\nVersuch: **${event.attempt}/3**\n${event.error || 'Unbekannter EA-Fehler'}`;
-  }
-  if (event.type === 'cache_hit') {
-    return `⚡ **EA-CACHE VERWENDET**\n${club}\nMatches im Cache: **${event.matchCount || 0}**\nAlter: **${seconds(event.ageMs)}**`;
-  }
-  if (event.type === 'cache_store') {
-    return `📥 **EA-DATEN GESPEICHERT**\n${club}\nMatches erhalten: **${event.matchCount || 0}**`;
-  }
-  return null;
-}
-
 async function sendTracker(content) {
   if (!content) return false;
   const channel = await getTrackerChannel();
@@ -57,14 +28,18 @@ async function sendTracker(content) {
 async function initTottTracker(client) {
   trackerClient = client;
   trackerChannel = null;
-  setEaDiagnostics(event => sendTracker(formatDiagnostic(event)));
+
+  // Keine Low-Level-Request-Meldungen mehr. Der Tracker wird nur noch
+  // vom TOTT-Service pro Night-Cup-Begegnung beschrieben.
+  setEaDiagnostics(null);
+
   const channel = await getTrackerChannel();
   if (!channel?.send) {
     console.warn('[tott-tracker] Diagnosekanal konnte nicht geladen werden.');
     return false;
   }
-  await sendTracker('📡 **TOTT TRACKER ONLINE**\nEA-Diagnose ist aktiv. Timeouts, Antworten und Cache-Treffer werden hier protokolliert.');
-  console.info(`[tott-tracker] Diagnose aktiv in ${channel.id}.`);
+
+  console.info(`[tott-tracker] Match-Diagnose aktiv in ${channel.id}.`);
   return true;
 }
 
