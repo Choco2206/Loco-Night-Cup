@@ -61,14 +61,27 @@ function currentFormat(count) {
   return [...BOMBER_X_LOCO_FORMAT_SIZES].filter(size => size <= count).pop() || null;
 }
 
+function formatSeparator(size) {
+  return `══════⬆️ ${size}er Turnier ⬆️══════`;
+}
+
+function buildTeamLines(entries) {
+  const lines = [];
+  for (let index = 0; index < 48; index += 1) {
+    const entry = entries[index];
+    lines.push(`${index + 1}. ${entry ? teamName(entry.teamId) : '—'}`);
+    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) {
+      lines.push(formatSeparator(index + 1));
+    }
+  }
+  return lines;
+}
+
 function buildPayload(state) {
   const count = state.entries.length;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
-  const lines = Array.from({ length: 48 }, (_, index) => {
-    const entry = state.entries[index];
-    return `${index + 1}. ${entry ? teamName(entry.teamId) : '—'}`;
-  });
+  const lines = buildTeamLines(state.entries);
 
   return {
     embeds: [new EmbedBuilder()
@@ -83,11 +96,12 @@ function buildPayload(state) {
         '🎲 Gruppenauslosung: 20:50 Uhr',
         '🚀 Turnierstart: 21:00 Uhr',
         '',
-        `🏆 Aktuelles Format: ${format ? `${format} Teams` : 'noch kein gültiges Format'}`,
+        `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
         `👥 Angemeldet: ${count}/48 Teams`,
         next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
         '',
-        '**Teilnehmende Teams**',
+        '**👥 Teilnehmende Teams**',
+        '',
         ...lines,
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(
