@@ -5,6 +5,10 @@ const BOMBER_X_LOCO_CHECKIN_CHANNEL_ID = '1542823464434671676';
 const BOMBER_X_LOCO_FORMAT_SIZES = [6, 12, 18, 24, 30, 36, 42, 48];
 const BOMBER_X_LOCO_GROUP_SIZE = 6;
 const BOMBER_X_LOCO_MATCHDAYS = 5;
+const BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME = '18:30';
+const BOMBER_X_LOCO_DRAW_TIME = '19:00';
+const BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME = '20:00';
+const BOMBER_X_LOCO_TOURNAMENT_START_TIME = '21:00';
 
 const BOMBER_X_LOCO_FORMATS = {
   6: { groupCount: 1, qualifiedCount: 4, directPlaces: 4, wildcardPlace: null, wildcardCount: 0, firstRoundKey: 'semi_final', rule: 'top4' },
@@ -31,10 +35,12 @@ function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE) {
     cycleKey: `saturday_${eventDate}`,
     eventDate,
     timeZone: 'Europe/Berlin',
-    deadlineAt: new Date(`${eventDate}T20:30:00${offset}`),
-    lateWindowUntil: new Date(`${eventDate}T20:45:00${offset}`),
-    drawAt: new Date(`${eventDate}T20:50:00${offset}`),
-    tournamentStartAt: new Date(`${eventDate}T21:00:00${offset}`),
+    deadlineAt: new Date(`${eventDate}T${BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME}:00${offset}`),
+    // Kein Late-Check-in: die Late-Grenze liegt absichtlich exakt auf dem Anmeldeschluss.
+    lateWindowUntil: new Date(`${eventDate}T${BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME}:00${offset}`),
+    drawAt: new Date(`${eventDate}T${BOMBER_X_LOCO_DRAW_TIME}:00${offset}`),
+    attendanceDeadlineAt: new Date(`${eventDate}T${BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00${offset}`),
+    tournamentStartAt: new Date(`${eventDate}T${BOMBER_X_LOCO_TOURNAMENT_START_TIME}:00${offset}`),
     resetAt: new Date('2026-09-20T07:00:00+02:00'),
     eventMode: 'bomber_x_loco',
   };
@@ -45,12 +51,16 @@ function getBomberXLocoFormat(formatSize) {
 }
 
 module.exports = {
+  BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME,
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
+  BOMBER_X_LOCO_DRAW_TIME,
   BOMBER_X_LOCO_EVENT_DATE,
   BOMBER_X_LOCO_FORMAT_SIZES,
   BOMBER_X_LOCO_FORMATS,
   BOMBER_X_LOCO_GROUP_SIZE,
   BOMBER_X_LOCO_MATCHDAYS,
+  BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME,
+  BOMBER_X_LOCO_TOURNAMENT_START_TIME,
   buildBomberXLocoSchedule,
   getBomberXLocoFormat,
   isBomberXLocoDate,
