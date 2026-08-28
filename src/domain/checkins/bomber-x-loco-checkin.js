@@ -1,6 +1,9 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
@@ -8,6 +11,9 @@ const {
 } = require('../events/bomber-x-loco-config');
 const { getEntryTeamIds } = require('./checkin-format');
 const { getCheckinWindowState } = require('./checkin-schedule');
+
+const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
+const BANNER_NAME = 'bomber-x-loco-check-in.png';
 
 function formatDateTime(value, type = 'time') {
   if (!value) return 'nicht gesetzt';
@@ -42,11 +48,17 @@ function formatTeams(event) {
   for (let index = 0; index < 48; index += 1) {
     const teamId = ids[index];
     lines.push(`${index + 1}. ${teamId ? teamName(teamId) : '—'}`);
-    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) {
-      lines.push(formatSeparator(index + 1));
-    }
+    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(formatSeparator(index + 1));
   }
   return lines.join('\n');
+}
+
+function getBanner() {
+  if (!fs.existsSync(BANNER_PATH)) return { embed: null, files: [] };
+  return {
+    embed: new EmbedBuilder().setColor(0xff0000).setImage(`attachment://${BANNER_NAME}`),
+    files: [{ attachment: BANNER_PATH, name: BANNER_NAME }],
+  };
 }
 
 function buildBomberXLocoPayload(event, settings) {
@@ -54,6 +66,7 @@ function buildBomberXLocoPayload(event, settings) {
   const count = getEntryTeamIds(event).length;
   const format = currentFormat(event);
   const next = nextFormat(event);
+  const banner = getBanner();
   const description = [
     state.canJoin ? '🟢 **Check-in geöffnet**' : '🔴 **Check-in geschlossen**',
     `📅 Datum: ${formatDateTime(event.cycle?.eventDate ? `${event.cycle.eventDate}T12:00:00+02:00` : null, 'date')}`,
@@ -73,13 +86,15 @@ function buildBomberXLocoPayload(event, settings) {
     '',
     '⚠️ Nach dem offiziellen Anmeldeschluss führt eine Abmeldung wie beim normalen Night Cup zur vorgesehenen Sperre.',
   ].join('\n');
+  const checkinEmbed = new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Check-in').setDescription(description).setTimestamp();
 
   return {
-    embeds: [new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Check-in').setDescription(description).setTimestamp()],
+    embeds: [banner.embed, checkinEmbed].filter(Boolean),
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('checkin_join:saturday').setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(!state.canJoin),
       new ButtonBuilder().setCustomId('checkin_leave:saturday').setLabel('⬇️ Abmelden').setStyle(ButtonStyle.Danger).setDisabled(!state.canLeave),
     )],
+    files: banner.files,
   };
 }
 
