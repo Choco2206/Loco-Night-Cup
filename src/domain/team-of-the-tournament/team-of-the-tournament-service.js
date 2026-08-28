@@ -20,6 +20,10 @@ function normalizePosition(value) {
   return null;
 }
 
+function isRealEaMatch(lncMatch) {
+  return lncMatch?.home?.type === 'team' && lncMatch?.away?.type === 'team';
+}
+
 function eaMatchId(match) {
   return String(match?.matchId ?? match?.match_id ?? match?.id ?? '');
 }
@@ -196,21 +200,23 @@ function teamName(teamId) {
 }
 
 function matchLabel(lncMatch) {
-  const homeName = teamName(lncMatch?.home?.teamId);
-  const awayName = teamName(lncMatch?.away?.teamId);
+  const homeName = lncMatch?.home?.type === 'bye' ? 'Freilos' : teamName(lncMatch?.home?.teamId);
+  const awayName = lncMatch?.away?.type === 'bye' ? 'Freilos' : teamName(lncMatch?.away?.teamId);
   const homeGoals = lncMatch?.result?.homeGoals ?? '?';
   const awayGoals = lncMatch?.result?.awayGoals ?? '?';
   return `${homeName} **${homeGoals}:${awayGoals}** ${awayName}`;
 }
 
 function linkedStatus(lncMatch) {
-  return [lncMatch?.home?.teamId, lncMatch?.away?.teamId].map(teamId => {
-    const team = findTeamById(teamId);
-    return `${team?.eaClub?.clubId ? '✅' : '❌'} ${team?.clubName || `Team ${teamId || '?'}`}`;
+  return [lncMatch?.home, lncMatch?.away].map(participant => {
+    if (participant?.type === 'bye') return '⏭️ Freilos – keine EA-Daten erwartet';
+    const team = findTeamById(participant?.teamId);
+    return `${team?.eaClub?.clubId ? '✅' : '❌'} ${team?.clubName || `Team ${participant?.teamId || '?'}`}`;
   }).join('\n');
 }
 
 async function captureOnce(eventKey, lncMatch) {
+  if (!isRealEaMatch(lncMatch)) return { captured: false, reason: 'bye_or_non_real_match' };
   const teams = [lncMatch?.home?.teamId, lncMatch?.away?.teamId].map(findTeamById).filter(Boolean);
   const linked = teams.filter(team => team.eaClub?.clubId);
   if (!linked.length || !lncMatch?.result) return { captured: false, reason: 'no_linked_teams' };
@@ -227,7 +233,7 @@ async function captureOnce(eventKey, lncMatch) {
 }
 
 function scheduleRatingCapture(eventKey, lncMatch) {
-  if (!lncMatch?.id || lncMatch.status !== 'confirmed') return false;
+  if (!lncMatch?.id || lncMatch.status !== 'confirmed' || !isRealEaMatch(lncMatch)) return false;
   const key = `${eventKey}:${lncMatch.id}`;
   if (captureTimers.has(key)) return false;
   let attempt = 0;
@@ -254,7 +260,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
         captureTimers.delete(key);
         return;
       }
-      if (result.reason === 'no_linked_teams') {
+      if (['no_linked_teams', 'bye_or_non_real_match'].includes(result.reason)) {
         captureTimers.delete(key);
         return;
       }
@@ -303,7 +309,7 @@ function confirmedEventMatches(event) {
     ...Object.values(event?.groups?.groups || {}).flatMap(group => group?.matchdays || []).flatMap(day => day?.matches || []),
     ...(event?.leaguePhase?.matchdays || []).flatMap(day => day?.matches || []),
     ...Object.values(event?.knockout?.rounds || {}).flatMap(round => round?.matches || []),
-  ].filter(match => match?.id && match.status === 'confirmed' && match.result);
+  ].filter(match => match?.id && match.status === 'confirmed' && match.result && isRealEaMatch(match));
   return [...new Map(matches.map(match => [String(match.id), match])).values()];
 }
 
@@ -320,6 +326,6 @@ function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
 
 module.exports = {
   FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
-  buildSelection, confirmedEventMatches, normalizePosition, resumeRatingCaptures,
+  buildSelection, confirmedEventMatches, isRealEaMatch, normalizePosition, resumeRatingCaptures,
   scheduleRatingCapture, selectEaMatch,
 };
