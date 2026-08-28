@@ -14,13 +14,13 @@ function assertCanLockEvent(event) {
   }
 }
 
-function assertGroupsHaveFourSlots(groups) {
+function assertGroupsHaveSlots(groups, expectedSlots = 4) {
   const groupList = Object.values(groups || {});
   const byeCounts = [];
 
   for (const group of groupList) {
-    if (!Array.isArray(group.slots) || group.slots.length !== 4) {
-      throw new Error(`Gruppe ${group.groupKey} muss genau 4 Slots haben.`);
+    if (!Array.isArray(group.slots) || group.slots.length !== expectedSlots) {
+      throw new Error(`Gruppe ${group.groupKey} muss genau ${expectedSlots} Slots haben.`);
     }
 
     byeCounts.push(group.slots.filter(slot => slot.type === 'bye').length);
@@ -41,7 +41,12 @@ function assertGroupsHaveFourSlots(groups) {
   }
 }
 
+function assertGroupsHaveFourSlots(groups) {
+  return assertGroupsHaveSlots(groups, 4);
+}
+
 module.exports = {
   assertCanLockEvent,
   assertGroupsHaveFourSlots,
+  assertGroupsHaveSlots,
 };
