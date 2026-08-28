@@ -3,6 +3,10 @@
 const { findTeamById } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 const { TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
+const {
+  BOMBER_X_LOCO_FORMAT_SIZES,
+  isBomberXLocoEvent,
+} = require('../events/bomber-x-loco-config');
 
 function uniqueStrings(values) {
   const seen = new Set();
@@ -49,38 +53,41 @@ function getManualByeCount(event) {
 }
 
 function getAllowedSizes(settings, event) {
+  if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
+
   const allowedSizes = event.meta?.eventMode === 'knockout_royale' && Array.isArray(event.format?.allowedSizes)
     ? event.format.allowedSizes
     : Array.isArray(settings.tournament?.allowedSizes)
-    ? settings.tournament.allowedSizes
-    : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
-  return [...allowedSizes].filter(size => TOURNAMENT_FORMAT_SIZES.includes(Number(size))).map(Number).sort((a, b) => a - b);
+      ? settings.tournament.allowedSizes
+      : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
+  return [...allowedSizes]
+    .filter(size => TOURNAMENT_FORMAT_SIZES.includes(Number(size)))
+    .map(Number)
+    .sort((a, b) => a - b);
 }
 
 function chooseFormatSize({ participantSlotCount, minimumParticipantSlots, allowedSizes }) {
   if (participantSlotCount < minimumParticipantSlots) return null;
-
   let selected = null;
   for (const size of [...allowedSizes].sort((a, b) => a - b)) {
     if (size <= participantSlotCount) selected = size;
   }
-
   return selected;
+}
+
+function minimumSlotsForEvent(event, settings) {
+  if (isBomberXLocoEvent(event)) return 6;
+  return Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
 }
 
 function recalculateFormatBeforeLock(event, settings) {
   const teamIds = getEntryTeamIds(event);
   const byeCount = getManualByeCount(event);
-  const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  const minimumParticipantSlots = minimumSlotsForEvent(event, settings);
   const allowedSizes = getAllowedSizes(settings, event);
   const participantSlotCount = teamIds.length + byeCount;
 
-  const size = chooseFormatSize({
-    participantSlotCount,
-    minimumParticipantSlots,
-    allowedSizes,
-  });
-
+  const size = chooseFormatSize({ participantSlotCount, minimumParticipantSlots, allowedSizes });
   const activeRealCount = size ? Math.min(teamIds.length, size) : teamIds.length;
   const activeTeamIds = teamIds.slice(0, activeRealCount);
   const waitlistTeamIds = teamIds.slice(activeRealCount);
@@ -98,7 +105,6 @@ function recalculateFormatBeforeLock(event, settings) {
     waitlistByeCount,
     waitlistCount: waitlistTeamIds.length + waitlistByeCount,
   };
-
   event.checkin.activeTeamIds = activeTeamIds;
   event.checkin.waitlistTeamIds = waitlistTeamIds;
   return event;
@@ -113,11 +119,7 @@ function preserveLockedFormat(event) {
   const lockedSize = Number(event.format?.size || 0);
   const availableActiveSlots = Math.max(0, lockedSize - activeTeamIds.length);
   const storedActiveByeCount = Number(event.format?.activeByeCount);
-  const activeByeCount = Math.min(
-    byeCount,
-    availableActiveSlots,
-    Number.isFinite(storedActiveByeCount) ? Math.max(0, storedActiveByeCount) : availableActiveSlots,
-  );
+  const activeByeCount = Math.min(byeCount, availableActiveSlots, Number.isFinite(storedActiveByeCount) ? Math.max(0, storedActiveByeCount) : availableActiveSlots);
   const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   for (const teamId of entryIds) {
@@ -147,7 +149,6 @@ function recalculateCheckinFormat(event, settings, now = new Date()) {
   event.byes = Array.isArray(event.byes) ? event.byes : [];
 
   pruneInvalidCheckinEntries(event, now);
-
   if (event.format?.lockedAt) return preserveLockedFormat(event);
   return recalculateFormatBeforeLock(event, settings);
 }
