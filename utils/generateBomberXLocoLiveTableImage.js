@@ -9,10 +9,13 @@ const WIDTH = 1600;
 const HEIGHT = 900;
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png');
 
+// Coordinates are aligned to the printed cells of the Bomber X Loco template.
+// Do not derive them from the previous test render, because that render itself was misplaced.
 const LAYOUT = Object.freeze({
   groupLabel: { x: 1105, y: 360, maxWidth: 250 },
   qualification: { x: 445, y: 360, maxWidth: 500 },
   rowsY: [438, 504, 570, 636, 702, 768],
+  placeX: 104,
   logoX: 292,
   logoSize: 48,
   teamX: 326,
@@ -156,6 +159,10 @@ async function drawRows(ctx, rows) {
     ctx.shadowColor = 'rgba(0,0,0,0.75)';
     ctx.shadowBlur = 4;
     ctx.textBaseline = 'middle';
+
+    setFont(ctx, 36, 'Oxanium', '700');
+    ctx.textAlign = 'center';
+    ctx.fillText(String(index + 1), LAYOUT.placeX, y);
 
     drawLogo(ctx, logo, LAYOUT.logoX, y, LAYOUT.logoSize);
 
