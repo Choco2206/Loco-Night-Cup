@@ -21,27 +21,10 @@ const ceremonyLayout = require('../../../config/bomber-x-loco-ceremony-layout');
 
 const TEMPLATE_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'ceremony.png');
 const REFERENCE = ceremonyLayout.reference;
-
-// Exakt auf die drei schwarzen Logo-Flaechen der Bomber X Loco Vorlage vermessen.
 const LOGO_SLOTS = Object.freeze({
-  first: Object.freeze({
-    centerX: ceremonyLayout.placements.first.centerX,
-    centerY: ceremonyLayout.placements.first.centerY,
-    width: ceremonyLayout.placements.first.width,
-    height: ceremonyLayout.placements.first.height,
-  }),
-  second: Object.freeze({
-    centerX: ceremonyLayout.placements.second.centerX,
-    centerY: ceremonyLayout.placements.second.centerY,
-    width: ceremonyLayout.placements.second.width,
-    height: ceremonyLayout.placements.second.height,
-  }),
-  third: Object.freeze({
-    centerX: ceremonyLayout.placements.third.centerX,
-    centerY: ceremonyLayout.placements.third.centerY,
-    width: ceremonyLayout.placements.third.width,
-    height: ceremonyLayout.placements.third.height,
-  }),
+  first: Object.freeze({ ...ceremonyLayout.placements.first }),
+  second: Object.freeze({ ...ceremonyLayout.placements.second }),
+  third: Object.freeze({ ...ceremonyLayout.placements.third }),
 });
 
 function findPlacementTeam(teamId, placement) {
@@ -74,14 +57,9 @@ async function logoOverlay(team, slot, scaleX, scaleY) {
   if (!logoPath) return null;
   const width = Math.round(slot.width * scaleX);
   const height = Math.round(slot.height * scaleY);
-  const resized = await sharp(logoPath)
-    .resize(width, height, {
-      fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-      withoutEnlargement: true,
-    })
-    .png()
-    .toBuffer();
+  const resized = await sharp(logoPath).resize(width, height, {
+    fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 }, withoutEnlargement: true,
+  }).png().toBuffer();
   const meta = await sharp(resized).metadata();
   return {
     input: resized,
@@ -107,17 +85,19 @@ async function renderBomberXLocoCeremonyImage({ teams }) {
 }
 
 function teamPings(team) {
-  const ids = [
-    team?.manager?.userId,
-    ...(Array.isArray(team?.coManagers) ? team.coManagers.map(manager => manager?.userId) : []),
-  ].filter(Boolean).map(String);
+  const ids = [team?.manager?.userId, ...(Array.isArray(team?.coManagers) ? team.coManagers.map(manager => manager?.userId) : [])]
+    .filter(Boolean).map(String);
   const unique = [...new Set(ids)];
   return unique.length ? unique.map(id => `<@${id}>`).join(' ') : '-';
 }
 
 function promotionLines(promotion) {
   if (!promotion?.name) return [];
-  return ['', `🔥 **Champion-Rang:** ${promotion.name}`];
+  return [
+    '',
+    '🔥 **Aufstieg freigeschaltet!**',
+    `Der Turniersieg bringt den neuen Rang: **${promotion.name}**`,
+  ];
 }
 
 function buildBomberXLocoCeremonyText({ teams, promotion = null }) {
@@ -130,60 +110,56 @@ function buildBomberXLocoCeremonyText({ teams, promotion = null }) {
     `👑 VM / Co-VM: ${teamPings(teams.first)}`,
     ...promotionLines(promotion),
     '',
+    'Verdient den Titel geholt und über das gesamte Turnier hinweg überzeugt. Herzlichen Glückwunsch zum Turniersieg! 🏆',
+    '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
     `🥈 **2. Platz • ${teams.second.clubName}**`,
     `👑 VM / Co-VM: ${teamPings(teams.second)}`,
+    '',
+    'Starke Leistung gezeigt und völlig verdient auf dem Podium gelandet. 👏',
     '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
     `🥉 **3. Platz • ${teams.third.clubName}**`,
     `👑 VM / Co-VM: ${teamPings(teams.third)}`,
     '',
+    'Ebenfalls ein starkes Turnier gespielt und sich den Platz auf dem Treppchen verdient gesichert. 👏',
+    '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
-    '❤️ **Danke an alle Teams!**',
+    '❤️ **Danke an alle Teilnehmer**',
     '',
-    'Vielen Dank an jeden, der beim ersten Bomber X Loco Cup dabei war. Wir hoffen, ihr hattet Spaß und gerade die Teams, die heute neu bei uns waren, konnten einen guten Einblick bekommen, wie unsere Cups ablaufen.',
+    'Ein fettes Dankeschön an alle Teams, die beim ersten gemeinsamen **Bomber X Loco Cup** dabei waren. ❤️‍🔥',
     '',
-    'Wir wünschen euch allen viel Spaß mit **FC 27** und hoffen natürlich, viele von euch auch bei den nächsten Cups wiederzusehen.',
+    'Gerade an alle, die heute zum ersten Mal bei uns dabei waren: Wir hoffen, ihr konntet einen guten Einblick bekommen, wie unsere Cups ablaufen und hattet genauso viel Spaß am Abend wie wir.',
     '',
-    'Und nicht vergessen: **schön beim Bomber Cup anmelden und schön beim Loco Night Cup anmelden.** 💣🐺',
+    'Wir wünschen euch allen einen geilen Start in **FC 27** und hoffen natürlich, viele von euch auch in Zukunft wiederzusehen.',
     '',
-    'Bis zum nächsten Mal! 🏆',
+    'Und ihr wisst Bescheid:',
+    '**Schön beim Bomber Cup anmelden. 💣**',
+    '**Schön beim Loco Night Cup anmelden. 🐺**',
+    '',
+    'Auf eine geile FC-27-Zeit zusammen! 🔥',
   ].join('\n');
 }
 
-function isConfirmed(match) {
-  return match?.status === 'confirmed';
-}
-
+function isConfirmed(match) { return match?.status === 'confirmed'; }
 function isReady(event) {
   const finalMatch = event?.knockout?.rounds?.final?.matches?.[0];
   const thirdPlaceMatch = event?.knockout?.rounds?.third_place?.matches?.[0];
-  return event?.ceremony?.status === 'ready'
-    && isConfirmed(finalMatch)
-    && (!thirdPlaceMatch || isConfirmed(thirdPlaceMatch));
+  return event?.ceremony?.status === 'ready' && isConfirmed(finalMatch) && (!thirdPlaceMatch || isConfirmed(thirdPlaceMatch));
 }
-
-function readSettings() {
-  return readJson(FILES.settings, createSettingsDefault());
-}
+function readSettings() { return readJson(FILES.settings, createSettingsDefault()); }
 
 async function ensureHallOfFameChannel(guild) {
   const settings = readSettings();
   const configuredId = settings.channels?.hallOfFameChannelId || null;
   const configured = configuredId ? await guild.channels.fetch(configuredId).catch(() => null) : null;
   if (configured?.type === ChannelType.GuildText) return configured;
-  const existing = guild.channels.cache.find(channel => (
-    channel.name === baseCeremony.HALL_OF_FAME_CHANNEL_NAME && channel.type === ChannelType.GuildText
-  ));
+  const existing = guild.channels.cache.find(channel => channel.name === baseCeremony.HALL_OF_FAME_CHANNEL_NAME && channel.type === ChannelType.GuildText);
   if (existing) return existing;
-  return guild.channels.create({
-    name: baseCeremony.HALL_OF_FAME_CHANNEL_NAME,
-    type: ChannelType.GuildText,
-    reason: 'Bomber X Loco Cup Siegerehrung',
-  });
+  return guild.channels.create({ name: baseCeremony.HALL_OF_FAME_CHANNEL_NAME, type: ChannelType.GuildText, reason: 'Bomber X Loco Cup Siegerehrung' });
 }
 
 function getPromotion(event, teams) {
@@ -195,15 +171,7 @@ function getPromotion(event, teams) {
 function updateMessageRefs(eventKey, event, channelId, imageMessageId, textMessageId, timestamp) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     messages.ceremony = messages.ceremony || {};
-    messages.ceremony[eventKey] = {
-      ...(messages.ceremony[eventKey] || {}),
-      cycleKey: event.cycle?.cycleKey || null,
-      channelId,
-      imageMessageId,
-      textMessageId,
-      postedAt: timestamp,
-      updatedAt: timestamp,
-    };
+    messages.ceremony[eventKey] = { ...(messages.ceremony[eventKey] || {}), cycleKey: event.cycle?.cycleKey || null, channelId, imageMessageId, textMessageId, postedAt: timestamp, updatedAt: timestamp };
     messages.liveSchedule = messages.liveSchedule || {};
     messages.liveSchedule.phase = 'ceremony';
     messages.liveSchedule.currentEventKey = eventKey;
@@ -229,15 +197,8 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
 
-  const imageMessage = await channel.send({
-    content: '@everyone',
-    files: [new AttachmentBuilder(image.buffer, { name: `bomber-x-loco-ceremony-${Date.now()}.png` })],
-    allowedMentions: { parse: ['everyone'] },
-  });
-  const textMessage = await channel.send({
-    content: buildBomberXLocoCeremonyText({ teams, promotion }),
-    allowedMentions: { parse: ['users'] },
-  });
+  const imageMessage = await channel.send({ content: '@everyone', files: [new AttachmentBuilder(image.buffer, { name: `bomber-x-loco-ceremony-${Date.now()}.png` })], allowedMentions: { parse: ['everyone'] } });
+  const textMessage = await channel.send({ content: buildBomberXLocoCeremonyText({ teams, promotion }), allowedMentions: { parse: ['users'] } });
 
   let updatedEvent;
   updateEventData(eventKey, storedEvent => {
@@ -259,29 +220,12 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   updateMessageRefs(eventKey, updatedEvent, channel.id, imageMessage.id, textMessage.id, timestamp);
 
   if (achievements.applied) {
-    await refreshTeamAchievementsRankingMessage({ client: guild.client, guild, force: true }).catch(error => {
-      console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`);
-    });
-    await syncChampionRolesForTeam(guild, achievements.placementTeamIds.gold).catch(error => {
-      console.warn(`[champion-roles] Gewinnerteam konnte nicht synchronisiert werden: ${error.message}`);
-    });
+    await refreshTeamAchievementsRankingMessage({ client: guild.client, guild, force: true }).catch(error => console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`));
+    await syncChampionRolesForTeam(guild, achievements.placementTeamIds.gold).catch(error => console.warn(`[champion-roles] Gewinnerteam konnte nicht synchronisiert werden: ${error.message}`));
   }
 
-  scheduleAutoCleanupForEvent({
-    eventKey,
-    guild,
-    scheduledAt: updatedEvent.ceremony.cleanupScheduledAt,
-    client: guild.client,
-  });
-
-  return {
-    channelId: channel.id,
-    imageMessageId: imageMessage.id,
-    textMessageId: textMessage.id,
-    teams,
-    dayKey: 'saturday',
-    dayLabel: 'Bomber X Loco Cup',
-  };
+  scheduleAutoCleanupForEvent({ eventKey, guild, scheduledAt: updatedEvent.ceremony.cleanupScheduledAt, client: guild.client });
+  return { channelId: channel.id, imageMessageId: imageMessage.id, textMessageId: textMessage.id, teams, dayKey: 'saturday', dayLabel: 'Bomber X Loco Cup' };
 }
 
 async function maybePostBomberXLocoCeremony({ guild, eventKey }) {
