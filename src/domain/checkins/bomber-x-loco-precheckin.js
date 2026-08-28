@@ -7,7 +7,7 @@ const { findNonDeletedTeamByUserId, findTeamById } = require('../teams/team-serv
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 const { readEventData, updateEventData } = require('./checkin-repository');
 const { recalculateCheckinFormat } = require('./checkin-format');
-const { FILES, readJson } = require('../../storage');
+const { FILES, ROOT_DIR, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
@@ -17,6 +17,8 @@ const {
 } = require('../events/bomber-x-loco-config');
 
 const PRECHECKIN_FILE = path.join(process.cwd(), 'data', 'bomber-x-loco-precheckin.json');
+const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
+const BANNER_NAME = 'bomber-x-loco-check-in.png';
 const EPHEMERAL = 64;
 let clientRef = null;
 let intervalRef = null;
@@ -76,28 +78,33 @@ function buildPayload(state, { liveEvent = false } = {}) {
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
   const lines = formatLines(state.entries);
+  const bannerExists = fs.existsSync(BANNER_PATH);
+  const bannerEmbed = bannerExists
+    ? new EmbedBuilder().setColor(0xff0000).setImage(`attachment://${BANNER_NAME}`)
+    : null;
+  const checkinEmbed = new EmbedBuilder()
+    .setColor(0xff0000)
+    .setTitle('💣🐺 Bomber X Loco Cup • Check-in')
+    .setDescription([
+      '🟢 **Check-in geöffnet**',
+      '📅 Samstag, 19.09.2026',
+      '',
+      '⏰ Anmeldeschluss: 20:30 Uhr',
+      '🕒 Late-Check-in bis: 20:45 Uhr',
+      '🎲 Gruppenauslosung: 20:50 Uhr',
+      '🚀 Turnierstart: 21:00 Uhr',
+      '',
+      `🏆 Aktuelles Format: ${format ? `${format} Teams` : 'noch kein gültiges Format'}`,
+      `👥 Angemeldet: ${count}/48 Teams`,
+      next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
+      '',
+      '**Teilnehmende Teams**',
+      '',
+      ...lines,
+    ].join('\n'));
 
   return {
-    embeds: [new EmbedBuilder()
-      .setColor(0xff0000)
-      .setTitle('💣🐺 Bomber X Loco Cup • Check-in')
-      .setDescription([
-        '🟢 **Check-in geöffnet**',
-        '📅 Samstag, 19.09.2026',
-        '',
-        '⏰ Anmeldeschluss: 20:30 Uhr',
-        '🕒 Late-Check-in bis: 20:45 Uhr',
-        '🎲 Gruppenauslosung: 20:50 Uhr',
-        '🚀 Turnierstart: 21:00 Uhr',
-        '',
-        `🏆 Aktuelles Format: ${format ? `${format} Teams` : 'noch kein gültiges Format'}`,
-        `👥 Angemeldet: ${count}/48 Teams`,
-        next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
-        '',
-        '**Teilnehmende Teams**',
-        '',
-        ...lines,
-      ].join('\n'))],
+    embeds: [bannerEmbed, checkinEmbed].filter(Boolean),
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(liveEvent ? 'checkin_join:saturday' : 'bomber_x_loco_prejoin')
@@ -109,6 +116,7 @@ function buildPayload(state, { liveEvent = false } = {}) {
         .setLabel('⬇️ Abmelden')
         .setStyle(ButtonStyle.Danger),
     )],
+    files: bannerExists ? [{ attachment: BANNER_PATH, name: BANNER_NAME }] : [],
   };
 }
 
