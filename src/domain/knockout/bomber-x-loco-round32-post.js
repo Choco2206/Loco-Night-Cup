@@ -8,12 +8,17 @@ const {
   EmbedBuilder,
   PermissionFlagsBits,
 } = require('discord.js');
+const { EVENT_KEYS } = require('../../app/constants');
+const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById } = require('../teams/team-service');
 const { getTeamUserIds } = require('../groups/group-roles');
+const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 const ROUND_KEY = 'round_of_32';
 const CHANNEL_NAME = 'ko-sechzehntelfinale';
 const RESULTS_CHANNEL_NAME = 'ergebnisse-sechzehntelfinale';
+const fingerprints = new Map();
+let intervalRef = null;
 
 function unique(values) {
   return [...new Set((values || []).filter(Boolean).map(String))];
@@ -74,7 +79,7 @@ function buildEmbed(round) {
   const lines = (round?.matches || []).flatMap(match => [
     `⚔️ **M${match.matchIndex}**`,
     `${participantName(match.home)} vs ${participantName(match.away)}`,
-    match.result ? `✅ ${match.result.homeGoals}:${match.result.awayGoals}` : '⏳ Offen',
+    match.result ? `✅ ${match.result.homeGoals}:${match.result.awayGoals}` : match.status === 'admin_decision_required' ? '🚨 Admin-Klärung' : match.status === 'pending_confirmation' ? '🕐 Wartet auf Bestätigung' : '⏳ Offen',
     '',
   ]);
   return new EmbedBuilder()
@@ -94,6 +99,22 @@ function resultButtons(eventKey) {
 async function upsertMessage(channel, messageId, payload) {
   const old = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
   return old ? old.edit(payload) : channel.send(payload);
+}
+
+function roundFingerprint(event) {
+  const round = event.knockout?.rounds?.[ROUND_KEY];
+  if (!round?.matches?.length) return null;
+  return JSON.stringify({
+    cycleKey: event.cycle?.cycleKey || null,
+    status: round.status,
+    matches: round.matches.map(match => ({
+      id: match.id,
+      status: match.status,
+      home: match.home?.teamId || match.home?.participantKey || null,
+      away: match.away?.teamId || match.away?.participantKey || null,
+      result: match.result ? [match.result.homeGoals, match.result.awayGoals] : null,
+    })),
+  });
 }
 
 async function upsertBomberRound32Post({ client, guild, eventKey, event }) {
@@ -117,6 +138,50 @@ async function upsertBomberRound32Post({ client, guild, eventKey, event }) {
   };
 }
 
+async function refreshEvent(client, eventKey) {
+  const event = readEventData(eventKey);
+  if (!isBomberXLocoEvent(event)) {
+    fingerprints.delete(eventKey);
+    return false;
+  }
+  const fingerprint = roundFingerprint(event);
+  if (!fingerprint) return false;
+  if (fingerprints.get(eventKey) === fingerprint) return false;
+
+  const post = await upsertBomberRound32Post({ client, eventKey, event });
+  if (!post) return false;
+
+  updateEventData(eventKey, current => {
+    const round = current.knockout?.rounds?.[ROUND_KEY];
+    if (!round) return current;
+    round.channelId = post.channelId || round.channelId || null;
+    round.messageId = post.messageId || round.messageId || null;
+    round.resultsChannelId = post.resultsChannelId || round.resultsChannelId || null;
+    round.resultsMessageId = post.resultsMessageId || round.resultsMessageId || null;
+    current.knockout.meta = { ...(current.knockout.meta || {}), updatedAt: new Date().toISOString() };
+    current.meta = { ...(current.meta || {}), updatedAt: new Date().toISOString() };
+    return current;
+  });
+
+  fingerprints.set(eventKey, fingerprint);
+  return true;
+}
+
+async function initBomberRound32Posts(client) {
+  for (const eventKey of EVENT_KEYS) {
+    await refreshEvent(client, eventKey).catch(error => console.error(`[bomber-x-loco-round32] ${eventKey}:`, error));
+  }
+  if (!intervalRef) {
+    intervalRef = setInterval(() => {
+      for (const eventKey of EVENT_KEYS) {
+        refreshEvent(client, eventKey).catch(error => console.error(`[bomber-x-loco-round32] ${eventKey}:`, error));
+      }
+    }, 3000);
+    if (typeof intervalRef.unref === 'function') intervalRef.unref();
+  }
+}
+
 module.exports = {
+  initBomberRound32Posts,
   upsertBomberRound32Post,
 };
