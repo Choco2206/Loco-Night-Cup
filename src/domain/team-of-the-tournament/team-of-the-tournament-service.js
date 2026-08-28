@@ -38,6 +38,10 @@ function clubGoals(club) {
   return Number.isFinite(number) ? number : null;
 }
 
+function eaScore(match) {
+  return Object.values(clubMap(match)).map(clubGoals).filter(Number.isFinite);
+}
+
 function matchTimestampMs(match) {
   const raw = match?.timestamp ?? match?.matchTimestamp ?? match?.match_timestamp ?? match?.date;
   if (raw === null || raw === undefined || raw === '') return null;
@@ -68,7 +72,7 @@ function matchContainsClubs(match, teamByEaClubId) {
 }
 
 function scoreMatches(match, lncMatch) {
-  const goals = Object.values(clubMap(match)).map(clubGoals).filter(Number.isFinite).sort((a, b) => a - b);
+  const goals = eaScore(match).sort((a, b) => a - b);
   const expected = [Number(lncMatch?.result?.homeGoals), Number(lncMatch?.result?.awayGoals)].sort((a, b) => a - b);
   return goals.length >= 2 && goals[0] === expected[0] && goals[goals.length - 1] === expected[1];
 }
@@ -85,25 +89,38 @@ function linkedTeamScoreMatches(match, lncMatch, team, eaClubId) {
   return ownGoals === expectedOwn && opponentGoals === expectedOpponent;
 }
 
+function withinMatchWindow(match, confirmedAt) {
+  const matchAt = matchTimestampMs(match);
+  return Boolean(confirmedAt && matchAt && Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS);
+}
+
 function selectEaMatch(matches, lncMatch, linkedTeams) {
   const confirmedAt = confirmedTimestampMs(lncMatch);
   const teamByEaClubId = new Map(linkedTeams.map(team => [String(team.eaClub.clubId), String(team.id)]));
-  const candidates = (matches || []).filter(match => {
+  const baseCandidates = (matches || []).filter(match => {
     if (!eaMatchId(match) || !matchContainsClubs(match, teamByEaClubId)) return false;
-    if (linkedTeams.length > 1) {
-      if (!scoreMatches(match, lncMatch)) return false;
-    } else if (!linkedTeamScoreMatches(match, lncMatch, linkedTeams[0], linkedTeams[0].eaClub.clubId)) {
-      return false;
-    }
     const matchAt = matchTimestampMs(match);
     if (linkedTeams.length === 1 && (!confirmedAt || !matchAt)) return false;
     return !confirmedAt || !matchAt || Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS;
   });
-  return candidates.sort((a, b) => {
+
+  const exactCandidates = baseCandidates.filter(match => linkedTeams.length > 1
+    ? scoreMatches(match, lncMatch)
+    : linkedTeamScoreMatches(match, lncMatch, linkedTeams[0], linkedTeams[0].eaClub.clubId));
+  const sortByTime = (a, b) => {
     if (!confirmedAt) return 0;
     return Math.abs(confirmedAt - (matchTimestampMs(a) || confirmedAt))
       - Math.abs(confirmedAt - (matchTimestampMs(b) || confirmedAt));
-  })[0] || null;
+  };
+  if (exactCandidates.length) return { match: exactCandidates.sort(sortByTime)[0], fallback: false };
+
+  if (linkedTeams.length > 1) {
+    const timedCandidates = baseCandidates.filter(match => withinMatchWindow(match, confirmedAt));
+    if (timedCandidates.length === 1) {
+      return { match: timedCandidates[0], fallback: true };
+    }
+  }
+  return { match: null, fallback: false };
 }
 
 function playerRows(match, teamByEaClubId, lncMatchId) {
@@ -223,10 +240,10 @@ async function captureOnce(eventKey, lncMatch) {
   const teamByEaClubId = new Map(linked.map(team => [String(team.eaClub.clubId), String(team.id)]));
   for (const team of linked) {
     const matches = await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform);
-    const candidate = selectEaMatch(matches, lncMatch, linked);
-    if (candidate) {
-      const result = persistMatch(eventKey, lncMatch, candidate, teamByEaClubId);
-      if (result.stored) return { captured: true, candidate, rows: result.rows, linked };
+    const selected = selectEaMatch(matches, lncMatch, linked);
+    if (selected.match) {
+      const result = persistMatch(eventKey, lncMatch, selected.match, teamByEaClubId);
+      if (result.stored) return { captured: true, candidate: selected.match, rows: result.rows, linked, fallback: selected.fallback };
     }
   }
   return { captured: false, reason: 'match_not_found', linked };
@@ -248,6 +265,13 @@ function scheduleRatingCapture(eventKey, lncMatch) {
         const details = [lncMatch?.home?.teamId, lncMatch?.away?.teamId]
           .map(teamId => `${teamName(teamId)}: **${counts.get(String(teamId)) || 0} Spielerwerte**`)
           .join('\n');
+        const fallbackWarning = result.fallback ? [
+          '',
+          '⚠️ **ERGEBNISABWEICHUNG – FALLBACK VERWENDET**',
+          `Night Cup eingetragen: **${lncMatch.result.homeGoals}:${lncMatch.result.awayGoals}**`,
+          `EA Match-Ergebnis: **${eaScore(result.candidate).join(':')}**`,
+          'Beide EA-Clubs + Zeitfenster waren eindeutig; es gab genau **einen** gemeinsamen Match-Kandidaten.',
+        ] : [];
         await sendTracker([
           '✅ **TOTT MATCH ERFASST**',
           matchLabel(lncMatch),
@@ -256,6 +280,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
           linkedStatus(lncMatch),
           details,
           '**Gespeichert:** ✅',
+          ...fallbackWarning,
         ].join('\n'));
         captureTimers.delete(key);
         return;
