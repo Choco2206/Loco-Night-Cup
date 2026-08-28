@@ -1,9 +1,17 @@
 'use strict';
 
-const PAIRINGS = [
+const NORMAL_PAIRINGS = [
   { matchday: 1, pairs: [[1, 2], [3, 4]] },
   { matchday: 2, pairs: [[1, 3], [2, 4]] },
   { matchday: 3, pairs: [[1, 4], [2, 3]] },
+];
+
+const SIX_TEAM_PAIRINGS = [
+  { matchday: 1, pairs: [[1, 6], [2, 5], [3, 4]] },
+  { matchday: 2, pairs: [[1, 5], [6, 4], [2, 3]] },
+  { matchday: 3, pairs: [[1, 4], [5, 3], [6, 2]] },
+  { matchday: 4, pairs: [[1, 3], [4, 2], [5, 6]] },
+  { matchday: 5, pairs: [[1, 2], [3, 6], [4, 5]] },
 ];
 
 function slotEntry(group, slotNumber) {
@@ -47,7 +55,8 @@ function createMatch({ eventKey, group, matchday, matchIndex, homeSlot, awaySlot
 }
 
 function createGroupMatchdays({ eventKey, group, createdAt }) {
-  return PAIRINGS.map(matchdayDefinition => ({
+  const pairings = group.slots?.length === 6 ? SIX_TEAM_PAIRINGS : NORMAL_PAIRINGS;
+  return pairings.map(matchdayDefinition => ({
     matchday: matchdayDefinition.matchday,
     matches: matchdayDefinition.pairs.map(([homeSlot, awaySlot], index) => createMatch({
       eventKey,
