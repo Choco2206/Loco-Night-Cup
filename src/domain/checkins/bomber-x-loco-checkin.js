@@ -68,12 +68,12 @@ function buildBomberXLocoPayload(event, settings) {
   const next = nextFormat(event);
   const banner = getBanner();
   const description = [
-    state.canJoin ? '🟢 **Check-in geöffnet**' : '🔴 **Check-in geschlossen**',
+    state.canJoin ? '🟢 **Anmeldung geöffnet**' : '🔴 **Anmeldung geschlossen**',
     `📅 Datum: ${formatDateTime(event.cycle?.eventDate ? `${event.cycle.eventDate}T12:00:00+02:00` : null, 'date')}`,
     '',
     `⏰ Offizieller Anmeldeschluss: ${formatDateTime(event.schedule?.deadlineAt)}`,
-    `🕒 Late-Check-in bis: ${formatDateTime(event.schedule?.lateWindowUntil)}`,
     `🎲 Gruppenauslosung: ${formatDateTime(event.schedule?.drawAt)}`,
+    '✅ Anwesenheits-Check: bis 20:00 Uhr',
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
     `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
@@ -84,9 +84,9 @@ function buildBomberXLocoPayload(event, settings) {
     '',
     formatTeams(event),
     '',
-    '⚠️ Nach dem offiziellen Anmeldeschluss führt eine Abmeldung wie beim normalen Night Cup zur vorgesehenen Sperre.',
+    '⚠️ Nach **18:30 Uhr** ist keine Anmeldung oder Abmeldung mehr möglich.',
   ].join('\n');
-  const checkinEmbed = new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Check-in').setDescription(description).setTimestamp();
+  const checkinEmbed = new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Anmeldung').setDescription(description).setTimestamp();
 
   return {
     embeds: [banner.embed, checkinEmbed].filter(Boolean),
@@ -108,6 +108,7 @@ function buildSaturdayBlockerPayload() {
         '',
         'Stattdessen spielen wir den **Bomber X Loco Cup**.',
         `Die Anmeldung läuft im <#${BOMBER_X_LOCO_CHECKIN_CHANNEL_ID}>.`,
+        '**Anmeldeschluss: 18:30 Uhr.**',
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('bomber_x_loco_redirect:saturday').setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success),
