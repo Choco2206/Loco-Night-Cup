@@ -2,20 +2,27 @@
 
 const { EVENT_KEYS } = require('../../app/constants');
 const { readEventData, updateEventData } = require('../events/event-repository');
+const { isBomberXLocoEvent, BOMBER_X_LOCO_MATCHDAYS } = require('../events/bomber-x-loco-config');
 
 const OVERVIEW_URL = 'https://discord.com/channels/1516390719411982346/1516429776070508555';
 const CHECK_INTERVAL_MS = 5000;
 let interval = null;
 
+function finalMatchdayForEvent(event) {
+  return isBomberXLocoEvent(event) ? BOMBER_X_LOCO_MATCHDAYS : 3;
+}
+
 function finalSlotRelease(event, groupKey) {
-  return event.groups?.releases?.groups?.[groupKey]?.slots?.['3']
-    || event.groups?.releases?.groups?.[groupKey]?.slots?.[3]
+  const slot = finalMatchdayForEvent(event);
+  return event.groups?.releases?.groups?.[groupKey]?.slots?.[String(slot)]
+    || event.groups?.releases?.groups?.[groupKey]?.slots?.[slot]
     || null;
 }
 
 function disableFinalMatchdayAutoScore(eventKey) {
   let changed = false;
   updateEventData(eventKey, event => {
+    const finalMatchday = finalMatchdayForEvent(event);
     for (const [groupKey, group] of Object.entries(event.groups?.groups || {})) {
       if (!group || group.status === 'completed') continue;
       const release = finalSlotRelease(event, groupKey);
@@ -28,6 +35,7 @@ function disableFinalMatchdayAutoScore(eventKey) {
       release.autoScoredAt = release.autoScoredAt || timestamp;
       release.autoScoreDisabled = true;
       release.autoScoreDisabledAt = release.autoScoreDisabledAt || timestamp;
+      release.autoScoreDisabledMatchday = finalMatchday;
       changed = true;
     }
     return event;
@@ -102,9 +110,9 @@ async function reconcile(client) {
 
     if (disableFinalMatchdayAutoScore(eventKey)) {
       // scheduleEvent löscht einen eventuell schon gesetzten 25-Minuten-Timer.
-      // Durch autoScoredAt wird für Spieltag 3 anschließend kein neuer erzeugt.
+      // Durch autoScoredAt wird für den jeweiligen letzten Gruppenspieltag anschließend kein neuer erzeugt.
       groupReleases.scheduleEvent(client, eventKey);
-      console.info(`[groups] ${eventKey}: automatische 25-Minuten-Wertung am letzten Gruppenspieltag deaktiviert.`);
+      console.info(`[groups] ${eventKey}: automatische 25-Minuten-Wertung am letzten Gruppenspieltag (${finalMatchdayForEvent(event)}) deaktiviert.`);
     }
 
     const current = readEventData(eventKey);
