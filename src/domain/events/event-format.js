@@ -5,6 +5,11 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { TOURNAMENT_FORMAT_SIZES, isLeaguePhaseFormat } = require('../../app/constants');
 const { findTeamById } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('../checkins/checkin-ban-integration');
+const {
+  BOMBER_X_LOCO_FORMAT_SIZES,
+  BOMBER_X_LOCO_GROUP_SIZE,
+  isBomberXLocoEvent,
+} = require('./bomber-x-loco-config');
 
 function uniqueEntryTeamIds(entries) {
   const seen = new Set();
@@ -23,14 +28,16 @@ function getActiveManualByes(event) {
 }
 
 function getAllowedSizes(settings, event) {
+  if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
   const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
     ? settings.tournament.allowedSizes
     : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
-  return [...allowedSizes].filter(size => TOURNAMENT_FORMAT_SIZES.includes(size)).sort((a, b) => a - b);
+  return [...allowedSizes].filter(size => TOURNAMENT_FORMAT_SIZES.includes(Number(size))).map(Number).sort((a, b) => a - b);
 }
 
-function groupCountForSize(size) {
-  return isLeaguePhaseFormat(size) ? 0 : size / 4;
+function groupCountForSize(size, event = null) {
+  if (isBomberXLocoEvent(event)) return Number(size) / BOMBER_X_LOCO_GROUP_SIZE;
+  return isLeaguePhaseFormat(size) ? 0 : Number(size) / 4;
 }
 
 function isTeamEligibleForLock(team, now) {
@@ -45,51 +52,42 @@ function collectValidRealTeams(event, now = new Date()) {
   const teamIds = uniqueEntryTeamIds(event.checkin?.entries || []);
   const teams = [];
   const skipped = [];
-
   for (const teamId of teamIds) {
     const team = findTeamById(teamId);
     const eligibility = isTeamEligibleForLock(team, now);
-    if (eligibility.ok) {
-      teams.push(team);
-    } else {
-      skipped.push({ teamId, reason: eligibility.reason });
-    }
+    if (eligibility.ok) teams.push(team);
+    else skipped.push({ teamId, reason: eligibility.reason });
   }
-
   return { teams, skipped };
 }
 
+function minimumParticipantSlots(settings, event) {
+  return isBomberXLocoEvent(event)
+    ? 6
+    : Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+}
+
 function choosePlayableFormat({ realTeamCount, byeCount, settings, event }) {
-  const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  const minimum = minimumParticipantSlots(settings, event);
   const participantSlotCount = realTeamCount + byeCount;
-  if (participantSlotCount < minimumParticipantSlots) return null;
-
+  if (participantSlotCount < minimum) return null;
   const allowedSizes = getAllowedSizes(settings, event).sort((a, b) => b - a);
-
   for (const size of allowedSizes) {
-    if (size > participantSlotCount) continue;
-    return size;
+    if (size <= participantSlotCount) return size;
   }
-
   return null;
 }
 
 function buildLockedParticipantField(event, now = new Date()) {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const minimumParticipantSlots = Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
+  const minimum = minimumParticipantSlots(settings, event);
   const allowedSizes = getAllowedSizes(settings, event);
   const { teams, skipped } = collectValidRealTeams(event, now);
   const manualByes = getActiveManualByes(event);
-
-  const size = choosePlayableFormat({
-    realTeamCount: teams.length,
-    byeCount: manualByes.length,
-    settings,
-    event,
-  });
+  const size = choosePlayableFormat({ realTeamCount: teams.length, byeCount: manualByes.length, settings, event });
 
   if (!size) {
-    throw new Error(`Format-Lock nicht möglich: mindestens ${minimumParticipantSlots} gültige Teams und ein spielbares Format aus ${getAllowedSizes(settings, event).join(', ')} Slots erforderlich.`);
+    throw new Error(`Format-Lock nicht möglich: mindestens ${minimum} gültige Teams und ein spielbares Format aus ${allowedSizes.join(', ')} Slots erforderlich.`);
   }
 
   const activeRealCount = Math.min(teams.length, size);
@@ -98,21 +96,11 @@ function buildLockedParticipantField(event, now = new Date()) {
   const waitlistTeams = teams.slice(activeRealCount);
   const activeByes = manualByes.slice(0, activeManualByeCount);
   const waitlistByes = manualByes.slice(activeManualByeCount);
-  const groupCount = groupCountForSize(size);
-
+  const groupCount = groupCountForSize(size, event);
 
   const participants = [
-    ...activeTeams.map(team => ({
-      type: 'team',
-      teamId: String(team.id),
-      displayName: team.clubName,
-      isTestTeam: team.isTestTeam === true,
-    })),
-    ...activeByes.map(bye => ({
-      type: 'bye',
-      byeId: String(bye.id),
-      displayName: bye.displayName || bye.label || 'Freilos',
-    })),
+    ...activeTeams.map(team => ({ type: 'team', teamId: String(team.id), displayName: team.clubName, isTestTeam: team.isTestTeam === true })),
+    ...activeByes.map(bye => ({ type: 'bye', byeId: String(bye.id), displayName: bye.displayName || bye.label || 'Freilos' })),
   ];
 
   if (participants.length !== size) {
@@ -121,7 +109,7 @@ function buildLockedParticipantField(event, now = new Date()) {
 
   return {
     allowedSizes,
-    minimumRealTeams: minimumParticipantSlots,
+    minimumRealTeams: minimum,
     size,
     groupCount,
     participants,
