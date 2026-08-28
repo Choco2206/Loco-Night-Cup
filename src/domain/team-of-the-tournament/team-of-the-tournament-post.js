@@ -15,8 +15,6 @@ const TEST_CHANNEL_ID = '1525035287971889173';
 const postTimers = new Map();
 
 function renderTeamOfTheTournament(input) {
-  // Canvas erst beim tatsächlichen Rendern laden. So bleibt Bootstrap/Recovery
-  // unabhängig von nativen Grafik-Bindings, bis wirklich ein Bild gebaut wird.
   return require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input);
 }
 
@@ -202,12 +200,27 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
       updatePostState(eventKey, { postLastResult: result.reason, postFailureReason: result.reason });
       const elapsed = Date.now() - new Date(postStartedAt).getTime();
       if (elapsed >= TOTT_GIVE_UP_AFTER_MS) {
-        const reason = `${result.reason}; ${snapshot.capturedMatches}/${snapshot.linkedMatches} `
-          + `verknüpfte Spiele erfasst; ${snapshot.selectedPlayers}/11 Spieler gewählt`;
+        // Wenn EA einzelne echte Matches dauerhaft nicht liefert, darf eine bereits
+        // vollständig aus den vorhandenen Daten gewählte Elf nicht verloren gehen.
+        // Freilose sind bereits aus confirmedEventMatches ausgeschlossen.
+        if (result.reason === 'ratings_pending' && snapshot.selectedPlayers >= 11) {
+          console.warn(`[tott] ${eventKey}: Nach zwei Stunden fehlen weiterhin `
+            + `${snapshot.linkedMatches - snapshot.capturedMatches} EA-Matches, aber 11/11 Spieler sind gewählt. `
+            + 'TOTT wird mit den erfolgreich erfassten Matchdaten veröffentlicht.');
+          const fallbackResult = await postTeamOfTheTournament({ client, eventKey, force: true });
+          if (fallbackResult.posted || fallbackResult.reason === 'already_posted') {
+            postTimers.delete(eventKey);
+            return;
+          }
+        }
+
+        const latest = workflowSnapshot(readEventData(eventKey));
+        const reason = `${result.reason}; ${latest.capturedMatches}/${latest.linkedMatches} `
+          + `verknüpfte Spiele erfasst; ${latest.selectedPlayers}/11 Spieler gewählt`;
         updatePostState(eventKey, {
           postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
           postLastResult: result.reason, postFailureReason: reason,
-          postNextAttemptAt: null, postSnapshot: snapshot,
+          postNextAttemptAt: null, postSnapshot: latest,
         });
         console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden aufgegeben: ${reason}. `
           + 'Die Turnierbereinigung ist jetzt freigegeben.');
