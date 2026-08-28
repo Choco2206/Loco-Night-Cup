@@ -13,6 +13,7 @@ const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_EVENT_DATE,
   BOMBER_X_LOCO_FORMAT_SIZES,
+  BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME,
   isBomberXLocoEvent,
 } = require('../events/bomber-x-loco-config');
 
@@ -42,6 +43,14 @@ function writeState(state) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   state.updatedAt = new Date().toISOString();
   fs.writeFileSync(PRECHECKIN_FILE, JSON.stringify(state, null, 2), 'utf8');
+}
+
+function registrationDeadline() {
+  return new Date(`${BOMBER_X_LOCO_EVENT_DATE}T${BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME}:00+02:00`);
+}
+
+function isRegistrationClosed(now = new Date()) {
+  return now.getTime() >= registrationDeadline().getTime();
 }
 
 function validTeamForUser(userId) {
@@ -79,21 +88,21 @@ function buildPayload(state, { liveEvent = false } = {}) {
   const count = state.entries.length;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
-  const lines = formatLines(state.entries);
+  const closed = !liveEvent && isRegistrationClosed();
   const bannerExists = fs.existsSync(BANNER_PATH);
   const bannerEmbed = bannerExists
     ? new EmbedBuilder().setColor(0xff0000).setImage(`attachment://${BANNER_NAME}`)
     : null;
   const checkinEmbed = new EmbedBuilder()
     .setColor(0xff0000)
-    .setTitle('💣🐺 Bomber X Loco Cup • Check-in')
+    .setTitle('💣🐺 Bomber X Loco Cup • Anmeldung')
     .setDescription([
-      '🟢 **Check-in geöffnet**',
+      closed ? '🔴 **Anmeldung geschlossen**' : '🟢 **Anmeldung geöffnet**',
       '📅 Samstag, 19.09.2026',
       '',
-      '⏰ Anmeldeschluss: 20:30 Uhr',
-      '🕒 Late-Check-in bis: 20:45 Uhr',
-      '🎲 Gruppenauslosung: 20:50 Uhr',
+      '⏰ Anmeldeschluss: 18:30 Uhr',
+      '🎲 Gruppenauslosung: 19:00 Uhr',
+      '✅ Anwesenheits-Check: bis 20:00 Uhr',
       '🚀 Turnierstart: 21:00 Uhr',
       '',
       `🏆 Aktuelles Format: ${format ? `${format} Teams` : 'noch kein gültiges Format'}`,
@@ -102,7 +111,9 @@ function buildPayload(state, { liveEvent = false } = {}) {
       '',
       '**Teilnehmende Teams**',
       '',
-      ...lines,
+      ...formatLines(state.entries),
+      '',
+      '**Nach 18:30 Uhr sind keine An- oder Abmeldungen mehr möglich.**',
     ].join('\n'));
 
   return {
@@ -112,11 +123,12 @@ function buildPayload(state, { liveEvent = false } = {}) {
         .setCustomId(liveEvent ? 'checkin_join:saturday' : 'bomber_x_loco_prejoin')
         .setLabel('⬆️ Anmelden')
         .setStyle(ButtonStyle.Success)
-        .setDisabled(count >= 48),
+        .setDisabled(closed || count >= 48),
       new ButtonBuilder()
         .setCustomId(liveEvent ? 'checkin_leave:saturday' : 'bomber_x_loco_preleave')
         .setLabel('⬇️ Abmelden')
-        .setStyle(ButtonStyle.Danger),
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(closed),
     )],
     files: bannerExists ? [{ attachment: BANNER_PATH, name: BANNER_NAME }] : [],
   };
@@ -196,11 +208,12 @@ async function handleInteraction(interaction) {
   const saturday = readEventData('saturday');
   if (isBomberXLocoEvent(saturday)) {
     await ensurePanel();
-    await interaction.reply({ content: 'Der Bomber X Loco Cup läuft jetzt im regulären Event-State. Bitte nutze denselben Check-in-Post erneut.', flags: EPHEMERAL });
+    await interaction.reply({ content: 'Der Bomber X Loco Cup läuft jetzt im regulären Event-State. Bitte nutze denselben Anmelde-Post erneut.', flags: EPHEMERAL });
     return true;
   }
 
   try {
+    if (isRegistrationClosed()) throw new Error('Die Anmeldung für den Bomber X Loco Cup ist seit 18:30 Uhr geschlossen.');
     const team = validTeamForUser(interaction.user.id);
     const state = readState();
     const index = state.entries.findIndex(entry => String(entry.teamId) === String(team.id));
