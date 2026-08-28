@@ -61,34 +61,28 @@ function currentFormat(count) {
   return [...BOMBER_X_LOCO_FORMAT_SIZES].filter(size => size <= count).pop() || null;
 }
 
-function formatSeparator(size) {
-  return `══════⬆️ ${size}er Turnier ⬆️══════`;
-}
-
-function buildTeamLines(entries) {
+function formatLines(entries) {
   const lines = [];
   for (let index = 0; index < 48; index += 1) {
     const entry = entries[index];
     lines.push(`${index + 1}. ${entry ? teamName(entry.teamId) : '—'}`);
-    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) {
-      lines.push(formatSeparator(index + 1));
-    }
+    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(`════ ⬆️ ${index + 1}er Turnier ⬆️ ════`);
   }
   return lines;
 }
 
-function buildPayload(state) {
+function buildPayload(state, { liveEvent = false } = {}) {
   const count = state.entries.length;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
-  const lines = buildTeamLines(state.entries);
+  const lines = formatLines(state.entries);
 
   return {
     embeds: [new EmbedBuilder()
       .setColor(0xff0000)
       .setTitle('💣🐺 Bomber X Loco Cup • Check-in')
       .setDescription([
-        '🟢 **Voranmeldung geöffnet**',
+        '🟢 **Check-in geöffnet**',
         '📅 Samstag, 19.09.2026',
         '',
         '⏰ Anmeldeschluss: 20:30 Uhr',
@@ -96,31 +90,57 @@ function buildPayload(state) {
         '🎲 Gruppenauslosung: 20:50 Uhr',
         '🚀 Turnierstart: 21:00 Uhr',
         '',
-        `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
+        `🏆 Aktuelles Format: ${format ? `${format} Teams` : 'noch kein gültiges Format'}`,
         `👥 Angemeldet: ${count}/48 Teams`,
         next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
         '',
-        '**👥 Teilnehmende Teams**',
+        '**Teilnehmende Teams**',
         '',
         ...lines,
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('bomber_x_loco_prejoin').setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(count >= 48),
-      new ButtonBuilder().setCustomId('bomber_x_loco_preleave').setLabel('⬇️ Abmelden').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(liveEvent ? 'checkin_join:saturday' : 'bomber_x_loco_prejoin')
+        .setLabel('⬆️ Anmelden')
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(count >= 48),
+      new ButtonBuilder()
+        .setCustomId(liveEvent ? 'checkin_leave:saturday' : 'bomber_x_loco_preleave')
+        .setLabel('⬇️ Abmelden')
+        .setStyle(ButtonStyle.Danger),
     )],
+  };
+}
+
+function stateFromLiveEvent(event) {
+  return {
+    ...readState(),
+    entries: (event.checkin?.entries || []).map(entry => ({
+      teamId: String(entry.teamId),
+      checkedInByUserId: String(entry.checkedInByUserId || ''),
+      checkedInAt: entry.checkedInAt || null,
+    })),
   };
 }
 
 async function ensurePanel() {
   if (!clientRef) return false;
   const saturday = readEventData('saturday');
-  if (isBomberXLocoEvent(saturday)) return false;
+  const liveEvent = isBomberXLocoEvent(saturday);
   const channel = await clientRef.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
   if (!channel?.send) return false;
-  const state = readState();
-  let message = state.messageId ? await channel.messages.fetch(state.messageId).catch(() => null) : null;
-  if (message) await message.edit({ ...buildPayload(state), attachments: [] });
-  else { message = await channel.send(buildPayload(state)); state.messageId = message.id; writeState(state); }
+
+  const storedState = readState();
+  const renderState = liveEvent ? stateFromLiveEvent(saturday) : storedState;
+  let message = storedState.messageId ? await channel.messages.fetch(storedState.messageId).catch(() => null) : null;
+  const payload = buildPayload(renderState, { liveEvent });
+
+  if (message) await message.edit({ ...payload, attachments: [] });
+  else {
+    message = await channel.send(payload);
+    storedState.messageId = message.id;
+    writeState(storedState);
+  }
   return true;
 }
 
@@ -155,11 +175,7 @@ async function migrateIntoSaturdayEvent() {
 
   state.migratedAt = new Date().toISOString();
   writeState(state);
-  if (clientRef && state.messageId) {
-    const channel = await clientRef.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
-    const message = channel ? await channel.messages.fetch(state.messageId).catch(() => null) : null;
-    if (message) await message.delete().catch(() => null);
-  }
+  await ensurePanel();
   return true;
 }
 
@@ -169,7 +185,8 @@ async function handleInteraction(interaction) {
 
   const saturday = readEventData('saturday');
   if (isBomberXLocoEvent(saturday)) {
-    await interaction.reply({ content: 'Der reguläre Bomber-X-Loco-Event-Check-in ist bereits aktiv. Bitte nutze den aktuellen Check-in-Post.', flags: EPHEMERAL });
+    await ensurePanel();
+    await interaction.reply({ content: 'Der Bomber X Loco Cup läuft jetzt im regulären Event-State. Bitte nutze denselben Check-in-Post erneut.', flags: EPHEMERAL });
     return true;
   }
 
@@ -205,7 +222,7 @@ module.exports = {
     clientRef = client;
     await reconcile();
     if (!intervalRef) {
-      intervalRef = setInterval(() => reconcile().catch(error => console.error('[bomber-x-loco-precheckin]', error)), 60 * 1000);
+      intervalRef = setInterval(() => reconcile().catch(error => console.error('[bomber-x-loco-checkin]', error)), 60 * 1000);
       if (typeof intervalRef.unref === 'function') intervalRef.unref();
     }
   },
