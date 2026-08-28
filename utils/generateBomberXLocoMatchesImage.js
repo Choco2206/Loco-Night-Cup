@@ -9,16 +9,28 @@ const WIDTH = 1600;
 const HEIGHT = 900;
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png');
 
-// Erste Vermessung der Bomber-X-Loco-Vorlage.
-// Wird spaeter mit dem Admin-Test feinjustiert.
+// Die Vorlage ist als 5 Spieltage mit jeweils 3 horizontalen Begegnungszeilen aufgebaut.
+// Pro Begegnung gibt es genau EIN linkes Teamfeld, EIN Ergebnisfeld in der Mitte
+// und EIN rechtes Teamfeld. Die Begegnungen werden deshalb vertikal in den
+// jeweiligen Spieltagsblock geschrieben und nicht nebeneinander verteilt.
 const LAYOUT = Object.freeze({
-  title: { x: 800, y: 170 },
-  matchdayTitleY: [286, 410, 534, 658, 782],
-  columnsX: [255, 800, 1345],
-  teamGap: 74,
-  logoSize: 46,
-  teamMaxWidth: 190,
-  scoreMaxWidth: 115,
+  title: { x: 800, y: 203, maxWidth: 360 },
+  matchdayTitleY: [244, 368, 492, 616, 740],
+  matchRowsY: [
+    [276, 307, 338],
+    [400, 431, 462],
+    [524, 555, 586],
+    [648, 679, 710],
+    [772, 803, 834],
+  ],
+  scoreX: 800,
+  homeLogoX: 258,
+  homeNameX: 478,
+  awayNameX: 1122,
+  awayLogoX: 1342,
+  logoSize: 34,
+  teamMaxWidth: 330,
+  scoreMaxWidth: 105,
 });
 
 let canvasApi = null;
@@ -102,61 +114,57 @@ function normalizedScore(result) {
 
 function drawTitle(ctx, groupKey) {
   const text = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
-  setFont(ctx, 72, 'Oxanium', '700');
+  fitFont(ctx, text, LAYOUT.title.maxWidth, 38, 26, 'Oxanium', '700');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.lineWidth = 5;
+  ctx.lineWidth = 3;
   ctx.lineJoin = 'round';
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-  ctx.shadowColor = 'rgba(255,170,40,0.82)';
-  ctx.shadowBlur = 18;
+  ctx.shadowColor = 'rgba(255,170,40,0.7)';
+  ctx.shadowBlur = 9;
   ctx.strokeText(text, LAYOUT.title.x, LAYOUT.title.y);
-  const gradient = ctx.createLinearGradient(560, LAYOUT.title.y, 1040, LAYOUT.title.y);
-  gradient.addColorStop(0, '#f6b343');
-  gradient.addColorStop(0.5, '#ffffff');
-  gradient.addColorStop(1, '#c58a2b');
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(text, LAYOUT.title.x, LAYOUT.title.y);
   ctx.shadowBlur = 0;
 }
 
 function drawMatchdayTitle(ctx, matchdayNumber, y) {
-  setFont(ctx, 25, 'Oxanium', '700');
+  setFont(ctx, 22, 'Oxanium', '700');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = 'rgba(0,0,0,0.85)';
   ctx.shadowBlur = 4;
-  ctx.fillText(`SPIELTAG ${matchdayNumber}`, 800, y - 42);
+  ctx.fillText(`SPIELTAG ${matchdayNumber}`, 800, y);
   ctx.shadowBlur = 0;
 }
 
-async function drawMatch(ctx, match, x, y) {
+async function drawMatch(ctx, match, y) {
   const homeName = participantName(match?.home);
   const awayName = participantName(match?.away);
   const [homeLogo, awayLogo] = await Promise.all([loadLogo(match?.home), loadLogo(match?.away)]);
-  const leftLogoX = x - 218;
-  const rightLogoX = x + 218;
-  drawLogo(ctx, homeLogo, leftLogoX, y, LAYOUT.logoSize);
-  drawLogo(ctx, awayLogo, rightLogoX, y, LAYOUT.logoSize);
+
+  drawLogo(ctx, homeLogo, LAYOUT.homeLogoX, y, LAYOUT.logoSize);
+  drawLogo(ctx, awayLogo, LAYOUT.awayLogoX, y, LAYOUT.logoSize);
 
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = 'rgba(0,0,0,0.75)';
   ctx.shadowBlur = 4;
-  fitFont(ctx, homeName, LAYOUT.teamMaxWidth, 28, 14);
-  ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText(homeName, x - LAYOUT.teamGap, y);
 
-  fitFont(ctx, awayName, LAYOUT.teamMaxWidth, 28, 14);
-  ctx.textAlign = 'left';
-  ctx.fillText(awayName, x + LAYOUT.teamGap, y);
+  fitFont(ctx, homeName, LAYOUT.teamMaxWidth, 25, 13);
+  ctx.textAlign = 'center';
+  ctx.fillText(homeName, LAYOUT.homeNameX, y);
+
+  fitFont(ctx, awayName, LAYOUT.teamMaxWidth, 25, 13);
+  ctx.textAlign = 'center';
+  ctx.fillText(awayName, LAYOUT.awayNameX, y);
 
   const score = normalizedScore(match?.result);
   if (score && match?.status === 'confirmed') {
-    fitFont(ctx, score, LAYOUT.scoreMaxWidth, 32, 20, 'Oxanium', '700');
+    fitFont(ctx, score, LAYOUT.scoreMaxWidth, 26, 17, 'Oxanium', '700');
     ctx.textAlign = 'center';
-    ctx.fillText(score, x, y);
+    ctx.fillText(score, LAYOUT.scoreX, y);
   }
   ctx.shadowBlur = 0;
 }
@@ -171,13 +179,12 @@ async function generateBomberXLocoMatchesImage({ group }) {
 
   const matchdays = (group.matchdays || []).slice(0, 5);
   for (let dayIndex = 0; dayIndex < 5; dayIndex += 1) {
-    const y = LAYOUT.matchdayTitleY[dayIndex];
-    drawMatchdayTitle(ctx, dayIndex + 1, y);
+    drawMatchdayTitle(ctx, dayIndex + 1, LAYOUT.matchdayTitleY[dayIndex]);
     const matches = matchdays[dayIndex]?.matches || [];
     for (let matchIndex = 0; matchIndex < 3; matchIndex += 1) {
       const match = matches[matchIndex];
       if (!match) continue;
-      await drawMatch(ctx, match, LAYOUT.columnsX[matchIndex], y);
+      await drawMatch(ctx, match, LAYOUT.matchRowsY[dayIndex][matchIndex]);
     }
   }
 
