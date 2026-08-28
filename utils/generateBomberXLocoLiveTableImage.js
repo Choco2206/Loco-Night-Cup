@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts');
-const { findTeamById } = require('../src/domain/teams/team-service');
+const { listVisibleTeams } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 
 const WIDTH = 1600;
@@ -52,11 +52,20 @@ async function loadBackground() {
   return backgroundPromise;
 }
 
-async function loadTeamLogo(teamId) {
-  if (!teamId) return null;
-  const key = String(teamId);
+function findTeamForRow(row) {
+  if (row?.teamId) {
+    return listVisibleTeams().find(team => String(team.id) === String(row.teamId)) || null;
+  }
+  const target = String(row?.name || '').trim().toLocaleLowerCase('de');
+  if (!target) return null;
+  return listVisibleTeams().find(team => String(team.clubName || '').trim().toLocaleLowerCase('de') === target) || null;
+}
+
+async function loadTeamLogo(row) {
+  const team = findTeamForRow(row);
+  if (!team) return null;
+  const key = String(team.id);
   if (logoCache.has(key)) return logoCache.get(key);
-  const team = findTeamById(teamId);
   const logoPath = resolveTeamLogoPath(team, { optional: true });
   if (!logoPath) {
     logoCache.set(key, null);
@@ -77,6 +86,7 @@ function fitFont(ctx, text, maxWidth, maxSize = 38, minSize = 20) {
     setFont(ctx, size, 'Odibee Sans', '400');
     if (ctx.measureText(text).width <= maxWidth) return size;
   }
+  setFont(ctx, minSize, 'Odibee Sans', '400');
   return minSize;
 }
 
@@ -119,7 +129,7 @@ async function drawRows(ctx, rows) {
     const row = visible[index];
     const y = LAYOUT.rowsY[index];
     const teamName = String(row.name || 'Team').trim();
-    const logo = row.isBye ? null : await loadTeamLogo(row.teamId);
+    const logo = row.isBye ? null : await loadTeamLogo(row);
 
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = 'rgba(0,0,0,0.75)';
