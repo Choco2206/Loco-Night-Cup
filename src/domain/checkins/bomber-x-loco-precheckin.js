@@ -65,9 +65,11 @@ function currentFormat(count) {
 
 function formatLines(entries) {
   const lines = [];
+  const activeFormat = currentFormat(entries.length);
   for (let index = 0; index < 48; index += 1) {
     const entry = entries[index];
-    lines.push(`${index + 1}. ${entry ? teamName(entry.teamId) : '—'}`);
+    const isWaitlist = Boolean(entry && activeFormat && index >= activeFormat);
+    lines.push(`${index + 1}. ${entry ? `${teamName(entry.teamId)}${isWaitlist ? ' (WL)' : ''}` : '—'}`);
     if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(`════ ⬆️ ${index + 1}er Turnier ⬆️ ════`);
   }
   return lines;
