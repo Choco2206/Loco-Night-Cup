@@ -5,6 +5,10 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
+const {
+  BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME,
+  isBomberXLocoEvent,
+} = require('../events/bomber-x-loco-config');
 const { findTeamById, isTeamMember } = require('../teams/team-service');
 
 const ATTENDANCE_CLOSE_OFFSET_MS = 2 * 60 * 1000;
@@ -25,7 +29,15 @@ function getScopeTeamIds(scope) {
     .map(slot => String(slot.teamId)))];
 }
 
+function bomberAttendanceCloseAt(event) {
+  const eventDate = event.cycle?.eventDate;
+  if (!eventDate) return null;
+  const date = new Date(`${eventDate}T${BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00+02:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function attendanceCloseAt(event) {
+  if (isBomberXLocoEvent(event)) return bomberAttendanceCloseAt(event);
   const start = event.schedule?.tournamentStartAt ? new Date(event.schedule.tournamentStartAt) : null;
   if (!start || Number.isNaN(start.getTime())) return null;
   return new Date(start.getTime() - ATTENDANCE_CLOSE_OFFSET_MS);
@@ -45,7 +57,10 @@ function ensureState(scope, event) {
     : [];
   const activeTeamIds = new Set(getScopeTeamIds(scope));
   scope.attendance.presentTeamIds = scope.attendance.presentTeamIds.filter(teamId => activeTeamIds.has(teamId));
-  if (!scope.attendance.closesAt && closeAt) scope.attendance.closesAt = closeAt.toISOString();
+  // Für Bomber X Loco die neue 20:00-Grenze auch dann übernehmen, wenn vorher bereits 20:58 gespeichert war.
+  if (closeAt && (isBomberXLocoEvent(event) || !scope.attendance.closesAt)) {
+    scope.attendance.closesAt = closeAt.toISOString();
+  }
   return scope.attendance;
 }
 
@@ -54,6 +69,8 @@ function teamName(teamId) {
 }
 
 function buildAttendancePayload(eventKey, groupKey, scope) {
+  const event = readEventData(eventKey);
+  const isBomber = isBomberXLocoEvent(event);
   const present = new Set(scope.attendance?.presentTeamIds || []);
   const teamIds = getScopeTeamIds(scope);
   const lines = teamIds.map(teamId => `${present.has(teamId) ? '\u2705' : '\u2B1C'} **${teamName(teamId)}**`);
@@ -62,14 +79,18 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
     .setColor(0x8b5cf6)
     .setTitle(title)
     .setDescription([
-      'Zeigt kurz, dass ihr bereit für den Loco Night Cup seid.',
+      isBomber
+        ? 'Zeigt kurz, dass ihr bereit für den Bomber X Loco Cup seid.'
+        : 'Zeigt kurz, dass ihr bereit für den Loco Night Cup seid.',
       '',
       ...lines,
       '',
       `**${present.size}/${teamIds.length} Teams anwesend**`,
       'Bitte drückt auf **Anwesend**, um euer Team einzuchecken.',
-    ].join('\n'))
-    .setFooter({ text: 'VM AURA \u2022 LOCO DNA \u2022 READY FOR KICK-OFF' });
+      isBomber ? '' : null,
+      isBomber ? '**Die Anwesenheitsabfrage endet um 20:00 Uhr.**' : null,
+    ].filter(line => line !== null).join('\n'))
+    .setFooter({ text: isBomber ? 'BOMBER X LOCO \u2022 READY FOR KICK-OFF' : 'VM AURA \u2022 LOCO DNA \u2022 READY FOR KICK-OFF' });
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`team_attendance:${eventKey}:${groupKey}`)
@@ -111,12 +132,19 @@ async function ensureAttendancePost(client, eventKey, groupKey) {
   return message;
 }
 
-function staffRoleIds() {
+function staffRoleIds(event = null) {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  return [...new Set([
+  const roleIds = [
     ...(settings.roles?.cupLeadRoleIds || []),
     ...(settings.permissions?.cupLeadRoleIds || []),
-  ].filter(Boolean).map(String))];
+  ];
+  if (isBomberXLocoEvent(event)) {
+    roleIds.push(
+      ...(settings.roles?.adminRoleIds || []),
+      ...(settings.permissions?.adminRoleIds || [])
+    );
+  }
+  return [...new Set(roleIds.filter(Boolean).map(String))];
 }
 
 function teamUserIds(teamId) {
@@ -138,7 +166,12 @@ async function finalizeAttendance(client, eventKey, groupKey, now = new Date()) 
     const present = new Set(attendance.presentTeamIds);
     attendance.status = 'finalized';
     attendance.finalizedAt = now.toISOString();
-    outcome = { scope, messageId: attendance.messageId, missingTeamIds: teamIds.filter(id => !present.has(id)) };
+    outcome = {
+      scope,
+      eventMode: event.meta?.eventMode || null,
+      messageId: attendance.messageId,
+      missingTeamIds: teamIds.filter(id => !present.has(id)),
+    };
     return event;
   });
   if (!outcome) return false;
@@ -146,7 +179,8 @@ async function finalizeAttendance(client, eventKey, groupKey, now = new Date()) 
   if (!channel) return true;
   const old = outcome.messageId ? await channel.messages.fetch(outcome.messageId).catch(() => null) : null;
   if (old) await old.delete().catch(() => null);
-  const roles = staffRoleIds();
+  const currentEvent = readEventData(eventKey);
+  const roles = staffRoleIds(currentEvent);
   const staffMentions = roles.map(id => `<@&${id}>`).join(' ') || '**Turnierleitung**';
   if (!outcome.missingTeamIds.length) {
     await channel.send({
@@ -254,6 +288,7 @@ async function initAttendance(client) {
 
 module.exports = {
   ATTENDANCE_CLOSE_OFFSET_MS,
+  attendanceCloseAt,
   buildAttendancePayload,
   ensureAttendancePost,
   finalizeAttendance,
