@@ -9,6 +9,7 @@ const { ensureDataFolders, ensureJsonFiles } = require('./utils/storage');
 const roleSystem = require('./systems/role-system');
 const teamSystem = require('./systems/team-system');
 const checkinSystem = require('./systems/checkin-system');
+const bomberXLocoSystem = require('./systems/bomber-x-loco-system');
 const groupSystem = require('./systems/group-system');
 const resultSystem = require('./systems/result-system');
 const koSystem = require('./systems/ko-system');
@@ -67,10 +68,10 @@ async function emergencyResetFriday0100(message) {
   ko.friday = null;
 
   const checkinEnd = new Date();
-checkinEnd.setHours(1, 20, 0, 0);
+  checkinEnd.setHours(1, 20, 0, 0);
 
-const groupDraw = new Date();
-groupDraw.setHours(1, 25, 0, 0);
+  const groupDraw = new Date();
+  groupDraw.setHours(1, 25, 0, 0);
 
   checkins.friday = {
     ...(checkins.friday || {}),
@@ -78,28 +79,25 @@ groupDraw.setHours(1, 25, 0, 0);
     backups: [],
     status: 'open',
     state: 'open',
-isOpen: true,
-isClosed: false,
-registrationOpen: true,
-registrationClosed: false,
-checkinOpen: true,
-checkinClosed: false,
-drawDone: false,
-groupsCreated: false,
-scheduleCreated: false,
+    isOpen: true,
+    isClosed: false,
+    registrationOpen: true,
+    registrationClosed: false,
+    checkinOpen: true,
+    checkinClosed: false,
+    drawDone: false,
+    groupsCreated: false,
+    scheduleCreated: false,
     closed: false,
     locked: false,
     started: false,
     completed: false,
     archived: false,
     format: null,
-
     deadlineTextdeadlineText: '01:20',
-deadlineAt: checkinEnd.getTime(),
-
-startText: '01:25',
-startAt: groupDraw.getTime(),
-
+    deadlineAt: checkinEnd.getTime(),
+    startText: '01:25',
+    startAt: groupDraw.getTime(),
     cycleKey: `friday-emergency-${Date.now()}`,
     emergencyRestart: true,
     emergencyRestartAt: new Date().toISOString(),
@@ -117,7 +115,7 @@ startAt: groupDraw.getTime(),
     'Der Check-in ist wieder offen.',
     'Alle Teams müssen sich neu anmelden.',
     'Check-in offen bis **01:20 Uhr**.',
-'Gruppenauslosung um **01:25 Uhr**.',
+    'Gruppenauslosung um **01:25 Uhr**.',
   ].join('\n'));
 
   return true;
@@ -131,14 +129,15 @@ client.once(Events.ClientReady, async readyClient => {
     if (roleSystem.init) await roleSystem.init(client);
     if (teamSystem.init) await teamSystem.init(client);
     if (checkinSystem.init) await checkinSystem.init(client);
+    if (bomberXLocoSystem.init) await bomberXLocoSystem.init(client);
     if (groupSystem.init) await groupSystem.init(client);
     if (resultSystem.init) await resultSystem.init(client);
     if (koSystem.init) await koSystem.init(client);
     if (adminSystem.init) await adminSystem.init(client);
     if (testSystem.init) await testSystem.init(client);
     if (liveSpielplanSystem.init) await liveSpielplanSystem.init(client);
-    
-if (nightcupReminderSystem.init) await nightcupReminderSystem.init(client);
+    if (nightcupReminderSystem.init) await nightcupReminderSystem.init(client);
+
     if (nicknameSystem.syncNicknames) {
       for (const guild of readyClient.guilds.cache.values()) {
         await nicknameSystem.syncNicknames(guild);
@@ -170,6 +169,13 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (teamSystem.handleInteraction) {
       const handled = await teamSystem.handleInteraction(interaction);
+      if (handled) return;
+    }
+
+    // Special Event vor dem normalen Check-in abfangen, damit am 19.09.
+    // der Samstag-NightCup sauber auf den Bomber X Loco Cup verweist.
+    if (bomberXLocoSystem.handleInteraction) {
+      const handled = await bomberXLocoSystem.handleInteraction(interaction);
       if (handled) return;
     }
 
