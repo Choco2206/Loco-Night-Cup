@@ -88,7 +88,7 @@ function buildPayload(state, { liveEvent = false } = {}) {
   const count = state.entries.length;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
-  const closed = !liveEvent && isRegistrationClosed();
+  const closed = isRegistrationClosed();
   const bannerExists = fs.existsSync(BANNER_PATH);
   const bannerEmbed = bannerExists
     ? new EmbedBuilder().setColor(0xff0000).setImage(`attachment://${BANNER_NAME}`)
