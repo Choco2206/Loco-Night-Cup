@@ -4,11 +4,19 @@ const { findTeamById } = require('../teams/team-service');
 const { TOURNAMENT_FORMATS } = require('../../app/constants');
 const { compareThirdPlaceRows, rankGroupRows } = require('../groups/group-ranking');
 const { recalculateGroupStandings } = require('../groups/group-results');
+const { getBomberXLocoFormat, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 const QUALIFICATION_RULES = TOURNAMENT_FORMATS;
 
-function groupKeysForFormat(formatSize) {
-  const config = QUALIFICATION_RULES[Number(formatSize)];
+function configForEvent(event) {
+  const formatSize = Number(event.format?.size || 0);
+  return isBomberXLocoEvent(event)
+    ? getBomberXLocoFormat(formatSize)
+    : QUALIFICATION_RULES[formatSize];
+}
+
+function groupKeysForEvent(event) {
+  const config = configForEvent(event);
   return config
     ? Array.from({ length: config.groupCount }, (_, index) => String.fromCharCode(65 + index))
     : [];
@@ -19,8 +27,7 @@ function assertGroupsCompleted(event) {
     throw new Error('Die K.O.-Phase kann erst erstellt werden, wenn die Gruppenphase abgeschlossen ist.');
   }
 
-  const formatSize = Number(event.format?.size || 0);
-  const groupKeys = groupKeysForFormat(formatSize);
+  const groupKeys = groupKeysForEvent(event);
   if (!groupKeys.length) throw new Error('Für dieses Format kann keine K.O.-Phase erstellt werden.');
 
   for (const groupKey of groupKeys) {
@@ -55,9 +62,6 @@ function createQualifiedTeam(row, groupKey, groupRank, seedBucket, seedIndex) {
 }
 
 function rankedGroupRows(group, groupKey) {
-  // Sicherheitsnetz: Direkt vor der K.O.-Qualifikation wird die Tabelle
-  // ausschließlich aus den final bestätigten Ergebnissen neu aufgebaut.
-  // So kann kein veralteter Stand in die Best-Third-/Best-Fourth-Auswahl rutschen.
   recalculateGroupStandings(group);
   return rankGroupRows(group).map(row => ({ ...row, groupKey }));
 }
@@ -86,12 +90,51 @@ function qualificationAudit(label, candidates, selectedCount) {
   return ranked;
 }
 
-function qualifyTeams(event) {
-  const formatSize = Number(event.format?.size || 0);
-  const config = QUALIFICATION_RULES[formatSize];
-  if (!config) throw new Error('Für dieses Format ist keine K.O.-Qualifikation definiert.');
+function qualifyBomberXLocoTeams(event, config, groupKeys) {
+  const direct = [];
+  const wildcardCandidates = [];
 
-  const groupKeys = assertGroupsCompleted(event);
+  for (const groupKey of groupKeys) {
+    const rows = rankedGroupRows(event.groups.groups[groupKey], groupKey);
+    if (rows.length < config.directPlaces) {
+      throw new Error(`Gruppe ${groupKey} hat nicht genug Teams für die K.O.-Qualifikation.`);
+    }
+
+    for (let rank = 1; rank <= config.directPlaces; rank += 1) {
+      direct.push(createQualifiedTeam(rows[rank - 1], groupKey, rank, `rank_${rank}`, direct.length + 1));
+    }
+
+    if (config.wildcardPlace && rows[config.wildcardPlace - 1]) {
+      wildcardCandidates.push(createQualifiedTeam(
+        rows[config.wildcardPlace - 1],
+        groupKey,
+        config.wildcardPlace,
+        `rank_${config.wildcardPlace}`,
+        wildcardCandidates.length + 1,
+      ));
+    }
+  }
+
+  let qualifiedTeams = direct;
+  if (config.wildcardCount > 0) {
+    const label = `Beste Platz-${config.wildcardPlace}-Teams`;
+    const wildcards = qualificationAudit(label, wildcardCandidates, config.wildcardCount)
+      .slice(0, config.wildcardCount);
+    qualifiedTeams = [...qualifiedTeams, ...wildcards];
+  }
+
+  if (qualifiedTeams.length !== config.qualifiedCount) {
+    throw new Error(`K.O.-Qualifikation erwartet ${config.qualifiedCount} Teams, gefunden: ${qualifiedTeams.length}.`);
+  }
+
+  return {
+    rule: config.rule,
+    qualifiedCount: config.qualifiedCount,
+    qualifiedTeams: qualifiedTeams.map((team, index) => ({ ...team, seed: index + 1 })),
+  };
+}
+
+function qualifyNormalTeams(event, config, groupKeys) {
   const winners = [];
   const runnersUp = [];
   const thirds = [];
@@ -109,17 +152,10 @@ function qualifyTeams(event) {
 
   let qualifiedTeams = [...winners, ...runnersUp];
   if (config.bestThirds > 0) {
-    const bestThirds = qualificationAudit('Beste Drittplatzierte', thirds, config.bestThirds)
-      .slice(0, config.bestThirds)
-      .map((team, index) => ({ ...team, seed: winners.length + runnersUp.length + index + 1 }));
-    qualifiedTeams = [...qualifiedTeams, ...bestThirds];
+    qualifiedTeams = [...qualifiedTeams, ...qualificationAudit('Beste Drittplatzierte', thirds, config.bestThirds).slice(0, config.bestThirds)];
   }
-
   if (config.bestFourths > 0) {
-    const bestFourths = qualificationAudit('Beste Viertplatzierte', fourths, config.bestFourths)
-      .slice(0, config.bestFourths)
-      .map((team, index) => ({ ...team, seed: qualifiedTeams.length + index + 1 }));
-    qualifiedTeams = [...qualifiedTeams, ...bestFourths];
+    qualifiedTeams = [...qualifiedTeams, ...qualificationAudit('Beste Viertplatzierte', fourths, config.bestFourths).slice(0, config.bestFourths)];
   }
 
   if (qualifiedTeams.length !== config.qualifiedCount) {
@@ -131,6 +167,15 @@ function qualifyTeams(event) {
     qualifiedCount: config.qualifiedCount,
     qualifiedTeams: qualifiedTeams.map((team, index) => ({ ...team, seed: index + 1 })),
   };
+}
+
+function qualifyTeams(event) {
+  const config = configForEvent(event);
+  if (!config) throw new Error('Für dieses Format ist keine K.O.-Qualifikation definiert.');
+  const groupKeys = assertGroupsCompleted(event);
+  return isBomberXLocoEvent(event)
+    ? qualifyBomberXLocoTeams(event, config, groupKeys)
+    : qualifyNormalTeams(event, config, groupKeys);
 }
 
 module.exports = {
