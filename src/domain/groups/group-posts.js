@@ -15,6 +15,7 @@ const {
 const { generateLiveTableImage } = require('../../../utils/generateLiveTableImage');
 const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
 const { generateGroupScheduleImage } = require('../../../utils/generateGroupScheduleImage');
+const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
 const { EVENT_KEYS } = require('../../app/constants');
 const { readEventData } = require('../events/event-repository');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
@@ -105,10 +106,13 @@ async function buildLiveTableImagePayload(group) {
 }
 
 async function buildScheduleImagePayload(group, { includeResultButtons = true } = {}) {
-  const image = await generateGroupScheduleImage({
-    group,
-    debug: process.env.GROUP_SCHEDULE_DEBUG === 'true',
-  });
+  const event = group.eventKey ? readEventData(group.eventKey) : null;
+  const image = isBomberXLocoEvent(event)
+    ? await generateBomberXLocoMatchesImage({ group })
+    : await generateGroupScheduleImage({
+        group,
+        debug: process.env.GROUP_SCHEDULE_DEBUG === 'true',
+      });
   return {
     content: null,
     embeds: [new EmbedBuilder().setImage(`attachment://${image.fileName}`)],
