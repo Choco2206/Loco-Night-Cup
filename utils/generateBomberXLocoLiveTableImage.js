@@ -10,19 +10,19 @@ const HEIGHT = 900;
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png');
 
 const LAYOUT = Object.freeze({
-  title: { x: 800, y: 250 },
+  groupLabel: { x: 1105, y: 360, maxWidth: 250 },
+  qualification: { x: 445, y: 360, maxWidth: 500 },
   rowsY: [438, 504, 570, 636, 702, 768],
-  placeX: 104,
-  logoX: 176,
-  logoSize: 54,
-  teamX: 220,
-  teamMaxWidth: 500,
-  playedX: 820,
-  winsX: 945,
-  drawsX: 1062,
-  lossesX: 1178,
-  diffX: 1340,
-  pointsX: 1500,
+  logoX: 292,
+  logoSize: 48,
+  teamX: 326,
+  teamMaxWidth: 330,
+  playedX: 697,
+  winsX: 809,
+  drawsX: 956,
+  lossesX: 1104,
+  diffX: 1245,
+  pointsX: 1374,
 });
 
 let canvasApi = null;
@@ -90,23 +90,44 @@ function fitFont(ctx, text, maxWidth, maxSize = 38, minSize = 20) {
   return minSize;
 }
 
-function drawTitle(ctx, groupKey) {
-  const text = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
-  setFont(ctx, 76, 'Oxanium', '700');
+function fitOxanium(ctx, text, maxWidth, maxSize = 30, minSize = 17, weight = '700') {
+  for (let size = maxSize; size >= minSize; size -= 1) {
+    setFont(ctx, size, 'Oxanium', weight);
+    if (ctx.measureText(text).width <= maxWidth) return size;
+  }
+  setFont(ctx, minSize, 'Oxanium', weight);
+  return minSize;
+}
+
+function cleanQualificationText(value) {
+  const raw = String(value || '').replace(/🏆/gu, '').trim();
+  const stripped = raw.replace(/^Weiterkommen:\s*/i, '').trim();
+  return stripped ? `K.O.-Phase erreicht: ${stripped}` : '';
+}
+
+function drawTopLabels(ctx, groupKey, qualificationText) {
+  const groupText = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.lineWidth = 5;
-  ctx.lineJoin = 'round';
+  ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-  ctx.shadowColor = 'rgba(255,170,40,0.8)';
-  ctx.shadowBlur = 18;
-  ctx.strokeText(text, LAYOUT.title.x, LAYOUT.title.y);
-  const gradient = ctx.createLinearGradient(550, LAYOUT.title.y, 1050, LAYOUT.title.y);
-  gradient.addColorStop(0, '#f6b343');
-  gradient.addColorStop(0.5, '#ffffff');
-  gradient.addColorStop(1, '#c58a2b');
-  ctx.fillStyle = gradient;
-  ctx.fillText(text, LAYOUT.title.x, LAYOUT.title.y);
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(255,140,30,0.55)';
+  ctx.shadowBlur = 7;
+
+  fitOxanium(ctx, groupText, LAYOUT.groupLabel.maxWidth, 32, 20, '700');
+  ctx.lineWidth = 3;
+  ctx.strokeText(groupText, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
+  ctx.fillText(groupText, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
+
+  const qualification = cleanQualificationText(qualificationText);
+  if (qualification) {
+    fitOxanium(ctx, qualification, LAYOUT.qualification.maxWidth, 25, 15, '600');
+    ctx.lineWidth = 2;
+    ctx.strokeText(qualification, LAYOUT.qualification.x, LAYOUT.qualification.y);
+    ctx.fillText(qualification, LAYOUT.qualification.x, LAYOUT.qualification.y);
+  }
+
   ctx.shadowBlur = 0;
 }
 
@@ -134,10 +155,7 @@ async function drawRows(ctx, rows) {
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = 'rgba(0,0,0,0.75)';
     ctx.shadowBlur = 4;
-    setFont(ctx, 36, 'Oxanium', '700');
-    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(index + 1), LAYOUT.placeX, y);
 
     drawLogo(ctx, logo, LAYOUT.logoX, y, LAYOUT.logoSize);
 
@@ -160,14 +178,14 @@ async function drawRows(ctx, rows) {
   ctx.shadowBlur = 0;
 }
 
-async function generateBomberXLocoLiveTableImage({ groupKey, rows }) {
+async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualificationText = '' }) {
   ensureFonts();
   const { createCanvas } = getCanvasApi();
   const background = await loadBackground();
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
-  drawTitle(ctx, groupKey);
+  drawTopLabels(ctx, groupKey, qualificationText);
   await drawRows(ctx, rows);
   return canvas.toBuffer('image/png');
 }
