@@ -6,7 +6,7 @@ const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_FORMAT_SIZES,
 } = require('../events/bomber-x-loco-config');
-const { getAllowedSizes, getEntryTeamIds } = require('./checkin-format');
+const { getEntryTeamIds } = require('./checkin-format');
 const { getCheckinWindowState } = require('./checkin-schedule');
 
 function formatDateTime(value, type = 'time') {
@@ -32,13 +32,19 @@ function nextFormat(event) {
   return BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
 }
 
+function formatSeparator(size) {
+  return `══════⬆️ ${size}er Turnier ⬆️══════`;
+}
+
 function formatTeams(event) {
   const ids = getEntryTeamIds(event);
   const lines = [];
   for (let index = 0; index < 48; index += 1) {
     const teamId = ids[index];
     lines.push(`${index + 1}. ${teamId ? teamName(teamId) : '—'}`);
-    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(`════ ⬆️ ${index + 1}er Cup ⬆️ ════`);
+    if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) {
+      lines.push(formatSeparator(index + 1));
+    }
   }
   return lines.join('\n');
 }
@@ -57,11 +63,12 @@ function buildBomberXLocoPayload(event, settings) {
     `🎲 Gruppenauslosung: ${formatDateTime(event.schedule?.drawAt)}`,
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
-    `🏆 Aktuelles Format: ${format ? `${format} Teams` : 'noch kein gültiges Format'}`,
+    `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
     `👥 Angemeldet: ${count}/48 Teams`,
     next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
     '',
-    '**Teilnehmende Teams**',
+    '**👥 Teilnehmende Teams**',
+    '',
     formatTeams(event),
     '',
     '⚠️ Nach dem offiziellen Anmeldeschluss führt eine Abmeldung wie beim normalen Night Cup zur vorgesehenen Sperre.',
