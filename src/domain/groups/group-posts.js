@@ -13,9 +13,11 @@ const {
   getQualificationText,
 } = require('./group-embeds');
 const { generateLiveTableImage } = require('../../../utils/generateLiveTableImage');
+const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
 const { generateGroupScheduleImage } = require('../../../utils/generateGroupScheduleImage');
 const { EVENT_KEYS } = require('../../app/constants');
 const { readEventData } = require('../events/event-repository');
+const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 function nowIso() {
   return new Date().toISOString();
@@ -38,17 +40,17 @@ function buildScheduleButtons(group) {
     new ButtonBuilder()
       .setCustomId(`group_result_open:${group.eventKey}:${group.groupKey}`)
       .setLabel('Ergebnis eintragen')
-      .setEmoji('\u26bd')
+      .setEmoji('⚽')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`group_admin_result_open:${group.eventKey}:${group.groupKey}`)
       .setLabel('Admin-Ergebnis')
-      .setEmoji('\ud83d\udee0\ufe0f')
+      .setEmoji('🛠️')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`group_replacement_open:${group.eventKey}:${group.groupKey}`)
       .setLabel('Nachrücker einsetzen')
-      .setEmoji('\ud83d\udd01')
+      .setEmoji('🔁')
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -77,11 +79,18 @@ async function upsertMessage(channel, messageId, payload, label, { sendIfMissing
 }
 
 async function buildLiveTableImagePayload(group) {
-  const image = await generateLiveTableImage({
-    groupKey: group.groupKey,
-    rows: getLiveTableRows(group),
-    qualificationText: getQualificationText(group.formatSize),
-  });
+  const event = group.eventKey ? readEventData(group.eventKey) : null;
+  const rows = getLiveTableRows(group);
+  const image = isBomberXLocoEvent(event)
+    ? await generateBomberXLocoLiveTableImage({
+        groupKey: group.groupKey,
+        rows,
+      })
+    : await generateLiveTableImage({
+        groupKey: group.groupKey,
+        rows,
+        qualificationText: getQualificationText(group.formatSize),
+      });
 
   return {
     content: null,
@@ -131,7 +140,7 @@ async function upsertGroupPosts(channel, group, refs = {}, resultsChannel = null
   const existingTableMessageId = refs.tableMessageId || group.tableMessageId || null;
   let table = existingTableMessageId ? { id: existingTableMessageId } : null;
   try {
-    const tablePayload = await buildLiveTableImagePayload(group);
+    const tablePayload = await buildLiveTableImagePayload(groupWithEvent);
     table = await upsertMessage(
       channel,
       existingTableMessageId,
