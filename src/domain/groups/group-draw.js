@@ -2,6 +2,7 @@
 
 const { GROUP_KEYS } = require('../../app/constants');
 const { createGroupMatchdays } = require('./group-matches');
+const { BOMBER_X_LOCO_GROUP_SIZE } = require('../events/bomber-x-loco-config');
 
 function createTeamSlot(team) {
   return {
@@ -20,13 +21,13 @@ function createByeSlot(bye) {
   };
 }
 
-function createEmptyGroups(groupCount, settings) {
+function createEmptyGroups(groupCount, settings, groupSize = 4) {
   return GROUP_KEYS.slice(0, groupCount).map(groupKey => ({
     groupKey,
     roleId: settings.roles?.groupRoleIds?.[groupKey] || null,
     channelId: settings.channels?.groupChannelIds?.[groupKey] || null,
     videoChannelId: null,
-    slots: [null, null, null, null],
+    slots: Array.from({ length: groupSize }, () => null),
     matchdays: [],
   }));
 }
@@ -104,8 +105,9 @@ function shuffleParticipants(participants) {
   return shuffled;
 }
 
-function createGroups({ eventKey, field, settings, createdAt }) {
-  const groups = createEmptyGroups(field.groupCount, settings);
+function createGroups({ eventKey, field, settings, createdAt, eventMode = 'night_cup' }) {
+  const groupSize = eventMode === 'bomber_x_loco' ? BOMBER_X_LOCO_GROUP_SIZE : 4;
+  const groups = createEmptyGroups(field.groupCount, settings, groupSize);
   const participants = Array.isArray(field.participants) ? field.participants : [];
   const byes = shuffleParticipants(participants.filter(participant => participant?.type === 'bye'));
   const teams = shuffleParticipants(participants.filter(participant => participant?.type !== 'bye'));
@@ -114,7 +116,7 @@ function createGroups({ eventKey, field, settings, createdAt }) {
   const finalizedGroups = groups.map(group => {
     finalizeSlots(group);
     if (group.slots.some(slot => !slot.type)) {
-      throw new Error(`Gruppe ${group.groupKey} konnte nicht vollständig mit 4 Slots erstellt werden.`);
+      throw new Error(`Gruppe ${group.groupKey} konnte nicht vollständig mit ${groupSize} Slots erstellt werden.`);
     }
     group.name = `Gruppe ${group.groupKey}`;
     group.standings = createStandings(group.slots);
