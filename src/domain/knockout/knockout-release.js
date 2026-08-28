@@ -25,6 +25,9 @@ function getRoundReleaseAt(round) {
     .filter(date => !Number.isNaN(date.getTime())).sort((a, b) => a.getTime() - b.getTime())[0] || null;
 }
 function getRoundReminderAt(releasedAt) { return addMinutes(releasedAt, ROUND_REMINDER_MINUTES); }
+function roundConfirmed(round) {
+  return Boolean(round?.matches?.length) && round.matches.every(match => match.status === 'confirmed');
+}
 function isRoundReadyForRelease(event, roundKey) {
   const knockout = event?.knockout || {};
   const round = knockout.rounds?.[roundKey];
@@ -38,7 +41,11 @@ function isRoundReadyForRelease(event, roundKey) {
     final: 'semi_final',
   };
   const prerequisite = prerequisiteByRound[roundKey];
-  return !prerequisite || knockout.rounds?.[prerequisite]?.status === 'completed' || knockout.rounds?.[prerequisite]?.status === 'not_needed';
+  const prerequisiteRound = prerequisite ? knockout.rounds?.[prerequisite] : null;
+  return !prerequisite
+    || prerequisiteRound?.status === 'completed'
+    || prerequisiteRound?.status === 'not_needed'
+    || roundConfirmed(prerequisiteRound);
 }
 function buildRoundReleaseContent({ label, releasedAt }) {
   const inviteEnd = addMinutes(releasedAt, INVITE_WINDOW_MINUTES);
