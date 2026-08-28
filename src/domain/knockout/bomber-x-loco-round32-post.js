@@ -15,6 +15,7 @@ const { getTeamUserIds } = require('../groups/group-roles');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 const ROUND_KEY = 'round_of_32';
+const ROUND_ROLE_NAME = 'LNC K.O. Sechzehntelfinale';
 const CHANNEL_NAME = 'ko-sechzehntelfinale';
 const RESULTS_CHANNEL_NAME = 'ergebnisse-sechzehntelfinale';
 const fingerprints = new Map();
@@ -39,13 +40,46 @@ function roundUserIds(round) {
   return unique(ids);
 }
 
-function permissionOverwrites(guild, userIds) {
+async function ensureRoundRole(guild, userIds) {
+  let role = guild.roles.cache.find(entry => entry.name === ROUND_ROLE_NAME) || null;
+  if (!role) {
+    role = await guild.roles.create({
+      name: ROUND_ROLE_NAME,
+      mentionable: false,
+      reason: 'Bomber X Loco Cup Sechzehntelfinale',
+    });
+  }
+
+  await guild.members.fetch().catch(() => null);
+  const desired = new Set(userIds.map(String));
+
+  for (const userId of desired) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member && !member.roles.cache.has(role.id)) {
+      await member.roles.add(role.id, 'Bomber X Loco Cup Sechzehntelfinale').catch(() => null);
+    }
+  }
+
+  for (const member of role.members.values()) {
+    if (!desired.has(String(member.id))) {
+      await member.roles.remove(role.id, 'Bomber X Loco Cup Sechzehntelfinale Rollen-Sync').catch(() => null);
+    }
+  }
+
+  return role;
+}
+
+function permissionOverwrites(guild, userIds, roleId = null) {
   return [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
     {
       id: guild.client.user.id,
       allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks],
     },
+    ...(roleId ? [{
+      id: roleId,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks],
+    }] : []),
     ...userIds.map(id => ({
       id,
       allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
@@ -53,7 +87,7 @@ function permissionOverwrites(guild, userIds) {
   ];
 }
 
-async function ensureChannel(guild, parentId, name, existingId, userIds) {
+async function ensureChannel(guild, parentId, name, existingId, userIds, roleId = null) {
   const existingById = existingId ? await guild.channels.fetch(existingId).catch(() => null) : null;
   const existingByName = guild.channels.cache.find(channel => channel.name === name && channel.type === ChannelType.GuildText);
   const channel = existingById?.isTextBased?.()
@@ -62,14 +96,14 @@ async function ensureChannel(guild, parentId, name, existingId, userIds) {
       name,
       type: ChannelType.GuildText,
       parent: parentId || undefined,
-      permissionOverwrites: permissionOverwrites(guild, userIds),
+      permissionOverwrites: permissionOverwrites(guild, userIds, roleId),
       reason: 'Bomber X Loco Cup Sechzehntelfinale',
     });
   if (parentId && channel.parentId !== parentId) await channel.setParent(parentId, { lockPermissions: false }).catch(() => null);
-  for (const overwrite of permissionOverwrites(guild, userIds)) {
+  for (const overwrite of permissionOverwrites(guild, userIds, roleId)) {
     const options = overwrite.deny?.includes(PermissionFlagsBits.ViewChannel)
       ? { ViewChannel: false }
-      : { ViewChannel: true, SendMessages: true, ReadMessageHistory: true };
+      : { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, EmbedLinks: true };
     await channel.permissionOverwrites.edit(overwrite.id, options).catch(() => null);
   }
   return channel;
@@ -124,13 +158,15 @@ async function upsertBomberRound32Post({ client, guild, eventKey, event }) {
   if (!targetGuild) return null;
 
   const userIds = roundUserIds(round);
+  const role = await ensureRoundRole(targetGuild, userIds);
   const parentId = event.knockout?.categoryId || null;
-  const channel = await ensureChannel(targetGuild, parentId, CHANNEL_NAME, round.channelId, userIds);
-  const resultsChannel = await ensureChannel(targetGuild, parentId, RESULTS_CHANNEL_NAME, round.resultsChannelId, userIds);
+  const channel = await ensureChannel(targetGuild, parentId, CHANNEL_NAME, round.channelId, userIds, role.id);
+  const resultsChannel = await ensureChannel(targetGuild, parentId, RESULTS_CHANNEL_NAME, round.resultsChannelId, userIds, role.id);
   const mainMessage = await upsertMessage(channel, round.messageId, { embeds: [buildEmbed(round)], components: [] });
   const resultsMessage = await upsertMessage(resultsChannel, round.resultsMessageId, { embeds: [buildEmbed(round)], components: [resultButtons(eventKey)] });
 
   return {
+    roleId: role.id,
     channelId: channel.id,
     messageId: mainMessage.id,
     resultsChannelId: resultsChannel.id,
@@ -154,6 +190,7 @@ async function refreshEvent(client, eventKey) {
   updateEventData(eventKey, current => {
     const round = current.knockout?.rounds?.[ROUND_KEY];
     if (!round) return current;
+    round.roleId = post.roleId || round.roleId || null;
     round.channelId = post.channelId || round.channelId || null;
     round.messageId = post.messageId || round.messageId || null;
     round.resultsChannelId = post.resultsChannelId || round.resultsChannelId || null;
