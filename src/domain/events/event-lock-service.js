@@ -5,17 +5,16 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { readEventData, updateEventData } = require('./event-repository');
 const { buildLockedParticipantField } = require('./event-format');
 const { createGroups } = require('../groups/group-draw');
-const { assertCanLockEvent, assertGroupsHaveFourSlots } = require('../groups/group-validation');
+const { assertCanLockEvent, assertGroupsHaveSlots } = require('../groups/group-validation');
 const { ensureGroupRolesAndMembers } = require('../groups/group-roles');
 const { ensureGroupChannel, ensureGroupResultsChannel, ensureGroupVideoChannel, getGroupUserIds } = require('../groups/group-channels');
 const { updateGroupMessageRefs, upsertGroupPosts } = require('../groups/group-posts');
 const { createInitialReleaseState, maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
 const { refreshLiveSchedule } = require('../live-schedule');
 const { isLeaguePhaseFormat } = require('../../app/constants');
+const { BOMBER_X_LOCO_GROUP_SIZE, isBomberXLocoEvent } = require('./bomber-x-loco-config');
 
-function nowIso(now = new Date()) {
-  return now.toISOString();
-}
+function nowIso(now = new Date()) { return now.toISOString(); }
 
 function getStoredGroupMessageRefs(eventKey) {
   const messages = readJson(FILES.messages, createMessagesDefault());
@@ -28,38 +27,26 @@ function updateGeneratedSettings(groupUpdates) {
     settings.roles.groupRoleIds = settings.roles.groupRoleIds || {};
     settings.channels = settings.channels || {};
     settings.channels.groupChannelIds = settings.channels.groupChannelIds || {};
-
     for (const update of groupUpdates) {
       if (update.roleId) settings.roles.groupRoleIds[update.groupKey] = update.roleId;
       if (update.channelId) settings.channels.groupChannelIds[update.groupKey] = update.channelId;
     }
-
-    settings.meta = {
-      ...(settings.meta || {}),
-      updatedAt: nowIso(),
-    };
-
+    settings.meta = { ...(settings.meta || {}), updatedAt: nowIso() };
     return settings;
   });
 }
 
 function createFieldFromLockedEvent(event) {
   const size = Number(event.format?.size || 0);
-  const participants = Array.isArray(event.format?.participants)
-    ? event.format.participants.slice(0, size)
-    : [];
+  const participants = Array.isArray(event.format?.participants) ? event.format.participants.slice(0, size) : [];
+  if (!event.format?.lockedAt || !size) throw new Error('Bitte locke zuerst das Turnierformat.');
+  if (participants.length !== size) throw new Error('Das gelockte Format enthält keine vollständige Teilnehmerliste.');
 
-  if (!event.format?.lockedAt || !size) {
-    throw new Error('Bitte locke zuerst das Turnierformat.');
-  }
-
-  if (participants.length !== size) {
-    throw new Error('Das gelockte Format enthält keine vollständige Teilnehmerliste.');
-  }
-
+  const groupSize = isBomberXLocoEvent(event) ? BOMBER_X_LOCO_GROUP_SIZE : 4;
   return {
     size,
-    groupCount: isLeaguePhaseFormat(size) ? 0 : size / 4,
+    groupCount: isLeaguePhaseFormat(size) && !isBomberXLocoEvent(event) ? 0 : size / groupSize,
+    groupSize,
     participants,
     activeTeams: participants.filter(participant => participant.type === 'team'),
     activeByes: participants.filter(participant => participant.type === 'bye'),
@@ -69,11 +56,9 @@ function createFieldFromLockedEvent(event) {
 function lockEventFormat(eventKey, actorUserId, now = new Date()) {
   const timestamp = nowIso(now);
   let result;
-
   updateEventData(eventKey, event => {
     assertCanLockEvent(event);
     const field = buildLockedParticipantField(event, now);
-
     event.status = 'checkin';
     event.format = {
       ...event.format,
@@ -90,7 +75,6 @@ function lockEventFormat(eventKey, actorUserId, now = new Date()) {
       lockedByUserId: actorUserId ? String(actorUserId) : null,
       participants: field.participants,
     };
-
     event.checkin = {
       ...event.checkin,
       isOpen: false,
@@ -100,44 +84,17 @@ function lockEventFormat(eventKey, actorUserId, now = new Date()) {
       waitlistTeamIds: field.waitlistTeams.map(team => String(team.id)),
       lateLeaveBans: event.checkin?.lateLeaveBans || [],
     };
-
-    event.groups = {
-      ...(event.groups || {}),
-      status: 'not_created',
-      groups: {},
-      meta: {
-        ...(event.groups?.meta || {}),
-        skippedCheckins: field.skipped,
-      },
-    };
-    event.leaguePhase = {
-      phaseType: null, status: 'not_created', participants: [], slots: [], matchdays: [], standings: [],
-      currentMatchday: 0, transitionStatus: 'not_started', messages: {},
-    };
-
-    event.meta = {
-      ...event.meta,
-      updatedAt: timestamp,
-    };
-
-    result = {
-      event,
-      field,
-      size: field.size,
-      participants: field.participants,
-      waitlistTeamIds: field.waitlistTeams.map(team => String(team.id)),
-      waitlistByeCount: field.waitlistByeCount,
-    };
-
+    event.groups = { ...(event.groups || {}), status: 'not_created', groups: {}, meta: { ...(event.groups?.meta || {}), skippedCheckins: field.skipped } };
+    event.leaguePhase = { phaseType: null, status: 'not_created', participants: [], slots: [], matchdays: [], standings: [], currentMatchday: 0, transitionStatus: 'not_started', messages: {} };
+    event.meta = { ...event.meta, updatedAt: timestamp };
+    result = { event, field, size: field.size, participants: field.participants, waitlistTeamIds: field.waitlistTeams.map(team => String(team.id)), waitlistByeCount: field.waitlistByeCount };
     return event;
   });
-
   return result;
 }
 
 async function syncGroupDiscordResources({ eventKey, event, client, guild, settings }) {
   if (!client || !guild) return [];
-
   const storedRefs = getStoredGroupMessageRefs(eventKey);
   const roleResult = await ensureGroupRolesAndMembers({ client, event, settings });
   const updates = [];
@@ -145,7 +102,6 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
   for (const group of Object.values(event.groups?.groups || {})) {
     const roleUpdate = roleResult.updates.find(update => update.groupKey === group.groupKey);
     if (roleUpdate?.roleId) group.roleId = roleUpdate.roleId;
-
     const userIds = getGroupUserIds(group);
     const channel = await ensureGroupChannel(roleResult.guild || guild, settings, group, userIds);
     group.channelId = channel.id;
@@ -165,16 +121,8 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
       resultsTableMessageId: group.resultsTableMessageId || storedRefs[group.groupKey]?.resultsTableMessageId || null,
       resultsScheduleMessageId: group.resultsScheduleMessageId || storedRefs[group.groupKey]?.resultsScheduleMessageId || null,
     }, resultsChannel);
-    group.messageId = messageRefs.messageId;
-    group.headerMessageId = messageRefs.headerMessageId;
-    group.teamsMessageId = messageRefs.teamsMessageId;
-    group.tableMessageId = messageRefs.tableMessageId;
-    group.scheduleMessageId = messageRefs.scheduleMessageId;
-    group.resultsTableMessageId = messageRefs.resultsTableMessageId;
-    group.resultsScheduleMessageId = messageRefs.resultsScheduleMessageId;
 
-    // Sobald die sichtbaren Discord-Posts existieren, muss auch das vollständige
-    // normal erzeugte Gruppenobjekt in derselben Eventdatei auffindbar sein.
+    Object.assign(group, messageRefs);
     updateEventData(eventKey, persistedEvent => {
       persistedEvent.groups = persistedEvent.groups || {};
       persistedEvent.groups.groups = persistedEvent.groups.groups || {};
@@ -185,7 +133,6 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
 
     const { ensureAttendancePost } = require('../groups/attendance-service');
     await ensureAttendancePost(client, eventKey, group.groupKey);
-
     updates.push({
       groupKey: group.groupKey,
       roleId: group.roleId || null,
@@ -209,28 +156,20 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
 
 async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
   const lockedEvent = readEventData(eventKey);
-  if (isLeaguePhaseFormat(lockedEvent.format?.size)) {
+  if (isLeaguePhaseFormat(lockedEvent.format?.size) && !isBomberXLocoEvent(lockedEvent)) {
     const { drawLeaguePhaseForEvent } = require('../league-phase');
     return drawLeaguePhaseForEvent({ eventKey, actorUserId, client, guild, now });
   }
+
   const settings = readJson(FILES.settings, createSettingsDefault());
   const timestamp = nowIso(now);
   let drawResult;
 
   updateEventData(eventKey, event => {
-    if (event.groups?.status && event.groups.status !== 'not_created') {
-      throw new Error('Die Gruppen wurden bereits gezogen.');
-    }
-
+    if (event.groups?.status && event.groups.status !== 'not_created') throw new Error('Die Gruppen wurden bereits gezogen.');
     const field = createFieldFromLockedEvent(event);
-    const groups = createGroups({
-      eventKey,
-      field,
-      settings,
-      createdAt: timestamp,
-    });
-    assertGroupsHaveFourSlots(groups);
-
+    const groups = createGroups({ eventKey, field, settings, createdAt: timestamp, eventMode: event.meta?.eventMode || 'night_cup' });
+    assertGroupsHaveSlots(groups, field.groupSize || 4);
     event.status = 'groups';
     event.groups = {
       ...(event.groups || {}),
@@ -240,115 +179,59 @@ async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null,
       groups,
       releases: createInitialReleaseState(eventKey, { ...event, groups: { ...(event.groups || {}), groups } }, now),
     };
-    event.meta = {
-      ...event.meta,
-      updatedAt: timestamp,
-    };
-
+    event.meta = { ...event.meta, updatedAt: timestamp };
     drawResult = { event, groups, field };
     return event;
   });
 
   console.info('[groups] Gruppen persistent erzeugt.', {
     selectedEvent: eventKey,
-    normalizedWeekday: eventKey,
     eventId: drawResult.event?.id || drawResult.event?.eventId || eventKey,
-    eventFile: FILES.events[eventKey],
     formatSize: drawResult.event?.format?.size,
+    eventMode: drawResult.event?.meta?.eventMode,
     storedGroupCount: Object.keys(drawResult.groups || {}).length,
-    groups: Object.values(drawResult.groups || {}).map(group => ({
-      groupId: String(group.groupKey),
-      channelId: group.channelId || null,
-    })),
   });
 
   let targetGuild = guild || null;
   if (!targetGuild && client) {
-    targetGuild = settings.guild?.guildId
-      ? await client.guilds.fetch(settings.guild.guildId).catch(() => null)
-      : client.guilds.cache.first() || null;
+    targetGuild = settings.guild?.guildId ? await client.guilds.fetch(settings.guild.guildId).catch(() => null) : client.guilds.cache.first() || null;
   }
-  const updates = await syncGroupDiscordResources({
-    eventKey,
-    event: drawResult.event,
-    client,
-    guild: targetGuild,
-    settings,
-  });
+  const updates = await syncGroupDiscordResources({ eventKey, event: drawResult.event, client, guild: targetGuild, settings });
 
   if (updates.length) {
     updateEventData(eventKey, event => {
       for (const update of updates) {
         const group = event.groups?.groups?.[update.groupKey];
         if (!group) continue;
-        group.roleId = update.roleId;
-        group.channelId = update.channelId;
-        group.resultsChannelId = update.resultsChannelId;
-        group.videoChannelId = update.videoChannelId;
-        group.messageId = update.messageId;
-        group.headerMessageId = update.headerMessageId;
-        group.teamsMessageId = update.teamsMessageId;
-        group.tableMessageId = update.tableMessageId;
-        group.scheduleMessageId = update.scheduleMessageId;
-        group.resultsTableMessageId = update.resultsTableMessageId;
-        group.resultsScheduleMessageId = update.resultsScheduleMessageId;
+        Object.assign(group, update);
       }
-      event.meta = {
-        ...event.meta,
-        updatedAt: nowIso(),
-      };
+      event.meta = { ...event.meta, updatedAt: nowIso() };
       drawResult.event = event;
       drawResult.groups = event.groups.groups;
       return event;
     });
   }
 
-  const persistedEvent = readEventData(eventKey);
-  console.info('[groups] Discord-Zuordnung persistent gespeichert.', {
-    selectedEvent: eventKey,
-    normalizedWeekday: eventKey,
-    eventId: persistedEvent?.id || persistedEvent?.eventId || eventKey,
-    eventFile: FILES.events[eventKey],
-    storedGroupCount: Object.keys(persistedEvent.groups?.groups || {}).length,
-    groups: Object.values(persistedEvent.groups?.groups || {}).map(group => ({
-      groupId: String(group.groupKey),
-      channelId: group.channelId || null,
-    })),
-  });
-
   if (client) {
     const { ensureAssignmentForEvent } = require('../tournament-leadership');
-    await ensureAssignmentForEvent({ client, eventKey }).catch(error => {
-      console.warn(`[tournament-leadership] Zuweisung nach Gruppenziehung für ${eventKey} fehlgeschlagen: ${error.message}`);
-    });
+    await ensureAssignmentForEvent({ client, eventKey }).catch(error => console.warn(`[tournament-leadership] Zuweisung nach Gruppenziehung für ${eventKey} fehlgeschlagen: ${error.message}`));
   }
 
   await maybeReleaseNextSlot(client, eventKey, now);
   scheduleEvent(client, eventKey);
-  await refreshLiveSchedule(client, eventKey).catch(error => {
-    console.warn(`[live-schedule] Refresh nach Gruppenziehung für ${eventKey} fehlgeschlagen: ${error.message}`);
-  });
-
-  return {
-    ...drawResult,
-    resourceUpdates: updates,
-  };
+  await refreshLiveSchedule(client, eventKey).catch(error => console.warn(`[live-schedule] Refresh nach Gruppenziehung für ${eventKey} fehlgeschlagen: ${error.message}`));
+  return { ...drawResult, resourceUpdates: updates };
 }
 
 async function lockEventAndCreateGroups({ eventKey, actorUserId = null, client = null, now = new Date() }) {
   const lock = lockEventFormat(eventKey, actorUserId, now);
   const draw = await drawGroupsForEvent({ eventKey, actorUserId, client, now });
-  return {
-    ...draw,
-    lock,
-  };
+  return { ...draw, lock };
 }
 
 function getLockedEventPreview(eventKey, now = new Date()) {
   const event = readEventData(eventKey);
-  const field = event.format?.lockedAt
-    ? createFieldFromLockedEvent(event)
-    : buildLockedParticipantField(event, now);
+  const field = event.format?.lockedAt ? createFieldFromLockedEvent(event) : buildLockedParticipantField(event, now);
   return {
     eventKey,
     formatSize: field.size,
@@ -359,9 +242,4 @@ function getLockedEventPreview(eventKey, now = new Date()) {
   };
 }
 
-module.exports = {
-  drawGroupsForEvent,
-  getLockedEventPreview,
-  lockEventAndCreateGroups,
-  lockEventFormat,
-};
+module.exports = { drawGroupsForEvent, getLockedEventPreview, lockEventAndCreateGroups, lockEventFormat };
