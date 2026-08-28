@@ -1,28 +1,20 @@
 'use strict';
 
 const CHECKIN_EVENT_STATUSES = [
-  'idle',
-  'checkin',
-  'checkin_open',
-  'deadline_reached',
-  'checkin_closed',
-  'draw_ready',
-  'cancelled',
-  'reset',
+  'idle', 'checkin', 'checkin_open', 'deadline_reached', 'checkin_closed', 'draw_ready', 'cancelled', 'reset',
 ];
 
 const EVENT_WEEKDAY_INDEX = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
 
 const DEFAULT_TIMEZONE = 'Europe/Berlin';
 const { buildRoyaleSchedule, isRoyaleEventDate } = require('../royale/royale-schedule');
+const {
+  BOMBER_X_LOCO_FORMAT_SIZES,
+  buildBomberXLocoSchedule,
+  isBomberXLocoDate,
+} = require('../events/bomber-x-loco-config');
 
 function getTimeZone(settings, event = {}) {
   return event.cycle?.timezone || settings.timeProfiles?.timezone || DEFAULT_TIMEZONE;
@@ -33,16 +25,11 @@ function getProfileForEvent(eventKey, settings, event = {}) {
   return settings.timeProfiles?.profiles?.[profileKey] || null;
 }
 
-function pad2(value) {
-  return String(value).padStart(2, '0');
-}
+function pad2(value) { return String(value).padStart(2, '0'); }
 
 function toDateOnly(date, timeZone = DEFAULT_TIMEZONE) {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
@@ -51,6 +38,36 @@ function toDateOnly(date, timeZone = DEFAULT_TIMEZONE) {
 function getZonedWeekday(date, timeZone = DEFAULT_TIMEZONE) {
   const value = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(date);
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(value);
+}
+
+function getTimeZoneOffsetMinutes(timeZone, date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, timeZoneName: 'shortOffset', hour: '2-digit',
+  }).formatToParts(date);
+  const zone = parts.find(part => part.type === 'timeZoneName')?.value || 'GMT';
+  const match = zone.match(/^GMT(?:(?<sign>[+-])(?<hours>\d{1,2})(?::(?<minutes>\d{2}))?)?$/);
+  if (!match) return 0;
+  const sign = match.groups.sign === '-' ? -1 : 1;
+  return sign * (Number(match.groups.hours || 0) * 60 + Number(match.groups.minutes || 0));
+}
+
+function parseDateTime(dateValue, timeValue, addDay = false, timeZone = DEFAULT_TIMEZONE) {
+  if (!dateValue || !timeValue) return null;
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const [hour, minute] = timeValue.split(':').map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let offset = getTimeZoneOffsetMinutes(timeZone, new Date(utcMs));
+  let parsed = new Date(utcMs - offset * 60 * 1000);
+  offset = getTimeZoneOffsetMinutes(timeZone, parsed);
+  parsed = new Date(utcMs - offset * 60 * 1000);
+  if (addDay) parsed.setUTCDate(parsed.getUTCDate() + 1);
+  return parsed;
+}
+
+function getCycleResetAt(eventDate, timeZone = DEFAULT_TIMEZONE) {
+  return parseDateTime(eventDate, '07:00', true, timeZone);
 }
 
 function isActiveCycle(event = {}) {
@@ -66,20 +83,9 @@ function isActiveCycle(event = {}) {
   return false;
 }
 
-function getEventDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
-  const timeZone = getTimeZone(settings, event);
-  if (event.cycle?.eventDate) {
-    const resetAt = getCycleResetAt(event.cycle.eventDate, timeZone);
-    if (!resetAt || now.getTime() < resetAt.getTime()) return event.cycle.eventDate;
-  }
-
-  return getCurrentCycleDateValue(eventKey, event, now, settings);
-}
-
 function getCurrentCycleDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
   const targetDay = EVENT_WEEKDAY_INDEX[eventKey];
   if (targetDay === undefined) return null;
-
   const timeZone = getTimeZone(settings, event);
   const zonedDay = getZonedWeekday(now, timeZone);
   const previousDiffDays = -((zonedDay - targetDay + 7) % 7);
@@ -87,128 +93,74 @@ function getCurrentCycleDateValue(eventKey, event = {}, now = new Date(), settin
   previousDate.setUTCDate(previousDate.getUTCDate() + previousDiffDays);
   const previousDateValue = toDateOnly(previousDate, timeZone);
   const resetAt = getCycleResetAt(previousDateValue, timeZone);
-
   if (resetAt && now.getTime() < resetAt.getTime()) return previousDateValue;
-
   const nextDate = new Date(previousDate);
   nextDate.setUTCDate(nextDate.getUTCDate() + 7);
   return toDateOnly(nextDate, timeZone);
 }
 
-function getTimeZoneOffsetMinutes(timeZone, date) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    timeZoneName: 'shortOffset',
-    hour: '2-digit',
-  }).formatToParts(date);
-  const zone = parts.find(part => part.type === 'timeZoneName')?.value || 'GMT';
-  const match = zone.match(/^GMT(?:(?<sign>[+-])(?<hours>\d{1,2})(?::(?<minutes>\d{2}))?)?$/);
-  if (!match) return 0;
-  const sign = match.groups.sign === '-' ? -1 : 1;
-  const hours = Number(match.groups.hours || 0);
-  const minutes = Number(match.groups.minutes || 0);
-  return sign * (hours * 60 + minutes);
+function getEventDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
+  const timeZone = getTimeZone(settings, event);
+  if (event.cycle?.eventDate) {
+    const resetAt = getCycleResetAt(event.cycle.eventDate, timeZone);
+    if (!resetAt || now.getTime() < resetAt.getTime()) return event.cycle.eventDate;
+  }
+  return getCurrentCycleDateValue(eventKey, event, now, settings);
 }
 
-function parseDateTime(dateValue, timeValue, addDay = false, timeZone = DEFAULT_TIMEZONE) {
-  if (!dateValue || !timeValue) return null;
-  const [year, month, day] = dateValue.split('-').map(Number);
-  const [hour, minute] = timeValue.split(':').map(Number);
-  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
-
-  let utcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-  let offset = getTimeZoneOffsetMinutes(timeZone, new Date(utcMs));
-  let parsed = new Date(utcMs - offset * 60 * 1000);
-  offset = getTimeZoneOffsetMinutes(timeZone, parsed);
-  parsed = new Date(utcMs - offset * 60 * 1000);
-  if (addDay) parsed.setUTCDate(parsed.getUTCDate() + 1);
-  return parsed;
-}
-
-function getCycleResetAt(eventDate, timeZone = DEFAULT_TIMEZONE) {
-  return parseDateTime(eventDate, '07:00', true, timeZone);
-}
-
-function getScheduleDate(
-  eventKey,
-  event,
-  settings,
-  explicitField,
-  profileField,
-  scheduleField,
-  nextDayField = null,
-  now = new Date()
-) {
+function getScheduleDate(eventKey, event, settings, explicitField, profileField, scheduleField, nextDayField = null, now = new Date()) {
   if (event.schedule?.[explicitField]) {
     const explicit = new Date(event.schedule[explicitField]);
     if (!Number.isNaN(explicit.getTime())) return explicit;
   }
-
   const profile = getProfileForEvent(eventKey, settings, event);
   const dateValue = getEventDateValue(eventKey, event, now, settings);
   const timeValue = profile?.[profileField] || event.schedule?.[scheduleField];
-  const addDay = Boolean(nextDayField)
-    && (profile?.[nextDayField] === true || event.schedule?.[nextDayField] === true);
+  const addDay = Boolean(nextDayField) && (profile?.[nextDayField] === true || event.schedule?.[nextDayField] === true);
   return parseDateTime(dateValue, timeValue, addDay, getTimeZone(settings, event));
 }
 
-function buildCycleKey(eventKey, eventDate) {
-  return eventDate ? `${eventKey}_${eventDate}` : null;
-}
+function buildCycleKey(eventKey, eventDate) { return eventDate ? `${eventKey}_${eventDate}` : null; }
 
 function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
   const profile = getProfileForEvent(eventKey, settings, event);
   const eventDate = getEventDateValue(eventKey, event, now, settings);
   const timeZone = getTimeZone(settings, event);
+
+  if (isBomberXLocoDate(eventKey, eventDate)) {
+    return buildBomberXLocoSchedule(eventDate);
+  }
+
   if (eventKey === 'saturday' && isRoyaleEventDate(eventDate)) {
     const royale = buildRoyaleSchedule(eventDate);
     return {
       cycleKey: buildCycleKey(eventKey, eventDate), eventDate, timeZone,
-      deadlineAt: new Date(royale.deadlineAt),
-      lateWindowUntil: new Date(royale.lateWindowUntil),
-      drawAt: new Date(royale.bracketAt),
-      tournamentStartAt: new Date(royale.tournamentStartAt),
-      resetAt: new Date(royale.resetAt),
-      eventMode: 'knockout_royale',
+      deadlineAt: new Date(royale.deadlineAt), lateWindowUntil: new Date(royale.lateWindowUntil),
+      drawAt: new Date(royale.bracketAt), tournamentStartAt: new Date(royale.tournamentStartAt),
+      resetAt: new Date(royale.resetAt), eventMode: 'knockout_royale',
     };
   }
-  const deadlineAt = parseDateTime(
-    eventDate,
-    profile?.deadlineTime || event.schedule?.deadlineTime,
-    profile?.deadlineIsNextDay === true || event.schedule?.deadlineIsNextDay === true,
-    timeZone
-  );
-  const lateWindowUntil = parseDateTime(
-    eventDate,
-    profile?.lateWindowUntilTime || event.schedule?.lateWindowUntilTime,
-    profile?.lateWindowIsNextDay === true || event.schedule?.lateWindowIsNextDay === true,
-    timeZone
-  );
-  const drawAt = parseDateTime(
-    eventDate,
-    profile?.drawTime || event.schedule?.drawTime,
-    profile?.drawIsNextDay === true || event.schedule?.drawIsNextDay === true,
-    timeZone
-  );
-  const tournamentStartAt = parseDateTime(
-    eventDate,
-    profile?.tournamentStartTime || event.schedule?.tournamentStartTime,
-    profile?.startIsNextDay === true || event.schedule?.startIsNextDay === true,
-    timeZone
-  );
-  const resetAt = getCycleResetAt(eventDate, timeZone);
 
   return {
     cycleKey: buildCycleKey(eventKey, eventDate),
     eventDate,
     timeZone,
-    deadlineAt,
-    lateWindowUntil,
-    drawAt,
-    tournamentStartAt,
-    resetAt,
+    deadlineAt: parseDateTime(eventDate, profile?.deadlineTime || event.schedule?.deadlineTime, profile?.deadlineIsNextDay === true || event.schedule?.deadlineIsNextDay === true, timeZone),
+    lateWindowUntil: parseDateTime(eventDate, profile?.lateWindowUntilTime || event.schedule?.lateWindowUntilTime, profile?.lateWindowIsNextDay === true || event.schedule?.lateWindowIsNextDay === true, timeZone),
+    drawAt: parseDateTime(eventDate, profile?.drawTime || event.schedule?.drawTime, profile?.drawIsNextDay === true || event.schedule?.drawIsNextDay === true, timeZone),
+    tournamentStartAt: parseDateTime(eventDate, profile?.tournamentStartTime || event.schedule?.tournamentStartTime, profile?.startIsNextDay === true || event.schedule?.startIsNextDay === true, timeZone),
+    resetAt: getCycleResetAt(eventDate, timeZone),
     eventMode: 'night_cup',
   };
+}
+
+function resetToOpenCheckinCycle(event) {
+  event.status = 'checkin_open';
+  event.format = { ...(event.format || {}), size: null, realTeamCount: 0, byeCount: 0, activeByeCount: 0, waitlistByeCount: 0, waitlistCount: 0, lockedAt: null, lockedByUserId: null, participants: [] };
+  event.checkin = { ...(event.checkin || {}), isOpen: true, closedAt: null, entries: [], activeTeamIds: [], waitlistTeamIds: [], lateLeaveBans: [] };
+  event.byes = [];
+  event.groups = { status: 'not_created', drawnAt: null, drawnBy: null, groups: {} };
+  event.knockout = { status: 'not_created', createdAt: null, source: { qualifiedRule: null, avoidSameGroupRematches: true }, rounds: {} };
 }
 
 function ensureEventCycle(eventKey, event, settings, now = new Date()) {
@@ -223,211 +175,69 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
   event.schedule = event.schedule || {};
   event.reset = event.reset || {};
   event.meta = event.meta || {};
+  event.format = event.format || {};
 
   const next = {
-    cycleKey: planned.cycleKey,
-    eventDate: planned.eventDate,
-    timezone: planned.timeZone,
-    deadlineAt: planned.deadlineAt?.toISOString() || null,
-    lateWindowUntil: planned.lateWindowUntil?.toISOString() || null,
-    drawAt: planned.drawAt?.toISOString() || null,
-    tournamentStartAt: planned.tournamentStartAt?.toISOString() || null,
+    cycleKey: planned.cycleKey, eventDate: planned.eventDate, timezone: planned.timeZone,
+    deadlineAt: planned.deadlineAt?.toISOString() || null, lateWindowUntil: planned.lateWindowUntil?.toISOString() || null,
+    drawAt: planned.drawAt?.toISOString() || null, tournamentStartAt: planned.tournamentStartAt?.toISOString() || null,
     resetAt: planned.resetAt?.toISOString() || null,
   };
 
-  if (event.meta.eventMode !== planned.eventMode) {
-    event.meta.eventMode = planned.eventMode;
-    changed = true;
-  }
+  if (event.meta.eventMode !== planned.eventMode) { event.meta.eventMode = planned.eventMode; changed = true; }
   const allowedSizes = planned.eventMode === 'knockout_royale'
     ? [8, 16, 32]
-    : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
-  if (JSON.stringify(event.format?.allowedSizes) !== JSON.stringify(allowedSizes)) {
-    event.format = { ...(event.format || {}), allowedSizes };
-    changed = true;
-  }
+    : planned.eventMode === 'bomber_x_loco'
+      ? BOMBER_X_LOCO_FORMAT_SIZES
+      : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
+  if (JSON.stringify(event.format.allowedSizes) !== JSON.stringify(allowedSizes)) { event.format.allowedSizes = [...allowedSizes]; changed = true; }
+  if (planned.eventMode === 'bomber_x_loco' && Number(event.format.minimumRealTeams) !== 6) { event.format.minimumRealTeams = 6; changed = true; }
 
-  if (event.cycle.cycleKey !== next.cycleKey) {
-    event.cycle.cycleKey = next.cycleKey;
-    changed = true;
+  for (const [field, value] of Object.entries({ cycleKey: next.cycleKey, eventDate: next.eventDate, timezone: next.timezone })) {
+    if (event.cycle[field] !== value) { event.cycle[field] = value; changed = true; }
   }
-  if (event.cycle.eventDate !== next.eventDate) {
-    event.cycle.eventDate = next.eventDate;
-    changed = true;
-  }
-  if (event.cycle.timezone !== next.timezone) {
-    event.cycle.timezone = next.timezone;
-    changed = true;
-  }
-
   for (const field of ['deadlineAt', 'lateWindowUntil', 'drawAt', 'tournamentStartAt', 'resetAt']) {
-    if (event.schedule[field] !== next[field]) {
-      event.schedule[field] = next[field];
-      changed = true;
-    }
+    if (event.schedule[field] !== next[field]) { event.schedule[field] = next[field]; changed = true; }
   }
-
-  if (event.reset.resetAt !== next.resetAt) {
-    event.reset.resetAt = next.resetAt;
-    changed = true;
-  }
+  if (event.reset.resetAt !== next.resetAt) { event.reset.resetAt = next.resetAt; changed = true; }
 
   const preserveActiveTestTournament = event.meta?.testMode === true
     && Object.keys(event.groups?.groups || {}).length > 0
     && !['not_created', 'reset'].includes(event.groups?.status);
 
-  if (switchedCycle && !preserveActiveTestTournament) {
-    resetToOpenCheckinCycle(event);
-    changed = true;
-  } else if (!preserveActiveTestTournament
-    && planned.deadlineAt
-    && now.getTime() < planned.deadlineAt.getTime()
-    && !['checkin', 'checkin_open'].includes(event.status)) {
-    resetToOpenCheckinCycle(event);
-    changed = true;
-  } else if (preserveActiveTestTournament && (switchedCycle || (planned.deadlineAt && now.getTime() < planned.deadlineAt.getTime()))) {
-    console.info('[checkin-schedule] Aktiver Testlauf wird außerhalb des regulären Zeitfensters nicht zurückgesetzt.', {
-      eventKey,
-      status: event.status,
-      groupStatus: event.groups?.status,
-      groupIds: Object.keys(event.groups?.groups || {}),
-    });
-  }
+  if (switchedCycle && !preserveActiveTestTournament) { resetToOpenCheckinCycle(event); changed = true; }
+  else if (!preserveActiveTestTournament && planned.deadlineAt && now.getTime() < planned.deadlineAt.getTime() && !['checkin', 'checkin_open'].includes(event.status)) { resetToOpenCheckinCycle(event); changed = true; }
 
   return changed;
 }
 
-function resetToOpenCheckinCycle(event) {
-  event.status = 'checkin_open';
-  event.format = {
-    ...(event.format || {}),
-    size: null,
-    realTeamCount: 0,
-    byeCount: 0,
-    activeByeCount: 0,
-    waitlistByeCount: 0,
-    waitlistCount: 0,
-    lockedAt: null,
-    lockedByUserId: null,
-    participants: [],
-  };
-  event.checkin = {
-    ...(event.checkin || {}),
-    isOpen: true,
-    closedAt: null,
-    entries: [],
-    activeTeamIds: [],
-    waitlistTeamIds: [],
-    lateLeaveBans: [],
-  };
-  event.byes = [];
-  event.groups = {
-    status: 'not_created',
-    drawnAt: null,
-    drawnBy: null,
-    groups: {},
-  };
-  event.knockout = {
-    status: 'not_created',
-    createdAt: null,
-    source: { qualifiedRule: null, avoidSameGroupRematches: true },
-    rounds: {},
-  };
-}
-
-function getDeadlineAt(eventKey, event, settings, now = new Date()) {
-  return getScheduleDate(eventKey, event, settings, 'deadlineAt', 'deadlineTime', 'deadlineTime', 'deadlineIsNextDay', now);
-}
-
-function getLateWindowUntil(eventKey, event, settings, now = new Date()) {
-  return getScheduleDate(
-    eventKey,
-    event,
-    settings,
-    'lateWindowUntil',
-    'lateWindowUntilTime',
-    'lateWindowUntilTime',
-    'lateWindowIsNextDay',
-    now
-  );
-}
-
-function getDrawAt(eventKey, event, settings, now = new Date()) {
-  return getScheduleDate(eventKey, event, settings, 'drawAt', 'drawTime', 'drawTime', 'drawIsNextDay', now);
-}
-
-function getTournamentStartAt(eventKey, event, settings, now = new Date()) {
-  return getScheduleDate(
-    eventKey,
-    event,
-    settings,
-    'tournamentStartAt',
-    'tournamentStartTime',
-    'tournamentStartTime',
-    'startIsNextDay',
-    now
-  );
-}
-
-function isAfterDeadline(eventKey, event, settings, now = new Date()) {
-  const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
-  if (!deadlineAt) return false;
-  return now.getTime() > deadlineAt.getTime();
-}
-
-function canUseCheckinStatus(status) {
-  return CHECKIN_EVENT_STATUSES.includes(status);
-}
+function getDeadlineAt(eventKey, event, settings, now = new Date()) { return getScheduleDate(eventKey, event, settings, 'deadlineAt', 'deadlineTime', 'deadlineTime', 'deadlineIsNextDay', now); }
+function getLateWindowUntil(eventKey, event, settings, now = new Date()) { return getScheduleDate(eventKey, event, settings, 'lateWindowUntil', 'lateWindowUntilTime', 'lateWindowUntilTime', 'lateWindowIsNextDay', now); }
+function getDrawAt(eventKey, event, settings, now = new Date()) { return getScheduleDate(eventKey, event, settings, 'drawAt', 'drawTime', 'drawTime', 'drawIsNextDay', now); }
+function getTournamentStartAt(eventKey, event, settings, now = new Date()) { return getScheduleDate(eventKey, event, settings, 'tournamentStartAt', 'tournamentStartTime', 'tournamentStartTime', 'startIsNextDay', now); }
+function isAfterDeadline(eventKey, event, settings, now = new Date()) { const d = getDeadlineAt(eventKey, event, settings, now); return d ? now.getTime() > d.getTime() : false; }
+function canUseCheckinStatus(status) { return CHECKIN_EVENT_STATUSES.includes(status); }
 
 function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
-  if (['checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) {
-    return { label: 'Geschlossen', phase: event.status, canJoin: false, canLeave: false };
-  }
-
-  if (event.status === 'cancelled') {
-    return { label: 'Abgesagt', phase: 'cancelled', canJoin: false, canLeave: false };
-  }
-
-  if (event.status === 'reset') {
-    return { label: 'Reset', phase: 'reset', canJoin: false, canLeave: false };
-  }
-
-  if (!canUseCheckinStatus(event.status)) {
-    return { label: 'Geschlossen', phase: 'closed', canJoin: false, canLeave: false };
-  }
+  if (['checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) return { label: 'Geschlossen', phase: event.status, canJoin: false, canLeave: false };
+  if (event.status === 'cancelled') return { label: 'Abgesagt', phase: 'cancelled', canJoin: false, canLeave: false };
+  if (event.status === 'reset') return { label: 'Reset', phase: 'reset', canJoin: false, canLeave: false };
+  if (!canUseCheckinStatus(event.status)) return { label: 'Geschlossen', phase: 'closed', canJoin: false, canLeave: false };
 
   const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
   const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);
   const isExplicitlyOpen = event.status === 'idle' ? true : event.checkin?.isOpen !== false;
-
   if (lateWindowUntil) {
-    if (deadlineAt && now.getTime() <= deadlineAt.getTime()) {
-      const isOpen = isExplicitlyOpen;
-      return { label: isOpen ? 'Offen' : 'Geschlossen', phase: 'regular', canJoin: isOpen, canLeave: isOpen };
-    }
-
-    if (now.getTime() <= lateWindowUntil.getTime()) {
-      const isOpen = isExplicitlyOpen;
-      return { label: isOpen ? 'Late Window' : 'Geschlossen', phase: 'late', canJoin: isOpen, canLeave: isOpen };
-    }
-
+    if (deadlineAt && now.getTime() <= deadlineAt.getTime()) return { label: isExplicitlyOpen ? 'Offen' : 'Geschlossen', phase: 'regular', canJoin: isExplicitlyOpen, canLeave: isExplicitlyOpen };
+    if (now.getTime() <= lateWindowUntil.getTime()) return { label: isExplicitlyOpen ? 'Late Window' : 'Geschlossen', phase: 'late', canJoin: isExplicitlyOpen, canLeave: isExplicitlyOpen };
     return { label: 'Geschlossen', phase: 'closed_after_late', canJoin: false, canLeave: false };
   }
-
-  if (event.status === 'checkin' && event.checkin?.isOpen === true) {
-    return { label: 'Offen', phase: 'manual_open', canJoin: true, canLeave: true };
-  }
-
+  if (event.status === 'checkin' && event.checkin?.isOpen === true) return { label: 'Offen', phase: 'manual_open', canJoin: true, canLeave: true };
   return { label: 'Geschlossen', phase: 'closed', canJoin: false, canLeave: false };
 }
 
-function canAcceptCheckinActions(eventKey, event, settings, now = new Date()) {
-  return getCheckinWindowState(eventKey, event, settings, now).canJoin;
-}
-
-function getCheckinWindowLabel(eventKey, event, settings, now = new Date()) {
-  return getCheckinWindowState(eventKey, event, settings, now).label;
-}
+function canAcceptCheckinActions(eventKey, event, settings, now = new Date()) { return getCheckinWindowState(eventKey, event, settings, now).canJoin; }
+function getCheckinWindowLabel(eventKey, event, settings, now = new Date()) { return getCheckinWindowState(eventKey, event, settings, now).label; }
 
 module.exports = {
   CHECKIN_EVENT_STATUSES,
