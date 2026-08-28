@@ -1,6 +1,7 @@
 'use strict';
 
 const ROUND_LABELS = {
+  round_of_32: 'Sechzehntelfinale',
   round_of_16: 'Achtelfinale',
   quarter_final: 'Viertelfinale',
   semi_final: 'Halbfinale',
@@ -16,13 +17,15 @@ function firstRoundForQualifiedCount(count) {
   if (count === 4) return 'semi_final';
   if (count === 8) return 'quarter_final';
   if (count === 16) return 'round_of_16';
+  if (count === 32) return 'round_of_32';
   throw new Error(`Keine K.O.-Runde für ${count} qualifizierte Teams definiert.`);
 }
 
 function mainRoundSequence(firstRoundKey) {
   if (firstRoundKey === 'semi_final') return ['semi_final', 'final'];
   if (firstRoundKey === 'quarter_final') return ['quarter_final', 'semi_final', 'final'];
-  return ['round_of_16', 'quarter_final', 'semi_final', 'final'];
+  if (firstRoundKey === 'round_of_16') return ['round_of_16', 'quarter_final', 'semi_final', 'final'];
+  return ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final'];
 }
 
 function createTeamParticipant(team) {
@@ -127,7 +130,7 @@ function buildKnockoutRounds({ eventKey, qualifiedTeams, createdAt = nowIso() })
   const firstRoundKey = firstRoundForQualifiedCount(qualifiedTeams.length);
   const mainRounds = mainRoundSequence(firstRoundKey);
   const rounds = Object.fromEntries(
-    ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final']
+    ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final']
       .map(roundKey => [roundKey, createEmptyRound(roundKey)])
   );
 
