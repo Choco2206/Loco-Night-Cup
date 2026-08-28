@@ -17,15 +17,31 @@ const {
 } = require('../teams/team-achievements');
 const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
+const ceremonyLayout = require('../../../config/bomber-x-loco-ceremony-layout');
 
 const TEMPLATE_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'ceremony.png');
-const REFERENCE = Object.freeze({ width: 1536, height: 1024 });
+const REFERENCE = ceremonyLayout.reference;
 
-// Erste Vermessung. Die drei Slots werden später über den Admin-Grafiktest feinjustiert.
+// Exakt auf die drei schwarzen Logo-Flaechen der Bomber X Loco Vorlage vermessen.
 const LOGO_SLOTS = Object.freeze({
-  first: Object.freeze({ centerX: 768, centerY: 706, width: 330, height: 190 }),
-  second: Object.freeze({ centerX: 386, centerY: 770, width: 280, height: 160 }),
-  third: Object.freeze({ centerX: 1150, centerY: 770, width: 280, height: 160 }),
+  first: Object.freeze({
+    centerX: ceremonyLayout.placements.first.centerX,
+    centerY: ceremonyLayout.placements.first.centerY,
+    width: ceremonyLayout.placements.first.width,
+    height: ceremonyLayout.placements.first.height,
+  }),
+  second: Object.freeze({
+    centerX: ceremonyLayout.placements.second.centerX,
+    centerY: ceremonyLayout.placements.second.centerY,
+    width: ceremonyLayout.placements.second.width,
+    height: ceremonyLayout.placements.second.height,
+  }),
+  third: Object.freeze({
+    centerX: ceremonyLayout.placements.third.centerX,
+    centerY: ceremonyLayout.placements.third.centerY,
+    width: ceremonyLayout.placements.third.width,
+    height: ceremonyLayout.placements.third.height,
+  }),
 });
 
 function findPlacementTeam(teamId, placement) {
