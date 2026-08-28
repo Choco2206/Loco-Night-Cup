@@ -75,10 +75,19 @@ async function handleBomberXLocoGraphicsTest(interaction) {
   return true;
 }
 
-async function handleInteraction(interaction, client) {
+async function handleAdminInteraction(interaction, client) {
   if (await handleBomberXLocoGraphicsTest(interaction)) return true;
   if (await handleTeamsWithoutEa(interaction, client)) return true;
-  return restored.handleInteraction(interaction, client);
+  return restored.handleAdminInteraction(interaction, client);
 }
 
-module.exports = { ...restored, handleInteraction };
+async function handleInteraction(interaction, client) {
+  return handleAdminInteraction(interaction, client);
+}
+
+module.exports = {
+  ...restored,
+  handleAdminButton: handleAdminInteraction,
+  handleAdminInteraction,
+  handleInteraction,
+};
