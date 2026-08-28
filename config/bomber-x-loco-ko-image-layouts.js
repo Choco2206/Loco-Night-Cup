@@ -4,12 +4,12 @@ const REFERENCE = Object.freeze({ width: 1024, height: 1536 });
 
 function matchSlot({
   centerY,
-  homeLogoX = 82,
-  homeNameX = 278,
+  homeLogoX = 122,
+  homeNameX = 302,
   homeNameWidth = 300,
-  awayNameX = 746,
+  awayNameX = 722,
   awayNameWidth = 300,
-  awayLogoX = 942,
+  awayLogoX = 902,
   logoSize = 54,
   scoreX = 512,
   scoreWidth = 104,
@@ -37,25 +37,25 @@ function round(template, centers, options = {}) {
   });
 }
 
-// Erste Vermessung der neuen Bomber-X-Loco-Grafiken.
-// Die Werte sind bewusst zentral gehalten, damit sie nach dem Admin-Grafiktest
-// schnell pixelgenau nachjustiert werden koennen.
+// Die Teamlogos und Teamnamen sitzen bewusst INNERHALB der dunklen
+// Begegnungsfelder. Die vorherigen X-Werte lagen zu nah am Außenrahmen und
+// führten besonders im Sechzehntelfinale zu deutlich versetzten Inhalten.
 module.exports = Object.freeze({
-  // Die Vorlage zeigt 17 sichtbare Zeilen. Es werden absichtlich NUR 16
-  // Match-Slots definiert. Dadurch bleibt das unterste 17. Feld immer leer.
+  // Exakt 16 Slots. Ein eventuell sichtbares zusätzliches Schmuck-/Leerfeld
+  // der Grafik wird nicht beschrieben.
   round_of_32: round(
     'round-of-32.png',
     [636, 684, 732, 780, 828, 876, 924, 972, 1020, 1068, 1116, 1164, 1212, 1260, 1308, 1356],
     {
-      homeLogoX: 76,
-      homeNameX: 282,
-      homeNameWidth: 306,
-      awayNameX: 742,
-      awayNameWidth: 306,
-      awayLogoX: 948,
-      logoSize: 34,
+      homeLogoX: 118,
+      homeNameX: 300,
+      homeNameWidth: 286,
+      awayNameX: 724,
+      awayNameWidth: 286,
+      awayLogoX: 906,
+      logoSize: 30,
       scoreWidth: 82,
-      fontSize: 18,
+      fontSize: 17,
     }
   ),
 
@@ -63,15 +63,15 @@ module.exports = Object.freeze({
     'round-of-16.png',
     [704, 788, 872, 956, 1040, 1124, 1208, 1292],
     {
-      homeLogoX: 82,
-      homeNameX: 282,
-      homeNameWidth: 310,
-      awayNameX: 742,
-      awayNameWidth: 310,
-      awayLogoX: 942,
-      logoSize: 48,
-      scoreWidth: 96,
-      fontSize: 23,
+      homeLogoX: 122,
+      homeNameX: 302,
+      homeNameWidth: 292,
+      awayNameX: 722,
+      awayNameWidth: 292,
+      awayLogoX: 902,
+      logoSize: 42,
+      scoreWidth: 94,
+      fontSize: 22,
     }
   ),
 
@@ -79,15 +79,15 @@ module.exports = Object.freeze({
     'quarter-final.png',
     [776, 914, 1052, 1190],
     {
-      homeLogoX: 86,
-      homeNameX: 286,
-      homeNameWidth: 318,
-      awayNameX: 738,
-      awayNameWidth: 318,
-      awayLogoX: 938,
-      logoSize: 58,
-      scoreWidth: 104,
-      fontSize: 27,
+      homeLogoX: 126,
+      homeNameX: 306,
+      homeNameWidth: 300,
+      awayNameX: 718,
+      awayNameWidth: 300,
+      awayLogoX: 898,
+      logoSize: 50,
+      scoreWidth: 102,
+      fontSize: 26,
     }
   ),
 
@@ -95,15 +95,15 @@ module.exports = Object.freeze({
     'semi-final.png',
     [828, 1082],
     {
-      homeLogoX: 90,
-      homeNameX: 292,
-      homeNameWidth: 326,
-      awayNameX: 732,
-      awayNameWidth: 326,
-      awayLogoX: 934,
-      logoSize: 68,
-      scoreWidth: 112,
-      fontSize: 30,
+      homeLogoX: 130,
+      homeNameX: 310,
+      homeNameWidth: 306,
+      awayNameX: 714,
+      awayNameWidth: 306,
+      awayLogoX: 894,
+      logoSize: 58,
+      scoreWidth: 110,
+      fontSize: 29,
     }
   ),
 
@@ -111,15 +111,15 @@ module.exports = Object.freeze({
     'third-place.png',
     [754],
     {
-      homeLogoX: 94,
-      homeNameX: 296,
-      homeNameWidth: 330,
-      awayNameX: 728,
-      awayNameWidth: 330,
-      awayLogoX: 930,
-      logoSize: 76,
-      scoreWidth: 120,
-      fontSize: 32,
+      homeLogoX: 134,
+      homeNameX: 314,
+      homeNameWidth: 310,
+      awayNameX: 710,
+      awayNameWidth: 310,
+      awayLogoX: 890,
+      logoSize: 64,
+      scoreWidth: 116,
+      fontSize: 31,
     }
   ),
 
@@ -127,15 +127,15 @@ module.exports = Object.freeze({
     'final.png',
     [754],
     {
-      homeLogoX: 94,
-      homeNameX: 296,
-      homeNameWidth: 330,
-      awayNameX: 728,
-      awayNameWidth: 330,
-      awayLogoX: 930,
-      logoSize: 76,
-      scoreWidth: 120,
-      fontSize: 32,
+      homeLogoX: 134,
+      homeNameX: 314,
+      homeNameWidth: 310,
+      awayNameX: 710,
+      awayNameWidth: 310,
+      awayLogoX: 890,
+      logoSize: 64,
+      scoreWidth: 116,
+      fontSize: 31,
     }
   ),
 
