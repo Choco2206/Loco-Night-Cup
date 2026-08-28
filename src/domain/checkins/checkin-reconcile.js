@@ -27,68 +27,41 @@ let activeClient = null;
 let isRunning = false;
 const eventTimers = new Map();
 
-function nowIso(now = new Date()) {
-  return now.toISOString();
-}
-
-function logStatus(eventKey, status) {
-  console.log(`[checkin-reconcile] ${eventKey} ${status}`);
-}
-
-function readSettings() {
-  return readJson(FILES.settings, createSettingsDefault());
-}
-
+function nowIso(now = new Date()) { return now.toISOString(); }
+function logStatus(eventKey, status) { console.log(`[checkin-reconcile] ${eventKey} ${status}`); }
+function readSettings() { return readJson(FILES.settings, createSettingsDefault()); }
 function formatTime(date) {
   if (!date) return 'nicht gesetzt';
   return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
-
+function isBomberXLoco(event) { return event?.meta?.eventMode === 'bomber_x_loco'; }
 function minimumTeams(settings, event) {
+  if (isBomberXLoco(event)) return Number(event.format?.minimumRealTeams || 6);
   return Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
 }
-
-function currentFormatLabel(event) {
-  return event.format?.size ? `${event.format.size}er Turnier` : 'noch kein gültiges Format';
-}
-
-function getValidRealTeamCount(event, now = new Date()) {
-  return collectValidRealTeams(event, now).teams.length;
-}
-
-function getActiveTeamCount(event) {
-  return Array.isArray(event.checkin?.activeTeamIds) ? event.checkin.activeTeamIds.length : 0;
-}
-
-function getWaitlistOverflowCount(event) {
-  return Number(event.format?.waitlistCount || 0);
-}
+function currentFormatLabel(event) { return event.format?.size ? `${event.format.size}er Turnier` : 'noch kein gültiges Format'; }
+function getValidRealTeamCount(event, now = new Date()) { return collectValidRealTeams(event, now).teams.length; }
+function getActiveTeamCount(event) { return Array.isArray(event.checkin?.activeTeamIds) ? event.checkin.activeTeamIds.length : 0; }
+function getWaitlistOverflowCount(event) { return Number(event.format?.waitlistCount || 0); }
 
 function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
   const lateDeadlineText = formatTime(getLateWindowUntil(eventKey, event, settings, now));
   const drawText = formatTime(getDrawAt(eventKey, event, settings, now));
   const minimum = minimumTeams(settings, event);
-
   if (!event.format?.size) {
     return [
-      '⚠️ **Aktueller Stand nach offiziellem Anmeldeschluss**',
-      '',
+      '⚠️ **Aktueller Stand nach offiziellem Anmeldeschluss**', '',
       'Aktuell sind noch nicht genug Teams für den NightCup angemeldet.',
-      `Minimum sind ${minimum} Teams.`,
-      '',
+      `Minimum sind ${minimum} Teams.`, '',
       `Teams können sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
       `Um ${lateDeadlineText} wird final geprüft, ob ein gültiges Format zustande kommt.`,
     ].join('\n');
   }
-
   return [
-    '✅ **Aktueller Stand nach offiziellem Anmeldeschluss**',
-    '',
-    `Aktuelles Format: ${currentFormatLabel(event)}`,
-    '',
+    '✅ **Aktueller Stand nach offiziellem Anmeldeschluss**', '',
+    `Aktuelles Format: ${currentFormatLabel(event)}`, '',
     `Teams können sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
-    `Um ${lateDeadlineText} wird final geprüft, welches Format zustande kommt.`,
-    '',
+    `Um ${lateDeadlineText} wird final geprüft, welches Format zustande kommt.`, '',
     `🎲 Die Gruppenauslosung findet um ${drawText} statt.`,
   ].join('\n');
 }
@@ -96,53 +69,58 @@ function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
 function buildFinalCancelledMessage(event, settings, now = new Date()) {
   const minimum = minimumTeams(settings, event);
   const validTeamCount = getValidRealTeamCount(event, now);
-
+  if (isBomberXLoco(event)) {
+    return [
+      '❌ **Bomber X Loco Cup abgesagt**', '',
+      'Zum offiziellen Anmeldeschluss sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.', '',
+      `Mindestanzahl: **${minimum} Teams**`,
+      `Aktuell gültige Teams: **${validTeamCount}**`, '',
+      'Der Bomber X Loco Cup kann daher leider nicht stattfinden.',
+    ].join('\n');
+  }
   return [
-    '❌ **Night Cup abgesagt**',
-    '',
-    'Nach Ende des Late-Check-ins sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.',
-    '',
+    '❌ **Night Cup abgesagt**', '',
+    'Nach Ende des Late-Check-ins sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.', '',
     `Mindestanzahl: **${minimum} Teams**`,
-    `Aktuell gültige Teams: **${validTeamCount}**`,
-    '',
+    `Aktuell gültige Teams: **${validTeamCount}**`, '',
     'Der heutige Night Cup findet daher nicht statt.',
   ].join('\n');
 }
 
 function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
   const waitlistCount = getWaitlistOverflowCount(event);
-
+  if (isBomberXLoco(event)) {
+    return [
+      '✅ **Bomber X Loco Cup findet statt**', '',
+      'Der offizielle Anmeldeschluss ist erreicht. Die Anmeldung ist geschlossen.', '',
+      `Finales Format: **${currentFormatLabel(event)}**`,
+      `Aktive Teams: **${getActiveTeamCount(event)}**`,
+      `Warteliste/Überschuss: **${waitlistCount}**`, '',
+      '🎲 Die Gruppenauslosung startet um **19:00 Uhr**.',
+      '✅ Danach läuft in jeder Gruppe die Anwesenheitsabfrage bis **20:00 Uhr**.',
+      '🚀 Turnierstart ist um **21:00 Uhr**.',
+    ].join('\n');
+  }
   return [
-    '✅ **Night Cup findet statt**',
-    '',
-    'Der Late-Check-in ist beendet.',
-    '',
+    '✅ **Night Cup findet statt**', '',
+    'Der Late-Check-in ist beendet.', '',
     `Finales Format: **${currentFormatLabel(event)}**`,
     `Aktive Teams: **${getActiveTeamCount(event)}**`,
-    `Warteliste/Überschuss: **${waitlistCount}**`,
-    '',
+    `Warteliste/Überschuss: **${waitlistCount}**`, '',
     'Die Gruppenauslosung startet in **5 Minuten**.',
   ].join('\n');
 }
 
-function isBefore(date, now) {
-  return date && now.getTime() < date.getTime();
-}
-
-function isReached(date, now) {
-  return date && now.getTime() >= date.getTime();
-}
-
+function isBefore(date, now) { return date && now.getTime() < date.getTime(); }
+function isReached(date, now) { return date && now.getTime() >= date.getTime(); }
 function clearEventTimer(eventKey) {
   const timer = eventTimers.get(eventKey);
   if (timer) clearTimeout(timer);
   eventTimers.delete(eventKey);
 }
-
 function setEventTimer(client, eventKey, targetAt) {
   clearEventTimer(eventKey);
   if (!targetAt) return;
-
   const delay = Math.max(0, new Date(targetAt).getTime() - Date.now());
   const timer = setTimeout(async () => {
     clearEventTimer(eventKey);
@@ -151,41 +129,30 @@ function setEventTimer(client, eventKey, targetAt) {
     });
     scheduleCheckinEvent(client, eventKey);
   }, Math.min(delay, MAX_TIMEOUT_MS));
-
   if (typeof timer.unref === 'function') timer.unref();
   eventTimers.set(eventKey, timer);
 }
 
 function getNextTarget(event, dates, now) {
   const candidates = [];
-
-  if (['idle', 'checkin', 'checkin_open'].includes(event.status)) {
-    candidates.push(dates.deadlineAt);
-  }
+  if (['idle', 'checkin', 'checkin_open'].includes(event.status)) candidates.push(dates.deadlineAt);
   if (['idle', 'checkin', 'checkin_open', 'deadline_reached', 'checkin_closed'].includes(event.status)) {
     candidates.push(dates.lateWindowUntil, dates.drawAt);
   }
-  if (['draw_ready', 'groups', 'groups_running'].includes(event.status)) {
-    candidates.push(dates.drawAt, dates.startAt);
-  }
+  if (['draw_ready', 'groups', 'groups_running'].includes(event.status)) candidates.push(dates.drawAt, dates.startAt);
   candidates.push(dates.resetAt);
-
-  return candidates
-    .filter(date => date && date.getTime() > now.getTime())
-    .sort((a, b) => a.getTime() - b.getTime())[0] || null;
+  return candidates.filter(date => date && date.getTime() > now.getTime()).sort((a, b) => a.getTime() - b.getTime())[0] || null;
 }
 
 function repairEventCycle(eventKey, settings, now) {
   let changed = false;
   let eventAfter = null;
-
   updateEventData(eventKey, event => {
     changed = ensureEventCycle(eventKey, event, settings, now);
     if (changed) event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     eventAfter = event;
     return event;
   });
-
   if (changed) console.log(`[checkin-reconcile] ${eventKey} cycle_repaired`);
   return { changed, event: eventAfter || readEventData(eventKey) };
 }
@@ -198,7 +165,6 @@ function scheduleCheckinEvent(client, eventKey, now = new Date()) {
     clearEventTimer(eventKey);
     return null;
   }
-
   const dates = {
     deadlineAt: getDeadlineAt(eventKey, event, settings, now),
     lateWindowUntil: getLateWindowUntil(eventKey, event, settings, now),
@@ -215,25 +181,15 @@ function scheduleCheckinEvent(client, eventKey, now = new Date()) {
 function markCheckinOpen(eventKey, now) {
   let changed = false;
   let eventAfter = null;
-
   updateEventData(eventKey, event => {
-    if (!['idle', 'checkin'].includes(event.status)) {
-      eventAfter = event;
-      return event;
-    }
-
+    if (!['idle', 'checkin'].includes(event.status)) { eventAfter = event; return event; }
     event.status = 'checkin_open';
-    event.checkin = {
-      ...(event.checkin || {}),
-      isOpen: true,
-      openedAt: event.checkin?.openedAt || nowIso(now),
-    };
+    event.checkin = { ...(event.checkin || {}), isOpen: true, openedAt: event.checkin?.openedAt || nowIso(now) };
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     changed = true;
     eventAfter = event;
     return event;
   });
-
   if (changed) logStatus(eventKey, 'checkin_open');
   return { changed, event: eventAfter || readEventData(eventKey) };
 }
@@ -244,12 +200,10 @@ async function getCheckinChannel(client, eventKey, settings) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   return channel?.send ? channel : null;
 }
-
 async function fetchMessage(channel, messageId) {
   if (!channel || !messageId) return null;
   return channel.messages.fetch(messageId).catch(() => null);
 }
-
 async function upsertStatusMessage(client, eventKey, content) {
   const settings = readSettings();
   const channel = await getCheckinChannel(client, eventKey, settings);
@@ -257,16 +211,13 @@ async function upsertStatusMessage(client, eventKey, content) {
     console.warn(`[checkin-reconcile] ${eventKey}: check-in channel missing for status message`);
     return null;
   }
-
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = messages.checkins?.[eventKey] || {};
   const staleChannel = state.channelId && String(state.channelId) !== String(channel.id);
   let message = staleChannel ? null : await fetchMessage(channel, state.summaryMessageId);
   const payload = { content, allowedMentions: { parse: [] } };
-
   if (message) message = await message.edit(payload);
   else message = await channel.send(payload);
-
   updateJson(FILES.messages, createMessagesDefault(), current => {
     current.checkins = current.checkins || {};
     current.checkins[eventKey] = current.checkins[eventKey] || {};
@@ -276,17 +227,12 @@ async function upsertStatusMessage(client, eventKey, content) {
     if (!current.checkins[eventKey].createdAt) current.checkins[eventKey].createdAt = nowIso();
     return current;
   });
-
   return message;
 }
 
 function markFinalStatusMessagePosted(eventKey, finalState, now = new Date()) {
   return updateEventData(eventKey, event => {
-    event.checkin = {
-      ...(event.checkin || {}),
-      finalStatusMessagePostedAt: nowIso(now),
-      finalStatusMessageState: finalState,
-    };
+    event.checkin = { ...(event.checkin || {}), finalStatusMessagePostedAt: nowIso(now), finalStatusMessageState: finalState };
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     return event;
   });
@@ -295,28 +241,20 @@ function markFinalStatusMessagePosted(eventKey, finalState, now = new Date()) {
 function markDeadlineReached(eventKey, settings, now) {
   let changed = false;
   let eventAfter = null;
-
   updateEventData(eventKey, event => {
     if (event.format?.lockedAt || RECONCILE_SKIP_STATUSES.has(event.status) || ['groups', 'groups_running'].includes(event.status)) {
-      eventAfter = event;
-      return event;
+      eventAfter = event; return event;
     }
-
     recalculateCheckinFormat(event, settings, now);
     if (event.status !== 'deadline_reached') {
       event.status = 'deadline_reached';
-      event.checkin = {
-        ...(event.checkin || {}),
-        isOpen: true,
-        deadlineReachedAt: event.checkin?.deadlineReachedAt || nowIso(now),
-      };
+      event.checkin = { ...(event.checkin || {}), isOpen: true, deadlineReachedAt: event.checkin?.deadlineReachedAt || nowIso(now) };
       event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
       changed = true;
     }
     eventAfter = event;
     return event;
   });
-
   if (changed) logStatus(eventKey, 'deadline_reached');
   return { changed, event: eventAfter || readEventData(eventKey) };
 }
@@ -324,21 +262,16 @@ function markDeadlineReached(eventKey, settings, now) {
 function markCheckinClosed(eventKey, settings, now) {
   let changed = false;
   let eventAfter = null;
-
   updateEventData(eventKey, event => {
     if (['cancelled', 'draw_ready', 'groups', 'groups_running'].includes(event.status) || RECONCILE_SKIP_STATUSES.has(event.status)) {
-      eventAfter = event;
-      return event;
+      eventAfter = event; return event;
     }
-
     recalculateCheckinFormat(event, settings, now);
     if (event.status !== 'checkin_closed' || event.checkin?.isOpen !== false) {
       event.status = 'checkin_closed';
       event.checkin = {
-        ...(event.checkin || {}),
-        isOpen: false,
-        closedAt: event.checkin?.closedAt || nowIso(now),
-        finalizedAt: event.checkin?.finalizedAt || nowIso(now),
+        ...(event.checkin || {}), isOpen: false,
+        closedAt: event.checkin?.closedAt || nowIso(now), finalizedAt: event.checkin?.finalizedAt || nowIso(now),
         finalizationStatus: 'checking',
       };
       event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
@@ -347,7 +280,6 @@ function markCheckinClosed(eventKey, settings, now) {
     eventAfter = event;
     return event;
   });
-
   if (changed) logStatus(eventKey, 'checkin_closed');
   return { changed, event: eventAfter || readEventData(eventKey) };
 }
@@ -359,20 +291,13 @@ function cancelEventAfterLate(eventKey, settings, now) {
     const validRealTeamCount = getValidRealTeamCount(event, now);
     event.status = 'cancelled';
     event.checkin = {
-      ...(event.checkin || {}),
-      isOpen: false,
-      closedAt: event.checkin?.closedAt || nowIso(now),
-      finalizedAt: event.checkin?.finalizedAt || nowIso(now),
+      ...(event.checkin || {}), isOpen: false,
+      closedAt: event.checkin?.closedAt || nowIso(now), finalizedAt: event.checkin?.finalizedAt || nowIso(now),
       finalizationStatus: 'cancelled_not_enough_teams',
     };
     event.format = {
-      ...(event.format || {}),
-      realTeamCount: validRealTeamCount,
-      activeRealTeamCount: 0,
-      waitlistCount: 0,
-      lockedAt: null,
-      lockedByUserId: null,
-      participants: [],
+      ...(event.format || {}), realTeamCount: validRealTeamCount, activeRealTeamCount: 0,
+      waitlistCount: 0, lockedAt: null, lockedByUserId: null, participants: [],
     };
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     eventAfter = event;
@@ -387,10 +312,8 @@ function markDrawReady(eventKey, now) {
   updateEventData(eventKey, event => {
     event.status = 'draw_ready';
     event.checkin = {
-      ...(event.checkin || {}),
-      isOpen: false,
-      closedAt: event.checkin?.closedAt || nowIso(now),
-      finalizedAt: event.checkin?.finalizedAt || nowIso(now),
+      ...(event.checkin || {}), isOpen: false,
+      closedAt: event.checkin?.closedAt || nowIso(now), finalizedAt: event.checkin?.finalizedAt || nowIso(now),
       finalizationStatus: 'draw_ready',
     };
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
@@ -406,27 +329,22 @@ function finalizeAfterLate(eventKey, settings, now) {
   if (current.status === 'cancelled' || current.status === 'draw_ready' || ['groups', 'groups_running'].includes(current.status)) {
     return { changed: false, event: current, finalState: current.status };
   }
-
   const closed = markCheckinClosed(eventKey, settings, now);
   const afterClose = closed.event;
-
   if (getValidRealTeamCount(afterClose, now) < minimumTeams(settings, afterClose)) {
     const cancelled = cancelEventAfterLate(eventKey, settings, now);
     return { changed: true, event: cancelled, finalState: 'cancelled' };
   }
-
   if (afterClose.format?.lockedAt) {
     const ready = markDrawReady(eventKey, now);
     return { changed: true, event: ready, finalState: 'draw_ready' };
   }
-
   updateEventData(eventKey, event => recalculateCheckinFormat(event, settings, now));
   const recalculated = readEventData(eventKey);
   if (getValidRealTeamCount(recalculated, now) < minimumTeams(settings, recalculated) || !recalculated.format?.size) {
     const cancelled = cancelEventAfterLate(eventKey, settings, now);
     return { changed: true, event: cancelled, finalState: 'cancelled' };
   }
-
   try {
     lockEventFormat(eventKey, 'auto-checkin-finalizer', now);
   } catch (error) {
@@ -434,7 +352,6 @@ function finalizeAfterLate(eventKey, settings, now) {
     const cancelled = cancelEventAfterLate(eventKey, settings, now);
     return { changed: true, event: cancelled, finalState: 'cancelled' };
   }
-
   const ready = markDrawReady(eventKey, now);
   return { changed: true, event: ready, finalState: 'draw_ready' };
 }
@@ -442,19 +359,14 @@ function finalizeAfterLate(eventKey, settings, now) {
 function markGroupsRunning(eventKey, now) {
   let changed = false;
   let eventAfter = null;
-
   updateEventData(eventKey, event => {
-    if (event.status !== 'groups') {
-      eventAfter = event;
-      return event;
-    }
+    if (event.status !== 'groups') { eventAfter = event; return event; }
     event.status = 'groups_running';
     event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
     changed = true;
     eventAfter = event;
     return event;
   });
-
   if (changed) logStatus(eventKey, 'groups_running');
   return { changed, event: eventAfter || readEventData(eventKey) };
 }
@@ -463,7 +375,6 @@ async function maybeDrawGroups({ client, eventKey, event, drawAt, now }) {
   if (!isReached(drawAt, now)) return { changed: false, event };
   if (event.status !== 'draw_ready') return { changed: false, event };
   if (!event.format?.lockedAt || event.groups?.status !== 'not_created') return { changed: false, event };
-
   if (eventKey === 'saturday' && event.meta?.eventMode === 'knockout_royale') {
     try {
       createRoyaleFromSaturdayCheckin({ saturdayEvent: event, actorUserId: 'auto-checkin-reconcile', now });
@@ -481,14 +392,8 @@ async function maybeDrawGroups({ client, eventKey, event, drawAt, now }) {
       return { changed: false, event };
     }
   }
-
   try {
-    const result = await drawGroupsForEvent({
-      eventKey,
-      actorUserId: 'auto-checkin-reconcile',
-      client,
-      now,
-    });
+    const result = await drawGroupsForEvent({ eventKey, actorUserId: 'auto-checkin-reconcile', client, now });
     const running = markGroupsRunning(eventKey, now);
     return { changed: true, event: running.event || result.event };
   } catch (error) {
@@ -504,7 +409,6 @@ async function maybeStartGroups({ client, eventKey, event, startAt, now }) {
     scheduleEvent(client, eventKey);
     return { changed: false, event };
   }
-
   const running = event.status === 'groups' ? markGroupsRunning(eventKey, now) : { changed: false, event };
   await maybeReleaseNextSlot(client, eventKey, now).catch(error => {
     console.warn(`[checkin-reconcile] ${eventKey}: auto group release failed: ${error.message}`);
@@ -518,19 +422,13 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
   const repaired = repairEventCycle(eventKey, settings, now);
   const event = repaired.event;
   if (RECONCILE_SKIP_STATUSES.has(event.status) || event.status === 'cancelled') return { changed: false, event };
-
   const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
   const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);
   const drawAt = getDrawAt(eventKey, event, settings, now);
   const startAt = getTournamentStartAt(eventKey, event, settings, now);
-
-  if (['groups', 'groups_running'].includes(event.status)) {
-    return maybeStartGroups({ client, eventKey, event, startAt, now });
-  }
-
+  if (['groups', 'groups_running'].includes(event.status)) return maybeStartGroups({ client, eventKey, event, startAt, now });
   let latest = event;
   let changed = repaired.changed;
-
   if (isBefore(deadlineAt, now)) {
     const open = markCheckinOpen(eventKey, now);
     latest = open.event;
@@ -540,16 +438,12 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
     });
     return { changed, event: latest };
   }
-
   if (isReached(deadlineAt, now) && isBefore(lateWindowUntil, now)) {
     const deadline = markDeadlineReached(eventKey, settings, now);
     latest = deadline.event;
     changed = changed || deadline.changed;
-    if (deadline.changed) {
-      await upsertStatusMessage(client, eventKey, buildDeadlineMessage(eventKey, latest, settings, now));
-    }
+    if (deadline.changed) await upsertStatusMessage(client, eventKey, buildDeadlineMessage(eventKey, latest, settings, now));
   }
-
   if (isReached(lateWindowUntil, now)) {
     const final = finalizeAfterLate(eventKey, settings, now);
     latest = final.event;
@@ -565,15 +459,12 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
       }
     }
   }
-
   const draw = await maybeDrawGroups({ client, eventKey, event: latest, drawAt, now });
   latest = draw.event;
   changed = changed || draw.changed;
-
   if (changed) await refreshCheckinMessage(eventKey, client).catch(error => {
     console.warn(`[checkin-reconcile] ${eventKey}: check-in refresh failed: ${error.message}`);
   });
-
   return { changed, event: latest };
 }
 
@@ -590,43 +481,31 @@ async function reconcileAllCheckins(client = activeClient, now = new Date()) {
       results.push({ eventKey, ...result });
     }
     return { skipped: false, results };
-  } finally {
-    isRunning = false;
-  }
+  } finally { isRunning = false; }
 }
 
 function scheduleAllCheckins(client = activeClient, now = new Date()) {
   for (const eventKey of EVENT_KEYS) scheduleCheckinEvent(client, eventKey, now);
 }
-
 function startCheckinReconcile(client) {
   if (safetyReconcileTimer) {
     activeClient = client || activeClient;
     return safetyReconcileTimer;
   }
-
   activeClient = client;
   for (const eventKey of EVENT_KEYS) clearEventTimer(eventKey);
-
   reconcileAllCheckins(client).catch(error => {
     console.warn(`[checkin-reconcile] startup reconcile failed: ${error.message}`);
-  }).finally(() => {
-    scheduleAllCheckins(client);
-  });
-
+  }).finally(() => { scheduleAllCheckins(client); });
   safetyReconcileTimer = setInterval(() => {
     reconcileAllCheckins(client).catch(error => {
       console.warn(`[checkin-reconcile] safety reconcile failed: ${error.message}`);
-    }).finally(() => {
-      scheduleAllCheckins(client);
-    });
+    }).finally(() => { scheduleAllCheckins(client); });
   }, SAFETY_RECONCILE_INTERVAL_MS);
-
   if (typeof safetyReconcileTimer.unref === 'function') safetyReconcileTimer.unref();
   console.log(`[checkin-reconcile] started scheduled timers with safety every ${SAFETY_RECONCILE_INTERVAL_MS / 1000}s`);
   return safetyReconcileTimer;
 }
-
 function stopCheckinReconcile() {
   if (safetyReconcileTimer) clearInterval(safetyReconcileTimer);
   safetyReconcileTimer = null;
