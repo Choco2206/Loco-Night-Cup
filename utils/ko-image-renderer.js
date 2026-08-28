@@ -2,11 +2,13 @@
 
 const path = require('path');
 const LAYOUTS = require('../config/ko-image-layouts');
+const BOMBER_X_LOCO_LAYOUTS = require('../config/bomber-x-loco-ko-image-layouts');
 const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupScheduleImage');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 
+const BOMBER_X_LOCO_CYCLE_KEY = 'saturday_2026-09-19';
 let canvasApi = null;
 let renderSequence = 0;
 const templateCache = new Map();
@@ -17,11 +19,21 @@ function getCanvasApi() {
   return canvasApi;
 }
 
-function getKoTemplate({ phase, qualifiedTeamCount }) {
+function isBomberXLocoRender(eventId) {
+  return String(eventId || '') === BOMBER_X_LOCO_CYCLE_KEY;
+}
+
+function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
+  const bomberXLoco = isBomberXLocoRender(eventId);
   if (phase === 'qualification_overview') {
     if (![4, 8, 16].includes(Number(qualifiedTeamCount))) throw new Error(`Keine K.O.-Uebersicht fuer ${qualifiedTeamCount} Teams.`);
     return `qualification_${Number(qualifiedTeamCount)}`;
   }
+
+  if (bomberXLoco && ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(phase)) {
+    return phase;
+  }
+
   if (![
     'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final',
     'royal_8_kings_round_1', 'royal_8_kings_round_2', 'royal_8_kings_final',
@@ -41,9 +53,12 @@ function getKoTemplate({ phase, qualifiedTeamCount }) {
 
 function getKoLayout(options) {
   const key = getKoTemplate(options);
-  const layout = LAYOUTS[key];
+  const layouts = isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]
+    ? BOMBER_X_LOCO_LAYOUTS
+    : LAYOUTS;
+  const layout = layouts[key];
   if (!layout) throw new Error(`K.O.-Layout fehlt: ${key}`);
-  return { key, layout };
+  return { key, layout, layouts };
 }
 
 function loadTemplate(templatePath) {
@@ -81,7 +96,7 @@ function scaleTextBox(box, scaleX, scaleY) {
   return { ...box, x: box.x * scaleX, y: box.y * scaleY, width: box.width * scaleX, height: box.height * scaleY };
 }
 
-async function drawParticipant(ctx, participantValue, slot, scaleX, scaleY) {
+async function drawParticipant(ctx, participantValue, slot, scaleX, scaleY, layouts) {
   const participant = asParticipant(participantValue);
   const name = participantName(participant);
   if (!name) return;
@@ -91,9 +106,9 @@ async function drawParticipant(ctx, participantValue, slot, scaleX, scaleY) {
   const box = scaleTextBox(slot.teamName, scaleX, scaleY);
   drawFittedText({
     ctx, text: name, x: box.x, y: box.y, maxWidth: box.width,
-    maxFontSize: (slot.teamName.fontSize || LAYOUTS.fonts.team.maxSize) * scaleY,
-    minFontSize: LAYOUTS.fonts.team.minSize * scaleY,
-    align: box.align || 'left', font: LAYOUTS.fonts.team, color: LAYOUTS.colors.text,
+    maxFontSize: (slot.teamName.fontSize || layouts.fonts.team.maxSize) * scaleY,
+    minFontSize: layouts.fonts.team.minSize * scaleY,
+    align: box.align || 'left', font: layouts.fonts.team, color: layouts.colors.text,
   });
 }
 
@@ -104,18 +119,18 @@ function officialScore(match) {
   return Number.isFinite(home) && Number.isFinite(away) ? { home, away } : null;
 }
 
-function drawScore(ctx, value, box, scaleX, scaleY) {
+function drawScore(ctx, value, box, scaleX, scaleY, layouts) {
   drawFittedText({
     ctx, text: String(value), x: box.x * scaleX, y: box.y * scaleY,
     maxWidth: box.width * scaleX,
-    maxFontSize: LAYOUTS.fonts.score.maxSize * scaleY,
-    minFontSize: LAYOUTS.fonts.score.minSize * scaleY,
-    align: 'center', font: LAYOUTS.fonts.score, color: LAYOUTS.colors.text,
+    maxFontSize: layouts.fonts.score.maxSize * scaleY,
+    minFontSize: layouts.fonts.score.minSize * scaleY,
+    align: 'center', font: layouts.fonts.score, color: layouts.colors.text,
   });
 }
 
 async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId = 'event', version = Date.now() }) {
-  const { key, layout } = getKoLayout({ phase, qualifiedTeamCount: qualifiedTeams.length });
+  const { key, layout, layouts } = getKoLayout({ phase, qualifiedTeamCount: qualifiedTeams.length, eventId });
   const template = await loadTemplate(layout.template);
   const width = template.naturalWidth || template.width;
   const height = template.naturalHeight || template.height;
@@ -129,19 +144,20 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
 
   if (layout.kind === 'qualification') {
     for (let index = 0; index < layout.slots.length; index += 1) {
-      await drawParticipant(ctx, qualifiedTeams[index], layout.slots[index], scaleX, scaleY);
+      await drawParticipant(ctx, qualifiedTeams[index], layout.slots[index], scaleX, scaleY, layouts);
     }
   } else {
+    // Bei Bomber X Loco round_of_32 besitzt die Vorlage zwar 17 optische
+    // Begegnungsfelder, das Layout definiert absichtlich nur 16 Match-Slots.
+    // Damit kann das 17. Feld nie versehentlich beschrieben werden.
     for (let index = 0; index < layout.matches.length; index += 1) {
       const match = matches[index];
       if (!match) continue;
       const slot = layout.matches[index];
-      await drawParticipant(ctx, match.home, slot.home, scaleX, scaleY);
-      await drawParticipant(ctx, match.away, slot.away, scaleX, scaleY);
+      await drawParticipant(ctx, match.home, slot.home, scaleX, scaleY, layouts);
+      await drawParticipant(ctx, match.away, slot.away, scaleX, scaleY, layouts);
       const score = officialScore(match);
-      if (score) {
-        drawScore(ctx, `${score.home}:${score.away}`, slot.score, scaleX, scaleY);
-      }
+      if (score) drawScore(ctx, `${score.home}:${score.away}`, slot.score, scaleX, scaleY, layouts);
     }
   }
 
@@ -156,4 +172,3 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
 }
 
 module.exports = { getKoLayout, getKoTemplate, officialScore, renderKoImage };
-
