@@ -1,6 +1,7 @@
 'use strict';
 
 const TIME_ZONE = 'Europe/Berlin';
+const ROYALE_ENABLED = false;
 const SPECIAL_EVENT_DATES = Object.freeze({
   '2026-08': '2026-08-22',
 });
@@ -25,6 +26,7 @@ function getRoyaleEventDate(year, month, overrides = SPECIAL_EVENT_DATES) {
 }
 
 function isRoyaleEventDate(eventDate, overrides = SPECIAL_EVENT_DATES) {
+  if (!ROYALE_ENABLED) return false;
   const match = String(eventDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return false;
   return getRoyaleEventDate(Number(match[1]), Number(match[2]), overrides) === eventDate;
@@ -93,6 +95,7 @@ function getNextRoyaleSchedule(now = new Date(), options = {}) {
 }
 
 module.exports = {
+  ROYALE_ENABLED,
   SPECIAL_EVENT_DATES,
   TIME_ZONE,
   buildRoyaleSchedule,
