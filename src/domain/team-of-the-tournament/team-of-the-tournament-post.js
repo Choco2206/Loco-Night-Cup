@@ -7,7 +7,8 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const { confirmedEventMatches, resumeRatingCaptures } = require('./team-of-the-tournament-service');
 
-const POST_RETRY_DELAYS_MS = [15000, 120000, 300000, 600000, 900000, 900000, 1200000];
+const TOTT_GRACE_PERIOD_MS = 5 * 60 * 1000;
+const POST_RETRY_DELAYS_MS = [120000, 120000, 300000, 600000, 900000, 900000, 1200000];
 const CONTINUOUS_RETRY_DELAY_MS = 15 * 60 * 1000;
 const TOTT_GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000;
 const LIVE_CHANNEL_ID = '1533394601220505641';
@@ -134,39 +135,98 @@ function reserveSerial(eventKey) {
   return serialNumber;
 }
 
+function errorDetails(error) {
+  return {
+    message: String(error?.message || 'unknown_error'),
+    code: error?.code ?? null,
+    status: error?.status ?? error?.httpStatus ?? error?.rawError?.status ?? null,
+  };
+}
+
 async function getTargetChannel(client, mode = 'live') {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const channelId = mode === 'test'
-    ? settings.channels?.teamOfTheTournamentTestChannelId || TEST_CHANNEL_ID
-    : settings.channels?.teamOfTheTournamentChannelId || LIVE_CHANNEL_ID;
-  return client.channels.fetch(channelId).catch(() => null);
+  const configuredId = mode === 'test'
+    ? settings.channels?.teamOfTheTournamentTestChannelId
+    : settings.channels?.teamOfTheTournamentChannelId;
+  const fallbackId = mode === 'test' ? TEST_CHANNEL_ID : LIVE_CHANNEL_ID;
+  const channelId = configuredId || fallbackId;
+  const source = configuredId ? 'settings.json' : 'Fallback';
+
+  console.info(`[tott-channel] Zielkanal: ${channelId}; Quelle: ${source}`);
+  try {
+    const channel = await client.channels.fetch(channelId);
+    console.info(`[tott-channel] Kanal gefunden: id=${channel?.id || 'null'}; name=${channel?.name || 'unbekannt'}; `
+      + `type=${channel?.type ?? 'unbekannt'}; guildId=${channel?.guildId || channel?.guild?.id || 'unbekannt'}; `
+      + `send=${typeof channel?.send === 'function'}`);
+    return channel;
+  } catch (error) {
+    const details = errorDetails(error);
+    console.error(`[tott-channel] Fetch fehlgeschlagen: channelId=${channelId}; message=${details.message}; `
+      + `code=${details.code ?? 'n/a'}; status=${details.status ?? 'n/a'}`);
+    error.tottChannelId = channelId;
+    throw error;
+  }
+}
+
+async function testLiveTottChannel(client) {
+  console.info(`[tott-test] Zielkanal: ${LIVE_CHANNEL_ID}`);
+  try {
+    const channel = await getTargetChannel(client, 'live');
+    if (!channel || typeof channel.send !== 'function') {
+      const error = new Error(`TOTT-Zielkanal ${LIVE_CHANNEL_ID} unterstützt channel.send() nicht.`);
+      error.code = 'TOTT_CHANNEL_NOT_SENDABLE';
+      throw error;
+    }
+    console.info(`[tott-test] Kanal gefunden: id=${channel.id}; name=${channel.name || 'unbekannt'}; type=${channel.type}; `
+      + `guildId=${channel.guildId || channel.guild?.id || 'unbekannt'}; send=true`);
+    const message = await channel.send({
+      content: '🧪 **TOTT-Kanaltest**\n✅ Der Loco Night Cup Bot kann diesen Kanal finden und Nachrichten senden.',
+      allowedMentions: { parse: [] },
+    });
+    console.info(`[tott-test] Nachricht erfolgreich gesendet: messageId ${message.id}`);
+    return { channelId: channel.id, messageId: message.id };
+  } catch (error) {
+    const details = errorDetails(error);
+    console.error(`[tott-test] FEHLER: ${details.message}; code=${details.code ?? 'n/a'}; status=${details.status ?? 'n/a'}`);
+    throw error;
+  }
 }
 
 async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   const event = readEventData(eventKey);
   const state = event.ceremony?.teamOfTheTournament;
   if (state?.postedAt) return { posted: false, reason: 'already_posted' };
-  if (!force && !closingRatingsReady(event)) return { posted: false, reason: 'ratings_pending' };
   if (selectionCount(state?.selection) < 11) return { posted: false, reason: 'not_enough_eligible_players' };
+  if (!force && !state?.postGraceCompletedAt) return { posted: false, reason: 'grace_period' };
+
   const channel = await getTargetChannel(client);
-  if (!channel?.send) throw new Error('Team-of-the-Tournament-Kanal wurde nicht gefunden.');
+  if (!channel || typeof channel.send !== 'function') {
+    const error = new Error('Team-of-the-Tournament-Kanal unterstützt keine Nachrichten.');
+    error.code = 'TOTT_CHANNEL_NOT_SENDABLE';
+    throw error;
+  }
+
   const serialNumber = reserveSerial(eventKey);
   const rendered = await renderTeamOfTheTournament({ selection: state.selection, serialNumber });
   const intro = buildIntroText();
   const imageMessage = await channel.send({
-    content: intro, files: [{ attachment: rendered.buffer, name: rendered.fileName }],
+    content: intro,
+    files: [{ attachment: rendered.buffer, name: rendered.fileName }],
     allowedMentions: { parse: ['everyone'] },
   });
   const awardsMessage = await channel.send({ content: buildAwardsText(state.performances), allowedMentions: { parse: [] } });
+
   updateEventData(eventKey, stored => {
     stored.ceremony.teamOfTheTournament = stored.ceremony.teamOfTheTournament || {};
     Object.assign(stored.ceremony.teamOfTheTournament, {
       postedAt: new Date().toISOString(), serialNumber,
       channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id,
       postStatus: 'posted', postCompletedAt: new Date().toISOString(), postFailureReason: null,
+      postNextAttemptAt: null,
     });
     return stored;
   });
+  console.info(`[tott] ${eventKey}: TOTT erfolgreich veröffentlicht in Kanal ${channel.id}. Message-ID: ${imageMessage.id}`);
   return { posted: true, serialNumber, channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id };
 }
 
@@ -174,89 +234,107 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   if (postTimers.has(eventKey)) return false;
   const initialState = readEventData(eventKey).ceremony?.teamOfTheTournament || {};
   const postStartedAt = initialState.postStartedAt || new Date().toISOString();
+  const elapsedAtSchedule = Math.max(0, Date.now() - new Date(postStartedAt).getTime());
+  const initialDelay = Math.max(0, TOTT_GRACE_PERIOD_MS - elapsedAtSchedule);
+
   updatePostState(eventKey, {
     postStatus: 'pending', postStartedAt,
     postCompletedAt: null, postFailureReason: null,
+    postNextAttemptAt: new Date(Date.now() + initialDelay).toISOString(),
   });
+  console.info(`[tott] ${eventKey}: Siegerehrung abgeschlossen. TOTT-Nachlauf gestartet; erste Prüfung in ${Math.ceil(initialDelay / 60000)} Minute(n).`);
+
   let attempt = 0;
   const run = async () => {
     try {
       const current = readEventData(eventKey);
       const resumed = resumeRatingCaptures(eventKey, current);
       const snapshot = workflowSnapshot(current);
+      const now = new Date().toISOString();
       updatePostState(eventKey, {
         postStatus: 'pending', postAttempt: attempt + 1,
-        postLastAttemptAt: new Date().toISOString(), postLastResult: null,
-        postSnapshot: snapshot,
+        postLastAttemptAt: now, postLastResult: null,
+        postSnapshot: snapshot, postGraceCompletedAt: now,
       });
-      console.info(`[tott] ${eventKey}: Postversuch ${attempt + 1}; `
-        + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknüpfte Spiele erfasst, `
-        + `${snapshot.selectedPlayers}/11 Spieler gewählt, ${resumed} EA-Abfragen gestartet.`);
-      const result = await postTeamOfTheTournament({ client, eventKey });
-      if (result.posted || result.reason === 'already_posted') {
-        postTimers.delete(eventKey);
-        return;
+
+      console.info(`[tott] ${eventKey}: 5-Minuten-Prüfung/Postversuch ${attempt + 1}: `
+        + `${snapshot.capturedMatches}/${snapshot.linkedMatches} EA-Spiele erfasst; `
+        + `${snapshot.selectedPlayers}/11 Spieler gewählt; ${resumed} EA-Abfragen gestartet.`);
+
+      if (snapshot.selectedPlayers >= 11) {
+        if (snapshot.capturedMatches < snapshot.linkedMatches) {
+          console.warn(`[tott] ${eventKey}: Vollständige TOTT-Elf vorhanden. `
+            + `${snapshot.linkedMatches - snapshot.capturedMatches} EA-Match(es) fehlen weiterhin, blockieren den Post aber nicht.`);
+        } else {
+          console.info(`[tott] ${eventKey}: Vollständige TOTT-Elf und alle verknüpften EA-Spiele vorhanden.`);
+        }
+        console.info(`[tott] ${eventKey}: Vollständige TOTT-Elf vorhanden. Veröffentlichung wird gestartet.`);
+        const result = await postTeamOfTheTournament({ client, eventKey });
+        if (result.posted || result.reason === 'already_posted') {
+          postTimers.delete(eventKey);
+          return;
+        }
+      } else {
+        console.info(`[tott] ${eventKey}: ${snapshot.selectedPlayers}/11 Spieler gewählt. EA-Nachholversuche laufen weiter.`);
+        updatePostState(eventKey, { postLastResult: 'not_enough_eligible_players', postFailureReason: 'not_enough_eligible_players' });
       }
-      updatePostState(eventKey, { postLastResult: result.reason, postFailureReason: result.reason });
+
       const elapsed = Date.now() - new Date(postStartedAt).getTime();
       if (elapsed >= TOTT_GIVE_UP_AFTER_MS) {
-        // Wenn EA einzelne echte Matches dauerhaft nicht liefert, darf eine bereits
-        // vollständig aus den vorhandenen Daten gewählte Elf nicht verloren gehen.
-        // Freilose sind bereits aus confirmedEventMatches ausgeschlossen.
-        if (result.reason === 'ratings_pending' && snapshot.selectedPlayers >= 11) {
-          console.warn(`[tott] ${eventKey}: Nach zwei Stunden fehlen weiterhin `
-            + `${snapshot.linkedMatches - snapshot.capturedMatches} EA-Matches, aber 11/11 Spieler sind gewählt. `
-            + 'TOTT wird mit den erfolgreich erfassten Matchdaten veröffentlicht.');
-          const fallbackResult = await postTeamOfTheTournament({ client, eventKey, force: true });
-          if (fallbackResult.posted || fallbackResult.reason === 'already_posted') {
-            postTimers.delete(eventKey);
-            return;
-          }
-        }
-
         const latest = workflowSnapshot(readEventData(eventKey));
-        const reason = `${result.reason}; ${latest.capturedMatches}/${latest.linkedMatches} `
-          + `verknüpfte Spiele erfasst; ${latest.selectedPlayers}/11 Spieler gewählt`;
-        updatePostState(eventKey, {
-          postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
-          postLastResult: result.reason, postFailureReason: reason,
-          postNextAttemptAt: null, postSnapshot: latest,
-        });
-        console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden aufgegeben: ${reason}. `
-          + 'Die Turnierbereinigung ist jetzt freigegeben.');
-        postTimers.delete(eventKey);
-        return;
+        if (latest.selectedPlayers < 11) {
+          const reason = `not_enough_eligible_players; ${latest.capturedMatches}/${latest.linkedMatches} `
+            + `verknüpfte Spiele erfasst; ${latest.selectedPlayers}/11 Spieler gewählt`;
+          updatePostState(eventKey, {
+            postStatus: 'skipped', postCompletedAt: new Date().toISOString(),
+            postLastResult: 'not_enough_eligible_players', postFailureReason: reason,
+            postNextAttemptAt: null, postSnapshot: latest,
+          });
+          console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden ohne vollständige Elf aufgegeben: ${reason}. `
+            + 'Die Turnierbereinigung ist jetzt freigegeben.');
+          postTimers.delete(eventKey);
+          return;
+        }
       }
     } catch (error) {
-      console.warn(`[tott] Abschluss-Post für ${eventKey} fehlgeschlagen: ${error.message}`);
+      const details = errorDetails(error);
+      console.warn(`[tott] Abschluss-Post für ${eventKey} fehlgeschlagen: ${details.message}; `
+        + `code=${details.code ?? 'n/a'}; status=${details.status ?? 'n/a'}`);
       updatePostState(eventKey, {
         postStatus: 'pending', postLastResult: 'error',
-        postFailureReason: String(error.message || 'unknown_error').slice(0, 500),
+        postFailureReason: `error: ${details.message}; code=${details.code ?? 'n/a'}; status=${details.status ?? 'n/a'}`.slice(0, 500),
       });
-      if (Date.now() - new Date(postStartedAt).getTime() >= TOTT_GIVE_UP_AFTER_MS) {
+
+      // Ein Discord-/Kanalfehler darf die TOTT-Daten nicht freigeben oder löschen.
+      // Der Workflow bleibt pending und wird auch nach zwei Stunden weiter versucht.
+      if (error?.tottChannelId || details.code === 'TOTT_CHANNEL_NOT_SENDABLE' || details.code === 10003 || details.code === 50001 || details.code === 50013) {
+        console.warn(`[tott] ${eventKey}: TOTT ist postbereit, aber der Zielkanal ist nicht erreichbar. `
+          + 'TOTT bleibt pending; Turnierbereinigung bleibt gesperrt.');
+      } else if (Date.now() - new Date(postStartedAt).getTime() >= TOTT_GIVE_UP_AFTER_MS) {
         const snapshot = workflowSnapshot(readEventData(eventKey));
-        const reason = `error: ${String(error.message || 'unknown_error').slice(0, 300)}; `
-          + `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknüpfte Spiele erfasst; `
-          + `${snapshot.selectedPlayers}/11 Spieler gewählt`;
+        const reason = `error: ${details.message}; ${snapshot.capturedMatches}/${snapshot.linkedMatches} `
+          + `verknüpfte Spiele erfasst; ${snapshot.selectedPlayers}/11 Spieler gewählt`;
         updatePostState(eventKey, {
           postStatus: 'failed', postCompletedAt: new Date().toISOString(),
           postLastResult: 'error', postFailureReason: reason,
           postNextAttemptAt: null, postSnapshot: snapshot,
         });
-        console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden wegen eines Fehlers aufgegeben: ${reason}. `
+        console.warn(`[tott] ${eventKey}: TOTT nach zwei Stunden wegen eines nicht-kanalbezogenen Fehlers aufgegeben: ${reason}. `
           + 'Die Turnierbereinigung ist jetzt freigegeben.');
         postTimers.delete(eventKey);
         return;
       }
     }
+
     attempt += 1;
-    const delay = POST_RETRY_DELAYS_MS[attempt] || CONTINUOUS_RETRY_DELAY_MS;
+    const delay = POST_RETRY_DELAYS_MS[attempt - 1] || CONTINUOUS_RETRY_DELAY_MS;
     updatePostState(eventKey, { postNextAttemptAt: new Date(Date.now() + delay).toISOString() });
     const timer = setTimeout(run, delay);
     if (typeof timer.unref === 'function') timer.unref();
     postTimers.set(eventKey, timer);
   };
-  const timer = setTimeout(run, POST_RETRY_DELAYS_MS[0]);
+
+  const timer = setTimeout(run, initialDelay);
   if (typeof timer.unref === 'function') timer.unref();
   postTimers.set(eventKey, timer);
   return true;
@@ -317,7 +395,7 @@ function buildTestPerformances(selection) {
 
 async function postTeamOfTheTournamentTest(client) {
   const channel = await getTargetChannel(client, 'test');
-  if (!channel?.send) throw new Error('Team-of-the-Tournament-Testkanal wurde nicht gefunden.');
+  if (!channel || typeof channel.send !== 'function') throw new Error('Team-of-the-Tournament-Testkanal wurde nicht gefunden.');
   const serialNumber = 1 + Math.floor(Math.random() * 10);
   const selection = buildTestSelection();
   const performances = buildTestPerformances(selection);
@@ -335,6 +413,6 @@ async function postTeamOfTheTournamentTest(client) {
 
 module.exports = {
   aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady,
-  initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost,
-  workflowSnapshot,
+  getTargetChannel, initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest,
+  scheduleTeamOfTheTournamentPost, testLiveTottChannel, workflowSnapshot,
 };
