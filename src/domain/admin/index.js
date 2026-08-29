@@ -5,6 +5,7 @@ const { handleAdminInteraction } = require('./admin-interactions');
 const { handleEaStatsTestInteraction } = require('./ea-stats-test');
 const { handleTeamsWithoutCupParticipationInteraction } = require('./teams-without-cup-participation');
 const { handleTeamsWithoutEaInteraction } = require('./teams-without-ea');
+const { handleTottChannelTestInteraction } = require('./tott-channel-test');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { syncAllTeamNicknames } = require('../nicknames');
@@ -42,6 +43,7 @@ async function init(client) {
 }
 
 async function handleInteraction(interaction, client) {
+  if (await handleTottChannelTestInteraction(interaction, client)) return true;
   if (await handleEaStatsTestInteraction(interaction, client)) return true;
   if (await handleTeamsWithoutCupParticipationInteraction(interaction, client)) return true;
   if (await handleTeamsWithoutEaInteraction(interaction, client)) return true;
