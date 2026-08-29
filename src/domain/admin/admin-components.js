@@ -70,6 +70,7 @@ const ADMIN_CATEGORIES = {
       ['admin_power_ranking_champion_test', 'Champion der Woche testen', 'Power-Ranking-Champion-Grafik im Testkanal prüfen'],
       ['admin_ea_stats_test', 'EA-Statistik testen', 'EA-Verbindung und letzte Clubspiele prüfen'],
       ['admin_tott_test', 'TOTT-Grafik testen', 'Team-of-the-Tournament-Grafik mit Zufallsdaten posten'],
+      ['admin_tott_channel_test', 'TOTT-Kanal testen', 'Live-TOTT-Kanal finden und Testnachricht senden'],
       ['admin_ceremony_post', 'Siegerehrung posten', 'Echte Siegerehrung für ein Event posten'],
     ],
   },
@@ -118,6 +119,7 @@ function buildAdminPanelPayload(selectedCategory = null) {
   if (selectedCategory === 'tests') {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin_tott_test').setLabel('TOTT-Grafik testen').setEmoji('⭐').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('admin_tott_channel_test').setLabel('TOTT-Kanal testen').setEmoji('📡').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_bxl_graphics_test').setLabel('Bomber X Loco Grafiken testen').setEmoji('💣').setStyle(ButtonStyle.Primary)
     ));
   }
