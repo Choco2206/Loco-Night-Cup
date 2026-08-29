@@ -2,7 +2,7 @@
 
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
-const { testLiveTottChannel } = require('../team-of-the-tournament/team-of-the-tournament-post');
+const { testLiveTottChannel } = require('../team-of-the-tournament');
 
 const EPHEMERAL = 64;
 
