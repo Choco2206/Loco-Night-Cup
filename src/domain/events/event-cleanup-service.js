@@ -10,7 +10,18 @@ const { cleanupLiveScheduleForEvent } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
 const { EVENT_KEYS } = require('../../app/constants');
 const { AUTO_CLEANUP_DELAY_MS, TOTT_CLEANUP_RECHECK_MS, isPowerRankingSettled, isTeamOfTheTournamentSettled } = require('./event-completion-policy');
+const GROUP_INFO_CHANNEL_NAMES = new Set([
+  'nightcup-info-gruppe-a',
+  'nightcup-info-gruppe-b',
+  'nightcup-info-gruppe-c',
+  'nightcup-info-gruppe-d',
+  'nightcup-info-gruppe-e',
+  'nightcup-info-gruppe-f',
+  'nightcup-info-gruppe-g',
+  'nightcup-info-gruppe-h',
+]);
 const KNOCKOUT_CHANNEL_NAMES = new Set([
+  'nightcup-info-ko-phase',
   'ko-phase',
   'ko-achtelfinale',
   'ko-viertelfinale',
@@ -106,6 +117,31 @@ function collectKnockoutChannelIds(eventKey, event, messages) {
   }
 
   return uniqueStrings(ids);
+}
+
+async function collectNamedChannelIds(guild, expectedNames) {
+  if (!guild || !expectedNames?.size) return [];
+  await guild.channels.fetch().catch(() => null);
+  return uniqueStrings(
+    [...guild.channels.cache.values()]
+      .filter(channel => channel?.name && expectedNames.has(channel.name))
+      .map(channel => channel.id)
+  );
+}
+
+function appendGroupCleanupChannelIds(groupRefs, channelIds) {
+  const knownIds = new Set(groupRefs.map(ref => ref.channelId).filter(Boolean).map(String));
+  for (const channelId of channelIds) {
+    if (knownIds.has(String(channelId))) continue;
+    groupRefs.push({
+      groupKey: `nightcup-info-${channelId}`,
+      channelId: String(channelId),
+      roleId: null,
+      teamIds: [],
+    });
+    knownIds.add(String(channelId));
+  }
+  return groupRefs;
 }
 
 async function fetchGuild(client, settings) {
@@ -338,7 +374,14 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   };
 
   const groupRefs = collectGroupRefs(eventKey, event, messages);
-  const knockoutChannelIds = collectKnockoutChannelIds(eventKey, event, messages);
+  const groupInfoChannelIds = await collectNamedChannelIds(targetGuild, GROUP_INFO_CHANNEL_NAMES);
+  appendGroupCleanupChannelIds(groupRefs, groupInfoChannelIds);
+
+  const knockoutInfoChannelIds = await collectNamedChannelIds(targetGuild, new Set(['nightcup-info-ko-phase']));
+  const knockoutChannelIds = uniqueStrings([
+    ...collectKnockoutChannelIds(eventKey, event, messages),
+    ...knockoutInfoChannelIds,
+  ]);
 
   await clearRoleMembers(targetGuild, groupRefs, summary);
   await clearKnockoutRoleMembers(targetGuild, activeSettings, summary);
@@ -493,4 +536,3 @@ module.exports = {
   schedulePendingAutoCleanups,
   resetEventForTesting,
 };
-
