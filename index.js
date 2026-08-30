@@ -17,6 +17,7 @@ const { initPowerRanking } = require('./src/domain/power-ranking');
 const { initLegacyRanking } = require('./src/domain/legacy-ranking');
 const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
 const royaleSystem = require('./src/domain/royale');
+const videoRequestSystem = require('./src/domain/video-requests');
 
 const EPHEMERAL = 64;
 const WELCOME_CHANNEL_ID = '1516390719839932576';
@@ -118,6 +119,7 @@ async function main() {
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Gruppen', () => groupSystem.init(client));
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
+      await runStartupStep('Größenvideo-Anforderung', () => videoRequestSystem.init(client));
       await runStartupStep('TOTT Tracker', () => teamOfTheTournamentSystem.initTottTracker(client));
       await runStartupStep('Team of the Tournament', () => teamOfTheTournamentSystem.initTeamOfTheTournament(client));
       await runStartupStep('Loco Power Ranking', () => initPowerRanking(client));
@@ -135,6 +137,7 @@ async function main() {
 
   client.on(Events.InteractionCreate, async interaction => {
     try {
+      if (await videoRequestSystem.handleInteraction(interaction, client)) return;
       if (await tournamentLeadershipSystem.handleInteraction(interaction, client)) return;
       if (await adminSystem.handleInteraction(interaction, client)) return;
       if (await groupSystem.handleGroupInteraction(interaction, client)) return;
