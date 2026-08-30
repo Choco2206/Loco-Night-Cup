@@ -42,7 +42,7 @@ function sortedStandings(group) {
 function buildGroupEmbed(event, group) {
   const table = sortedStandings(group).map((row, index) => `${index + 1}. ${row.displayName || findTeamById(row.teamId)?.clubName || row.teamId} • P ${row.points} • Diff ${row.goalDifference >= 0 ? '+' : ''}${row.goalDifference}`);
   const matches = getGroupMatches(group).map((match, index) => `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatGroupStatus(match)}`);
-  return new EmbedBuilder().setTitle(`📋 Gruppe ${group.groupKey}`).setColor(0xff0000).setDescription(['**Live-Tabelle**', table.join('\n') || 'Noch keine Tabelle.', '', '**Spielplan**', matches.join('\n') || 'Noch kein Spielplan.'].join('\n')).setFooter({ text: `${event.label || event.eventKey} • Gruppenphase` }).setTimestamp(new Date());
+  return new EmbedBuilder().setTitle(`📋 Gruppe ${group.groupKey}`).setColor(0xff0000).setDescription(['**Live-Tabelle**', '', table.join('\n') || 'Noch keine Tabelle.', '', '**Spielplan**', '', matches.join('\n') || 'Noch kein Spielplan.'].join('\n')).setFooter({ text: `${event.label || event.eventKey} • Gruppenphase` }).setTimestamp(new Date());
 }
 function roundTitle(roundKey) { if (roundKey === 'third_place') return '🥉 Spiel um Platz 3'; if (roundKey === 'final') return '👑 Finale'; return `🏆 ${ROUND_LABELS[roundKey] || roundKey}`; }
 function buildRoundEmbed(event, roundKey, round) {
