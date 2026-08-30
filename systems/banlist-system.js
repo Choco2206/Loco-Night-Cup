@@ -132,6 +132,17 @@ function getTeamMentions(ban) {
   return ids.map(formatUserMention).join(' ');
 }
 
+function getBanSourceMention(ban) {
+  // Alte Sperren werden bewusst nicht nachträglich ergänzt.
+  if (ban.actorTrackingVersion !== 1) return null;
+
+  const actorId = String(ban.bannedByUserId || '').trim();
+  if (actorId) return formatUserMention(actorId);
+
+  const botId = String(clientRef?.user?.id || '').trim();
+  return botId ? formatUserMention(botId) : 'Loco Night Cup Bot';
+}
+
 function buildInfoEmbed() {
   return new EmbedBuilder()
     .setTitle('🚫 LOCO NIGHT CUP | SPERRLISTE')
@@ -184,16 +195,21 @@ function buildBanlistText(data) {
   data.bans
     .sort((a, b) => String(a.bannedUntilDate).localeCompare(String(b.bannedUntilDate)))
     .forEach((ban, index) => {
-      lines.push(
-        [
-          `### ${index + 1}. ${ban.clubName}`,
-          `**VM / Co-VM:** ${getTeamMentions(ban)}`,
-          `**Grund:** ${ban.reason}`,
-          `**Sperre ab:** ${formatDateDE(ban.bannedAtDate)}`,
-          `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
-          '',
-        ].join('\n')
-      );
+      const sourceMention = getBanSourceMention(ban);
+      const banLines = [
+        `### ${index + 1}. ${ban.clubName}`,
+        `**VM / Co-VM:** ${getTeamMentions(ban)}`,
+        `**Grund:** ${ban.reason}`,
+        `**Sperre ab:** ${formatDateDE(ban.bannedAtDate)}`,
+        `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
+      ];
+
+      if (sourceMention) {
+        banLines.push(`**Von:** ${sourceMention}`);
+      }
+
+      banLines.push('');
+      lines.push(banLines.join('\n'));
     });
 
   return lines.join('\n');
@@ -275,6 +291,20 @@ async function addTeamBan(team, reason, bannedByUserId = null, durationDays = 14
   const bannedAtDate = todayDateString();
   const bannedUntilDate = addDaysDateString(durationDays);
 
+  const teamUserIds = [
+    team.managerId,
+    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
+  ].filter(Boolean).map(String);
+
+  const isAutomaticLateWithdrawal =
+    reason === 'Abmeldung nach offiziellem Anmeldeschluss' &&
+    bannedByUserId &&
+    teamUserIds.includes(String(bannedByUserId));
+
+  const trackedBannedByUserId = isAutomaticLateWithdrawal
+    ? null
+    : bannedByUserId;
+
   data.bans = data.bans.filter(ban => String(ban.teamId) !== teamId);
 
   data.bans.push({
@@ -285,7 +315,8 @@ async function addTeamBan(team, reason, bannedByUserId = null, durationDays = 14
     reason,
     bannedAtDate,
     bannedUntilDate,
-    bannedByUserId,
+    bannedByUserId: trackedBannedByUserId,
+    actorTrackingVersion: 1,
     createdAt: new Date().toISOString(),
   });
 
