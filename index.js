@@ -18,6 +18,7 @@ const { initLegacyRanking } = require('./src/domain/legacy-ranking');
 const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
 const royaleSystem = require('./src/domain/royale');
 const videoRequestSystem = require('./src/domain/video-requests');
+const facebookFeedSystem = require('./src/domain/social-media/facebook-feed');
 
 const EPHEMERAL = 64;
 const WELCOME_CHANNEL_ID = '1516390719839932576';
@@ -124,6 +125,7 @@ async function main() {
       await runStartupStep('Team of the Tournament', () => teamOfTheTournamentSystem.initTeamOfTheTournament(client));
       await runStartupStep('Loco Power Ranking', () => initPowerRanking(client));
       await runStartupStep('Loco Legacy Ranking', () => initLegacyRanking(client));
+      await runStartupStep('Facebook Social Media', () => facebookFeedSystem.init(client));
       initPendingResultConfirmations(client);
       await runStartupStep('Live-Spielplan', () => liveScheduleSystem.refreshLiveScheduleForActiveEvents(client));
       schedulePendingAutoCleanups(client);
