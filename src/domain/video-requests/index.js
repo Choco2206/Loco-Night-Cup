@@ -93,6 +93,18 @@ function getGroupRequestableMatches(event, groupKey, userId) {
     .filter(entry => entry.requesterTeam && entry.opponentTeam);
 }
 
+function getLeagueRequestableMatches(event, userId) {
+  const phase = event?.leaguePhase;
+  const slot = Number(phase?.currentMatchday) || null;
+  if (phase?.phaseType !== 'league' || !slot) return [];
+  const matchday = phase.matchdays?.[slot - 1];
+  if (!matchday) return [];
+  return (matchday.matches || [])
+    .filter(match => isReleasedOpenMatch(match) && groupMatchSlot(match) === slot)
+    .map(match => ({ match, slot, ...requesterEntryForMatch(match, userId) }))
+    .filter(entry => entry.requesterTeam && entry.opponentTeam);
+}
+
 function getKoRequestableMatches(event, roundKey, userId) {
   const round = event?.knockout?.rounds?.[roundKey];
   if (!round) return [];
@@ -100,6 +112,12 @@ function getKoRequestableMatches(event, roundKey, userId) {
     .filter(isReleasedOpenMatch)
     .map(match => ({ match, ...requesterEntryForMatch(match, userId) }))
     .filter(entry => entry.requesterTeam && entry.opponentTeam);
+}
+
+function getRequestableMatches(event, phase, phaseKey, userId) {
+  if (phase === 'group') return getGroupRequestableMatches(event, phaseKey, userId);
+  if (phase === 'league') return getLeagueRequestableMatches(event, userId);
+  return getKoRequestableMatches(event, phaseKey, userId);
 }
 
 function panelCustomId(phase, eventKey, phaseKey) {
@@ -121,7 +139,11 @@ function buildPanelRow(phase, eventKey, phaseKey) {
 }
 
 function buildPanelPayload(phase, eventKey, phaseKey) {
-  const context = phase === 'group' ? `Gruppe ${phaseKey}` : 'K.O.-Runde';
+  const context = phase === 'group'
+    ? `Gruppe ${phaseKey}`
+    : phase === 'league'
+      ? 'Ligaphase'
+      : 'K.O.-Runde';
   return {
     content: [
       '📹 **Größenvideo anfordern**',
@@ -158,6 +180,9 @@ async function refreshPanels(client) {
     for (const [groupKey, group] of Object.entries(event?.groups?.groups || {})) {
       await ensurePanelInChannel(client, group?.videoChannelId, 'group', eventKey, groupKey).catch(() => null);
     }
+    if (event?.leaguePhase?.phaseType === 'league' && event.leaguePhase.videoChannelId) {
+      await ensurePanelInChannel(client, event.leaguePhase.videoChannelId, 'league', eventKey, 'league').catch(() => null);
+    }
     for (const [roundKey, round] of Object.entries(event?.knockout?.rounds || {})) {
       if (!round?.matches?.length || round.status === 'not_needed') continue;
       await ensurePanelInChannel(client, round?.videoChannelId, 'ko', eventKey, roundKey).catch(() => null);
@@ -171,7 +196,7 @@ function buildMatchSelect(phase, eventKey, phaseKey, entries) {
       .setCustomId(selectCustomId(phase, eventKey, phaseKey))
       .setPlaceholder('Begegnung auswählen')
       .addOptions(entries.slice(0, 25).map(entry => {
-        const prefix = phase === 'group' ? `Spieltag ${entry.slot}: ` : '';
+        const prefix = phase === 'group' || phase === 'league' ? `Spieltag ${entry.slot}: ` : '';
         return {
           label: `${prefix}${participantName(entry.match.home)} vs ${participantName(entry.match.away)}`.slice(0, 100),
           value: String(entry.match.id),
@@ -183,9 +208,7 @@ function buildMatchSelect(phase, eventKey, phaseKey, entries) {
 
 async function handleOpenRequest(interaction, phase, eventKey, phaseKey) {
   const event = readEventData(eventKey);
-  const entries = phase === 'group'
-    ? getGroupRequestableMatches(event, phaseKey, interaction.user.id)
-    : getKoRequestableMatches(event, phaseKey, interaction.user.id);
+  const entries = getRequestableMatches(event, phase, phaseKey, interaction.user.id);
 
   if (!entries.length) {
     await interaction.reply({
@@ -195,7 +218,9 @@ async function handleOpenRequest(interaction, phase, eventKey, phaseKey) {
     return true;
   }
 
-  const slotText = phase === 'group' ? ` Aktuell freigegeben: Spieltag ${entries[0].slot}.` : '';
+  const slotText = phase === 'group' || phase === 'league'
+    ? ` Aktuell freigegeben: Spieltag ${entries[0].slot}.`
+    : '';
   await interaction.reply({
     content: `Wähle die Begegnung aus, für die du ein Größenvideo vom Gegner anfordern möchtest.${slotText}`,
     components: [buildMatchSelect(phase, eventKey, phaseKey, entries)],
@@ -207,9 +232,7 @@ async function handleOpenRequest(interaction, phase, eventKey, phaseKey) {
 async function handleRequestSelect(interaction, phase, eventKey, phaseKey) {
   const matchId = String(interaction.values?.[0] || '');
   const event = readEventData(eventKey);
-  const entries = phase === 'group'
-    ? getGroupRequestableMatches(event, phaseKey, interaction.user.id)
-    : getKoRequestableMatches(event, phaseKey, interaction.user.id);
+  const entries = getRequestableMatches(event, phase, phaseKey, interaction.user.id);
   const entry = entries.find(candidate => String(candidate.match.id) === matchId);
 
   if (!entry) {
@@ -222,7 +245,7 @@ async function handleRequestSelect(interaction, phase, eventKey, phaseKey) {
 
   const opponentUserIds = teamManagerUserIds(entry.opponentTeam);
   const opponentMentions = mentionUsers(opponentUserIds);
-  const context = phase === 'group'
+  const context = phase === 'group' || phase === 'league'
     ? `Spieltag ${entry.slot} · ${participantName(entry.match.home)} vs ${participantName(entry.match.away)}`
     : `${participantName(entry.match.home)} vs ${participantName(entry.match.away)}`;
 
@@ -248,7 +271,7 @@ async function handleInteraction(interaction) {
   if (!customId.startsWith(`${PANEL_PREFIX}:`) && !customId.startsWith(`${SELECT_PREFIX}:`)) return false;
 
   const [prefix, phase, eventKey, phaseKey] = customId.split(':');
-  if (!['group', 'ko'].includes(phase) || !EVENT_KEYS.includes(eventKey) || !phaseKey) return false;
+  if (!['group', 'league', 'ko'].includes(phase) || !EVENT_KEYS.includes(eventKey) || !phaseKey) return false;
 
   if (prefix === PANEL_PREFIX && interaction.isButton?.()) {
     return handleOpenRequest(interaction, phase, eventKey, phaseKey);
