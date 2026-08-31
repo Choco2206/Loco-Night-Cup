@@ -143,6 +143,7 @@ function createTeamBanEntry(team, reason, bannedByUserId = null, durationDays = 
     bannedAtDate: timestamp,
     bannedUntilDate: expiresAt,
     bannedByUserId: bannedByUserId ? String(bannedByUserId) : null,
+    sourceDisplayVersion: 1,
     createdAt: timestamp,
     startsAt: timestamp,
     expiresAt,
@@ -248,6 +249,34 @@ function formatMentions(userIds) {
   return ids.length ? ids.map(userId => `<@${userId}>`).join(', ') : '-';
 }
 
+function getBanSourceMention(ban) {
+  if (ban?.sourceDisplayVersion !== 1) return null;
+
+  const actorId = String(
+    ban?.bannedByUserId ||
+    (ban?.createdByUserId && ban.createdByUserId !== 'system' ? ban.createdByUserId : '') ||
+    ''
+  ).trim();
+
+  const teamUserIds = uniqueStrings([
+    ban?.managerId,
+    ...(Array.isArray(ban?.coManagerIds) ? ban.coManagerIds : []),
+    ...(Array.isArray(ban?.affectedUsers) ? ban.affectedUsers.map(user => user?.userId) : []),
+  ]);
+
+  const isAutomaticLateWithdrawal =
+    ban?.reason === 'late_withdrawal' &&
+    actorId &&
+    teamUserIds.includes(actorId);
+
+  if (isAutomaticLateWithdrawal || !actorId) {
+    const botId = String(activeClient?.user?.id || '').trim();
+    return botId ? `<@${botId}>` : 'Loco Night Cup Bot';
+  }
+
+  return `<@${actorId}>`;
+}
+
 async function postLogMessage(content) {
   const settings = readSettings();
   const channelId = settings.channels?.logChannelId;
@@ -285,13 +314,20 @@ function buildBanListContent(now = new Date()) {
     return '## 🔴 Aktuell gesperrte Teams\n\n✅ Aktuell sind keine Teams gesperrt.';
   }
 
-  const blocks = activeBans.map((ban, index) => [
-    `**${index + 1}. ${ban.clubName || ban.team?.clubNameSnapshot || getBanTeamId(ban) || 'Unbekanntes Team'}**`,
-    `VM / Co-VM: ${formatMentions([ban.managerId, ...(ban.coManagerIds || []), ...getBanUserIds(ban)])}`,
-    `Grund: ${getBanReasonText(ban)}`,
-    `Sperre ab: ${formatDate(ban.bannedAtDate || ban.startsAt || ban.createdAt)}`,
-    `Sperre bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`,
-  ].join('\n'));
+  const blocks = activeBans.map((ban, index) => {
+    const lines = [
+      `**${index + 1}. ${ban.clubName || ban.team?.clubNameSnapshot || getBanTeamId(ban) || 'Unbekanntes Team'}**`,
+      `VM / Co-VM: ${formatMentions([ban.managerId, ...(ban.coManagerIds || []), ...getBanUserIds(ban)])}`,
+      `Grund: ${getBanReasonText(ban)}`,
+      `Sperre ab: ${formatDate(ban.bannedAtDate || ban.startsAt || ban.createdAt)}`,
+      `Sperre bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`,
+    ];
+
+    const sourceMention = getBanSourceMention(ban);
+    if (sourceMention) lines.push(`Von: ${sourceMention}`);
+
+    return lines.join('\n');
+  });
 
   return `## 🔴 Aktuell gesperrte Teams\n\n${blocks.join('\n\n')}`;
 }
