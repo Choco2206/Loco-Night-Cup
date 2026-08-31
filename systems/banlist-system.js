@@ -3,6 +3,7 @@ const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 
 const BANLIST_FILE = path.join(process.cwd(), 'data', 'banlist.json');
+const ACTOR_TRACKING_STARTED_AT = Date.parse('2026-08-30T11:45:04Z');
 
 let clientRef = null;
 let midnightTimeoutRef = null;
@@ -132,15 +133,35 @@ function getTeamMentions(ban) {
   return ids.map(formatUserMention).join(' ');
 }
 
-function getBanSourceMention(ban) {
-  // Alte Sperren werden bewusst nicht nachträglich ergänzt.
-  if (ban.actorTrackingVersion !== 1) return null;
-
-  const actorId = String(ban.bannedByUserId || '').trim();
-  if (actorId) return formatUserMention(actorId);
-
+function getBotMention() {
   const botId = String(clientRef?.user?.id || '').trim();
   return botId ? formatUserMention(botId) : 'Loco Night Cup Bot';
+}
+
+function getBanSourceMention(ban) {
+  const createdAtMs = Date.parse(ban.createdAt || '');
+  const isNewEnough = Number.isFinite(createdAtMs) && createdAtMs >= ACTOR_TRACKING_STARTED_AT;
+
+  // Bestehende Alt-Sperren vor Einführung des Trackings bleiben unverändert.
+  if (ban.actorTrackingVersion !== 1 && !isNewEnough) return null;
+
+  const actorId = String(ban.bannedByUserId || '').trim();
+  const teamUserIds = [
+    ban.managerId,
+    ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : []),
+  ].filter(Boolean).map(String);
+
+  // Bei der automatischen 7-Tage-Sperre löst der Team-User nur den Vorgang aus.
+  // Die eigentliche Sperre wird vom Bot gesetzt und soll auch so angezeigt werden.
+  const isAutomaticLateWithdrawal =
+    ban.reason === 'Abmeldung nach offiziellem Anmeldeschluss' &&
+    actorId &&
+    teamUserIds.includes(actorId);
+
+  if (isAutomaticLateWithdrawal) return getBotMention();
+  if (actorId) return formatUserMention(actorId);
+
+  return getBotMention();
 }
 
 function buildInfoEmbed() {
