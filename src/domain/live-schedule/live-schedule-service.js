@@ -13,6 +13,7 @@ const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/leag
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const PUBLIC_LIVE_SCHEDULE_CHANNEL_ID = '1516429776070508555';
+const PUBLIC_REBUILD_VERSION = 1;
 const ROUND_LABELS = {
   round_of_32: 'Sechzehntelfinale',
   round_of_16: 'Achtelfinale',
@@ -68,6 +69,24 @@ async function upsertMessage(channel, messageId, payload) {
 }
 function getKnownMessageIds(state) { return [state?.headerMessageId, ...Object.values(state?.groupMessageIds || {}), ...Object.values(state?.knockoutMessageIds || {})].filter(Boolean); }
 async function deleteKnownMessages(channel, state) { const deleted = []; for (const messageId of getKnownMessageIds(state)) { const message = await fetchMessage(channel, messageId); if (!message) continue; await message.delete().catch(() => null); deleted.push(messageId); } return deleted; }
+async function clearPublicLiveScheduleBotMessages(channel) {
+  let before;
+  let deleted = 0;
+  while (true) {
+    const options = { limit: 100 };
+    if (before) options.before = before;
+    const batch = await channel.messages.fetch(options).catch(() => null);
+    if (!batch?.size) break;
+    for (const message of batch.values()) {
+      if (message.author?.id !== channel.client.user.id || message.pinned) continue;
+      const removed = await message.delete().then(() => true).catch(() => false);
+      if (removed) deleted += 1;
+    }
+    before = batch.last()?.id;
+    if (batch.size < 100 || !before) break;
+  }
+  return deleted;
+}
 async function getChannel(client, settings) {
   const channelId = settings.channels?.liveScheduleChannelId || PUBLIC_LIVE_SCHEDULE_CHANNEL_ID;
   const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -87,15 +106,37 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
   const phase = getPhase(currentEvent);
   if (!phase) return false;
   const cycleKey = getCycleKey(currentEvent);
+  const rebuildKey = `${eventKey}:${cycleKey || 'no-cycle'}:v${PUBLIC_REBUILD_VERSION}`;
   const messages = readJson(FILES.messages, createMessagesDefault());
   const state = messages.liveSchedule || {};
-  if (shouldResetState(state, eventKey, cycleKey)) {
+
+  if (state.publicRebuildKey !== rebuildKey) {
+    const deleted = await clearPublicLiveScheduleBotMessages(channel);
+    console.log(`[live-schedule] Öffentlicher Live-Spielplan einmalig bereinigt (${deleted} Bot-Nachrichten) und wird aus dem laufenden Event neu aufgebaut.`);
+    updateJson(FILES.messages, createMessagesDefault(), current => {
+      current.liveSchedule = {
+        ...(current.liveSchedule || {}),
+        channelId: channel.id,
+        currentEventKey: eventKey,
+        cycleKey,
+        phase,
+        headerMessageId: null,
+        groupMessageIds: {},
+        knockoutMessageIds: {},
+        cleanupStatus: 'rebuilding',
+        publicRebuildKey: rebuildKey,
+        updatedAt: nowIso(),
+      };
+      return current;
+    });
+  } else if (shouldResetState(state, eventKey, cycleKey)) {
     await deleteKnownMessages(channel, state);
     updateJson(FILES.messages, createMessagesDefault(), current => {
       current.liveSchedule = { ...(current.liveSchedule || {}), channelId: channel.id, currentEventKey: null, cycleKey: null, phase: null, headerMessageId: null, groupMessageIds: {}, knockoutMessageIds: {}, cleanupStatus: 'rebuilt', updatedAt: nowIso() };
       return current;
     });
   }
+
   const latestMessages = readJson(FILES.messages, createMessagesDefault());
   const latestState = latestMessages.liveSchedule || {};
   const header = await upsertMessage(channel, latestState.headerMessageId, headerPayload(currentEvent, phase));
@@ -113,6 +154,7 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
       groupMessageIds,
       knockoutMessageIds,
       cleanupStatus: 'active',
+      publicRebuildKey: rebuildKey,
       updatedAt: nowIso(),
     };
     return current;
@@ -154,6 +196,7 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
       groupMessageIds,
       knockoutMessageIds,
       cleanupStatus: 'active',
+      publicRebuildKey: rebuildKey,
       updatedAt: nowIso(),
     };
     return current;
