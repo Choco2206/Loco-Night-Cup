@@ -102,6 +102,22 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
   const groupMessageIds = { ...(latestState.groupMessageIds || {}) };
   const knockoutMessageIds = { ...(latestState.knockoutMessageIds || {}) };
 
+  updateJson(FILES.messages, createMessagesDefault(), current => {
+    current.liveSchedule = {
+      ...(current.liveSchedule || {}),
+      channelId: channel.id,
+      currentEventKey: eventKey,
+      cycleKey,
+      phase,
+      headerMessageId: header.id,
+      groupMessageIds,
+      knockoutMessageIds,
+      cleanupStatus: 'active',
+      updatedAt: nowIso(),
+    };
+    return current;
+  });
+
   if (phase === 'groups') {
     for (const group of activeGroups(currentEvent)) {
       const message = await upsertMessage(channel, groupMessageIds[group.groupKey], { embeds: [buildGroupEmbed(currentEvent, group)], allowedMentions: { parse: [] } });
@@ -110,8 +126,14 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
   } else if (phase === 'league') {
     const table = await renderLeagueTable(currentEvent.leaguePhase);
     const schedule = await renderLeagueSchedule(currentEvent.leaguePhase);
-    const tableMessage = await upsertMessage(channel, groupMessageIds.league_table, table);
-    const scheduleMessage = await upsertMessage(channel, groupMessageIds.league_schedule, schedule);
+    const tableMessage = await upsertMessage(channel, groupMessageIds.league_table, {
+      files: [{ attachment: table, name: 'league-table.png' }],
+      allowedMentions: { parse: [] },
+    });
+    const scheduleMessage = await upsertMessage(channel, groupMessageIds.league_schedule, {
+      files: [{ attachment: schedule, name: 'league-schedule.png' }],
+      allowedMentions: { parse: [] },
+    });
     groupMessageIds.league_table = tableMessage.id;
     groupMessageIds.league_schedule = scheduleMessage.id;
   } else if (phase === 'knockout') {
