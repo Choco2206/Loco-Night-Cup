@@ -1,6 +1,6 @@
 'use strict';
 
-const { EVENT_KEYS } = require('../../app/constants');
+const { EVENT_KEYS, isLeaguePhaseFormat } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { collectValidRealTeams } = require('../events/event-format');
@@ -43,6 +43,7 @@ function currentFormatLabel(event) { return event.format?.size ? `${event.format
 function getValidRealTeamCount(event, now = new Date()) { return collectValidRealTeams(event, now).teams.length; }
 function getActiveTeamCount(event) { return Array.isArray(event.checkin?.activeTeamIds) ? event.checkin.activeTeamIds.length : 0; }
 function getWaitlistOverflowCount(event) { return Number(event.format?.waitlistCount || 0); }
+function drawLabelForEvent(event) { return isLeaguePhaseFormat(event.format?.size) ? 'Ligaphasen-Auslosung' : 'Gruppenauslosung'; }
 
 function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
   const lateDeadlineText = formatTime(getLateWindowUntil(eventKey, event, settings, now));
@@ -53,16 +54,16 @@ function buildDeadlineMessage(eventKey, event, settings, now = new Date()) {
       '⚠️ **Aktueller Stand nach offiziellem Anmeldeschluss**', '',
       'Aktuell sind noch nicht genug Teams für den NightCup angemeldet.',
       `Minimum sind ${minimum} Teams.`, '',
-      `Teams können sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
+      `Teams können sich noch bis ${lateDeadlineText} anmelden.`,
       `Um ${lateDeadlineText} wird final geprüft, ob ein gültiges Format zustande kommt.`,
     ].join('\n');
   }
   return [
     '✅ **Aktueller Stand nach offiziellem Anmeldeschluss**', '',
     `Aktuelles Format: ${currentFormatLabel(event)}`, '',
-    `Teams können sich noch bis ${lateDeadlineText} anmelden oder abmelden.`,
+    `Teams können sich noch bis ${lateDeadlineText} anmelden.`,
     `Um ${lateDeadlineText} wird final geprüft, welches Format zustande kommt.`, '',
-    `🎲 Die Gruppenauslosung findet um ${drawText} statt.`,
+    `🎲 Die ${drawLabelForEvent(event)} findet um ${drawText} statt.`,
   ].join('\n');
 }
 
@@ -107,7 +108,7 @@ function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
     `Finales Format: **${currentFormatLabel(event)}**`,
     `Aktive Teams: **${getActiveTeamCount(event)}**`,
     `Warteliste/Überschuss: **${waitlistCount}**`, '',
-    'Die Gruppenauslosung startet in **5 Minuten**.',
+    `Die ${drawLabelForEvent(event)} startet in **5 Minuten**.`,
   ].join('\n');
 }
 
