@@ -26,31 +26,30 @@ function measuredRound(template, measurements) {
 }
 
 // Each Bomber X Loco template is measured independently.
-// round-of-32.png (Sechzehntelfinale) has 17 visible match rows in the artwork.
-// Only the first 16 are populated; the 17th/bottom field intentionally stays empty.
-// Measurements below come from the current template shown in the live render, not from
-// the old renderer output. The old coordinates started one field too low.
+// Sechzehntelfinale: first 16 rows are populated; bottom/17th artwork row stays empty.
 const ROUND_32 = [578,635,692,749,806,863,920,977,1034,1091,1148,1205,1262,1319,1376,1433].map(y => ({
+  y, homeLogoX:64, homeNameX:250, homeNameWidth:330, awayNameX:774, awayNameWidth:330,
+  awayLogoX:960, logoSize:36, scoreX:512, scoreWidth:92, fontSize:18,
+}));
+
+// Achtelfinale: measured directly from the current 1024x1536 artwork supplied for
+// round-of-16.png. Eight large rows, each with its own left team field, central score
+// box and right team field. These values are NOT derived from the Sechzehntelfinale.
+const ROUND_16 = [674,770,866,962,1058,1154,1250,1346].map(y => ({
   y,
-  homeLogoX: 64,
-  homeNameX: 250,
-  homeNameWidth: 330,
-  awayNameX: 774,
-  awayNameWidth: 330,
-  awayLogoX: 960,
-  logoSize: 36,
+  homeLogoX: 116,
+  homeNameX: 286,
+  homeNameWidth: 292,
+  awayNameX: 738,
+  awayNameWidth: 292,
+  awayLogoX: 908,
+  logoSize: 52,
   scoreX: 512,
   scoreWidth: 92,
-  fontSize: 18,
+  fontSize: 25,
 }));
 
-// Remaining rounds stay isolated and will be replaced only after their own current
-// artwork has been measured. Do not derive their values from ROUND_32.
-const ROUND_16 = [704,788,872,956,1040,1124,1208,1292].map(y => ({
-  y, homeLogoX:122, homeNameX:302, homeNameWidth:292, awayNameX:722, awayNameWidth:292,
-  awayLogoX:902, logoSize:42, scoreWidth:94, fontSize:22,
-}));
-
+// Remaining rounds stay isolated until their current artwork is supplied and measured.
 const QUARTER_FINAL = [776,914,1052,1190].map(y => ({
   y, homeLogoX:126, homeNameX:306, homeNameWidth:300, awayNameX:718, awayNameWidth:300,
   awayLogoX:898, logoSize:50, scoreWidth:102, fontSize:26,
