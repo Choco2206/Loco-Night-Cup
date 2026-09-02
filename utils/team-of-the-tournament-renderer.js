@@ -2,13 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const LAYOUT = require('../config/team-of-the-tournament-layout');
+const DEFAULT_LAYOUT = require('../config/team-of-the-tournament-layout');
+const BOMBER_X_LOCO_LAYOUT = require('../config/bomber-x-loco-tott-layout');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 
 let canvasApi;
-let templatePromise;
+const templatePromises = new Map();
 
 function getCanvas() {
   if (!canvasApi) canvasApi = require('canvas');
@@ -38,9 +39,11 @@ function drawCenteredText(ctx, text, box, maxSize, minSize = 18) {
   ctx.fillText(value, box.x + box.width / 2, box.y + box.height / 2, box.width);
 }
 
-async function loadTemplate() {
-  if (!templatePromise) templatePromise = getCanvas().loadImage(path.resolve(ROOT_DIR, LAYOUT.template));
-  return templatePromise;
+async function loadTemplate(layout) {
+  if (!templatePromises.has(layout.template)) {
+    templatePromises.set(layout.template, getCanvas().loadImage(path.resolve(ROOT_DIR, layout.template)));
+  }
+  return templatePromises.get(layout.template);
 }
 
 async function drawLogo(ctx, player, circle) {
@@ -72,15 +75,16 @@ function orderedPlayers(selection) {
   };
 }
 
-async function renderTeamOfTheTournament({ selection, serialNumber }) {
-  const template = await loadTemplate();
+async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'default' }) {
+  const layout = variant === 'bomber_x_loco' ? BOMBER_X_LOCO_LAYOUT : DEFAULT_LAYOUT;
+  const template = await loadTemplate(layout);
   const canvas = getCanvas().createCanvas(template.width, template.height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(template, 0, 0, template.width, template.height);
   ctx.shadowColor = 'rgba(0,0,0,0.9)';
   ctx.shadowBlur = 5;
   const players = orderedPlayers(selection);
-  for (const [position, slots] of Object.entries(LAYOUT.slots)) {
+  for (const [position, slots] of Object.entries(layout.slots)) {
     for (let index = 0; index < slots.length; index += 1) {
       const player = players[position][index];
       if (!player) continue;
@@ -93,12 +97,15 @@ async function renderTeamOfTheTournament({ selection, serialNumber }) {
       }, slot.rating.radius >= 38 ? 32 : 27, 18);
     }
   }
-  drawCenteredText(ctx, `#${serialNumber}`, {
-    x: LAYOUT.serial.centerX - LAYOUT.serial.width / 2,
-    y: LAYOUT.serial.centerY - LAYOUT.serial.height / 2,
-    width: LAYOUT.serial.width, height: LAYOUT.serial.height,
-  }, LAYOUT.serial.maxFontSize, 32);
-  return { buffer: canvas.toBuffer('image/png'), fileName: `team-of-the-tournament-${serialNumber}.png` };
+  if (layout.serial) {
+    drawCenteredText(ctx, `#${serialNumber}`, {
+      x: layout.serial.centerX - layout.serial.width / 2,
+      y: layout.serial.centerY - layout.serial.height / 2,
+      width: layout.serial.width, height: layout.serial.height,
+    }, layout.serial.maxFontSize, 32);
+  }
+  const prefix = variant === 'bomber_x_loco' ? 'bomber-x-loco-team-of-the-tournament' : 'team-of-the-tournament';
+  return { buffer: canvas.toBuffer('image/png'), fileName: `${prefix}${layout.serial ? `-${serialNumber}` : ''}.png` };
 }
 
 module.exports = { orderedPlayers, renderTeamOfTheTournament };

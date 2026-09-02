@@ -5,6 +5,7 @@ const test = require('node:test');
 const { FORMATION, MINIMUM_MATCHES, buildSelection, confirmedEventMatches, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
+const bomberXLocoLayout = require('../config/bomber-x-loco-tott-layout');
 const { AUTO_CLEANUP_DELAY_MS, isTeamOfTheTournamentSettled } = require('../src/domain/events/event-completion-policy');
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
@@ -96,6 +97,14 @@ test('maps exactly eleven graphic slots to the 1-3-5-2 formation', () => {
   });
 });
 
+test('uses a separate serial-free Bomber X Loco Team of the Tournament layout', () => {
+  assert.deepEqual(bomberXLocoLayout.reference, { width: 1022, height: 1536 });
+  assert.equal(bomberXLocoLayout.serial, null);
+  assert.equal(Object.values(bomberXLocoLayout.slots).flat().length, 11);
+  assert.equal(layout.template, 'assets/team-of-the-tournament/team-of-the-tournament.png');
+  assert.equal(bomberXLocoLayout.template, 'assets/bomber-x-loco/team-of-the-tournament.png');
+});
+
 test('builds eleven fictitious players for the admin graphic test', () => {
   const selection = buildTestSelection();
   assert.equal(Object.values(selection).flat().length, 11);
@@ -117,4 +126,3 @@ test('aggregates special awards only after three appearances', () => {
   assert.match(awards, /Assist-KÃ¶nig.*Helper/);
   assert.match(awards, /Top-AbrÃ¤umer.*Helper/);
 });
-

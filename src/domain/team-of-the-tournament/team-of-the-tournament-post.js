@@ -3,6 +3,7 @@
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
+const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const { confirmedEventMatches, resumeRatingCaptures } = require('./team-of-the-tournament-service');
@@ -221,7 +222,11 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   }
 
   const serialNumber = reserveSerial(eventKey);
-  const rendered = await renderTeamOfTheTournament({ selection: state.selection, serialNumber });
+  const rendered = await renderTeamOfTheTournament({
+    selection: state.selection,
+    serialNumber,
+    variant: isBomberXLocoEvent(event) ? 'bomber_x_loco' : 'default',
+  });
   const awardsRendered = await renderSpecialAwards({ awards: selectSpecialAwards(state.performances), serialNumber });
   const intro = buildIntroText();
   const imageMessage = await channel.send({
