@@ -102,7 +102,7 @@ test('uses a separate serial-free Bomber X Loco Team of the Tournament layout', 
   assert.equal(bomberXLocoLayout.serial, null);
   assert.equal(Object.values(bomberXLocoLayout.slots).flat().length, 11);
   assert.equal(layout.template, 'assets/team-of-the-tournament/team-of-the-tournament.png');
-  assert.equal(bomberXLocoLayout.template, 'assets/bomber-x-loco/team-of-the-tournament.png');
+  assert.equal(bomberXLocoLayout.template, 'assets/bomber-x-loco/team-of-the-tournament.jpg');
 });
 
 test('builds eleven fictitious players for the admin graphic test', () => {

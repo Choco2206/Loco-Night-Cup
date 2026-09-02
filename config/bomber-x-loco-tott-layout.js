@@ -1,9 +1,9 @@
 'use strict';
 
-// Individually measured against assets/bomber-x-loco/team-of-the-tournament.png.
+// Individually measured against assets/bomber-x-loco/team-of-the-tournament.jpg.
 // The one-off Bomber X Loco artwork intentionally has no serial-number field.
 module.exports = {
-  template: 'assets/bomber-x-loco/team-of-the-tournament.png',
+  template: 'assets/bomber-x-loco/team-of-the-tournament.jpg',
   reference: { width: 1022, height: 1536 },
   serial: null,
   slots: {

@@ -221,13 +221,18 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     throw error;
   }
 
-  const serialNumber = reserveSerial(eventKey);
+  const bomberXLoco = isBomberXLocoEvent(event);
+  const serialNumber = bomberXLoco ? null : reserveSerial(eventKey);
   const rendered = await renderTeamOfTheTournament({
     selection: state.selection,
     serialNumber,
-    variant: isBomberXLocoEvent(event) ? 'bomber_x_loco' : 'default',
+    variant: bomberXLoco ? 'bomber_x_loco' : 'default',
   });
-  const awardsRendered = await renderSpecialAwards({ awards: selectSpecialAwards(state.performances), serialNumber });
+  const awardsRendered = await renderSpecialAwards({
+    awards: selectSpecialAwards(state.performances),
+    serialNumber,
+    variant: bomberXLoco ? 'bomber_x_loco' : 'default',
+  });
   const intro = buildIntroText();
   const imageMessage = await channel.send({
     content: intro,
