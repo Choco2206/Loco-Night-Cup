@@ -419,6 +419,15 @@ function normalizeEventFile(eventKey) {
     }
   }
 
+  // Older cycle resets left the previous league phase behind after already
+  // clearing the locked format. Repair that inactive state before validation
+  // so a completed 14/18/20-team league cannot prevent the next bot startup.
+  const inactiveStatuses = ['idle', 'checkin', 'checkin_open', 'cancelled', 'reset'];
+  if (inactiveStatuses.includes(event.status) && event.leaguePhase.phaseType === 'league') {
+    event.leaguePhase = createEventDefault(eventKey).leaguePhase;
+    changed = true;
+  }
+
   event.ceremony = isPlainObject(event.ceremony) ? event.ceremony : createEventDefault(eventKey).ceremony;
   if (!isPlainObject(event.ceremony.teamAchievements)) {
     event.ceremony.teamAchievements = {
