@@ -7,6 +7,13 @@ const { sendTracker } = require('./tott-tracker');
 
 const MINIMUM_MATCHES = 3;
 const FORMATION = { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 };
+const GOALKEEPER_WEIGHTS = {
+  savePercentage: 0.35,
+  averageRating: 0.25,
+  goalsConcededPerMatch: 0.15,
+  savesPerMatch: 0.15,
+  cleanSheetPercentage: 0.10,
+};
 const RETRY_DELAYS_MS = [0, 30000, 120000, 300000, 600000, 900000, 900000, 1200000];
 const MAX_MATCH_TIME_DISTANCE_MS = 2 * 60 * 60 * 1000;
 const captureTimers = new Map();
@@ -116,9 +123,7 @@ function selectEaMatch(matches, lncMatch, linkedTeams) {
 
   if (linkedTeams.length > 1) {
     const timedCandidates = baseCandidates.filter(match => withinMatchWindow(match, confirmedAt));
-    if (timedCandidates.length === 1) {
-      return { match: timedCandidates[0], fallback: true };
-    }
+    if (timedCandidates.length === 1) return { match: timedCandidates[0], fallback: true };
   }
   return { match: null, fallback: false };
 }
@@ -131,6 +136,11 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
     const clubId = String(club?.clubId ?? club?.club_id ?? rawClubId);
     const teamId = teamByEaClubId.get(clubId);
     if (!teamId || !players || typeof players !== 'object') continue;
+    const goalsConceded = Object.entries(clubMap(match))
+      .filter(([key, opponent]) => String(key) !== String(rawClubId)
+        && String(opponent?.clubId ?? opponent?.club_id ?? key) !== clubId)
+      .map(([, opponent]) => clubGoals(opponent))
+      .find(Number.isFinite);
     for (const [playerId, player] of Object.entries(players)) {
       const rating = Number(player?.rating);
       const position = normalizePosition(player?.pos ?? player?.position);
@@ -143,6 +153,7 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
         manOfTheMatch: Number(player.man_of_the_match ?? player.mom) || 0,
         tacklesMade: Number(player.tacklesmade ?? player.tacklesMade) || 0,
         saves: Number(player.saves ?? player.gkSaves) || 0,
+        goalsConceded: position === 'goalkeeper' && Number.isFinite(goalsConceded) ? goalsConceded : null,
         cleanSheets: Math.max(
           Number(player.cleansheetsany) || 0,
           Number(player.cleansheetsdef) || 0,
@@ -155,6 +166,40 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
   return rows;
 }
 
+function normalizeMetric(players, field, lowerIsBetter = false) {
+  const values = players.map(player => Number(player[field])).filter(Number.isFinite);
+  if (!values.length) return players.forEach(player => { player[`${field}Score`] = 5; });
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  for (const player of players) {
+    const value = Number(player[field]);
+    if (!Number.isFinite(value) || max === min) {
+      player[`${field}Score`] = 5;
+      continue;
+    }
+    const normalized = (value - min) / (max - min);
+    player[`${field}Score`] = Number(((lowerIsBetter ? 1 - normalized : normalized) * 10).toFixed(4));
+  }
+}
+
+function addGoalkeeperScores(players) {
+  if (!players.length) return;
+  normalizeMetric(players, 'savePercentage');
+  normalizeMetric(players, 'averageRating');
+  normalizeMetric(players, 'goalsConcededPerMatch', true);
+  normalizeMetric(players, 'savesPerMatch');
+  normalizeMetric(players, 'cleanSheetPercentage');
+  for (const player of players) {
+    player.goalkeeperScore = Number((
+      player.savePercentageScore * GOALKEEPER_WEIGHTS.savePercentage
+      + player.averageRatingScore * GOALKEEPER_WEIGHTS.averageRating
+      + player.goalsConcededPerMatchScore * GOALKEEPER_WEIGHTS.goalsConcededPerMatch
+      + player.savesPerMatchScore * GOALKEEPER_WEIGHTS.savesPerMatch
+      + player.cleanSheetPercentageScore * GOALKEEPER_WEIGHTS.cleanSheetPercentage
+    ).toFixed(4));
+  }
+}
+
 function buildSelection(performances) {
   const aggregates = new Map();
   for (const row of performances || []) {
@@ -162,7 +207,8 @@ function buildSelection(performances) {
     const aggregate = aggregates.get(key) || {
       teamId: row.teamId, playerId: row.playerId, playerName: row.playerName,
       ratings: [], positions: {}, goals: 0, assists: 0, manOfTheMatch: 0,
-      tacklesMade: 0, saves: 0, cleanSheets: 0, passesMade: 0,
+      tacklesMade: 0, saves: 0, goalsConceded: 0, goalkeeperMatchesWithConcededData: 0,
+      cleanSheets: 0, passesMade: 0,
     };
     aggregate.playerName = row.playerName;
     aggregate.ratings.push(Number(row.rating));
@@ -172,6 +218,10 @@ function buildSelection(performances) {
     aggregate.manOfTheMatch += Number(row.manOfTheMatch) || 0;
     aggregate.tacklesMade += Number(row.tacklesMade) || 0;
     aggregate.saves += Number(row.saves) || 0;
+    if (row.position === 'goalkeeper' && Number.isFinite(Number(row.goalsConceded))) {
+      aggregate.goalsConceded += Number(row.goalsConceded);
+      aggregate.goalkeeperMatchesWithConcededData += 1;
+    }
     aggregate.cleanSheets += Number(row.cleanSheets) || 0;
     aggregate.passesMade += Number(row.passesMade) || 0;
     aggregates.set(key, aggregate);
@@ -181,13 +231,33 @@ function buildSelection(performances) {
     const position = Object.entries(item.positions)
       .sort((a, b) => b[1] - a[1] || Number(b[0] === lastPosition) - Number(a[0] === lastPosition))[0]?.[0] || null;
     const averageRating = item.ratings.reduce((sum, rating) => sum + rating, 0) / item.ratings.length;
-    return { ...item, position, matches: item.ratings.length, averageRating: Number(averageRating.toFixed(2)) };
+    const matches = item.ratings.length;
+    const goalkeeperMatches = item.positions.goalkeeper || 0;
+    const hasCompleteConcededData = goalkeeperMatches > 0 && item.goalkeeperMatchesWithConcededData === goalkeeperMatches;
+    const saveDenominator = item.saves + item.goalsConceded;
+    return {
+      ...item, position, matches, averageRating: Number(averageRating.toFixed(2)),
+      savePercentage: hasCompleteConcededData && saveDenominator > 0 ? item.saves / saveDenominator : 0,
+      goalsConcededPerMatch: hasCompleteConcededData ? item.goalsConceded / goalkeeperMatches : null,
+      savesPerMatch: goalkeeperMatches > 0 ? item.saves / goalkeeperMatches : 0,
+      cleanSheetPercentage: goalkeeperMatches > 0 ? item.cleanSheets / goalkeeperMatches : 0,
+    };
   });
+
+  const goalkeepers = eligible.filter(player => player.position === 'goalkeeper');
+  addGoalkeeperScores(goalkeepers);
+
   const compare = (a, b) => b.averageRating - a.averageRating
     || b.matches - a.matches || b.manOfTheMatch - a.manOfTheMatch
     || (b.goals + b.assists) - (a.goals + a.assists);
+  const compareGoalkeepers = (a, b) => b.goalkeeperScore - a.goalkeeperScore
+    || b.averageRating - a.averageRating || b.matches - a.matches;
+
   return Object.fromEntries(Object.entries(FORMATION).map(([position, count]) => [
-    position, eligible.filter(player => player.position === position).sort(compare).slice(0, count),
+    position,
+    eligible.filter(player => player.position === position)
+      .sort(position === 'goalkeeper' ? compareGoalkeepers : compare)
+      .slice(0, count),
   ]));
 }
 
@@ -350,7 +420,7 @@ function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
 }
 
 module.exports = {
-  FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
+  FORMATION, GOALKEEPER_WEIGHTS, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
   buildSelection, confirmedEventMatches, isRealEaMatch, normalizePosition, resumeRatingCaptures,
   scheduleRatingCapture, selectEaMatch,
 };
