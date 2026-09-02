@@ -5,27 +5,28 @@ const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts')
 const { listVisibleTeams } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 
-const WIDTH = 1600;
-const HEIGHT = 900;
+const WIDTH = 1536;
+const HEIGHT = 864;
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png');
 
-// Coordinates are aligned to the printed cells of the Bomber X Loco template.
-// Do not derive them from the previous test render, because that render itself was misplaced.
+// Individually measured against the current 1536x864 Bomber X Loco live-table template.
+// Header strip: qualification on the left/centre, group label on the right.
+// Data is centered inside the six printed table rows.
 const LAYOUT = Object.freeze({
-  groupLabel: { x: 1105, y: 360, maxWidth: 250 },
-  qualification: { x: 445, y: 360, maxWidth: 500 },
-  rowsY: [438, 504, 570, 636, 702, 768],
-  placeX: 104,
-  logoX: 292,
-  logoSize: 48,
-  teamX: 326,
-  teamMaxWidth: 330,
-  playedX: 697,
-  winsX: 809,
-  drawsX: 956,
-  lossesX: 1104,
-  diffX: 1245,
-  pointsX: 1374,
+  groupLabel: { x: 1060, y: 346, maxWidth: 245 },
+  qualification: { x: 435, y: 346, maxWidth: 515 },
+  rowsY: [444, 496, 547, 599, 650, 702],
+  placeX: 207,
+  logoX: 290,
+  logoSize: 38,
+  teamX: 320,
+  teamMaxWidth: 275,
+  playedX: 669,
+  winsX: 776,
+  drawsX: 907,
+  lossesX: 1054,
+  diffX: 1194,
+  pointsX: 1325,
 });
 
 let canvasApi = null;
@@ -37,13 +38,8 @@ function getCanvasApi() {
   return canvasApi;
 }
 
-function ensureFonts() {
-  ensureCanvasFontsRegistered(getCanvasApi());
-}
-
-function setFont(ctx, size, family, weight = '400') {
-  setCanvasFont(ctx, size, family, weight);
-}
+function ensureFonts() { ensureCanvasFontsRegistered(getCanvasApi()); }
+function setFont(ctx, size, family, weight = '400') { setCanvasFont(ctx, size, family, weight); }
 
 async function loadBackground() {
   if (!backgroundPromise) {
@@ -56,9 +52,7 @@ async function loadBackground() {
 }
 
 function findTeamForRow(row) {
-  if (row?.teamId) {
-    return listVisibleTeams().find(team => String(team.id) === String(row.teamId)) || null;
-  }
+  if (row?.teamId) return listVisibleTeams().find(team => String(team.id) === String(row.teamId)) || null;
   const target = String(row?.name || '').trim().toLocaleLowerCase('de');
   if (!target) return null;
   return listVisibleTeams().find(team => String(team.clubName || '').trim().toLocaleLowerCase('de') === target) || null;
@@ -70,10 +64,7 @@ async function loadTeamLogo(row) {
   const key = String(team.id);
   if (logoCache.has(key)) return logoCache.get(key);
   const logoPath = resolveTeamLogoPath(team, { optional: true });
-  if (!logoPath) {
-    logoCache.set(key, null);
-    return null;
-  }
+  if (!logoPath) { logoCache.set(key, null); return null; }
   try {
     const image = await getCanvasApi().loadImage(logoPath);
     logoCache.set(key, image);
@@ -84,7 +75,7 @@ async function loadTeamLogo(row) {
   }
 }
 
-function fitFont(ctx, text, maxWidth, maxSize = 38, minSize = 20) {
+function fitFont(ctx, text, maxWidth, maxSize = 30, minSize = 16) {
   for (let size = maxSize; size >= minSize; size -= 1) {
     setFont(ctx, size, 'Odibee Sans', '400');
     if (ctx.measureText(text).width <= maxWidth) return size;
@@ -93,7 +84,7 @@ function fitFont(ctx, text, maxWidth, maxSize = 38, minSize = 20) {
   return minSize;
 }
 
-function fitOxanium(ctx, text, maxWidth, maxSize = 30, minSize = 17, weight = '700') {
+function fitOxanium(ctx, text, maxWidth, maxSize = 26, minSize = 14, weight = '700') {
   for (let size = maxSize; size >= minSize; size -= 1) {
     setFont(ctx, size, 'Oxanium', weight);
     if (ctx.measureText(text).width <= maxWidth) return size;
@@ -116,21 +107,20 @@ function drawTopLabels(ctx, groupKey, qualificationText) {
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.lineJoin = 'round';
   ctx.shadowColor = 'rgba(255,140,30,0.55)';
-  ctx.shadowBlur = 7;
+  ctx.shadowBlur = 6;
 
-  fitOxanium(ctx, groupText, LAYOUT.groupLabel.maxWidth, 32, 20, '700');
-  ctx.lineWidth = 3;
+  fitOxanium(ctx, groupText, LAYOUT.groupLabel.maxWidth, 25, 16, '700');
+  ctx.lineWidth = 2;
   ctx.strokeText(groupText, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
   ctx.fillText(groupText, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
 
   const qualification = cleanQualificationText(qualificationText);
   if (qualification) {
-    fitOxanium(ctx, qualification, LAYOUT.qualification.maxWidth, 25, 15, '600');
+    fitOxanium(ctx, qualification, LAYOUT.qualification.maxWidth, 20, 12, '600');
     ctx.lineWidth = 2;
     ctx.strokeText(qualification, LAYOUT.qualification.x, LAYOUT.qualification.y);
     ctx.fillText(qualification, LAYOUT.qualification.x, LAYOUT.qualification.y);
   }
-
   ctx.shadowBlur = 0;
 }
 
@@ -157,20 +147,20 @@ async function drawRows(ctx, rows) {
 
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = 'rgba(0,0,0,0.75)';
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 3;
     ctx.textBaseline = 'middle';
 
-    setFont(ctx, 36, 'Oxanium', '700');
+    setFont(ctx, 29, 'Oxanium', '700');
     ctx.textAlign = 'center';
     ctx.fillText(String(index + 1), LAYOUT.placeX, y);
 
     drawLogo(ctx, logo, LAYOUT.logoX, y, LAYOUT.logoSize);
 
-    fitFont(ctx, teamName, LAYOUT.teamMaxWidth, 38, 18);
+    fitFont(ctx, teamName, LAYOUT.teamMaxWidth, 29, 15);
     ctx.textAlign = 'left';
     ctx.fillText(teamName, LAYOUT.teamX, y);
 
-    setFont(ctx, 40, 'Odibee Sans', '400');
+    setFont(ctx, 31, 'Odibee Sans', '400');
     ctx.textAlign = 'center';
     const values = [
       [LAYOUT.playedX, Number(row.played || 0)],
@@ -197,7 +187,4 @@ async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualification
   return canvas.toBuffer('image/png');
 }
 
-module.exports = {
-  BOMBER_X_LOCO_TABLE_LAYOUT: LAYOUT,
-  generateBomberXLocoLiveTableImage,
-};
+module.exports = { BOMBER_X_LOCO_TABLE_LAYOUT: LAYOUT, generateBomberXLocoLiveTableImage };
