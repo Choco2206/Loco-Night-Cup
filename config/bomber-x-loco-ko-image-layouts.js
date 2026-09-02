@@ -11,12 +11,10 @@ function slot({ y, homeLogoX, homeNameX, homeNameWidth, awayNameX, awayNameWidth
 }
 function measuredRound(template, measurements) { return Object.freeze({ template:`assets/bomber-x-loco/${template}`, reference:REFERENCE, kind:'round', matches:Object.freeze(measurements.map(slot)) }); }
 
-// The artwork contains 17 visible rows. A round of 32 has exactly 16 matches,
-// so only the first 16 row centres are mapped. The bottom row at y=1490 is
-// deliberately excluded and must always remain empty.
-// Logos sit inside the tapered team panels, with the name areas measured
-// between logo and score panel.
-const ROUND_32 = [578,635,692,749,806,863,920,977,1034,1091,1148,1205,1262,1319,1376,1433].map(y => ({ y,homeLogoX:104,homeNameX:270,homeNameWidth:280,awayNameX:754,awayNameWidth:280,awayLogoX:920,logoSize:36,scoreX:512,scoreWidth:92,fontSize:18 }));
+// Independently measured against the replacement artwork containing exactly
+// 16 visible match rows. Logos sit inside the tapered team panels, with the
+// name areas measured between logo and score panel.
+const ROUND_32 = [567,624,679,734,789,844,900,954,1010,1065,1120,1175,1230,1286,1340,1396].map(y => ({ y,homeLogoX:104,homeNameX:270,homeNameWidth:280,awayNameX:754,awayNameWidth:280,awayLogoX:920,logoSize:36,scoreX:512,scoreWidth:92,fontSize:18 }));
 const ROUND_16 = [674,770,866,962,1058,1154,1250,1346].map(y => ({ y,homeLogoX:116,homeNameX:286,homeNameWidth:292,awayNameX:738,awayNameWidth:292,awayLogoX:908,logoSize:52,scoreX:512,scoreWidth:92,fontSize:25 }));
 const QUARTER_FINAL = [721,916,1114,1315].map(y => ({ y,homeLogoX:132,homeNameX:292,homeNameWidth:270,awayNameX:732,awayNameWidth:270,awayLogoX:892,logoSize:64,scoreX:512,scoreWidth:82,fontSize:29 }));
 const SEMI_FINAL = [872,1230].map(y => ({ y,homeLogoX:134,homeNameX:292,homeNameWidth:266,awayNameX:732,awayNameWidth:266,awayLogoX:890,logoSize:70,scoreX:512,scoreWidth:80,fontSize:30 }));
@@ -39,6 +37,6 @@ const FINAL = [{
 }];
 
 module.exports = Object.freeze({
- round_of_32:measuredRound('round-of-32.png',ROUND_32), round_of_16:measuredRound('round-of-16.png',ROUND_16), quarter_final:measuredRound('quarter-final.png',QUARTER_FINAL), semi_final:measuredRound('semi-final.png',SEMI_FINAL), third_place:measuredRound('third-place.png',THIRD_PLACE), final:measuredRound('final.png',FINAL),
+ round_of_32:measuredRound('round-of-32.jpg',ROUND_32), round_of_16:measuredRound('round-of-16.png',ROUND_16), quarter_final:measuredRound('quarter-final.png',QUARTER_FINAL), semi_final:measuredRound('semi-final.png',SEMI_FINAL), third_place:measuredRound('third-place.png',THIRD_PLACE), final:measuredRound('final.png',FINAL),
  fonts:Object.freeze({ team:Object.freeze({family:'Open Sans',weight:'700',maxSize:32,minSize:11}), score:Object.freeze({family:'Oxanium',weight:'700',maxSize:34,minSize:18}) }), colors:Object.freeze({text:'#ffffff'})
 });

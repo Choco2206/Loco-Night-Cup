@@ -147,9 +147,6 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
       await drawParticipant(ctx, qualifiedTeams[index], layout.slots[index], scaleX, scaleY, layouts);
     }
   } else {
-    // The Bomber X Loco round-of-32 artwork has 17 visible rows, but the
-    // layout deliberately exposes only the first 16. The bottom template row
-    // is decorative surplus and can therefore never receive a match.
     for (let index = 0; index < layout.matches.length; index += 1) {
       const match = matches[index];
       if (!match) continue;

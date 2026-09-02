@@ -4,14 +4,14 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const layouts = require('../config/bomber-x-loco-ko-image-layouts');
 
-test('maps only the first sixteen of seventeen visible Sechzehntelfinale rows', () => {
+test('maps all sixteen visible rows of the replacement Sechzehntelfinale artwork', () => {
   const matches = layouts.round_of_32.matches;
   assert.equal(matches.length, 16);
   assert.deepEqual(matches.map(match => match.score.y), [
-    578, 635, 692, 749, 806, 863, 920, 977,
-    1034, 1091, 1148, 1205, 1262, 1319, 1376, 1433,
+    567, 624, 679, 734, 789, 844, 900, 954,
+    1010, 1065, 1120, 1175, 1230, 1286, 1340, 1396,
   ]);
-  assert.equal(matches.some(match => match.score.y === 1490), false);
+  assert.equal(layouts.round_of_32.template, 'assets/bomber-x-loco/round-of-32.jpg');
 });
 
 test('keeps Sechzehntelfinale logos inside both team panels', () => {
