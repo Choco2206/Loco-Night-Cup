@@ -8,11 +8,22 @@ const { sendTracker } = require('./tott-tracker');
 const MINIMUM_MATCHES = 3;
 const FORMATION = { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 };
 const GOALKEEPER_WEIGHTS = {
-  savePercentage: 0.35,
-  averageRating: 0.25,
-  goalsConcededPerMatch: 0.15,
-  savesPerMatch: 0.15,
-  cleanSheetPercentage: 0.10,
+  savePercentage: 0.35, averageRating: 0.25, goalsConcededPerMatch: 0.15,
+  savesPerMatch: 0.15, cleanSheetPercentage: 0.10,
+};
+const POSITION_WEIGHTS = {
+  defender: {
+    tacklesPerMatch: 0.30, averageRating: 0.25, tacklePercentage: 0.20,
+    cleanSheetPercentage: 0.15, passPercentage: 0.10,
+  },
+  midfielder: {
+    averageRating: 0.20, assistsPerMatch: 0.20, passPercentage: 0.20,
+    tacklesPerMatch: 0.20, goalsPerMatch: 0.10, tacklePercentage: 0.10,
+  },
+  forward: {
+    goalsPerMatch: 0.30, averageRating: 0.25, assistsPerMatch: 0.20,
+    shotConversion: 0.15, passPercentage: 0.10,
+  },
 };
 const RETRY_DELAYS_MS = [0, 30000, 120000, 300000, 600000, 900000, 900000, 1200000];
 const MAX_MATCH_TIME_DISTANCE_MS = 2 * 60 * 60 * 1000;
@@ -35,9 +46,7 @@ function eaMatchId(match) {
   return String(match?.matchId ?? match?.match_id ?? match?.id ?? '');
 }
 
-function clubMap(match) {
-  return match?.clubs || match?.teams || {};
-}
+function clubMap(match) { return match?.clubs || match?.teams || {}; }
 
 function clubGoals(club) {
   const value = club?.goals ?? club?.score ?? club?.goalsFor;
@@ -45,9 +54,7 @@ function clubGoals(club) {
   return Number.isFinite(number) ? number : null;
 }
 
-function eaScore(match) {
-  return Object.values(clubMap(match)).map(clubGoals).filter(Number.isFinite);
-}
+function eaScore(match) { return Object.values(clubMap(match)).map(clubGoals).filter(Number.isFinite); }
 
 function matchTimestampMs(match) {
   const raw = match?.timestamp ?? match?.matchTimestamp ?? match?.match_timestamp ?? match?.date;
@@ -110,7 +117,6 @@ function selectEaMatch(matches, lncMatch, linkedTeams) {
     if (linkedTeams.length === 1 && (!confirmedAt || !matchAt)) return false;
     return !confirmedAt || !matchAt || Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS;
   });
-
   const exactCandidates = baseCandidates.filter(match => linkedTeams.length > 1
     ? scoreMatches(match, lncMatch)
     : linkedTeamScoreMatches(match, lncMatch, linkedTeams[0], linkedTeams[0].eaClub.clubId));
@@ -120,7 +126,6 @@ function selectEaMatch(matches, lncMatch, linkedTeams) {
       - Math.abs(confirmedAt - (matchTimestampMs(b) || confirmedAt));
   };
   if (exactCandidates.length) return { match: exactCandidates.sort(sortByTime)[0], fallback: false };
-
   if (linkedTeams.length > 1) {
     const timedCandidates = baseCandidates.filter(match => withinMatchWindow(match, confirmedAt));
     if (timedCandidates.length === 1) return { match: timedCandidates[0], fallback: true };
@@ -139,8 +144,7 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
     const goalsConceded = Object.entries(clubMap(match))
       .filter(([key, opponent]) => String(key) !== String(rawClubId)
         && String(opponent?.clubId ?? opponent?.club_id ?? key) !== clubId)
-      .map(([, opponent]) => clubGoals(opponent))
-      .find(Number.isFinite);
+      .map(([, opponent]) => clubGoals(opponent)).find(Number.isFinite);
     for (const [playerId, player] of Object.entries(players)) {
       const rating = Number(player?.rating);
       const position = normalizePosition(player?.pos ?? player?.position);
@@ -152,14 +156,13 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
         goals: Number(player.goals) || 0, assists: Number(player.assists) || 0,
         manOfTheMatch: Number(player.man_of_the_match ?? player.mom) || 0,
         tacklesMade: Number(player.tacklesmade ?? player.tacklesMade) || 0,
+        tackleAttempts: Number(player.tackleattempts ?? player.tackleAttempts) || 0,
+        shots: Number(player.shots) || 0,
         saves: Number(player.saves ?? player.gkSaves) || 0,
         goalsConceded: position === 'goalkeeper' && Number.isFinite(goalsConceded) ? goalsConceded : null,
-        cleanSheets: Math.max(
-          Number(player.cleansheetsany) || 0,
-          Number(player.cleansheetsdef) || 0,
-          Number(player.cleansheetsgk) || 0
-        ),
+        cleanSheets: Math.max(Number(player.cleansheetsany) || 0, Number(player.cleansheetsdef) || 0, Number(player.cleansheetsgk) || 0),
         passesMade: Number(player.passesmade ?? player.passesMade) || 0,
+        passAttempts: Number(player.passattempts ?? player.passAttempts) || 0,
       });
     }
   }
@@ -169,34 +172,35 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
 function normalizeMetric(players, field, lowerIsBetter = false) {
   const values = players.map(player => Number(player[field])).filter(Number.isFinite);
   if (!values.length) return players.forEach(player => { player[`${field}Score`] = 5; });
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const min = Math.min(...values); const max = Math.max(...values);
   for (const player of players) {
     const value = Number(player[field]);
-    if (!Number.isFinite(value) || max === min) {
-      player[`${field}Score`] = 5;
-      continue;
-    }
+    if (!Number.isFinite(value) || max === min) { player[`${field}Score`] = 5; continue; }
     const normalized = (value - min) / (max - min);
     player[`${field}Score`] = Number(((lowerIsBetter ? 1 - normalized : normalized) * 10).toFixed(4));
   }
 }
 
+function addWeightedScores(players, weights, scoreField) {
+  if (!players.length) return;
+  Object.keys(weights).forEach(field => normalizeMetric(players, field));
+  for (const player of players) {
+    player[scoreField] = Number(Object.entries(weights)
+      .reduce((sum, [field, weight]) => sum + player[`${field}Score`] * weight, 0).toFixed(4));
+  }
+}
+
 function addGoalkeeperScores(players) {
   if (!players.length) return;
-  normalizeMetric(players, 'savePercentage');
-  normalizeMetric(players, 'averageRating');
-  normalizeMetric(players, 'goalsConcededPerMatch', true);
-  normalizeMetric(players, 'savesPerMatch');
+  normalizeMetric(players, 'savePercentage'); normalizeMetric(players, 'averageRating');
+  normalizeMetric(players, 'goalsConcededPerMatch', true); normalizeMetric(players, 'savesPerMatch');
   normalizeMetric(players, 'cleanSheetPercentage');
   for (const player of players) {
-    player.goalkeeperScore = Number((
-      player.savePercentageScore * GOALKEEPER_WEIGHTS.savePercentage
+    player.goalkeeperScore = Number((player.savePercentageScore * GOALKEEPER_WEIGHTS.savePercentage
       + player.averageRatingScore * GOALKEEPER_WEIGHTS.averageRating
       + player.goalsConcededPerMatchScore * GOALKEEPER_WEIGHTS.goalsConcededPerMatch
       + player.savesPerMatchScore * GOALKEEPER_WEIGHTS.savesPerMatch
-      + player.cleanSheetPercentageScore * GOALKEEPER_WEIGHTS.cleanSheetPercentage
-    ).toFixed(4));
+      + player.cleanSheetPercentageScore * GOALKEEPER_WEIGHTS.cleanSheetPercentage).toFixed(4));
   }
 }
 
@@ -207,23 +211,20 @@ function buildSelection(performances) {
     const aggregate = aggregates.get(key) || {
       teamId: row.teamId, playerId: row.playerId, playerName: row.playerName,
       ratings: [], positions: {}, goals: 0, assists: 0, manOfTheMatch: 0,
-      tacklesMade: 0, saves: 0, goalsConceded: 0, goalkeeperMatchesWithConcededData: 0,
-      cleanSheets: 0, passesMade: 0,
+      tacklesMade: 0, tackleAttempts: 0, shots: 0, saves: 0, goalsConceded: 0,
+      goalkeeperMatchesWithConcededData: 0, cleanSheets: 0, passesMade: 0, passAttempts: 0,
     };
-    aggregate.playerName = row.playerName;
-    aggregate.ratings.push(Number(row.rating));
+    aggregate.playerName = row.playerName; aggregate.ratings.push(Number(row.rating));
     aggregate.positions[row.position] = (aggregate.positions[row.position] || 0) + 1;
-    aggregate.goals += Number(row.goals) || 0;
-    aggregate.assists += Number(row.assists) || 0;
+    aggregate.goals += Number(row.goals) || 0; aggregate.assists += Number(row.assists) || 0;
     aggregate.manOfTheMatch += Number(row.manOfTheMatch) || 0;
-    aggregate.tacklesMade += Number(row.tacklesMade) || 0;
-    aggregate.saves += Number(row.saves) || 0;
+    aggregate.tacklesMade += Number(row.tacklesMade) || 0; aggregate.tackleAttempts += Number(row.tackleAttempts) || 0;
+    aggregate.shots += Number(row.shots) || 0; aggregate.saves += Number(row.saves) || 0;
     if (row.position === 'goalkeeper' && Number.isFinite(Number(row.goalsConceded))) {
-      aggregate.goalsConceded += Number(row.goalsConceded);
-      aggregate.goalkeeperMatchesWithConcededData += 1;
+      aggregate.goalsConceded += Number(row.goalsConceded); aggregate.goalkeeperMatchesWithConcededData += 1;
     }
     aggregate.cleanSheets += Number(row.cleanSheets) || 0;
-    aggregate.passesMade += Number(row.passesMade) || 0;
+    aggregate.passesMade += Number(row.passesMade) || 0; aggregate.passAttempts += Number(row.passAttempts) || 0;
     aggregates.set(key, aggregate);
   }
   const eligible = [...aggregates.values()].filter(item => item.ratings.length >= MINIMUM_MATCHES).map(item => {
@@ -231,8 +232,7 @@ function buildSelection(performances) {
     const position = Object.entries(item.positions)
       .sort((a, b) => b[1] - a[1] || Number(b[0] === lastPosition) - Number(a[0] === lastPosition))[0]?.[0] || null;
     const averageRating = item.ratings.reduce((sum, rating) => sum + rating, 0) / item.ratings.length;
-    const matches = item.ratings.length;
-    const goalkeeperMatches = item.positions.goalkeeper || 0;
+    const matches = item.ratings.length; const goalkeeperMatches = item.positions.goalkeeper || 0;
     const hasCompleteConcededData = goalkeeperMatches > 0 && item.goalkeeperMatchesWithConcededData === goalkeeperMatches;
     const saveDenominator = item.saves + item.goalsConceded;
     return {
@@ -240,30 +240,31 @@ function buildSelection(performances) {
       savePercentage: hasCompleteConcededData && saveDenominator > 0 ? item.saves / saveDenominator : 0,
       goalsConcededPerMatch: hasCompleteConcededData ? item.goalsConceded / goalkeeperMatches : null,
       savesPerMatch: goalkeeperMatches > 0 ? item.saves / goalkeeperMatches : 0,
-      cleanSheetPercentage: goalkeeperMatches > 0 ? item.cleanSheets / goalkeeperMatches : 0,
+      cleanSheetPercentage: item.cleanSheets / matches,
+      tacklesPerMatch: item.tacklesMade / matches,
+      tacklePercentage: item.tackleAttempts > 0 ? item.tacklesMade / item.tackleAttempts : 0,
+      passPercentage: item.passAttempts > 0 ? item.passesMade / item.passAttempts : 0,
+      goalsPerMatch: item.goals / matches, assistsPerMatch: item.assists / matches,
+      shotConversion: item.shots > 0 ? item.goals / item.shots : 0,
     };
   });
 
-  const goalkeepers = eligible.filter(player => player.position === 'goalkeeper');
-  addGoalkeeperScores(goalkeepers);
+  const byPosition = Object.fromEntries(Object.keys(FORMATION).map(position => [position, eligible.filter(player => player.position === position)]));
+  addGoalkeeperScores(byPosition.goalkeeper);
+  addWeightedScores(byPosition.defender, POSITION_WEIGHTS.defender, 'positionScore');
+  addWeightedScores(byPosition.midfielder, POSITION_WEIGHTS.midfielder, 'positionScore');
+  addWeightedScores(byPosition.forward, POSITION_WEIGHTS.forward, 'positionScore');
 
-  const compare = (a, b) => b.averageRating - a.averageRating
-    || b.matches - a.matches || b.manOfTheMatch - a.manOfTheMatch
-    || (b.goals + b.assists) - (a.goals + a.assists);
-  const compareGoalkeepers = (a, b) => b.goalkeeperScore - a.goalkeeperScore
-    || b.averageRating - a.averageRating || b.matches - a.matches;
-
+  const compareGoalkeepers = (a, b) => b.goalkeeperScore - a.goalkeeperScore || b.averageRating - a.averageRating || b.matches - a.matches;
+  const compareFieldPlayers = (a, b) => b.positionScore - a.positionScore || b.averageRating - a.averageRating
+    || b.matches - a.matches || b.manOfTheMatch - a.manOfTheMatch;
   return Object.fromEntries(Object.entries(FORMATION).map(([position, count]) => [
-    position,
-    eligible.filter(player => player.position === position)
-      .sort(position === 'goalkeeper' ? compareGoalkeepers : compare)
-      .slice(0, count),
+    position, byPosition[position].sort(position === 'goalkeeper' ? compareGoalkeepers : compareFieldPlayers).slice(0, count),
   ]));
 }
 
 function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
-  let stored = false;
-  let storedRows = [];
+  let stored = false; let storedRows = [];
   updateEventData(eventKey, event => {
     event.ceremony = event.ceremony || {};
     const state = event.ceremony.teamOfTheTournament || { performances: [], capturedMatches: [], selection: null };
@@ -272,28 +273,18 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
     if (!rows.length) return event;
     state.performances.push(...rows);
     state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), capturedAt: new Date().toISOString() });
-    state.selection = buildSelection(state.performances);
-    state.updatedAt = new Date().toISOString();
-    event.ceremony.teamOfTheTournament = state;
-    storedRows = rows;
-    stored = true;
-    return event;
+    state.selection = buildSelection(state.performances); state.updatedAt = new Date().toISOString();
+    event.ceremony.teamOfTheTournament = state; storedRows = rows; stored = true; return event;
   });
   return { stored, rows: storedRows };
 }
 
-function teamName(teamId) {
-  return findTeamById(teamId)?.clubName || `Team ${teamId || '?'}`;
-}
-
+function teamName(teamId) { return findTeamById(teamId)?.clubName || `Team ${teamId || '?'}`; }
 function matchLabel(lncMatch) {
   const homeName = lncMatch?.home?.type === 'bye' ? 'Freilos' : teamName(lncMatch?.home?.teamId);
   const awayName = lncMatch?.away?.type === 'bye' ? 'Freilos' : teamName(lncMatch?.away?.teamId);
-  const homeGoals = lncMatch?.result?.homeGoals ?? '?';
-  const awayGoals = lncMatch?.result?.awayGoals ?? '?';
-  return `${homeName} **${homeGoals}:${awayGoals}** ${awayName}`;
+  return `${homeName} **${lncMatch?.result?.homeGoals ?? '?'}:${lncMatch?.result?.awayGoals ?? '?'}** ${awayName}`;
 }
-
 function linkedStatus(lncMatch) {
   return [lncMatch?.home, lncMatch?.away].map(participant => {
     if (participant?.type === 'bye') return '⏭️ Freilos – keine EA-Daten erwartet';
@@ -323,8 +314,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
   if (!lncMatch?.id || lncMatch.status !== 'confirmed' || !isRealEaMatch(lncMatch)) return false;
   const key = `${eventKey}:${lncMatch.id}`;
   if (captureTimers.has(key)) return false;
-  let attempt = 0;
-  let firstWarningSent = false;
+  let attempt = 0; let firstWarningSent = false;
   const run = async () => {
     let lastError = null;
     try {
@@ -333,70 +323,37 @@ function scheduleRatingCapture(eventKey, lncMatch) {
         const counts = new Map();
         for (const row of result.rows || []) counts.set(row.teamId, (counts.get(row.teamId) || 0) + 1);
         const details = [lncMatch?.home?.teamId, lncMatch?.away?.teamId]
-          .map(teamId => `${teamName(teamId)}: **${counts.get(String(teamId)) || 0} Spielerwerte**`)
-          .join('\n');
-        const fallbackWarning = result.fallback ? [
-          '',
-          '⚠️ **ERGEBNISABWEICHUNG – FALLBACK VERWENDET**',
+          .map(teamId => `${teamName(teamId)}: **${counts.get(String(teamId)) || 0} Spielerwerte**`).join('\n');
+        const fallbackWarning = result.fallback ? ['', '⚠️ **ERGEBNISABWEICHUNG – FALLBACK VERWENDET**',
           `Night Cup eingetragen: **${lncMatch.result.homeGoals}:${lncMatch.result.awayGoals}**`,
           `EA Match-Ergebnis: **${eaScore(result.candidate).join(':')}**`,
-          'Beide EA-Clubs + Zeitfenster waren eindeutig; es gab genau **einen** gemeinsamen Match-Kandidaten.',
-        ] : [];
-        await sendTracker([
-          '✅ **TOTT MATCH ERFASST**',
-          matchLabel(lncMatch),
-          '',
-          `EA Match-ID: **${eaMatchId(result.candidate)}**`,
-          linkedStatus(lncMatch),
-          details,
-          '**Gespeichert:** ✅',
-          ...fallbackWarning,
-        ].join('\n'));
-        captureTimers.delete(key);
-        return;
+          'Beide EA-Clubs + Zeitfenster waren eindeutig; es gab genau **einen** gemeinsamen Match-Kandidaten.'] : [];
+        await sendTracker(['✅ **TOTT MATCH ERFASST**', matchLabel(lncMatch), '', `EA Match-ID: **${eaMatchId(result.candidate)}**`,
+          linkedStatus(lncMatch), details, '**Gespeichert:** ✅', ...fallbackWarning].join('\n'));
+        captureTimers.delete(key); return;
       }
-      if (['no_linked_teams', 'bye_or_non_real_match'].includes(result.reason)) {
-        captureTimers.delete(key);
-        return;
-      }
+      if (['no_linked_teams', 'bye_or_non_real_match'].includes(result.reason)) { captureTimers.delete(key); return; }
     } catch (error) {
-      lastError = error;
-      console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
+      lastError = error; console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
     }
-
     attempt += 1;
     if (!firstWarningSent) {
       firstWarningSent = true;
-      await sendTracker([
-        '⚠️ **TOTT MATCH NOCH NICHT ERFASST**',
-        matchLabel(lncMatch),
-        '',
-        linkedStatus(lncMatch),
+      await sendTracker(['⚠️ **TOTT MATCH NOCH NICHT ERFASST**', matchLabel(lncMatch), '', linkedStatus(lncMatch),
         lastError ? `EA-Fehler: **${lastError.message}**` : 'EA erreichbar, aber das passende Match wurde noch nicht gefunden.',
-        '**Weitere Versuche laufen automatisch.**',
-      ].join('\n'));
+        '**Weitere Versuche laufen automatisch.**'].join('\n'));
     }
-
     if (attempt >= RETRY_DELAYS_MS.length) {
       console.warn(`[tott] ${key}: nach ${attempt} EA-Abfragen noch keine passenden Matchdaten gefunden.`);
-      await sendTracker([
-        '🔴 **TOTT MATCH NICHT ERFASST**',
-        matchLabel(lncMatch),
-        '',
-        linkedStatus(lncMatch),
+      await sendTracker(['🔴 **TOTT MATCH NICHT ERFASST**', matchLabel(lncMatch), '', linkedStatus(lncMatch),
         `Nach **${attempt} Versuchen** konnten keine passenden EA-Matchdaten gespeichert werden.`,
-        lastError ? `Letzter EA-Fehler: **${lastError.message}**` : 'EA hat kein eindeutig passendes Match geliefert.',
-      ].join('\n'));
-      captureTimers.delete(key);
-      return;
+        lastError ? `Letzter EA-Fehler: **${lastError.message}**` : 'EA hat kein eindeutig passendes Match geliefert.'].join('\n'));
+      captureTimers.delete(key); return;
     }
     const timer = setTimeout(run, RETRY_DELAYS_MS[attempt]);
-    if (typeof timer.unref === 'function') timer.unref();
-    captureTimers.set(key, timer);
+    if (typeof timer.unref === 'function') timer.unref(); captureTimers.set(key, timer);
   };
-  captureTimers.set(key, true);
-  run();
-  return true;
+  captureTimers.set(key, true); run(); return true;
 }
 
 function confirmedEventMatches(event) {
@@ -409,8 +366,7 @@ function confirmedEventMatches(event) {
 }
 
 function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
-  const captured = new Set((event?.ceremony?.teamOfTheTournament?.capturedMatches || [])
-    .map(entry => String(entry.lncMatchId)));
+  const captured = new Set((event?.ceremony?.teamOfTheTournament?.capturedMatches || []).map(entry => String(entry.lncMatchId)));
   let scheduled = 0;
   for (const match of confirmedEventMatches(event)) {
     if (captured.has(String(match.id))) continue;
@@ -420,7 +376,7 @@ function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
 }
 
 module.exports = {
-  FORMATION, GOALKEEPER_WEIGHTS, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
+  FORMATION, GOALKEEPER_WEIGHTS, POSITION_WEIGHTS, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
   buildSelection, confirmedEventMatches, isRealEaMatch, normalizePosition, resumeRatingCaptures,
   scheduleRatingCapture, selectEaMatch,
 };
