@@ -160,6 +160,12 @@ function resetToOpenCheckinCycle(event) {
   event.checkin = { ...(event.checkin || {}), isOpen: true, closedAt: null, entries: [], activeTeamIds: [], waitlistTeamIds: [], lateLeaveBans: [] };
   event.byes = [];
   event.groups = { status: 'not_created', drawnAt: null, drawnBy: null, groups: {} };
+  event.leaguePhase = {
+    phaseType: null, status: 'not_created', participants: [], slots: [], matchdays: [], standings: [],
+    currentMatchday: 0, roleId: null, overviewChannelId: null, resultsChannelId: null,
+    videoChannelId: null, calculationChannelId: null, qualificationAuditMessageId: null,
+    qualificationAuditPostedAt: null, transitionStatus: 'not_started', messages: {},
+  };
   event.knockout = { status: 'not_created', createdAt: null, source: { qualifiedRule: null, avoidSameGroupRematches: true }, rounds: {} };
 }
 
