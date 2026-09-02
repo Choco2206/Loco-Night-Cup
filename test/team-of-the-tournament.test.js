@@ -112,6 +112,8 @@ test('builds eleven fictitious players for the admin graphic test', () => {
   assert.equal(buildTestPerformances(selection).length, 33);
   assert.match(buildIntroText({ test: true }), /@everyone/);
   assert.match(buildIntroText({ test: true }), /Loco DNA/);
+  assert.match(buildIntroText({ variant: 'bomber_x_loco' }), /BOMBER X LOCO CUP/);
+  assert.doesNotMatch(buildIntroText({ variant: 'bomber_x_loco' }), /Loco DNA/);
 });
 
 test('aggregates special awards only after three appearances', () => {

@@ -40,19 +40,24 @@ function sortedStandings(group) {
   recalculateGroupStandings(group);
   return (group.standings || []).slice().sort((a, b) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor || a.goalsAgainst - b.goalsAgainst || String(a.displayName || '').localeCompare(String(b.displayName || ''), 'de', { sensitivity: 'base' }));
 }
+function eventDisplayLabel(event) {
+  return event?.meta?.eventMode === 'bomber_x_loco'
+    ? 'Bomber X Loco Cup'
+    : `Loco Night Cup ${event?.label || event?.eventKey}`;
+}
 function buildGroupEmbed(event, group) {
   const table = sortedStandings(group).map((row, index) => `${index + 1}. ${row.displayName || findTeamById(row.teamId)?.clubName || row.teamId} • P ${row.points} • Diff ${row.goalDifference >= 0 ? '+' : ''}${row.goalDifference}`);
   const matches = getGroupMatches(group).map((match, index) => `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatGroupStatus(match)}`);
-  return new EmbedBuilder().setTitle(`📋 Gruppe ${group.groupKey}`).setColor(0xff0000).setDescription(['**Live-Tabelle**', '', table.join('\n') || 'Noch keine Tabelle.', '', '**Spielplan**', '', matches.join('\n') || 'Noch kein Spielplan.'].join('\n')).setFooter({ text: `${event.label || event.eventKey} • Gruppenphase` }).setTimestamp(new Date());
+  return new EmbedBuilder().setTitle(`📋 Gruppe ${group.groupKey}`).setColor(0xff0000).setDescription(['**Live-Tabelle**', '', table.join('\n') || 'Noch keine Tabelle.', '', '**Spielplan**', '', matches.join('\n') || 'Noch kein Spielplan.'].join('\n')).setFooter({ text: `${eventDisplayLabel(event)} • Gruppenphase` }).setTimestamp(new Date());
 }
 function roundTitle(roundKey) { if (roundKey === 'third_place') return '🥉 Spiel um Platz 3'; if (roundKey === 'final') return '👑 Finale'; return `🏆 ${ROUND_LABELS[roundKey] || roundKey}`; }
 function buildRoundEmbed(event, roundKey, round) {
   const matches = (round.matches || []).map((match, index) => `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatKnockoutStatus(match)}`);
-  return new EmbedBuilder().setTitle(roundTitle(roundKey)).setColor(roundKey === 'final' ? 0xf2c94c : 0xff0000).setDescription(matches.join('\n') || 'Diese Runde ist noch nicht bereit.').setFooter({ text: `${event.label || event.eventKey} • K.O.-Phase` }).setTimestamp(new Date());
+  return new EmbedBuilder().setTitle(roundTitle(roundKey)).setColor(roundKey === 'final' ? 0xf2c94c : 0xff0000).setDescription(matches.join('\n') || 'Diese Runde ist noch nicht bereit.').setFooter({ text: `${eventDisplayLabel(event)} • K.O.-Phase` }).setTimestamp(new Date());
 }
 function headerPayload(event, phase) {
   const size = event.format?.size ? `${event.format.size}er Cup` : 'Cup';
-  const label = event.meta?.eventMode === 'bomber_x_loco' ? 'Bomber X Loco Cup' : `Loco Night Cup ${event.label || event.eventKey}`;
+  const label = eventDisplayLabel(event);
   if (phase === 'knockout') return { content: `🏆 ${label} • K.O.-Phase`, allowedMentions: { parse: [] } };
   if (phase === 'league') return { content: `📊 Loco Night Cup ${event.label || event.eventKey} • ${event.format?.size}er-Ligaphase\n🏆 Die besten 8 qualifizieren sich für das Viertelfinale.`, allowedMentions: { parse: [] } };
   return { content: [`📊 ${label} • Live-Spielplan`, `🏆 Turnierformat: ${size}`].join('\n'), allowedMentions: { parse: [] } };

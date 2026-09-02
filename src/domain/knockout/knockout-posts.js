@@ -384,7 +384,7 @@ function buildRoundButtons(eventKey, roundKey) {
 }
 
 function currentRoundLabel(event) {
-  const roundKey = ROUND_ORDER.find(key => {
+  const roundKey = ['round_of_32', ...ROUND_ORDER].find(key => {
     const round = event.knockout?.rounds?.[key];
     return round?.matches?.length && ['open', 'pending_confirmation', 'admin_decision_required'].includes(round.status);
   });
@@ -397,7 +397,13 @@ function currentRoundLabel(event) {
 
 function channelLines(event) {
   const lines = [];
-  for (const roundKey of activeRoundKeys(event)) {
+  const roundKeys = ['round_of_32', ...activeRoundKeys(event)]
+    .filter((roundKey, index, keys) => keys.indexOf(roundKey) === index)
+    .filter(roundKey => {
+      const round = event.knockout?.rounds?.[roundKey];
+      return round?.matches?.length && round.status !== 'not_needed';
+    });
+  for (const roundKey of roundKeys) {
     const channelId = event.knockout?.rounds?.[roundKey]?.channelId;
     lines.push(`• ${ROUND_LABELS[roundKey] || roundKey}: ${channelId ? `<#${channelId}>` : 'wird vorbereitet'}`);
   }

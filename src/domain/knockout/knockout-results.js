@@ -3,7 +3,7 @@
 const { updateEventData } = require('../events/event-repository');
 const { findTeamById, isTeamMember } = require('../teams/team-service');
 
-const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
+const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const MATCH_STATUSES = ['open', 'pending_confirmation', 'admin_decision_required', 'confirmed', 'locked'];
 const RESULT_CONFIRMATION_TIMEOUT_MS = 2 * 60 * 1000;
 

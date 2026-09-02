@@ -96,7 +96,19 @@ function selectSpecialAwards(performances) {
   };
 }
 
-function buildIntroText({ test = false } = {}) {
+function buildIntroText({ test = false, variant = 'default' } = {}) {
+  if (variant === 'bomber_x_loco') {
+    return [
+      test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
+      '@everyone',
+      '🏆 **BOMBER X LOCO CUP – TEAM OF THE TOURNAMENT**',
+      'Zwei Communities. Ein gemeinsamer Cup. Elf Spieler, die diesem besonderen Abend ihren Stempel aufgedrückt haben.',
+      '',
+      'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt Spiele entschieden, Verantwortung übernommen und auf der gemeinsamen Bühne von Bomber Cup und Loco Night Cup abgeliefert. 💣🐺',
+      '',
+      '**Das ist die beste Elf des Bomber X Loco Cups.**',
+    ].filter(entry => entry !== null).join('\n');
+  }
   return [
     test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
     '@everyone',
@@ -233,7 +245,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     serialNumber,
     variant: bomberXLoco ? 'bomber_x_loco' : 'default',
   });
-  const intro = buildIntroText();
+  const intro = buildIntroText({ variant: bomberXLoco ? 'bomber_x_loco' : 'default' });
   const imageMessage = await channel.send({
     content: intro,
     files: [{ attachment: rendered.buffer, name: rendered.fileName }],
