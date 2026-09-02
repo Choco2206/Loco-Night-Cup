@@ -147,9 +147,6 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
       await drawParticipant(ctx, qualifiedTeams[index], layout.slots[index], scaleX, scaleY, layouts);
     }
   } else {
-    // Bei Bomber X Loco round_of_32 besitzt die Vorlage zwar 17 optische
-    // Begegnungsfelder, das Layout definiert absichtlich nur 16 Match-Slots.
-    // Damit kann das 17. Feld nie versehentlich beschrieben werden.
     for (let index = 0; index < layout.matches.length; index += 1) {
       const match = matches[index];
       if (!match) continue;
