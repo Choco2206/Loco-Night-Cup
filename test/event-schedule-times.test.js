@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createEventDefault, createSettingsDefault } = require('../src/storage/defaults');
-const { getPlannedSchedule } = require('../src/domain/checkins/checkin-schedule');
+const { ensureEventCycle, getPlannedSchedule } = require('../src/domain/checkins/checkin-schedule');
 
 test('starts Monday through Thursday and Sunday at 23:00 with unchanged lead times', () => {
   const settings = createSettingsDefault();
@@ -53,3 +53,28 @@ test('keeps Friday and Saturday on the existing 00:15 late schedule', () => {
   assert.equal(planned.tournamentStartAt.toISOString(), '2026-08-07T22:15:00.000Z');
 });
 
+test('clears a previous league phase when the next check-in cycle opens', () => {
+  const settings = createSettingsDefault();
+  const event = createEventDefault('tuesday');
+  event.status = 'completed';
+  event.cycle.eventDate = '2026-08-25';
+  event.format.size = 20;
+  event.format.lockedAt = '2026-08-25T20:30:00.000Z';
+  event.leaguePhase = {
+    ...event.leaguePhase,
+    phaseType: 'league',
+    status: 'completed',
+    participants: Array.from({ length: 20 }, (_, index) => ({ teamId: String(index + 1) })),
+    matchdays: Array.from({ length: 4 }, () => ({ matches: [] })),
+  };
+
+  const changed = ensureEventCycle('tuesday', event, settings, new Date('2026-09-01T12:00:00.000Z'));
+
+  assert.equal(changed, true);
+  assert.equal(event.status, 'checkin_open');
+  assert.equal(event.format.size, null);
+  assert.equal(event.leaguePhase.phaseType, null);
+  assert.equal(event.leaguePhase.status, 'not_created');
+  assert.deepEqual(event.leaguePhase.participants, []);
+  assert.deepEqual(event.leaguePhase.matchdays, []);
+});
