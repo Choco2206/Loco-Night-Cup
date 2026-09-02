@@ -1,5 +1,7 @@
 'use strict';
 
+require('./live-schedule-cleanup.test');
+
 require('./team-stream-list.test');
 require('./team-overview.test');
 require('./event-schedule-times.test');

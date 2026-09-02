@@ -208,6 +208,45 @@ function refreshLiveSchedule(client, eventKey, event = null) {
   return enqueueCoalesced(`live-schedule:${eventKey}`, () => performLiveScheduleRefresh(client, eventKey, event));
 }
 
+async function cleanupLiveScheduleForEvent(client, eventKey) {
+  if (!client || !EVENT_KEYS.includes(eventKey)) return { cleaned: false, deletedMessageIds: [] };
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const state = messages.liveSchedule || {};
+
+  // Never erase a newer event that already owns the shared public channel.
+  if (state.currentEventKey && state.currentEventKey !== eventKey) {
+    return { cleaned: false, deletedMessageIds: [] };
+  }
+
+  const channel = await getChannel(client, readSettings());
+  if (!channel) return { cleaned: false, deletedMessageIds: [] };
+
+  const knownMessageIds = getKnownMessageIds(state);
+  await deleteKnownMessages(channel, state);
+  // Also remove orphaned/duplicate bot posts whose IDs were lost during an
+  // interrupted refresh. The channel is dedicated to the public schedule.
+  const orphanedCount = await clearPublicLiveScheduleBotMessages(channel);
+
+  updateJson(FILES.messages, createMessagesDefault(), current => {
+    current.liveSchedule = {
+      ...(current.liveSchedule || {}),
+      channelId: channel.id,
+      currentEventKey: null,
+      cycleKey: null,
+      phase: null,
+      headerMessageId: null,
+      groupMessageIds: {},
+      knockoutMessageIds: {},
+      cleanupStatus: 'cleaned',
+      publicRebuildKey: null,
+      updatedAt: nowIso(),
+    };
+    return current;
+  });
+
+  return { cleaned: true, deletedMessageIds: knownMessageIds, orphanedCount };
+}
+
 async function refreshLiveScheduleForActiveEvents(client) {
   for (const eventKey of EVENT_KEYS) {
     const event = readEventData(eventKey);
@@ -217,6 +256,7 @@ async function refreshLiveScheduleForActiveEvents(client) {
 }
 
 module.exports = {
+  cleanupLiveScheduleForEvent,
   refreshLiveSchedule,
   refreshLiveScheduleForActiveEvents,
 };

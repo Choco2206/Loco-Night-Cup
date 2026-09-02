@@ -19,6 +19,13 @@ const GROUP_INFO_CHANNEL_NAMES = new Set([
   'nightcup-info-gruppe-f',
   'nightcup-info-gruppe-g',
   'nightcup-info-gruppe-h',
+  'nightcup-info-liga',
+  'nightcup-info-ko-phase',
+  'nightcup-info-achtelfinale',
+  'nightcup-info-viertelfinale',
+  'nightcup-info-halbfinale',
+  'nightcup-info-platz-3',
+  'nightcup-info-finale',
 ]);
 const KNOCKOUT_CHANNEL_NAMES = new Set([
   'nightcup-info-ko-phase',
@@ -377,10 +384,8 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   const groupInfoChannelIds = await collectNamedChannelIds(targetGuild, GROUP_INFO_CHANNEL_NAMES);
   appendGroupCleanupChannelIds(groupRefs, groupInfoChannelIds);
 
-  const knockoutInfoChannelIds = await collectNamedChannelIds(targetGuild, new Set(['nightcup-info-ko-phase']));
   const knockoutChannelIds = uniqueStrings([
     ...collectKnockoutChannelIds(eventKey, event, messages),
-    ...knockoutInfoChannelIds,
   ]);
 
   await clearRoleMembers(targetGuild, groupRefs, summary);
