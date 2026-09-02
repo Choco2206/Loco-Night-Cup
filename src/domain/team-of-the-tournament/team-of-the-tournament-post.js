@@ -19,6 +19,10 @@ function renderTeamOfTheTournament(input) {
   return require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input);
 }
 
+function renderSpecialAwards(input) {
+  return require('../../../utils/special-awards-renderer').renderSpecialAwards(input);
+}
+
 function updatePostState(eventKey, values) {
   updateEventData(eventKey, event => {
     event.ceremony = event.ceremony || {};
@@ -79,6 +83,16 @@ function buildAwardsText(performances) {
     playerAwardLine('👑', 'MVP der Nacht', topPlayer(players, 'averageRating'), 'averageRating', 'Ø-Bewertung'),
     playerAwardLine('⭐', 'MOTM-König', topPlayer(players, 'manOfTheMatch'), 'manOfTheMatch', 'Auszeichnungen'),
   ].join('\n');
+}
+
+function selectSpecialAwards(performances) {
+  const players = aggregatePlayers(performances);
+  return {
+    goals: topPlayer(players, 'goals'), assists: topPlayer(players, 'assists'),
+    tacklesMade: topPlayer(players, 'tacklesMade'), saves: topPlayer(players, 'saves'),
+    cleanSheets: topPlayer(players, 'cleanSheets'), passesMade: topPlayer(players, 'passesMade'),
+    averageRating: topPlayer(players, 'averageRating'), manOfTheMatch: topPlayer(players, 'manOfTheMatch'),
+  };
 }
 
 function buildIntroText({ test = false } = {}) {
@@ -208,13 +222,16 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
 
   const serialNumber = reserveSerial(eventKey);
   const rendered = await renderTeamOfTheTournament({ selection: state.selection, serialNumber });
+  const awardsRendered = await renderSpecialAwards({ awards: selectSpecialAwards(state.performances), serialNumber });
   const intro = buildIntroText();
   const imageMessage = await channel.send({
     content: intro,
     files: [{ attachment: rendered.buffer, name: rendered.fileName }],
     allowedMentions: { parse: ['everyone'] },
   });
-  const awardsMessage = await channel.send({ content: buildAwardsText(state.performances), allowedMentions: { parse: [] } });
+  const awardsMessage = await channel.send({
+    files: [{ attachment: awardsRendered.buffer, name: awardsRendered.fileName }], allowedMentions: { parse: [] },
+  });
 
   updateEventData(eventKey, stored => {
     stored.ceremony.teamOfTheTournament = stored.ceremony.teamOfTheTournament || {};
@@ -400,19 +417,21 @@ async function postTeamOfTheTournamentTest(client) {
   const selection = buildTestSelection();
   const performances = buildTestPerformances(selection);
   const rendered = await renderTeamOfTheTournament({ selection, serialNumber });
+  const awardsRendered = await renderSpecialAwards({ awards: selectSpecialAwards(performances), serialNumber });
   const message = await channel.send({
     content: buildIntroText({ test: true }),
     files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },
   });
   const awardsMessage = await channel.send({
-    content: `🧪 **FIKTIVE TESTDATEN**\n${buildAwardsText(performances)}`,
+    content: '🧪 **FIKTIVE TESTDATEN – SPECIAL AWARDS**',
+    files: [{ attachment: awardsRendered.buffer, name: `test-${awardsRendered.fileName}` }],
     allowedMentions: { parse: [] },
   });
   return { channelId: channel.id, messageId: message.id, awardsMessageId: awardsMessage.id, serialNumber };
 }
 
 module.exports = {
-  aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady,
+  aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady, selectSpecialAwards,
   getTargetChannel, initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest,
   scheduleTeamOfTheTournamentPost, testLiveTottChannel, workflowSnapshot,
 };

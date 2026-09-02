@@ -12,6 +12,7 @@ require('./royale-system.test');
 require('./group-video-channel.test');
 require('./result-auto-confirm.test');
 require('./team-of-the-tournament.test');
+require('./special-awards-renderer.test');
 require('./phase-deadline.test');
 require('./messages-validation.test');
 require('./async-coalescer.test');
