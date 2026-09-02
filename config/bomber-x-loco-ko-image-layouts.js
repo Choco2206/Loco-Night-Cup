@@ -13,24 +13,24 @@ function measuredRound(template, measurements) { return Object.freeze({ template
 
 const ROUND_32 = [578,635,692,749,806,863,920,977,1034,1091,1148,1205,1262,1319,1376,1433].map(y => ({ y,homeLogoX:64,homeNameX:250,homeNameWidth:330,awayNameX:774,awayNameWidth:330,awayLogoX:960,logoSize:36,scoreX:512,scoreWidth:92,fontSize:18 }));
 const ROUND_16 = [674,770,866,962,1058,1154,1250,1346].map(y => ({ y,homeLogoX:116,homeNameX:286,homeNameWidth:292,awayNameX:738,awayNameWidth:292,awayLogoX:908,logoSize:52,scoreX:512,scoreWidth:92,fontSize:25 }));
+const QUARTER_FINAL = [721,916,1114,1315].map(y => ({ y,homeLogoX:132,homeNameX:292,homeNameWidth:270,awayNameX:732,awayNameWidth:270,awayLogoX:892,logoSize:64,scoreX:512,scoreWidth:82,fontSize:29 }));
 
-// Viertelfinale: independently measured from the supplied current 1024x1536 artwork.
-// Four rows. Logos stay inside the large team panels, names use the remaining inner area.
-const QUARTER_FINAL = [721,916,1114,1315].map(y => ({
+// Halbfinale: independently measured from the supplied current 1024x1536 artwork.
+// Two match rows. Values are specific to semi-final.png and are not inherited from QF/final.
+const SEMI_FINAL = [872,1230].map(y => ({
   y,
-  homeLogoX: 132,
+  homeLogoX: 134,
   homeNameX: 292,
-  homeNameWidth: 270,
+  homeNameWidth: 266,
   awayNameX: 732,
-  awayNameWidth: 270,
-  awayLogoX: 892,
-  logoSize: 64,
+  awayNameWidth: 266,
+  awayLogoX: 890,
+  logoSize: 70,
   scoreX: 512,
-  scoreWidth: 82,
-  fontSize: 29,
+  scoreWidth: 80,
+  fontSize: 30,
 }));
 
-const SEMI_FINAL = [828,1082].map(y => ({ y,homeLogoX:130,homeNameX:310,homeNameWidth:306,awayNameX:714,awayNameWidth:306,awayLogoX:894,logoSize:58,scoreWidth:110,fontSize:29 }));
 const THIRD_PLACE = [{ y:754,homeLogoX:134,homeNameX:314,homeNameWidth:310,awayNameX:710,awayNameWidth:310,awayLogoX:890,logoSize:64,scoreWidth:116,fontSize:31 }];
 const FINAL = [{ y:754,homeLogoX:134,homeNameX:314,homeNameWidth:310,awayNameX:710,awayNameWidth:310,awayLogoX:890,logoSize:64,scoreWidth:116,fontSize:31 }];
 
