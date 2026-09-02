@@ -157,7 +157,7 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   messageIds.push(await sendImage(channel, 'Matches • 5 Spieltage × 3 Begegnungen', matches));
 
   const koRounds = [
-    ['round_of_32', 16, 'Sechzehntelfinale • 16 Begegnungen'],
+    ['round_of_32', 16, 'Sechzehntelfinale • 16 Begegnungen • unterste Vorlagenzeile bleibt leer'],
     ['round_of_16', 8, 'Achtelfinale • 8 Begegnungen'],
     ['quarter_final', 4, 'Viertelfinale • 4 Begegnungen'],
     ['semi_final', 2, 'Halbfinale • 2 Begegnungen'],

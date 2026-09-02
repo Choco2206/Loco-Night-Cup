@@ -4,13 +4,14 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const layouts = require('../config/bomber-x-loco-ko-image-layouts');
 
-test('maps all sixteen visible Sechzehntelfinale rows', () => {
+test('maps only the first sixteen of seventeen visible Sechzehntelfinale rows', () => {
   const matches = layouts.round_of_32.matches;
   assert.equal(matches.length, 16);
   assert.deepEqual(matches.map(match => match.score.y), [
     578, 635, 692, 749, 806, 863, 920, 977,
     1034, 1091, 1148, 1205, 1262, 1319, 1376, 1433,
   ]);
+  assert.equal(matches.some(match => match.score.y === 1490), false);
 });
 
 test('keeps Sechzehntelfinale logos inside both team panels', () => {
