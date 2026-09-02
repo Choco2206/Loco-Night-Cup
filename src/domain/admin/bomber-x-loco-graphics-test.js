@@ -11,6 +11,12 @@ const {
 const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
 const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
+const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
+const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
+const {
+  buildTestPerformances,
+  selectSpecialAwards,
+} = require('../team-of-the-tournament/team-of-the-tournament-post');
 
 const BOMBER_X_LOCO_TEST_EVENT_ID = 'saturday_2026-09-19';
 
@@ -22,6 +28,28 @@ function availableTeams() {
 
 function cycleTeams(teams, count) {
   return Array.from({ length: count }, (_, index) => teams[index % teams.length]);
+}
+
+function buildTottSelection(teams) {
+  const logoTeams = teams.filter(team => team?.logo?.fileName);
+  if (!logoTeams.length) {
+    throw new Error('Für den TOTT-Grafiktest wird mindestens ein aktives Team mit gespeichertem Logo benötigt.');
+  }
+  const names = ['Nox', 'Viper', 'Ragnar', 'Kyro', 'Maverick', 'Nova', 'Ghost', 'Zeno', 'Blaze', 'Lynx', 'Ares'];
+  let cursor = 0;
+  const make = count => Array.from({ length: count }, () => {
+    const team = logoTeams[cursor % logoTeams.length];
+    const player = {
+      teamId: String(team.id),
+      playerId: `bxl-graphics-test-player-${cursor + 1}`,
+      playerName: names[cursor],
+      matches: 4,
+      averageRating: Number((7.1 + ((cursor % 7) * 0.31)).toFixed(2)),
+    };
+    cursor += 1;
+    return player;
+  });
+  return { goalkeeper: make(1), defender: make(3), midfielder: make(5), forward: make(2) };
 }
 
 function participant(team, index = 0) {
@@ -167,7 +195,31 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   });
   messageIds.push(textMessage.id);
 
+  const tottSelection = buildTottSelection(teams);
+  const tottImage = await renderTeamOfTheTournament({
+    selection: tottSelection,
+    variant: 'bomber_x_loco',
+  });
+  messageIds.push(await sendImage(
+    channel,
+    'Team of the Tournament • vollständig gefüllte Vorschau',
+    tottImage,
+    'bomber-x-loco-test-team-of-the-tournament.png',
+  ));
+
+  const awardPlayers = selectSpecialAwards(buildTestPerformances(tottSelection));
+  const awardsImage = await renderSpecialAwards({
+    awards: awardPlayers,
+    variant: 'bomber_x_loco',
+  });
+  messageIds.push(await sendImage(
+    channel,
+    'Special Awards • vollständig gefüllte Vorschau',
+    awardsImage,
+    'bomber-x-loco-test-special-awards.png',
+  ));
+
   return { channelId: channel.id, messageIds, teamCount: teams.length };
 }
 
-module.exports = { postBomberXLocoGraphicsTest };
+module.exports = { buildTottSelection, postBomberXLocoGraphicsTest };
