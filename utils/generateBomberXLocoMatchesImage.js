@@ -5,32 +5,36 @@ const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts')
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 
-const WIDTH = 1600;
-const HEIGHT = 900;
+// Current Bomber X Loco matches artwork was measured directly at 1024 x 1535.
+const WIDTH = 1024;
+const HEIGHT = 1535;
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png');
 
-// Die Vorlage ist als 5 Spieltage mit jeweils 3 horizontalen Begegnungszeilen aufgebaut.
-// Pro Begegnung gibt es genau EIN linkes Teamfeld, EIN Ergebnisfeld in der Mitte
-// und EIN rechtes Teamfeld. Die Begegnungen werden deshalb vertikal in den
-// jeweiligen Spieltagsblock geschrieben und nicht nebeneinander verteilt.
+// Five matchdays, three matches per matchday. Every coordinate below belongs
+// specifically to matches.png and must not be reused by another template.
 const LAYOUT = Object.freeze({
-  title: { x: 800, y: 203, maxWidth: 360 },
-  matchdayTitleY: [244, 368, 492, 616, 740],
-  matchRowsY: [
-    [276, 307, 338],
-    [400, 431, 462],
-    [524, 555, 586],
-    [648, 679, 710],
-    [772, 803, 834],
-  ],
-  scoreX: 800,
-  homeLogoX: 258,
-  homeNameX: 478,
-  awayNameX: 1122,
-  awayLogoX: 1342,
-  logoSize: 34,
-  teamMaxWidth: 330,
-  scoreMaxWidth: 105,
+  // Free header area above Spieltag 1 for the group identifier.
+  title: { x: 512, y: 548, maxWidth: 330 },
+
+  // The artwork already prints SPIELTAG 1..5, so those labels are not redrawn.
+  matchRowsY: Object.freeze([
+    Object.freeze([624, 665, 706]),
+    Object.freeze([799, 840, 880]),
+    Object.freeze([974, 1015, 1055]),
+    Object.freeze([1149, 1190, 1230]),
+    Object.freeze([1324, 1365, 1405]),
+  ]),
+
+  // Each row is: orange home box | red score box | purple away box.
+  homeLogoX: 166,
+  homeNameX: 291,
+  homeNameMaxWidth: 220,
+  scoreX: 510,
+  scoreMaxWidth: 116,
+  awayNameX: 735,
+  awayNameMaxWidth: 220,
+  awayLogoX: 860,
+  logoSize: 30,
 });
 
 let canvasApi = null;
@@ -87,7 +91,7 @@ async function loadLogo(participant) {
   }
 }
 
-function fitFont(ctx, text, maxWidth, maxSize = 28, minSize = 15, family = 'Odibee Sans', weight = '400') {
+function fitFont(ctx, text, maxWidth, maxSize = 23, minSize = 12, family = 'Odibee Sans', weight = '400') {
   for (let size = maxSize; size >= minSize; size -= 1) {
     setFont(ctx, size, family, weight);
     if (ctx.measureText(text).width <= maxWidth) return size;
@@ -114,28 +118,17 @@ function normalizedScore(result) {
 
 function drawTitle(ctx, groupKey) {
   const text = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
-  fitFont(ctx, text, LAYOUT.title.maxWidth, 38, 26, 'Oxanium', '700');
+  fitFont(ctx, text, LAYOUT.title.maxWidth, 30, 20, 'Oxanium', '700');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 3;
   ctx.lineJoin = 'round';
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.shadowColor = 'rgba(255,170,40,0.7)';
-  ctx.shadowBlur = 9;
+  ctx.shadowBlur = 7;
   ctx.strokeText(text, LAYOUT.title.x, LAYOUT.title.y);
   ctx.fillStyle = '#ffffff';
   ctx.fillText(text, LAYOUT.title.x, LAYOUT.title.y);
-  ctx.shadowBlur = 0;
-}
-
-function drawMatchdayTitle(ctx, matchdayNumber, y) {
-  setFont(ctx, 22, 'Oxanium', '700');
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(0,0,0,0.85)';
-  ctx.shadowBlur = 4;
-  ctx.fillText(`SPIELTAG ${matchdayNumber}`, 800, y);
   ctx.shadowBlur = 0;
 }
 
@@ -149,20 +142,20 @@ async function drawMatch(ctx, match, y) {
 
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = 'rgba(0,0,0,0.75)';
-  ctx.shadowBlur = 4;
+  ctx.shadowBlur = 3;
   ctx.textBaseline = 'middle';
 
-  fitFont(ctx, homeName, LAYOUT.teamMaxWidth, 25, 13);
+  fitFont(ctx, homeName, LAYOUT.homeNameMaxWidth, 22, 11);
   ctx.textAlign = 'center';
   ctx.fillText(homeName, LAYOUT.homeNameX, y);
 
-  fitFont(ctx, awayName, LAYOUT.teamMaxWidth, 25, 13);
+  fitFont(ctx, awayName, LAYOUT.awayNameMaxWidth, 22, 11);
   ctx.textAlign = 'center';
   ctx.fillText(awayName, LAYOUT.awayNameX, y);
 
   const score = normalizedScore(match?.result);
   if (score && match?.status === 'confirmed') {
-    fitFont(ctx, score, LAYOUT.scoreMaxWidth, 26, 17, 'Oxanium', '700');
+    fitFont(ctx, score, LAYOUT.scoreMaxWidth, 22, 14, 'Oxanium', '700');
     ctx.textAlign = 'center';
     ctx.fillText(score, LAYOUT.scoreX, y);
   }
@@ -179,7 +172,6 @@ async function generateBomberXLocoMatchesImage({ group }) {
 
   const matchdays = (group.matchdays || []).slice(0, 5);
   for (let dayIndex = 0; dayIndex < 5; dayIndex += 1) {
-    drawMatchdayTitle(ctx, dayIndex + 1, LAYOUT.matchdayTitleY[dayIndex]);
     const matches = matchdays[dayIndex]?.matches || [];
     for (let matchIndex = 0; matchIndex < 3; matchIndex += 1) {
       const match = matches[matchIndex];
