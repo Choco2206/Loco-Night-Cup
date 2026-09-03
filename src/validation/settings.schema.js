@@ -42,6 +42,7 @@ function validateSettings(data) {
     requireSnowflakeOrNull(errors, data.roles.managerRoleId, 'roles.managerRoleId');
     requireSnowflakeOrNull(errors, data.roles.coManagerRoleId, 'roles.coManagerRoleId');
     requireSnowflakeOrNull(errors, data.roles.leaguePhaseRoleId, 'roles.leaguePhaseRoleId');
+    requireSnowflakeOrNull(errors, data.roles.ticketModRoleId, 'roles.ticketModRoleId');
     validateIdMap(errors, data.roles.championRoleIds, CHAMPION_ROLE_KEYS, 'roles.championRoleIds');
     validateIdMap(errors, data.roles.groupRoleIds, GROUP_KEYS, 'roles.groupRoleIds');
     validateIdMap(errors, data.roles.knockoutRoleIds, KNOCKOUT_ROUNDS, 'roles.knockoutRoleIds');
@@ -73,6 +74,8 @@ function validateSettings(data) {
       'managerSupportChannelId',
       'playerSearchChannelId',
       'helperAvailableChannelId',
+      'ticketSupportChannelId',
+      'ticketLogChannelId',
       'knockoutOverviewChannelId',
     ].forEach(field => requireSnowflakeOrNull(errors, data.channels[field], `channels.${field}`));
 

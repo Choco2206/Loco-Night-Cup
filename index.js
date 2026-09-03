@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { Client, EmbedBuilder, Events, GatewayIntentBits } = require('discord.js');
+const { Client, EmbedBuilder, Events, GatewayIntentBits, Partials } = require('discord.js');
 const { bootstrapPhaseOne } = require('./src/app/bootstrap');
 const teamSystem = require('./src/domain/teams');
 const checkinSystem = require('./src/domain/checkins');
@@ -19,6 +19,7 @@ const tournamentLeadershipSystem = require('./src/domain/tournament-leadership')
 const royaleSystem = require('./src/domain/royale');
 const videoRequestSystem = require('./src/domain/video-requests');
 const facebookFeedSystem = require('./src/domain/social-media/facebook-feed');
+const ticketSystem = require('./src/domain/tickets');
 
 const EPHEMERAL = 64;
 const WELCOME_CHANNEL_ID = '1516390719839932576';
@@ -104,7 +105,8 @@ async function main() {
   }
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent],
+    partials: [Partials.Channel],
   });
 
   client.once(Events.ClientReady, async readyClient => {
@@ -117,6 +119,7 @@ async function main() {
       await runStartupStep('Turnierleitung', () => tournamentLeadershipSystem.init(client));
       await runStartupStep('Admin', () => adminSystem.init(client));
       await runStartupStep('Rollen', () => roleSystem.init(client));
+      await runStartupStep('Ticket-System', () => ticketSystem.init(client));
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Gruppen', () => groupSystem.init(client));
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
@@ -139,6 +142,7 @@ async function main() {
 
   client.on(Events.InteractionCreate, async interaction => {
     try {
+      if (await ticketSystem.handleInteraction(interaction, client)) return;
       if (await videoRequestSystem.handleInteraction(interaction, client)) return;
       if (await tournamentLeadershipSystem.handleInteraction(interaction, client)) return;
       if (await adminSystem.handleInteraction(interaction, client)) return;
@@ -155,6 +159,7 @@ async function main() {
 
   client.on(Events.MessageCreate, async message => {
     try {
+      await ticketSystem.handleMessage(message, client);
       if (await groupSystem.handleGroupMessage(message, client)) return;
       if (await teamSystem.handleMessage(message, client)) return;
     } catch (error) {

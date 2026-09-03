@@ -65,6 +65,16 @@ function createTournamentLeadershipDefault() {
   return { version: DATA_VERSION, cycles: {}, meta: emptyTimestampMeta() };
 }
 
+function createTicketsDefault() {
+  return {
+    version: DATA_VERSION,
+    nextNumber: 1,
+    panel: emptyPanelMessage(),
+    tickets: {},
+    meta: emptyTimestampMeta(),
+  };
+}
+
 function createKnockoutRoyaleDefault() {
   return {
     version: DATA_VERSION,
@@ -373,6 +383,7 @@ function createSettingsDefault() {
       managerRoleId: null,
       coManagerRoleId: null,
       leaguePhaseRoleId: null,
+      ticketModRoleId: null,
       championRoleIds: {
         champion: null,
         elite: null,
@@ -411,6 +422,8 @@ function createSettingsDefault() {
       managerSupportChannelId: null,
       playerSearchChannelId: null,
       helperAvailableChannelId: null,
+      ticketSupportChannelId: null,
+      ticketLogChannelId: null,
       checkinChannelIds: eventIds,
       groupChannelIds: groupIds,
       knockoutOverviewChannelId: null,
@@ -435,6 +448,14 @@ function createSettingsDefault() {
       knockoutCategoryId: null,
       archiveCategoryId: null,
       powerRankingCategoryId: '1534485070428115016',
+    },
+    tickets: {
+      enabled: true,
+      categoryId: '1517040817041047592',
+      bannerPath: 'assets/tickets/ticket-system-banner.jpeg',
+      maxOpenPerUser: 2,
+      inactivityHours: 48,
+      reminderCooldownHours: 24,
     },
     permissions: {
       adminRoleIds: [],
@@ -582,6 +603,7 @@ module.exports = {
   createLegacyRankingDefault,
   createKnockoutRoyaleDefault,
   createTournamentLeadershipDefault,
+  createTicketsDefault,
   createSettingsDefault,
   createTeamHistoryDefault,
   createTottHistoryDefault,

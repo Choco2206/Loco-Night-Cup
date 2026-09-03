@@ -29,6 +29,7 @@ const FILES = {
   powerRanking: path.join(DATA_DIR, 'power-ranking.json'),
   legacyRanking: path.join(DATA_DIR, 'legacy-ranking.json'),
   tournamentLeadership: path.join(DATA_DIR, 'tournament-leadership.json'),
+  tickets: path.join(DATA_DIR, 'tickets.json'),
   knockoutRoyale: path.join(EVENTS_DIR, 'knockout-royale.json'),
   events: Object.fromEntries(
     EVENT_KEYS.map(eventKey => [eventKey, path.join(EVENTS_DIR, `${eventKey}.json`)])

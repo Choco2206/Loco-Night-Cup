@@ -28,6 +28,7 @@ const {
   createKnockoutRoyaleDefault,
   createSettingsDefault,
   createTournamentLeadershipDefault,
+  createTicketsDefault,
   createTottHistoryDefault,
   createTeamsDefault,
 } = require('./defaults');
@@ -709,6 +710,7 @@ function initializeStorage() {
   ensureJsonFile(FILES.powerRanking, createPowerRankingDefault);
   ensureJsonFile(FILES.legacyRanking, createLegacyRankingDefault);
   ensureJsonFile(FILES.tournamentLeadership, createTournamentLeadershipDefault);
+  ensureJsonFile(FILES.tickets, createTicketsDefault);
   ensureJsonFile(FILES.knockoutRoyale, createKnockoutRoyaleDefault);
 
   for (const eventKey of EVENT_KEYS) {

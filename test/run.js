@@ -22,3 +22,4 @@ require('./attendance.test');
 require('./german-ui-text.test');
 require('./tournament-leadership.test');
 require('./legacy-ranking.test');
+require('./ticket-system.test');
