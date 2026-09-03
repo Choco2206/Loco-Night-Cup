@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
@@ -16,11 +17,12 @@ const {
 const { TEAM_LOGOS_DIR } = require('../../storage');
 const { getTeamAchievementRank, getTeamHistoryStats, getTeamTitles } = require('./team-achievements');
 const { getChampionLevelForGold } = require('./champion-ranks');
+const teamRegistrationBannerBase64 = require('./team-registration-banner');
 
 function buildTeamPanelPayload() {
+  const bannerName = 'team-registration-banner.jpg';
   const embed = new EmbedBuilder()
-    .setTitle('Team-Verwaltung')
-    .setDescription('Registriere dein Team oder öffne deine Teamübersicht.')
+    .setImage(`attachment://${bannerName}`)
     .setColor(0xff0000);
 
   const row = new ActionRowBuilder().addComponents(
@@ -33,6 +35,7 @@ function buildTeamPanelPayload() {
   return {
     embeds: [embed],
     components: [row],
+    files: [new AttachmentBuilder(Buffer.from(teamRegistrationBannerBase64, 'base64'), { name: bannerName })],
   };
 }
 
