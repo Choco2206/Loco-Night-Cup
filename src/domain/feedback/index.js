@@ -165,11 +165,16 @@ async function forum(client) {
 }
 
 async function ensureTags(channel) {
-  const wanted = [...Object.values(CATEGORIES), ...Object.values(STATUSES)];
   const tags = [...channel.availableTags];
-  for (const item of wanted) {
+  for (const item of Object.values(CATEGORIES)) {
     const name = tagName(item);
     if (!tags.some(tag => tag.name === name)) tags.push({ name, moderated: false });
+  }
+  for (const item of Object.values(STATUSES)) {
+    const name = tagName(item);
+    const index = tags.findIndex(tag => tag.name === name);
+    if (index === -1) tags.push({ name, moderated: true });
+    else tags[index] = { ...tags[index], moderated: true };
   }
   if (tags.length > 20) throw new Error('Feedback-Forum: Es sind zu viele Tags vorhanden. Discord erlaubt maximal 20.');
   await channel.setAvailableTags(tags, 'Feedback-Kategorien und Status synchronisieren');
