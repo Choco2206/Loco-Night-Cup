@@ -17,12 +17,13 @@ const {
 } = require('discord.js');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
+const feedbackBannerBase64 = require('./feedback-banner');
 
 const FORUM_CHANNEL_ID = '1544972269808394260';
 const EPHEMERAL = 64;
 const STORE_FILE = path.resolve(process.cwd(), 'data', 'feedback.json');
-const BANNER_FILE = path.resolve(process.cwd(), 'assets', 'feedback', 'loco-night-cup-feedback.png');
-const BANNER_NAME = 'loco-night-cup-feedback.png';
+const BANNER_FILE = path.resolve(process.cwd(), 'data', 'generated-assets', 'loco-night-cup-feedback.jpg');
+const BANNER_NAME = 'loco-night-cup-feedback.jpg';
 
 const CATEGORIES = {
   cup: { label: 'Cup & Turnierablauf', emoji: '🏆' },
@@ -186,6 +187,10 @@ function findTag(channel, item) {
 }
 
 async function ensurePanel(channel) {
+  if (!fs.existsSync(BANNER_FILE)) {
+    fs.mkdirSync(path.dirname(BANNER_FILE), { recursive: true });
+    fs.writeFileSync(BANNER_FILE, Buffer.from(feedbackBannerBase64, 'base64'));
+  }
   const store = readStore();
   let thread = store.panelThreadId ? await channel.threads.fetch(store.panelThreadId).catch(() => null) : null;
   const embed = panelEmbed();
