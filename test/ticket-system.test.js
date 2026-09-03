@@ -13,7 +13,7 @@ const {
 const { activeTicketsForUser, buildTranscript } = require('../src/domain/tickets/ticket-store');
 const { dueForReminder } = require('../src/domain/tickets/ticket-reminders');
 const { parseNumber, roleLabelForMember } = require('../src/domain/tickets/ticket-interactions');
-const { supportOverwrites } = require('../src/domain/tickets/ticket-setup');
+const { panelPayload, supportOverwrites } = require('../src/domain/tickets/ticket-setup');
 
 assert.strictEqual(formatTicketNumber(1), '001');
 assert.strictEqual(formatTicketNumber(99), '099');
@@ -55,8 +55,14 @@ assert.ok(ticketEmbed.fields.some(field => field.name === 'Status' && field.valu
 
 const panel = buildPanelEmbed().toJSON();
 const panelRows = buildPanelComponents().map(row => row.toJSON());
-assert.ok(panel.description.includes('privat'));
+assert.strictEqual(panel.title, '🐺 LOCO NIGHT CUP • TICKET CENTER');
+assert.ok(panel.fields.some(field => field.name.includes('SUPPORT-BEREICHE')));
+assert.ok(panel.fields.some(field => field.name.includes('PRIVAT')));
 assert.strictEqual(panelRows[0].components[0].options.length, 6);
+const completePanel = panelPayload(createSettingsDefault());
+assert.strictEqual(completePanel.embeds.length, 2);
+assert.strictEqual(completePanel.embeds[0].toJSON().image.url, 'attachment://loco-night-cup-ticket-system.jpeg');
+assert.strictEqual(completePanel.embeds[1].toJSON().title, '🐺 LOCO NIGHT CUP • TICKET CENTER');
 
 const activeStore = {
   tickets: {

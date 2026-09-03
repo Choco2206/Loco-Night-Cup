@@ -5,6 +5,7 @@ const path = require('path');
 const {
   AttachmentBuilder,
   ChannelType,
+  EmbedBuilder,
   PermissionFlagsBits,
 } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
@@ -175,7 +176,10 @@ function panelPayload(settings) {
     allowedMentions: { parse: [] },
   };
   if (bannerPath && fs.existsSync(bannerPath)) {
-    payload.embeds[0].setImage(`attachment://${BANNER_NAME}`);
+    const bannerEmbed = new EmbedBuilder()
+      .setColor(0x7b2cff)
+      .setImage(`attachment://${BANNER_NAME}`);
+    payload.embeds = [bannerEmbed, buildPanelEmbed()];
     payload.attachments = [];
     payload.files = [new AttachmentBuilder(bannerPath, { name: BANNER_NAME })];
   }

@@ -44,23 +44,56 @@ function statusDetails(status) {
 function buildPanelEmbed() {
   return new EmbedBuilder()
     .setColor(0x7b2cff)
-    .setTitle('🎫 Du brauchst Hilfe?')
+    .setTitle('🐺 LOCO NIGHT CUP • TICKET CENTER')
     .setDescription([
-      'Egal ob Teamanmeldung, fehlende Rolle, Probleme während eines Cups oder eine andere Frage: Über unser Ticket-System erreichst du direkt das zuständige Team.',
+      '## 🆘 DU BRAUCHST HILFE?',
+      '**Dann bist du hier genau richtig.** Wähle unten dein Thema aus und unser Ticket-Team kümmert sich direkt um dein Anliegen.',
       '',
-      'Wähle unten die passende Kategorie aus und beschreibe dein Anliegen kurz und verständlich.',
-      '',
-      '🔒 Dein Ticket ist privat und kann nur von dir, hinzugefügten Personen und unseren Ticket Mods eingesehen werden.',
-      '',
-      '> Bitte eröffne nicht mehrere Tickets für dasselbe Anliegen.',
+      '> 🎫 **Eine Kategorie auswählen. Formular ausfüllen. Hilfe bekommen.**',
     ].join('\n'))
-    .setFooter({ text: 'Loco Night Cup Support' });
+    .addFields(
+      {
+        name: '⚡ SO FUNKTIONIERT’S',
+        value: [
+          '**1 • Kategorie auswählen**',
+          '**2 • Anliegen kurz beschreiben**',
+          '**3 • Privat mit einem Ticket Mod klären**',
+        ].join('\n'),
+      },
+      {
+        name: '🎯 SUPPORT-BEREICHE',
+        value: [
+          '📝 **Teamanmeldung**',
+          '🛡️ **Rollen & Rechte**',
+          '🏆 **Cup-Support**',
+        ].join('\n'),
+        inline: true,
+      },
+      {
+        name: '​',
+        value: [
+          '🚨 **Regelverstoß melden**',
+          '🤝 **Kooperation & Partnerschaft**',
+          '❓ **Sonstiges**',
+        ].join('\n'),
+        inline: true,
+      },
+      {
+        name: '🔒 PRIVAT • DIREKT • ÜBERSICHTLICH',
+        value: 'Dein Ticket sehen ausschließlich **du**, hinzugefügte Personen und unsere **Ticket Mods**. Andere Mitglieder haben keinen Zugriff.',
+      },
+      {
+        name: '⚠️ KURZER HINWEIS',
+        value: 'Bitte eröffne **nicht mehrere Tickets für dasselbe Anliegen** und beschreibe dein Problem so klar wie möglich.',
+      }
+    )
+    .setFooter({ text: 'SUPPORT NEVER SLEEPS • Loco Night Cup' });
 }
 
 function buildPanelComponents() {
   const menu = new StringSelectMenuBuilder()
     .setCustomId('ticket_category_select')
-    .setPlaceholder('Wähle dein Anliegen aus')
+    .setPlaceholder('🎫 Ticket-Kategorie auswählen')
     .setMinValues(1)
     .setMaxValues(1)
     .addOptions(Object.entries(CATEGORIES).map(([value, details]) => ({
