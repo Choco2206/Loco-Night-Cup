@@ -20,6 +20,7 @@ const royaleSystem = require('./src/domain/royale');
 const videoRequestSystem = require('./src/domain/video-requests');
 const facebookFeedSystem = require('./src/domain/social-media/facebook-feed');
 const ticketSystem = require('./src/domain/tickets');
+const feedbackSystem = require('./src/domain/feedback');
 
 const EPHEMERAL = 64;
 const WELCOME_CHANNEL_ID = '1516390719839932576';
@@ -120,6 +121,7 @@ async function main() {
       await runStartupStep('Admin', () => adminSystem.init(client));
       await runStartupStep('Rollen', () => roleSystem.init(client));
       await runStartupStep('Ticket-System', () => ticketSystem.init(client));
+      await runStartupStep('Feedback-System', () => feedbackSystem.init(client));
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Gruppen', () => groupSystem.init(client));
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
@@ -142,6 +144,7 @@ async function main() {
 
   client.on(Events.InteractionCreate, async interaction => {
     try {
+      if (await feedbackSystem.handleInteraction(interaction, client)) return;
       if (await ticketSystem.handleInteraction(interaction, client)) return;
       if (await videoRequestSystem.handleInteraction(interaction, client)) return;
       if (await tournamentLeadershipSystem.handleInteraction(interaction, client)) return;
