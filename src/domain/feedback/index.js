@@ -81,17 +81,11 @@ function panelEmbed() {
       '',
       'Egal ob Cup-Ablauf, Bot-Systeme, Moderation, Discord oder eine komplett neue Idee: Konstruktives Feedback hilft uns dabei, den Loco Night Cup gemeinsam mit euch weiterzuentwickeln.',
       '',
-      'Klicke unten auf **Feedback abgeben**. Dein Feedback wird anschließend als eigener Forumsbeitrag veröffentlicht und kann von der Community diskutiert und bewertet werden.',
+      'Erstelle über **Neuer Beitrag** beziehungsweise das **Plus** direkt dein Feedback und wähle den passenden Kategorie-Tag aus. Anschließend kann die Community deine Idee diskutieren und bewerten.',
       '',
       '> Bitte bleibt fair, respektvoll und möglichst konkret. Persönliche Beschwerden und Regelverstöße gehören weiterhin in den Ticket-Support.',
     ].join('\n'))
     .setFooter({ text: 'Gemeinsam machen wir die Nacht noch besser. 🌙🏆' });
-}
-
-function panelComponents() {
-  return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('feedback_start').setLabel('Feedback abgeben').setEmoji('💡').setStyle(ButtonStyle.Primary),
-  )];
 }
 
 function categoryMenu() {
@@ -194,7 +188,7 @@ async function ensurePanel(channel) {
   const store = readStore();
   let thread = store.panelThreadId ? await channel.threads.fetch(store.panelThreadId).catch(() => null) : null;
   const embed = panelEmbed();
-  const payload = { embeds: [embed], components: panelComponents(), allowedMentions: { parse: [] } };
+  const payload = { embeds: [embed], components: [], allowedMentions: { parse: [] } };
   if (fs.existsSync(BANNER_FILE)) {
     embed.setImage(`attachment://${BANNER_NAME}`);
     payload.files = [new AttachmentBuilder(BANNER_FILE, { name: BANNER_NAME })];
@@ -207,8 +201,6 @@ async function ensurePanel(channel) {
     const starter = await thread.fetchStarterMessage().catch(() => null);
     if (starter) await starter.edit(payload);
   }
-  await thread.setPinned(true, 'Feedback-Panel anpinnen').catch(() => null);
-  await thread.setLocked(true, 'Feedback-Panel ist nur zur Einreichung').catch(() => null);
   return thread;
 }
 
@@ -288,13 +280,6 @@ async function updateStatus(interaction, client, number, statusKey) {
 }
 
 async function handleInteraction(interaction, client) {
-  if (interaction.isButton() && interaction.customId === 'feedback_start') {
-    const settings = readSettings();
-    const member = await memberFor(interaction);
-    if (!eligible(member, settings)) throw new Error('Du benötigst die Manager- oder Spielerrolle, um Feedback abzugeben.');
-    await interaction.reply({ content: 'Wähle zuerst die passende Kategorie:', components: categoryMenu(), flags: EPHEMERAL });
-    return true;
-  }
   if (interaction.isStringSelectMenu() && interaction.customId === 'feedback_category') {
     const category = interaction.values[0];
     if (!CATEGORIES[category]) throw new Error('Diese Feedback-Kategorie ist ungültig.');
