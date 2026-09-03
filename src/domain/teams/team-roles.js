@@ -99,6 +99,7 @@ async function syncTeamFunctionRolesForUser(guild, userId, settings, options = {
   const coManagerRoleId = settings.roles.coManagerRoleId;
   const playerRoleId = settings.roles.playerRoleId;
   const preserveManagerIntent = options.preserveManagerIntent === true;
+  const grantPlayerWhenUnassigned = options.grantPlayerWhenUnassigned === true;
   if (!guild || !userId) return false;
 
   const managerRole = await getRole(guild, managerRoleId);
@@ -120,6 +121,11 @@ async function syncTeamFunctionRolesForUser(guild, userId, settings, options = {
   }
   if (playerRole && hasAnyTeamFunction && member.roles.cache.has(playerRole.id)) {
     await member.roles.remove(playerRole.id);
+    changed = true;
+  }
+
+  if (playerRole && grantPlayerWhenUnassigned && !hasAnyTeamFunction && !member.roles.cache.has(playerRole.id)) {
+    await member.roles.add(playerRole.id);
     changed = true;
   }
 

@@ -1007,7 +1007,7 @@ async function handleAdminDeleteTeam({ interaction, client, settings, teamId }) 
   adminDeleteTeam({ teamId: team.id, actorUserId: interaction.user.id });
   const affectedEventKeys = removeTeamFromAllEvents({ teamId: team.id, settings });
   for (const userId of userIds) {
-    await syncTeamFunctionRolesForUser(interaction.guild, userId, settings);
+    await syncTeamFunctionRolesForUser(interaction.guild, userId, settings, { grantPlayerWhenUnassigned: true });
     await syncChampionRolesForUser(interaction.guild, userId, settings);
     await clearTeamNickname(interaction.guild, userId);
   }
@@ -2312,4 +2312,5 @@ async function handleAdminInteraction(interaction, client) {
 module.exports = {
   handleAdminButton: handleAdminInteraction,
   handleAdminInteraction,
+  handleAdminDeleteTeam,
 };
