@@ -55,14 +55,16 @@ assert.ok(ticketEmbed.fields.some(field => field.name === 'Status' && field.valu
 
 const panel = buildPanelEmbed().toJSON();
 const panelRows = buildPanelComponents().map(row => row.toJSON());
-assert.strictEqual(panel.title, '🐺 LOCO NIGHT CUP • TICKET CENTER');
-assert.ok(panel.fields.some(field => field.name.includes('SUPPORT-BEREICHE')));
+assert.strictEqual(panel.title, '🎫 SUPPORT DESK');
+assert.ok(panel.description.includes('**DEIN DIREKTER DRAHT ZU UNS**'));
+assert.ok(panel.description.includes('*Du brauchst Hilfe'));
+assert.ok(panel.fields.some(field => field.name.includes('WOMIT KÖNNEN WIR HELFEN')));
 assert.ok(panel.fields.some(field => field.name.includes('PRIVAT')));
 assert.strictEqual(panelRows[0].components[0].options.length, 6);
 const completePanel = panelPayload(createSettingsDefault());
-assert.strictEqual(completePanel.embeds.length, 2);
+assert.strictEqual(completePanel.embeds.length, 1);
 assert.strictEqual(completePanel.embeds[0].toJSON().image.url, 'attachment://loco-night-cup-ticket-system.jpeg');
-assert.strictEqual(completePanel.embeds[1].toJSON().title, '🐺 LOCO NIGHT CUP • TICKET CENTER');
+assert.strictEqual(completePanel.embeds[0].toJSON().title, '🎫 SUPPORT DESK');
 
 const activeStore = {
   tickets: {

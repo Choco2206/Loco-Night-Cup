@@ -44,24 +44,36 @@ function statusDetails(status) {
 function buildPanelEmbed() {
   return new EmbedBuilder()
     .setColor(0x7b2cff)
-    .setTitle('🐺 LOCO NIGHT CUP • TICKET CENTER')
+    .setAuthor({ name: 'LOCO NIGHT CUP • SUPPORT NEVER SLEEPS' })
+    .setTitle('🎫 SUPPORT DESK')
     .setDescription([
-      '## 🆘 DU BRAUCHST HILFE?',
-      '**Dann bist du hier genau richtig.** Wähle unten dein Thema aus und unser Ticket-Team kümmert sich direkt um dein Anliegen.',
+      '# 🐺 **DEIN DIREKTER DRAHT ZU UNS**',
       '',
-      '> 🎫 **Eine Kategorie auswählen. Formular ausfüllen. Hilfe bekommen.**',
+      '*Du brauchst Hilfe, hast ein Problem während des Cups oder möchtest dein Team anmelden?*',
+      '**Kein Stress. Eröffne dein Ticket und wir kümmern uns darum.**',
+      '',
+      '━━━━━━━━━━━━━━━━━━━━',
+      '',
+      '## ⚡ **IN DREI SCHRITTEN ZUM SUPPORT**',
     ].join('\n'))
     .addFields(
       {
-        name: '⚡ SO FUNKTIONIERT’S',
-        value: [
-          '**1 • Kategorie auswählen**',
-          '**2 • Anliegen kurz beschreiben**',
-          '**3 • Privat mit einem Ticket Mod klären**',
-        ].join('\n'),
+        name: '01 • AUSWÄHLEN',
+        value: '*Passende Kategorie auswählen*',
+        inline: true,
       },
       {
-        name: '🎯 SUPPORT-BEREICHE',
+        name: '02 • BESCHREIBEN',
+        value: '*Formular kurz ausfüllen*',
+        inline: true,
+      },
+      {
+        name: '03 • HILFE BEKOMMEN',
+        value: '*Privat mit uns klären*',
+        inline: true,
+      },
+      {
+        name: '🎯 WOMIT KÖNNEN WIR HELFEN?',
         value: [
           '📝 **Teamanmeldung**',
           '🛡️ **Rollen & Rechte**',
@@ -79,15 +91,16 @@ function buildPanelEmbed() {
         inline: true,
       },
       {
-        name: '🔒 PRIVAT • DIREKT • ÜBERSICHTLICH',
-        value: 'Dein Ticket sehen ausschließlich **du**, hinzugefügte Personen und unsere **Ticket Mods**. Andere Mitglieder haben keinen Zugriff.',
-      },
-      {
-        name: '⚠️ KURZER HINWEIS',
-        value: 'Bitte eröffne **nicht mehrere Tickets für dasselbe Anliegen** und beschreibe dein Problem so klar wie möglich.',
+        name: '🔒 DEIN TICKET. DEIN ANLIEGEN. PRIVAT.',
+        value: [
+          '*Andere Mitglieder können dein Ticket nicht sehen.*',
+          'Zugriff haben nur **du**, hinzugefügte Personen und unsere **Ticket Mods**.',
+          '',
+          '> ⚠️ **Bitte nur ein Ticket pro Anliegen eröffnen.**',
+        ].join('\n'),
       }
     )
-    .setFooter({ text: 'SUPPORT NEVER SLEEPS • Loco Night Cup' });
+    .setFooter({ text: '🐺 LOCO NIGHT CUP • SCHNELL. DIREKT. FÜR EUCH DA.' });
 }
 
 function buildPanelComponents() {
