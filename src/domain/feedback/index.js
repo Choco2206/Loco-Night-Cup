@@ -22,8 +22,8 @@ const feedbackBannerBase64 = require('./feedback-banner');
 const FORUM_CHANNEL_ID = '1544972269808394260';
 const EPHEMERAL = 64;
 const STORE_FILE = path.resolve(process.cwd(), 'data', 'feedback.json');
-const BANNER_FILE = path.resolve(process.cwd(), 'data', 'generated-assets', 'loco-night-cup-feedback.jpg');
-const BANNER_NAME = 'loco-night-cup-feedback.jpg';
+const BANNER_FILE = path.resolve(process.cwd(), 'data', 'generated-assets', 'loco-night-cup-feedback-v2.jpg');
+const BANNER_NAME = 'loco-night-cup-feedback-v2.jpg';
 
 const CATEGORIES = {
   cup: { label: 'Cup & Turnierablauf', emoji: '🏆' },
