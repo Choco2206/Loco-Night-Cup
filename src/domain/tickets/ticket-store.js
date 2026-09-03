@@ -59,6 +59,7 @@ function reserveTicket(input, maxOpen = 2) {
       ratingFeedback: null,
       ratingAt: null,
       ratingDmSent: false,
+      supportRequestedAt: null,
       lastActivityAt: timestamp,
       lastReminderAt: null,
       createdAt: timestamp,

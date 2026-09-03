@@ -159,24 +159,90 @@ function buildTicketEmbed(ticket) {
   const category = categoryDetails(ticket.category);
   const status = statusDetails(ticket.status);
   const claimedBy = ticket.claimedById ? `<@${ticket.claimedById}>` : 'Noch niemand';
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(status.color)
     .setTitle(`Ticket #${formatTicketNumber(ticket.number)}`)
     .addFields(
       { name: 'Status', value: `${status.emoji} ${status.label}`, inline: true },
       { name: 'Kategorie', value: `${category.emoji} ${category.label}`, inline: true },
       { name: 'Erstellt von', value: `<@${ticket.creatorId}>`, inline: true },
-      { name: 'Serverrolle', value: ticket.roleLabel || 'Unbekannt', inline: true },
+      { name: 'Serverrolle', value: ticket.roleLabel || 'Unbekannt', inline: true }
+    )
+    .setFooter({ text: 'Loco Night Cup Ticket-System' })
+    .setTimestamp(new Date(ticket.createdAt));
+
+  if (ticket.category !== 'team_registration') {
+    embed.addFields(
       { name: 'Team', value: ticket.teamName || 'Nicht angegeben', inline: true },
       { name: 'Übernommen von', value: claimedBy, inline: true },
       { name: 'Betreff', value: ticket.subject || 'Kein Betreff' },
       { name: 'Anliegen', value: ticket.description || 'Keine Beschreibung' }
-    )
-    .setFooter({ text: 'Loco Night Cup Ticket-System' })
-    .setTimestamp(new Date(ticket.createdAt));
+    );
+  }
+  return embed;
+}
+
+function buildTeamRegistrationGuideEmbed() {
+  return new EmbedBuilder()
+    .setColor(0x7b2cff)
+    .setTitle('📝 ANLEITUNG: TEAM REGISTRIEREN')
+    .setDescription([
+      'Du möchtest dein Team auf dem **Loco-Night-Cup-Server** registrieren? Dann folge einfach diesen Schritten:',
+      '',
+      '## **1️⃣ MANAGERROLLE AUSWÄHLEN**',
+      'Gehe zuerst in den Kanal <#1516543498113908866> und wähle dort die **Managerrolle** aus.',
+      '',
+      '> ⚠️ **Wichtig:** Nimm dir diese Rolle nur, wenn du wirklich ein eigenes Team auf dem Server registrieren möchtest.',
+      '',
+      '## **2️⃣ TEAM REGISTRIEREN**',
+      'Sobald du die Managerrolle hast, kannst du im Kanal <#1516429663457775687> dein Team registrieren.',
+      '',
+      'Fülle dort bitte alle abgefragten Angaben **vollständig und korrekt** aus.',
+      '',
+      '*Die Registrierung ist noch keine Anmeldung für einen bestimmten Cup.* Sie dient dazu, dein Team und alle wichtigen Daten auf dem Server zu hinterlegen. Erst danach kannst du dein Team für die einzelnen Cups anmelden.',
+      '',
+      '## **3️⃣ DEIN TEAM VERWALTEN**',
+      'Im Kanal <#1522775227703103589> kannst du dein registriertes Team anschließend selbst verwalten.',
+      '',
+      '> 🖼️ **Teamlogo hinterlegen oder ändern**',
+      '> 👥 **Co-VMs hinzufügen oder entfernen**',
+      '> 🟣 **Twitch-Kanal hinterlegen oder ändern**',
+      '> 🎮 **EA-Club-ID hinterlegen oder ändern**',
+      '> 🚪 **Dein Team verlassen**',
+      '> 🗑️ **Dein Team vollständig löschen**',
+      '',
+      '## **4️⃣ FÜR EINEN CUP ANMELDEN**',
+      'Wenn dein Team vollständig registriert ist, kannst du es in den jeweiligen **Check-in-Kanälen von Montag bis Sonntag** für den gewünschten Cup an- oder abmelden.',
+      '',
+      '━━━━━━━━━━━━━━━━━━━━',
+      '',
+      '✅ **Alles geklappt?** Klicke auf **„Ticket schließen (User)“**.',
+      '',
+      '🆘 **Du brauchst weiterhin Hilfe?** Klicke auf **„Ticket Mod anfordern“**.',
+    ].join('\n'))
+    .setFooter({ text: 'Loco Night Cup • Automatische Hilfe zur Teamanmeldung' });
+}
+
+function buildTeamRegistrationControls(ticket) {
+  const disabled = ticket.status === 'closed';
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ticket_user_close:${ticket.number}`)
+      .setLabel('Ticket schließen (User)')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`ticket_request_mod:${ticket.number}`)
+      .setLabel(ticket.supportRequestedAt ? 'Ticket Mod angefordert' : 'Ticket Mod anfordern')
+      .setEmoji('🆘')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(disabled || Boolean(ticket.supportRequestedAt))
+  )];
 }
 
 function buildTicketControls(ticket) {
+  if (ticket.category === 'team_registration') return buildTeamRegistrationControls(ticket);
   const disabled = ticket.status === 'closed';
   return [new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -312,6 +378,8 @@ module.exports = {
   buildRatingModal,
   buildTicketControls,
   buildTicketEmbed,
+  buildTeamRegistrationControls,
+  buildTeamRegistrationGuideEmbed,
   buildUserSelect,
   categoryDetails,
   discordTimestamp,

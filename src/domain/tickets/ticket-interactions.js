@@ -19,6 +19,7 @@ const {
   buildRatingModal,
   buildTicketControls,
   buildTicketEmbed,
+  buildTeamRegistrationGuideEmbed,
   buildUserSelect,
   categoryDetails,
   formatTicketNumber,
@@ -79,6 +80,16 @@ async function requireTicketMod(interaction, settings) {
   return member;
 }
 
+async function requireTicketCloser(interaction, settings, ticket) {
+  const member = await memberFor(interaction);
+  const isCreatorClosingRegistration = ticket.category === 'team_registration'
+    && String(ticket.creatorId) === String(interaction.user.id);
+  if (!member || (!isCreatorClosingRegistration && !isTicketMod(member, settings))) {
+    throw new Error('Dieses Ticket kann nur vom Ersteller oder von einem Ticket Mod geschlossen werden.');
+  }
+  return member;
+}
+
 async function fetchTicketThread(client, ticket) {
   if (!ticket?.threadId) return null;
   const channel = await client.channels.fetch(String(ticket.threadId)).catch(() => null);
@@ -91,25 +102,29 @@ async function refreshTicketMessage(client, ticket) {
   const message = await thread.messages.fetch(String(ticket.controlMessageId)).catch(() => null);
   if (!message) return false;
   await message.edit({
-    embeds: [buildTicketEmbed(ticket)],
+    embeds: ticket.category === 'team_registration'
+      ? [buildTicketEmbed(ticket), buildTeamRegistrationGuideEmbed()]
+      : [buildTicketEmbed(ticket)],
     components: buildTicketControls(ticket),
     allowedMentions: { parse: [] },
   });
   return true;
 }
 
-async function handleCategorySelect(interaction) {
+async function handleCategorySelect(interaction, client) {
   const category = interaction.values?.[0];
   if (!CATEGORIES[category]) throw new Error('Diese Ticket-Kategorie ist ungültig.');
   const settings = readSettings();
+  if (category === 'team_registration') {
+    await createAutomaticTeamRegistrationTicket(interaction, client);
+    return;
+  }
   await requireEligibleMember(interaction, settings);
   await interaction.showModal(buildCreateModal(category));
 }
 
-async function createTicketFromModal(interaction, client, category) {
+async function resolveTicketCreationContext(interaction, settings) {
   if (!interaction.guild) throw new Error('Tickets können nur auf dem Server erstellt werden.');
-  if (!CATEGORIES[category]) throw new Error('Diese Ticket-Kategorie ist ungültig.');
-  const settings = readSettings();
   const { member, roleLabel } = await requireEligibleMember(interaction, settings);
   const supportChannelId = settings.channels?.ticketSupportChannelId;
   const supportChannel = supportChannelId
@@ -118,6 +133,97 @@ async function createTicketFromModal(interaction, client, category) {
   if (!supportChannel || supportChannel.type !== ChannelType.GuildText) {
     throw new Error('Der Ticket-Support-Kanal ist gerade nicht verfügbar.');
   }
+  return { member, roleLabel, supportChannel };
+}
+
+async function createTicketThread({ interaction, member, supportChannel, settings, ticket, initialStatus, pingTicketMods = true }) {
+  try {
+    const thread = await supportChannel.threads.create({
+      name: `Ticket ${formatTicketNumber(ticket.number)}`,
+      type: ChannelType.PrivateThread,
+      autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
+      invitable: false,
+      reason: `Ticket #${formatTicketNumber(ticket.number)} von ${interaction.user.tag || interaction.user.id}`,
+    });
+    await thread.members.add(interaction.user.id);
+    const activeTicket = updateTicket(ticket.number, current => ({
+      ...current,
+      status: initialStatus,
+      threadId: thread.id,
+      updatedAt: new Date().toISOString(),
+    }));
+    const ticketModRoleId = settings.roles?.ticketModRoleId;
+    const content = [
+      pingTicketMods && ticketModRoleId ? `<@&${ticketModRoleId}>` : null,
+      `<@${interaction.user.id}>, dein Ticket wurde erstellt.`,
+      pingTicketMods ? 'Ein Ticket Mod meldet sich hier bei dir.' : 'Folge bitte der Anleitung. Falls du Hilfe brauchst, kannst du jederzeit einen Ticket Mod anfordern.',
+    ].filter(Boolean).join('\n');
+    const controlMessage = await thread.send({
+      content,
+      embeds: activeTicket.category === 'team_registration'
+        ? [buildTicketEmbed(activeTicket), buildTeamRegistrationGuideEmbed()]
+        : [buildTicketEmbed(activeTicket)],
+      components: buildTicketControls(activeTicket),
+      allowedMentions: {
+        parse: [],
+        users: [interaction.user.id],
+        roles: pingTicketMods && ticketModRoleId ? [ticketModRoleId] : [],
+      },
+    });
+    const finalized = updateTicket(ticket.number, current => ({ ...current, controlMessageId: controlMessage.id }));
+    const link = `https://discord.com/channels/${interaction.guild.id}/${thread.id}`;
+    await interaction.editReply({ content: `✅ Dein Ticket #${formatTicketNumber(ticket.number)} wurde erstellt: ${link}` });
+    const dmDescription = finalized.category === 'team_registration'
+      ? `Deine automatische Anleitung zur **Teamanmeldung** ist bereit.\n\n[Zum Ticket](${link})`
+      : `Dein Anliegen **${finalized.subject}** wurde an unsere Ticket Mods weitergeleitet.\n\n[Zum Ticket](${link})`;
+    await member.send({
+      embeds: [new EmbedBuilder()
+        .setColor(0x7b2cff)
+        .setTitle(`Ticket #${formatTicketNumber(ticket.number)} wurde erstellt`)
+        .setDescription(dmDescription)
+        .setFooter({ text: 'Loco Night Cup Support' })],
+      allowedMentions: { parse: [] },
+    }).catch(() => null);
+    return finalized;
+  } catch (error) {
+    updateTicket(ticket.number, current => ({
+      ...current,
+      status: 'failed',
+      failureReason: String(error?.message || error).slice(0, 500),
+    }));
+    throw error;
+  }
+}
+
+async function createAutomaticTeamRegistrationTicket(interaction, client) {
+  const settings = readSettings();
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const { member, roleLabel, supportChannel } = await resolveTicketCreationContext(interaction, settings);
+  const ticket = reserveTicket({
+    category: 'team_registration',
+    creatorId: interaction.user.id,
+    creatorName: interaction.user.tag || interaction.user.username,
+    roleLabel,
+    teamName: null,
+    subject: 'Team registrieren',
+    description: 'Automatische Anleitung zur Teamregistrierung',
+    guildId: interaction.guild.id,
+  }, Number(settings.tickets?.maxOpenPerUser) || 2);
+  return createTicketThread({
+    interaction,
+    member,
+    supportChannel,
+    settings,
+    ticket,
+    initialStatus: 'in_progress',
+    pingTicketMods: false,
+  });
+}
+
+async function createTicketFromModal(interaction, client, category) {
+  if (!CATEGORIES[category]) throw new Error('Diese Ticket-Kategorie ist ungültig.');
+  const settings = readSettings();
+  const { member, roleLabel, supportChannel } = await resolveTicketCreationContext(interaction, settings);
 
   await interaction.deferReply({ flags: EPHEMERAL });
   const ticket = reserveTicket({
@@ -131,55 +237,15 @@ async function createTicketFromModal(interaction, client, category) {
     guildId: interaction.guild.id,
   }, Number(settings.tickets?.maxOpenPerUser) || 2);
 
-  try {
-    const thread = await supportChannel.threads.create({
-      name: `Ticket ${formatTicketNumber(ticket.number)}`,
-      type: ChannelType.PrivateThread,
-      autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
-      invitable: false,
-      reason: `Ticket #${formatTicketNumber(ticket.number)} von ${interaction.user.tag || interaction.user.id}`,
-    });
-    await thread.members.add(interaction.user.id);
-    const activeTicket = updateTicket(ticket.number, current => ({
-      ...current,
-      status: 'open',
-      threadId: thread.id,
-      updatedAt: new Date().toISOString(),
-    }));
-    const ticketModRoleId = settings.roles?.ticketModRoleId;
-    const content = [
-      ticketModRoleId ? `<@&${ticketModRoleId}>` : null,
-      `<@${interaction.user.id}>, dein Ticket wurde erstellt. Ein Ticket Mod meldet sich hier bei dir.`,
-    ].filter(Boolean).join('\n');
-    const controlMessage = await thread.send({
-      content,
-      embeds: [buildTicketEmbed(activeTicket)],
-      components: buildTicketControls(activeTicket),
-      allowedMentions: {
-        parse: [],
-        users: [interaction.user.id],
-        roles: ticketModRoleId ? [ticketModRoleId] : [],
-      },
-    });
-    const finalized = updateTicket(ticket.number, current => ({ ...current, controlMessageId: controlMessage.id }));
-    const link = `https://discord.com/channels/${interaction.guild.id}/${thread.id}`;
-    await interaction.editReply({ content: `✅ Dein Ticket #${formatTicketNumber(ticket.number)} wurde erstellt: ${link}` });
-    await member.send({
-      embeds: [new EmbedBuilder()
-        .setColor(0x7b2cff)
-        .setTitle(`Ticket #${formatTicketNumber(ticket.number)} wurde erstellt`)
-        .setDescription(`Dein Anliegen **${finalized.subject}** wurde an unsere Ticket Mods weitergeleitet.\n\n[Zum Ticket](${link})`)
-        .setFooter({ text: 'Loco Night Cup Support' })],
-      allowedMentions: { parse: [] },
-    }).catch(() => null);
-  } catch (error) {
-    updateTicket(ticket.number, current => ({
-      ...current,
-      status: 'failed',
-      failureReason: String(error?.message || error).slice(0, 500),
-    }));
-    throw error;
-  }
+  return createTicketThread({
+    interaction,
+    member,
+    supportChannel,
+    settings,
+    ticket,
+    initialStatus: 'open',
+    pingTicketMods: true,
+  });
 }
 
 async function handleClaim(interaction, client, number) {
@@ -249,11 +315,54 @@ async function handleCloseRequest(interaction, number) {
   });
 }
 
-async function handleCloseConfirm(interaction, number) {
+async function handleUserCloseRequest(interaction, number) {
   const settings = readSettings();
-  await requireTicketMod(interaction, settings);
   const ticket = getTicket(number);
   if (!ticket || ticket.status === 'closed') throw new Error('Dieses Ticket ist bereits geschlossen oder nicht mehr verfügbar.');
+  await requireTicketCloser(interaction, settings, ticket);
+  await replyEphemeral(interaction, {
+    content: `Möchtest du Ticket #${formatTicketNumber(number)} wirklich schließen?`,
+    components: buildCloseConfirmation(number),
+  });
+}
+
+async function handleTicketModRequest(interaction, client, number) {
+  const settings = readSettings();
+  let ticket = getTicket(number);
+  if (!ticket || ticket.status === 'closed') throw new Error('Dieses Ticket ist bereits geschlossen oder nicht mehr verfügbar.');
+  if (ticket.category !== 'team_registration' || String(ticket.creatorId) !== String(interaction.user.id)) {
+    throw new Error('Nur der Ersteller dieses Teamanmeldungs-Tickets kann einen Ticket Mod anfordern.');
+  }
+  if (ticket.supportRequestedAt) throw new Error('Ein Ticket Mod wurde für dieses Ticket bereits angefordert.');
+  const ticketModRoleId = settings.roles?.ticketModRoleId;
+  if (!ticketModRoleId) throw new Error('Die Ticket-Mod-Rolle ist gerade nicht verfügbar.');
+  const thread = await fetchTicketThread(client, ticket);
+  if (!thread) throw new Error('Der private Ticket-Thread wurde nicht gefunden.');
+
+  await interaction.deferReply({ flags: EPHEMERAL });
+  const requestedAt = new Date().toISOString();
+  ticket = updateTicket(number, current => {
+    if (current.supportRequestedAt) throw new Error('Ein Ticket Mod wurde für dieses Ticket bereits angefordert.');
+    return { ...current, supportRequestedAt: requestedAt, lastActivityAt: requestedAt };
+  });
+  try {
+    await thread.send({
+      content: `<@&${ticketModRoleId}> wird von <@${interaction.user.id}> für Ticket #${formatTicketNumber(number)} benötigt.`,
+      allowedMentions: { parse: [], users: [interaction.user.id], roles: [ticketModRoleId] },
+    });
+  } catch (error) {
+    updateTicket(number, current => ({ ...current, supportRequestedAt: null }));
+    throw error;
+  }
+  await refreshTicketMessage(client, ticket);
+  await interaction.editReply({ content: '✅ Die Ticket Mods wurden angefordert und hier im Thread benachrichtigt.' });
+}
+
+async function handleCloseConfirm(interaction, number) {
+  const settings = readSettings();
+  const ticket = getTicket(number);
+  if (!ticket || ticket.status === 'closed') throw new Error('Dieses Ticket ist bereits geschlossen oder nicht mehr verfügbar.');
+  await requireTicketCloser(interaction, settings, ticket);
   await interaction.showModal(buildCloseModal(number));
 }
 
@@ -289,9 +398,9 @@ async function sendRatingRequest(client, ticket) {
 
 async function handleCloseModal(interaction, client, number) {
   const settings = readSettings();
-  await requireTicketMod(interaction, settings);
   let ticket = getTicket(number);
   if (!ticket || ticket.status === 'closed') throw new Error('Dieses Ticket ist bereits geschlossen oder nicht mehr verfügbar.');
+  await requireTicketCloser(interaction, settings, ticket);
   await interaction.deferReply({ flags: EPHEMERAL });
   const thread = await fetchTicketThread(client, ticket);
   if (!thread) throw new Error('Der private Ticket-Thread wurde nicht gefunden.');
@@ -387,7 +496,7 @@ async function handleRatingModal(interaction, client, number, rating) {
 async function handleInteraction(interaction, client) {
   try {
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_category_select') {
-      await handleCategorySelect(interaction);
+      await handleCategorySelect(interaction, client);
       return true;
     }
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_create_modal:')) {
@@ -409,6 +518,14 @@ async function handleInteraction(interaction, client) {
     }
     if (interaction.isButton() && parseNumber(interaction.customId, 'ticket_close')) {
       await handleCloseRequest(interaction, parseNumber(interaction.customId, 'ticket_close'));
+      return true;
+    }
+    if (interaction.isButton() && parseNumber(interaction.customId, 'ticket_user_close')) {
+      await handleUserCloseRequest(interaction, parseNumber(interaction.customId, 'ticket_user_close'));
+      return true;
+    }
+    if (interaction.isButton() && parseNumber(interaction.customId, 'ticket_request_mod')) {
+      await handleTicketModRequest(interaction, client, parseNumber(interaction.customId, 'ticket_request_mod'));
       return true;
     }
     if (interaction.isButton() && parseNumber(interaction.customId, 'ticket_close_confirm')) {
@@ -447,6 +564,7 @@ async function handleInteraction(interaction, client) {
 }
 
 module.exports = {
+  createAutomaticTeamRegistrationTicket,
   createTicketFromModal,
   fetchAllMessages,
   handleInteraction,

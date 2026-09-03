@@ -6,7 +6,9 @@ const { createSettingsDefault, createTicketsDefault } = require('../src/storage/
 const {
   buildPanelComponents,
   buildPanelEmbed,
+  buildTeamRegistrationGuideEmbed,
   buildTicketEmbed,
+  buildTicketControls,
   formatTicketNumber,
   stars,
 } = require('../src/domain/tickets/ticket-components');
@@ -53,6 +55,29 @@ assert.strictEqual(ticketEmbed.title, 'Ticket #001');
 assert.ok(ticketEmbed.fields.some(field => field.name === 'Serverrolle' && field.value === 'Manager'));
 assert.ok(ticketEmbed.fields.some(field => field.name === 'Status' && field.value.includes('Offen')));
 
+const registrationTicket = {
+  ...sample,
+  status: 'in_progress',
+  category: 'team_registration',
+  teamName: null,
+  subject: 'Team registrieren',
+  description: 'Automatische Anleitung zur Teamregistrierung',
+  supportRequestedAt: null,
+};
+const registrationEmbed = buildTicketEmbed(registrationTicket).toJSON();
+const registrationGuide = buildTeamRegistrationGuideEmbed().toJSON();
+const registrationControls = buildTicketControls(registrationTicket)[0].toJSON().components;
+assert.ok(registrationEmbed.fields.some(field => field.name === 'Status' && field.value.includes('In Bearbeitung')));
+assert.ok(!registrationEmbed.fields.some(field => field.name === 'Betreff'));
+assert.ok(registrationGuide.description.includes('<#1516543498113908866>'));
+assert.ok(registrationGuide.description.includes('<#1516429663457775687>'));
+assert.ok(registrationGuide.description.includes('<#1522775227703103589>'));
+assert.strictEqual(registrationControls.length, 2);
+assert.strictEqual(registrationControls[0].custom_id, 'ticket_user_close:1');
+assert.strictEqual(registrationControls[1].custom_id, 'ticket_request_mod:1');
+const requestedControls = buildTicketControls({ ...registrationTicket, supportRequestedAt: '2026-09-03T01:00:00.000Z' })[0].toJSON().components;
+assert.strictEqual(requestedControls[1].disabled, true);
+
 const panel = buildPanelEmbed().toJSON();
 const panelRows = buildPanelComponents().map(row => row.toJSON());
 assert.strictEqual(panel.title, '🎫 SUPPORT DESK');
@@ -90,6 +115,8 @@ const now = Date.parse('2026-09-03T12:00:00.000Z');
 assert.strictEqual(dueForReminder({ status: 'open', threadId: '1', lastActivityAt: '2026-09-01T11:59:00.000Z' }, reminderSettings, now), true);
 assert.strictEqual(dueForReminder({ status: 'open', threadId: '1', lastActivityAt: '2026-09-02T12:00:00.000Z' }, reminderSettings, now), false);
 assert.strictEqual(dueForReminder({ status: 'closed', threadId: '1', lastActivityAt: '2026-08-01T12:00:00.000Z' }, reminderSettings, now), false);
+assert.strictEqual(dueForReminder({ category: 'team_registration', status: 'in_progress', threadId: '1', lastActivityAt: '2026-09-01T11:59:00.000Z', supportRequestedAt: null }, reminderSettings, now), false);
+assert.strictEqual(dueForReminder({ category: 'team_registration', status: 'in_progress', threadId: '1', lastActivityAt: '2026-09-01T11:59:00.000Z', supportRequestedAt: '2026-09-01T11:59:00.000Z' }, reminderSettings, now), true);
 
 const overwrites = supportOverwrites({
   roles: { everyone: { id: 'everyone' } },

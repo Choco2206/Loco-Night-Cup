@@ -10,6 +10,7 @@ let reminderTimer = null;
 
 function dueForReminder(ticket, settings, now = Date.now()) {
   if (!ACTIVE_STATUSES.has(ticket.status) || !ticket.threadId) return false;
+  if (ticket.category === 'team_registration' && !ticket.supportRequestedAt) return false;
   const inactivityMs = Math.max(1, Number(settings.tickets?.inactivityHours) || 48) * 60 * 60 * 1000;
   const cooldownMs = Math.max(1, Number(settings.tickets?.reminderCooldownHours) || 24) * 60 * 60 * 1000;
   const lastActivity = new Date(ticket.lastActivityAt || ticket.createdAt || 0).getTime();
