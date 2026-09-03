@@ -121,7 +121,13 @@ async function main() {
       await runStartupStep('Admin', () => adminSystem.init(client));
       await runStartupStep('Rollen', () => roleSystem.init(client));
       await runStartupStep('Ticket-System', () => ticketSystem.init(client));
-      await runStartupStep('Feedback-System', () => feedbackSystem.init(client));
+      await runStartupStep('Feedback-System', async () => {
+        try {
+          await feedbackSystem.init(client);
+        } catch (error) {
+          console.error('[feedback] Einrichtung fehlgeschlagen; übrige Bot-Systeme starten trotzdem:', error);
+        }
+      });
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Gruppen', () => groupSystem.init(client));
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
