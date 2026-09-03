@@ -28,7 +28,7 @@ const BANNER_NAME = 'loco-night-cup-feedback-v2.jpg';
 const CATEGORIES = {
   cup: { label: 'Cup & Turnierablauf', emoji: '🏆' },
   systems: { label: 'Bot & Systeme', emoji: '🤖' },
-  moderation: { label: 'Moderation & Community', emoji: '🛡️' },
+  moderation: { label: 'Moderation & Community', tagLabel: 'Community & Mods', emoji: '🛡️' },
   discord: { label: 'Discord & Gestaltung', emoji: '🎨' },
   idea: { label: 'Neue Idee', emoji: '💡' },
   other: { label: 'Sonstiges', emoji: '📦' },
@@ -69,7 +69,16 @@ function formatNumber(number) {
 }
 
 function tagName(item) {
-  return `${item.emoji} ${item.label}`;
+  return item.tagLabel || item.label;
+}
+
+function normalizeTagName(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/\uFE0F/g, '')
+    .replace(/^[^\p{L}\p{N}]+/u, '')
+    .trim()
+    .toLocaleLowerCase('de-DE');
 }
 
 function panelEmbed() {
@@ -165,24 +174,31 @@ async function forum(client) {
 }
 
 async function ensureTags(channel) {
-  const tags = [...channel.availableTags];
-  for (const item of Object.values(CATEGORIES)) {
-    const name = tagName(item);
-    if (!tags.some(tag => tag.name === name)) tags.push({ name, moderated: false });
-  }
-  for (const item of Object.values(STATUSES)) {
-    const name = tagName(item);
-    const index = tags.findIndex(tag => tag.name === name);
-    if (index === -1) tags.push({ name, moderated: true });
-    else tags[index] = { ...tags[index], moderated: true };
-  }
+  const existing = [...channel.availableTags];
+  const wanted = [
+    ...Object.values(CATEGORIES).map(item => ({ item, moderated: false })),
+    ...Object.values(STATUSES).map(item => ({ item, moderated: true })),
+  ];
+  const usedIds = new Set();
+  const tags = wanted.map(({ item, moderated }) => {
+    const aliases = new Set([normalizeTagName(tagName(item)), normalizeTagName(item.label)]);
+    const match = existing.find(tag => !usedIds.has(tag.id) && aliases.has(normalizeTagName(tag.name)));
+    if (match?.id) usedIds.add(match.id);
+    return {
+      ...(match?.id ? { id: match.id } : {}),
+      name: tagName(item),
+      emoji: item.emoji,
+      moderated,
+    };
+  });
   if (tags.length > 20) throw new Error('Feedback-Forum: Es sind zu viele Tags vorhanden. Discord erlaubt maximal 20.');
   await channel.setAvailableTags(tags, 'Feedback-Kategorien und Status synchronisieren');
   return channel.availableTags;
 }
 
 function findTag(channel, item) {
-  return channel.availableTags.find(tag => tag.name === tagName(item))?.id;
+  const wanted = normalizeTagName(tagName(item));
+  return channel.availableTags.find(tag => normalizeTagName(tag.name) === wanted)?.id;
 }
 
 async function ensurePanel(channel) {
