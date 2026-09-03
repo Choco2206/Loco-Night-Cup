@@ -18,6 +18,7 @@ const { TEAM_LOGOS_DIR } = require('../../storage');
 const { getTeamAchievementRank, getTeamHistoryStats, getTeamTitles } = require('./team-achievements');
 const { getChampionLevelForGold } = require('./champion-ranks');
 const teamRegistrationBannerBase64 = require('./team-registration-banner');
+const myTeamBannerBase64 = require('./my-team-banner');
 
 function buildTeamPanelPayload() {
   const bannerName = 'team-registration-banner.jpg';
@@ -40,9 +41,9 @@ function buildTeamPanelPayload() {
 }
 
 function buildMyTeamPanelPayload() {
+  const bannerName = 'my-team-banner.jpeg';
   const embed = new EmbedBuilder()
-    .setTitle('Mein Team')
-    .setDescription('Öffne deine private Teamübersicht.')
+    .setImage(`attachment://${bannerName}`)
     .setColor(0xff0000);
 
   const row = new ActionRowBuilder().addComponents(
@@ -55,6 +56,7 @@ function buildMyTeamPanelPayload() {
   return {
     embeds: [embed],
     components: [row],
+    files: [new AttachmentBuilder(Buffer.from(myTeamBannerBase64, 'base64'), { name: bannerName })],
   };
 }
 
