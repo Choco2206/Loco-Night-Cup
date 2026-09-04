@@ -7,6 +7,7 @@ const { createBansDefault, createMessagesDefault, createSettingsDefault } = requ
 const DEFAULT_DURATION_DAYS = 14;
 const BERLIN_TIME_ZONE = 'Europe/Berlin';
 const VALID_REASONS = new Set(['late_withdrawal', 'no_show', 'left_tournament', 'disrespect', 'admin_other']);
+const MAX_LIST_MESSAGE_LENGTH = 1850;
 
 let activeClient = null;
 let cleanupTimer = null;
@@ -308,28 +309,43 @@ function buildBanInfoEmbed() {
     ].join('\n'));
 }
 
-function buildBanListContent(now = new Date()) {
+function buildBanBlock(ban, index) {
+  const lines = [
+    `**${index + 1}. ${ban.clubName || ban.team?.clubNameSnapshot || getBanTeamId(ban) || 'Unbekanntes Team'}**`,
+    `VM / Co-VM: ${formatMentions([ban.managerId, ...(ban.coManagerIds || []), ...getBanUserIds(ban)])}`,
+    `Grund: ${getBanReasonText(ban)}`,
+    `Sperre ab: ${formatDate(ban.bannedAtDate || ban.startsAt || ban.createdAt)}`,
+    `Sperre bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`,
+  ];
+
+  const sourceMention = getBanSourceMention(ban);
+  if (sourceMention) lines.push(`Von: ${sourceMention}`);
+  return lines.join('\n');
+}
+
+function buildBanListContents(now = new Date()) {
   const activeBans = readBansData().bans.filter(ban => isBanActive(ban, now));
   if (!activeBans.length) {
-    return '## 🔴 Aktuell gesperrte Teams\n\n✅ Aktuell sind keine Teams gesperrt.';
+    return ['## 🔴 Aktuell gesperrte Teams\n\n✅ Aktuell sind keine Teams gesperrt.'];
   }
 
-  const blocks = activeBans.map((ban, index) => {
-    const lines = [
-      `**${index + 1}. ${ban.clubName || ban.team?.clubNameSnapshot || getBanTeamId(ban) || 'Unbekanntes Team'}**`,
-      `VM / Co-VM: ${formatMentions([ban.managerId, ...(ban.coManagerIds || []), ...getBanUserIds(ban)])}`,
-      `Grund: ${getBanReasonText(ban)}`,
-      `Sperre ab: ${formatDate(ban.bannedAtDate || ban.startsAt || ban.createdAt)}`,
-      `Sperre bis: ${formatDate(ban.bannedUntilDate || ban.expiresAt)}`,
-    ];
+  const messages = [];
+  let current = '## 🔴 Aktuell gesperrte Teams';
 
-    const sourceMention = getBanSourceMention(ban);
-    if (sourceMention) lines.push(`Von: ${sourceMention}`);
+  activeBans.forEach((ban, index) => {
+    const block = buildBanBlock(ban, index);
+    const candidate = `${current}\n\n${block}`;
 
-    return lines.join('\n');
+    if (candidate.length > MAX_LIST_MESSAGE_LENGTH && current !== '## 🔴 Aktuell gesperrte Teams') {
+      messages.push(current);
+      current = `## 🔴 Aktuell gesperrte Teams • Fortsetzung\n\n${block}`;
+    } else {
+      current = candidate;
+    }
   });
 
-  return `## 🔴 Aktuell gesperrte Teams\n\n${blocks.join('\n\n')}`;
+  if (current) messages.push(current);
+  return messages;
 }
 
 async function fetchMessage(channel, messageId) {
@@ -360,29 +376,53 @@ async function refreshBanlistMessage(client = activeClient) {
     channelId: null,
     infoMessageId: null,
     listMessageId: null,
+    listMessageIds: [],
     createdAt: null,
     updatedAt: null,
   };
 
   const staleChannel = messages.banlist.channelId && String(messages.banlist.channelId) !== String(channel.id);
   let infoMessage = staleChannel ? null : await fetchMessage(channel, messages.banlist.infoMessageId);
-  let listMessage = staleChannel ? null : await fetchMessage(channel, messages.banlist.listMessageId);
+
+  const previousListIds = staleChannel
+    ? []
+    : Array.isArray(messages.banlist.listMessageIds) && messages.banlist.listMessageIds.length
+      ? messages.banlist.listMessageIds.filter(Boolean).map(String)
+      : messages.banlist.listMessageId
+        ? [String(messages.banlist.listMessageId)]
+        : [];
 
   const infoPayload = { embeds: [buildBanInfoEmbed()] };
-  const listPayload = { content: buildBanListContent(), allowedMentions: { parse: ['users'] } };
-
   if (infoMessage) await infoMessage.edit(infoPayload);
   else infoMessage = await channel.send(infoPayload);
 
-  if (listMessage) await listMessage.edit(listPayload);
-  else listMessage = await channel.send(listPayload);
+  const contents = buildBanListContents();
+  const nextListIds = [];
+
+  for (let index = 0; index < contents.length; index += 1) {
+    const payload = {
+      content: contents[index],
+      allowedMentions: { parse: ['users'] },
+    };
+    const existing = await fetchMessage(channel, previousListIds[index]);
+    const message = existing
+      ? await existing.edit(payload)
+      : await channel.send(payload);
+    nextListIds.push(message.id);
+  }
+
+  for (let index = contents.length; index < previousListIds.length; index += 1) {
+    const staleMessage = await fetchMessage(channel, previousListIds[index]);
+    if (staleMessage) await staleMessage.delete().catch(() => null);
+  }
 
   const timestamp = nowIso();
   updateJson(FILES.messages, createMessagesDefault(), current => {
     current.banlist = current.banlist || {};
     current.banlist.channelId = channel.id;
     current.banlist.infoMessageId = infoMessage.id;
-    current.banlist.listMessageId = listMessage.id;
+    current.banlist.listMessageId = nextListIds[0] || null;
+    current.banlist.listMessageIds = nextListIds;
     current.banlist.updatedAt = timestamp;
     if (!current.banlist.createdAt) current.banlist.createdAt = timestamp;
     return current;
