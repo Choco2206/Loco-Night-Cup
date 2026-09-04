@@ -145,8 +145,16 @@ function stateFromLiveEvent(event) {
   };
 }
 
+function isDiscordClientReady() {
+  return Boolean(
+    clientRef &&
+    (typeof clientRef.isReady !== 'function' || clientRef.isReady()) &&
+    clientRef.rest?.authPrefix !== undefined
+  );
+}
+
 async function ensurePanel() {
-  if (!clientRef) return false;
+  if (!isDiscordClientReady()) return false;
   const saturday = readEventData('saturday');
   const liveEvent = isBomberXLocoEvent(saturday);
   const channel = await clientRef.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
@@ -236,8 +244,10 @@ async function handleInteraction(interaction) {
 }
 
 async function reconcile() {
+  if (!isDiscordClientReady()) return false;
   const migrated = await migrateIntoSaturdayEvent();
   if (!migrated) await ensurePanel();
+  return true;
 }
 
 module.exports = {
@@ -245,7 +255,10 @@ module.exports = {
     clientRef = client;
     await reconcile();
     if (!intervalRef) {
-      intervalRef = setInterval(() => reconcile().catch(error => console.error('[bomber-x-loco-checkin]', error)), 60 * 1000);
+      intervalRef = setInterval(() => {
+        if (!isDiscordClientReady()) return;
+        reconcile().catch(error => console.error('[bomber-x-loco-checkin]', error));
+      }, 60 * 1000);
       if (typeof intervalRef.unref === 'function') intervalRef.unref();
     }
   },
