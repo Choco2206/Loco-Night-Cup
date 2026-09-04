@@ -2,6 +2,7 @@
 
 const { EVENT_KEYS } = require('../../app/constants');
 const { checkInTeam, withdrawTeam } = require('./checkin-service');
+const { handleInteraction: handleBomberManualDrawInteraction } = require('./bomber-x-loco-manual-draw');
 const {
   adoptBomberXLocoPanelMessage,
   refreshCheckinMessage,
@@ -40,12 +41,7 @@ async function bindClickedBomberPanel(interaction, client, eventKey) {
 
 async function handleJoin(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
-
-  // Beim Bomber X Loco ist immer genau die angeklickte Nachricht das offizielle Panel.
-  // So kann kein veralteter specialMainMessageId dazu führen, dass eine andere Nachricht
-  // aktualisiert wird als die, auf der der User gerade An-/Abmelden drückt.
   await bindClickedBomberPanel(interaction, client, eventKey);
-
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
   await refreshCheckinMessage(eventKey, client);
   if (result.alreadyCheckedIn) {
@@ -58,11 +54,7 @@ async function handleJoin(interaction, client, eventKey) {
 
 async function handleLeave(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
-
-  // Auch bei normalen checkin_leave:saturday-Buttons das angeklickte Bomber-Panel
-  // vor der Datenänderung binden, nicht nur bei alten Legacy-Buttons.
   await bindClickedBomberPanel(interaction, client, eventKey);
-
   const result = withdrawTeam({ eventKey, userId: interaction.user.id });
   if (!result.wasCheckedIn) {
     await refreshCheckinMessage(eventKey, client);
@@ -80,6 +72,7 @@ async function handleLeave(interaction, client, eventKey) {
 }
 
 async function handleInteraction(interaction, client) {
+  if (await handleBomberManualDrawInteraction(interaction, client)) return true;
   if (!interaction.isButton()) return false;
 
   if (interaction.customId === 'bomber_x_loco_redirect:saturday') {
