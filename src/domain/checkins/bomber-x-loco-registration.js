@@ -5,7 +5,7 @@ const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { FILES, ROOT_DIR, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
-const { findNonDeletedTeamByUserId, findTeamById } = require('../teams/team-service');
+const { findNonDeletedTeamByUserId, findTeamById, isTeamMember } = require('../teams/team-service');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 const { readEventData, updateEventData } = require('./checkin-repository');
 const { recalculateCheckinFormat } = require('./checkin-format');
@@ -20,6 +20,7 @@ const {
 const REGISTRATION_FILE = path.join(process.cwd(), 'data', 'bomber-x-loco-registration.json');
 const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
+const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const FORCE_REPOST_MARKER = 'forcedRepost20260904V3At';
 const EPHEMERAL = 64;
 let clientRef = null;
@@ -54,15 +55,57 @@ function isRegistrationClosed(now = new Date()) {
   return now.getTime() >= registrationDeadline().getTime();
 }
 
+function isValidRegistrationTeam(team, actorUserId = null, now = new Date()) {
+  if (!team || team.status !== 'active' || team.registrationStatus !== 'complete') return false;
+  return !findActiveBanForTeamOrManagers(team, actorUserId, now);
+}
+
+function normalizeEntries(entries, now = new Date()) {
+  const seen = new Set();
+  const result = [];
+  for (const entry of entries || []) {
+    const teamId = String(entry?.teamId || '').trim();
+    if (!teamId || seen.has(teamId)) continue;
+    const team = findTeamById(teamId);
+    if (!isValidRegistrationTeam(team, entry?.checkedInByUserId, now)) continue;
+    seen.add(teamId);
+    result.push({
+      teamId,
+      checkedInByUserId: String(entry?.checkedInByUserId || ''),
+      checkedInAt: entry?.checkedInAt || null,
+    });
+  }
+  return result;
+}
+
+function readCleanState() {
+  const state = readState();
+  const cleaned = normalizeEntries(state.entries);
+  const changed = cleaned.length !== state.entries.length
+    || cleaned.some((entry, index) => String(entry.teamId) !== String(state.entries[index]?.teamId));
+  if (changed) {
+    state.entries = cleaned;
+    writeState(state);
+  }
+  return state;
+}
+
 function validTeamForUser(userId) {
   const team = findNonDeletedTeamByUserId(userId);
-  if (!team || team.status !== 'active' || team.registrationStatus !== 'complete') {
+  if (!team || !isValidRegistrationTeam(team, userId, new Date())) {
     throw new Error('Du bist keinem vollständig registrierten aktiven Team als VM oder Co-VM zugeordnet.');
   }
-  if (findActiveBanForTeamOrManagers(team, userId, new Date())) {
-    throw new Error('Dein Team oder ein zugehöriger Manager ist aktuell gesperrt.');
-  }
   return team;
+}
+
+function registeredTeamForUser(state, userId) {
+  const id = String(userId);
+  for (const entry of state.entries || []) {
+    const team = findTeamById(entry.teamId);
+    if (!team) continue;
+    if (String(entry.checkedInByUserId || '') === id || isTeamMember(team, id)) return team;
+  }
+  return null;
 }
 
 function teamName(teamId) {
@@ -86,16 +129,26 @@ function formatLines(entries) {
 function stateFromLiveEvent(event) {
   return {
     ...readState(),
-    entries: (event.checkin?.entries || []).map(entry => ({
+    entries: normalizeEntries((event.checkin?.entries || []).map(entry => ({
       teamId: String(entry.teamId),
       checkedInByUserId: String(entry.checkedInByUserId || ''),
       checkedInAt: entry.checkedInAt || null,
-    })),
+    }))),
   };
 }
 
+function syncStateFromLiveEvent(event) {
+  const liveState = stateFromLiveEvent(event);
+  const state = readState();
+  state.entries = liveState.entries;
+  state.handedOverAt = state.handedOverAt || new Date().toISOString();
+  writeState(state);
+  return state;
+}
+
 function buildPayload(state, { liveEvent = false } = {}) {
-  const count = state.entries.length;
+  const cleanEntries = normalizeEntries(state.entries);
+  const count = cleanEntries.length;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
   const closed = isRegistrationClosed();
@@ -112,6 +165,7 @@ function buildPayload(state, { liveEvent = false } = {}) {
       '',
       '⏰ Offizieller Anmeldeschluss: 18:30 Uhr',
       '🎲 Gruppenauslosung live bei Paddy HSV: 19:00 Uhr',
+      `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
       '✅ Anwesenheits-Check: bis 20:00 Uhr',
       '🚀 Turnierstart: 21:00 Uhr',
       '',
@@ -121,9 +175,11 @@ function buildPayload(state, { liveEvent = false } = {}) {
       '',
       '**👥 Teilnehmende Teams**',
       '',
-      ...formatLines(state.entries),
+      ...formatLines(cleanEntries),
       '',
       '⚠️ Nach **18:30 Uhr** ist keine Anmeldung oder Abmeldung mehr möglich.',
+      '🎥 Die Gruppen werden anschließend **live bei Paddy HSV** gezogen und von der Turnierleitung manuell zugeteilt.',
+      `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
     ].join('\n'));
 
   return {
@@ -155,7 +211,8 @@ async function ensurePanel() {
   const channel = await clientRef.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
   if (!channel?.send) return false;
 
-  const storedState = readState();
+  let storedState = readCleanState();
+  if (liveEvent && storedState.handedOverAt) storedState = syncStateFromLiveEvent(saturday);
   const renderState = liveEvent ? stateFromLiveEvent(saturday) : storedState;
   let message = storedState.messageId ? await channel.messages.fetch(storedState.messageId).catch(() => null) : null;
   const payload = buildPayload(renderState, { liveEvent });
@@ -181,13 +238,12 @@ async function ensurePanel() {
 }
 
 async function forceRepostOnce() {
-  const state = readState();
+  const state = readCleanState();
   if (state[FORCE_REPOST_MARKER]) return false;
 
   const channel = await clientRef?.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
   if (!channel?.send) throw new Error('Bomber-X-Loco-Check-in-Kanal konnte nicht gefunden werden.');
 
-  // Nur die Nachrichtenreferenz neu aufbauen. Die Teilnehmerliste bleibt unverändert.
   if (state.messageId) {
     const oldMessage = await channel.messages.fetch(String(state.messageId)).catch(() => null);
     if (oldMessage) await oldMessage.delete().catch(() => null);
@@ -210,8 +266,13 @@ async function forceRepostOnce() {
 async function handOverToSaturdayEvent() {
   const saturday = readEventData('saturday');
   if (!isBomberXLocoEvent(saturday) || String(saturday.cycle?.eventDate || '') !== BOMBER_X_LOCO_EVENT_DATE) return false;
-  const state = readState();
-  if (state.handedOverAt) return false;
+  const state = readCleanState();
+
+  if (state.handedOverAt) {
+    syncStateFromLiveEvent(saturday);
+    return false;
+  }
+
   const settings = readJson(FILES.settings, createSettingsDefault());
 
   updateEventData('saturday', event => {
@@ -220,8 +281,7 @@ async function handOverToSaturdayEvent() {
     const existing = new Set(event.checkin.entries.map(entry => String(entry.teamId)));
     for (const entry of state.entries) {
       const team = findTeamById(entry.teamId);
-      if (!team || team.status !== 'active' || team.registrationStatus !== 'complete') continue;
-      if (findActiveBanForTeamOrManagers(team, entry.checkedInByUserId, new Date())) continue;
+      if (!isValidRegistrationTeam(team, entry.checkedInByUserId, new Date())) continue;
       if (existing.has(String(entry.teamId))) continue;
       event.checkin.entries.push({
         teamId: String(entry.teamId),
@@ -236,10 +296,10 @@ async function handOverToSaturdayEvent() {
     return event;
   });
 
-  state.handedOverAt = new Date().toISOString();
-  writeState(state);
+  const liveEvent = readEventData('saturday');
+  const synced = syncStateFromLiveEvent(liveEvent);
+  console.log(`[bomber-x-loco] Offizieller Check-in an Saturday-Event übergeben: ${synced.entries.length} Teams`);
   await ensurePanel();
-  console.log(`[bomber-x-loco] Offizieller Check-in an Saturday-Event übergeben: ${state.entries.length} Teams`);
   return true;
 }
 
@@ -256,25 +316,28 @@ async function handleInteraction(interaction) {
       throw new Error('Der Bomber X Loco Cup läuft jetzt im Event-State. Bitte nutze denselben Anmelde-Post erneut.');
     }
 
-    const team = validTeamForUser(interaction.user.id);
-    const state = readState();
-    const index = state.entries.findIndex(entry => String(entry.teamId) === String(team.id));
+    const state = readCleanState();
+
     if (interaction.customId === 'bomber_x_loco_join') {
+      const team = validTeamForUser(interaction.user.id);
+      const index = state.entries.findIndex(entry => String(entry.teamId) === String(team.id));
       if (index !== -1) throw new Error('Dein Team ist bereits für den Bomber X Loco Cup angemeldet.');
       if (state.entries.length >= 48) throw new Error('Der Bomber X Loco Cup ist bereits mit 48 Teams voll.');
       state.entries.push({ teamId: String(team.id), checkedInByUserId: String(interaction.user.id), checkedInAt: new Date().toISOString() });
-    } else {
-      if (index === -1) throw new Error('Dein Team ist aktuell nicht für den Bomber X Loco Cup angemeldet.');
-      state.entries.splice(index, 1);
+      writeState(state);
+      await ensurePanel();
+      await interaction.reply({ content: `✅ **${team.clubName}** wurde angemeldet.`, flags: EPHEMERAL });
+      return true;
     }
+
+    const team = registeredTeamForUser(state, interaction.user.id);
+    if (!team) throw new Error('Dein Team ist aktuell nicht für den Bomber X Loco Cup angemeldet.');
+    const index = state.entries.findIndex(entry => String(entry.teamId) === String(team.id));
+    if (index === -1) throw new Error('Dein Team ist aktuell nicht für den Bomber X Loco Cup angemeldet.');
+    state.entries.splice(index, 1);
     writeState(state);
     await ensurePanel();
-    await interaction.reply({
-      content: interaction.customId === 'bomber_x_loco_join'
-        ? `✅ **${team.clubName}** wurde angemeldet.`
-        : `⬇️ **${team.clubName}** wurde abgemeldet.`,
-      flags: EPHEMERAL,
-    });
+    await interaction.reply({ content: `⬇️ **${team.clubName}** wurde abgemeldet.`, flags: EPHEMERAL });
     return true;
   } catch (error) {
     await interaction.reply({ content: error.message || 'Aktion konnte nicht ausgeführt werden.', flags: EPHEMERAL }).catch(() => {});
