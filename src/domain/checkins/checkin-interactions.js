@@ -2,21 +2,34 @@
 
 const { EVENT_KEYS } = require('../../app/constants');
 const { checkInTeam, withdrawTeam } = require('./checkin-service');
-const { refreshCheckinMessage, refreshCheckinMessages } = require('./checkin-panel');
+const {
+  adoptBomberXLocoPanelMessage,
+  refreshCheckinMessage,
+  refreshCheckinMessages,
+} = require('./checkin-panel');
 const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID } = require('../events/bomber-x-loco-config');
 
 const EPHEMERAL = 64;
 
 function parseCheckinButton(customId) {
   if (!customId || typeof customId !== 'string') return null;
+
+  if (customId === 'bomber_x_loco_prejoin') {
+    return { action: 'checkin_join', eventKey: 'saturday', legacyBomberButton: true };
+  }
+  if (customId === 'bomber_x_loco_preleave') {
+    return { action: 'checkin_leave', eventKey: 'saturday', legacyBomberButton: true };
+  }
+
   const [action, eventKey] = customId.split(':');
   if (!['checkin_join', 'checkin_leave'].includes(action)) return null;
   if (!EVENT_KEYS.includes(eventKey)) return null;
-  return { action, eventKey };
+  return { action, eventKey, legacyBomberButton: false };
 }
 
-async function handleJoin(interaction, client, eventKey) {
+async function handleJoin(interaction, client, eventKey, { legacyBomberButton = false } = {}) {
   await interaction.deferReply({ flags: EPHEMERAL });
+  if (legacyBomberButton) await adoptBomberXLocoPanelMessage(interaction.message, client);
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
   await refreshCheckinMessage(eventKey, client);
   if (result.alreadyCheckedIn) {
@@ -27,8 +40,9 @@ async function handleJoin(interaction, client, eventKey) {
   return true;
 }
 
-async function handleLeave(interaction, client, eventKey) {
+async function handleLeave(interaction, client, eventKey, { legacyBomberButton = false } = {}) {
   await interaction.deferReply({ flags: EPHEMERAL });
+  if (legacyBomberButton) await adoptBomberXLocoPanelMessage(interaction.message, client);
   const result = withdrawTeam({ eventKey, userId: interaction.user.id });
   if (!result.wasCheckedIn) {
     await refreshCheckinMessage(eventKey, client);
@@ -65,8 +79,12 @@ async function handleInteraction(interaction, client) {
   if (!parsed) return false;
 
   try {
-    if (parsed.action === 'checkin_join') return await handleJoin(interaction, client, parsed.eventKey);
-    if (parsed.action === 'checkin_leave') return await handleLeave(interaction, client, parsed.eventKey);
+    if (parsed.action === 'checkin_join') {
+      return await handleJoin(interaction, client, parsed.eventKey, parsed);
+    }
+    if (parsed.action === 'checkin_leave') {
+      return await handleLeave(interaction, client, parsed.eventKey, parsed);
+    }
     return false;
   } catch (error) {
     const message = error?.message || 'Check-in konnte nicht verarbeitet werden.';
