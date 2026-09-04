@@ -4,6 +4,7 @@ const { EmbedBuilder } = require('discord.js');
 
 const BANLIST_FILE = path.join(process.cwd(), 'data', 'banlist.json');
 const ACTOR_TRACKING_STARTED_AT = Date.parse('2026-08-30T11:45:04Z');
+const MAX_LIST_MESSAGE_LENGTH = 1900;
 
 let clientRef = null;
 let midnightTimeoutRef = null;
@@ -11,11 +12,7 @@ let dailyIntervalRef = null;
 
 function ensureFile(filePath, fallback) {
   const dir = path.dirname(filePath);
-
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), 'utf8');
   }
@@ -25,24 +22,25 @@ function loadBanlist() {
   ensureFile(BANLIST_FILE, {
     infoMessageId: null,
     listMessageId: null,
+    listMessageIds: [],
     bans: [],
   });
 
   try {
     const raw = fs.readFileSync(BANLIST_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
-
     return {
       infoMessageId: parsed.infoMessageId || null,
       listMessageId: parsed.listMessageId || null,
+      listMessageIds: Array.isArray(parsed.listMessageIds) ? parsed.listMessageIds : [],
       bans: Array.isArray(parsed.bans) ? parsed.bans : [],
     };
   } catch (error) {
     console.error('❌ Fehler beim Lesen der Sperrliste:', error);
-
     return {
       infoMessageId: null,
       listMessageId: null,
+      listMessageIds: [],
       bans: [],
     };
   }
@@ -54,12 +52,10 @@ function saveBanlist(data) {
 
 async function fetchBanlistChannel() {
   const channelId = process.env.BANLIST_CHANNEL_ID;
-
   if (!channelId) {
     console.warn('⚠️ BANLIST_CHANNEL_ID fehlt in der .env');
     return null;
   }
-
   try {
     return await clientRef.channels.fetch(channelId);
   } catch (error) {
@@ -70,7 +66,6 @@ async function fetchBanlistChannel() {
 
 async function fetchMessage(channel, messageId) {
   if (!messageId) return null;
-
   try {
     return await channel.messages.fetch(messageId);
   } catch {
@@ -83,37 +78,28 @@ function todayDateString() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-
   return `${year}-${month}-${day}`;
 }
 
 function addDaysDateString(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
-
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-
   return `${year}-${month}-${day}`;
 }
 
 function formatDateDE(dateString) {
   if (!dateString) return '—';
-
   const [year, month, day] = String(dateString).split('-');
   return `${day}.${month}.${year}`;
 }
 
 function cleanupExpiredBans(data) {
   const today = todayDateString();
-
   const before = data.bans.length;
-
-  data.bans = data.bans.filter(ban => {
-    return String(ban.bannedUntilDate) > today;
-  });
-
+  data.bans = data.bans.filter(ban => String(ban.bannedUntilDate) > today);
   return before !== data.bans.length;
 }
 
@@ -123,13 +109,8 @@ function formatUserMention(userId) {
 }
 
 function getTeamMentions(ban) {
-  const ids = [
-    ban.managerId,
-    ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : []),
-  ].filter(Boolean);
-
+  const ids = [ban.managerId, ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : [])].filter(Boolean);
   if (!ids.length) return '—';
-
   return ids.map(formatUserMention).join(' ');
 }
 
@@ -141,18 +122,13 @@ function getBotMention() {
 function getBanSourceMention(ban) {
   const createdAtMs = Date.parse(ban.createdAt || '');
   const isNewEnough = Number.isFinite(createdAtMs) && createdAtMs >= ACTOR_TRACKING_STARTED_AT;
-
-  // Bestehende Alt-Sperren vor Einführung des Trackings bleiben unverändert.
   if (ban.actorTrackingVersion !== 1 && !isNewEnough) return null;
 
   const actorId = String(ban.bannedByUserId || '').trim();
-  const teamUserIds = [
-    ban.managerId,
-    ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : []),
-  ].filter(Boolean).map(String);
+  const teamUserIds = [ban.managerId, ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : [])]
+    .filter(Boolean)
+    .map(String);
 
-  // Bei der automatischen 7-Tage-Sperre löst der Team-User nur den Vorgang aus.
-  // Die eigentliche Sperre wird vom Bot gesetzt und soll auch so angezeigt werden.
   const isAutomaticLateWithdrawal =
     ban.reason === 'Abmeldung nach offiziellem Anmeldeschluss' &&
     actorId &&
@@ -160,21 +136,18 @@ function getBanSourceMention(ban) {
 
   if (isAutomaticLateWithdrawal) return getBotMention();
   if (actorId) return formatUserMention(actorId);
-
   return getBotMention();
 }
 
 function buildInfoEmbed() {
   return new EmbedBuilder()
     .setTitle('🚫 LOCO NIGHT CUP | SPERRLISTE')
-    .setDescription(
-      [
-        '**Hier landen Teams, die den Turnierabend kaputt machen, nicht auftauchen oder den Ablauf unnötig bremsen.**',
-        '',
-        'Wer sich anmeldet oder eincheckt, übernimmt Verantwortung gegenüber allen anderen Teams.',
-        'Wir wollen einen flüssigen, fairen und respektvollen Cup ohne unnötiges Chaos.',
-      ].join('\n')
-    )
+    .setDescription([
+      '**Hier landen Teams, die den Turnierabend kaputt machen, nicht auftauchen oder den Ablauf unnötig bremsen.**',
+      '',
+      'Wer sich anmeldet oder eincheckt, übernimmt Verantwortung gegenüber allen anderen Teams.',
+      'Wir wollen einen flüssigen, fairen und respektvollen Cup ohne unnötiges Chaos.',
+    ].join('\n'))
     .addFields(
       {
         name: '⛔ Gründe für eine Sperre',
@@ -199,41 +172,82 @@ function buildInfoEmbed() {
     .setFooter({ text: 'Loco Night Cup • Fair bleiben oder Pause machen.' });
 }
 
-function buildBanlistText(data) {
+function buildBanBlock(ban, index) {
+  const sourceMention = getBanSourceMention(ban);
+  const lines = [
+    `### ${index + 1}. ${ban.clubName}`,
+    `**VM / Co-VM:** ${getTeamMentions(ban)}`,
+    `**Grund:** ${ban.reason}`,
+    `**Sperre ab:** ${formatDateDE(ban.bannedAtDate)}`,
+    `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
+  ];
+  if (sourceMention) lines.push(`**Von:** ${sourceMention}`);
+  return lines.join('\n');
+}
+
+function buildBanlistTexts(data) {
   if (!data.bans.length) {
-    return [
-      '## 🔴 Aktuell gesperrte Teams',
-      '',
-      '✅ Aktuell sind keine Teams gesperrt.',
-    ].join('\n');
+    return ['## 🔴 Aktuell gesperrte Teams\n\n✅ Aktuell sind keine Teams gesperrt.'];
   }
 
-  const lines = [
-    '## 🔴 Aktuell gesperrte Teams',
-    '',
-  ];
+  const sortedBans = [...data.bans].sort((a, b) =>
+    String(a.bannedUntilDate).localeCompare(String(b.bannedUntilDate))
+  );
 
-  data.bans
-    .sort((a, b) => String(a.bannedUntilDate).localeCompare(String(b.bannedUntilDate)))
-    .forEach((ban, index) => {
-      const sourceMention = getBanSourceMention(ban);
-      const banLines = [
-        `### ${index + 1}. ${ban.clubName}`,
-        `**VM / Co-VM:** ${getTeamMentions(ban)}`,
-        `**Grund:** ${ban.reason}`,
-        `**Sperre ab:** ${formatDateDE(ban.bannedAtDate)}`,
-        `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
-      ];
+  const messages = [];
+  let current = '## 🔴 Aktuell gesperrte Teams';
 
-      if (sourceMention) {
-        banLines.push(`**Von:** ${sourceMention}`);
-      }
+  sortedBans.forEach((ban, index) => {
+    const block = buildBanBlock(ban, index);
+    const candidate = `${current}\n\n${block}`;
 
-      banLines.push('');
-      lines.push(banLines.join('\n'));
-    });
+    if (candidate.length > MAX_LIST_MESSAGE_LENGTH) {
+      messages.push(current);
+      current = `## 🔴 Aktuell gesperrte Teams • Fortsetzung\n\n${block}`;
+    } else {
+      current = candidate;
+    }
+  });
 
-  return lines.join('\n');
+  if (current) messages.push(current);
+  return messages;
+}
+
+async function syncBanlistMessages(channel, data) {
+  const contents = buildBanlistTexts(data);
+  const previousIds = Array.isArray(data.listMessageIds)
+    ? data.listMessageIds.filter(Boolean).map(String)
+    : [];
+
+  if (!previousIds.length && data.listMessageId) {
+    previousIds.push(String(data.listMessageId));
+  }
+
+  const nextIds = [];
+
+  for (let index = 0; index < contents.length; index += 1) {
+    let message = await fetchMessage(channel, previousIds[index] || null);
+    const payload = {
+      content: contents[index],
+      allowedMentions: { parse: ['users'] },
+    };
+
+    if (message) {
+      await message.edit(payload);
+    } else {
+      message = await channel.send(payload);
+    }
+
+    nextIds.push(message.id);
+  }
+
+  for (let index = contents.length; index < previousIds.length; index += 1) {
+    const oldMessage = await fetchMessage(channel, previousIds[index]);
+    if (oldMessage) await oldMessage.delete().catch(() => {});
+  }
+
+  data.listMessageIds = nextIds;
+  data.listMessageId = nextIds[0] || null;
 }
 
 async function refreshBanlistMessage() {
@@ -241,46 +255,18 @@ async function refreshBanlistMessage() {
   if (!channel) return;
 
   const data = loadBanlist();
-  const changed = cleanupExpiredBans(data);
+  cleanupExpiredBans(data);
 
   let infoMessage = await fetchMessage(channel, data.infoMessageId);
-  let listMessage = await fetchMessage(channel, data.listMessageId);
-
   if (!infoMessage) {
-    infoMessage = await channel.send({
-      embeds: [buildInfoEmbed()],
-    });
-
+    infoMessage = await channel.send({ embeds: [buildInfoEmbed()] });
     data.infoMessageId = infoMessage.id;
   } else {
-    await infoMessage.edit({
-      embeds: [buildInfoEmbed()],
-    });
+    await infoMessage.edit({ embeds: [buildInfoEmbed()] });
   }
 
-  if (!listMessage) {
-    listMessage = await channel.send({
-      content: buildBanlistText(data),
-      allowedMentions: {
-        parse: ['users'],
-      },
-    });
-
-    data.listMessageId = listMessage.id;
-  } else {
-    await listMessage.edit({
-      content: buildBanlistText(data),
-      allowedMentions: {
-        parse: ['users'],
-      },
-    });
-  }
-
-  if (changed) {
-    saveBanlist(data);
-  } else {
-    saveBanlist(data);
-  }
+  await syncBanlistMessages(channel, data);
+  saveBanlist(data);
 }
 
 function scheduleMidnightCleanup() {
@@ -289,14 +275,11 @@ function scheduleMidnightCleanup() {
 
   const now = new Date();
   const nextMidnight = new Date(now);
-
   nextMidnight.setHours(24, 0, 0, 0);
-
   const msUntilMidnight = nextMidnight.getTime() - now.getTime();
 
   midnightTimeoutRef = setTimeout(async () => {
     await refreshBanlistMessage();
-
     dailyIntervalRef = setInterval(async () => {
       await refreshBanlistMessage();
     }, 24 * 60 * 60 * 1000);
@@ -305,29 +288,24 @@ function scheduleMidnightCleanup() {
 
 async function addTeamBan(team, reason, bannedByUserId = null, durationDays = 14) {
   const data = loadBanlist();
-
   cleanupExpiredBans(data);
 
   const teamId = String(team.id || team.teamId);
   const bannedAtDate = todayDateString();
   const bannedUntilDate = addDaysDateString(durationDays);
 
-  const teamUserIds = [
-    team.managerId,
-    ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : []),
-  ].filter(Boolean).map(String);
+  const teamUserIds = [team.managerId, ...(Array.isArray(team.coManagerIds) ? team.coManagerIds : [])]
+    .filter(Boolean)
+    .map(String);
 
   const isAutomaticLateWithdrawal =
     reason === 'Abmeldung nach offiziellem Anmeldeschluss' &&
     bannedByUserId &&
     teamUserIds.includes(String(bannedByUserId));
 
-  const trackedBannedByUserId = isAutomaticLateWithdrawal
-    ? null
-    : bannedByUserId;
+  const trackedBannedByUserId = isAutomaticLateWithdrawal ? null : bannedByUserId;
 
   data.bans = data.bans.filter(ban => String(ban.teamId) !== teamId);
-
   data.bans.push({
     teamId,
     clubName: team.clubName,
@@ -342,15 +320,9 @@ async function addTeamBan(team, reason, bannedByUserId = null, durationDays = 14
   });
 
   saveBanlist(data);
-
   await refreshBanlistMessage();
 
-  return {
-    teamName: team.clubName,
-    bannedAtDate,
-    bannedUntilDate,
-    reason,
-  };
+  return { teamName: team.clubName, bannedAtDate, bannedUntilDate, reason };
 }
 
 function isTeamOrUserBanned(teamOrUser) {
@@ -361,14 +333,11 @@ function isTeamOrUserBanned(teamOrUser) {
   const userId = String(teamOrUser.userId || '');
 
   return data.bans.find(ban => {
-    const bannedUsers = [
-      ban.managerId,
-      ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : []),
-    ].filter(Boolean).map(String);
-
+    const bannedUsers = [ban.managerId, ...(Array.isArray(ban.coManagerIds) ? ban.coManagerIds : [])]
+      .filter(Boolean)
+      .map(String);
     if (teamId && String(ban.teamId) === teamId) return true;
     if (userId && bannedUsers.includes(userId)) return true;
-
     return false;
   }) || null;
 }
@@ -376,17 +345,15 @@ function isTeamOrUserBanned(teamOrUser) {
 module.exports = {
   async init(client) {
     clientRef = client;
-
     ensureFile(BANLIST_FILE, {
       infoMessageId: null,
       listMessageId: null,
+      listMessageIds: [],
       bans: [],
     });
-
     await refreshBanlistMessage();
     scheduleMidnightCleanup();
   },
-
   addTeamBan,
   refreshBanlistMessage,
   isTeamOrUserBanned,
