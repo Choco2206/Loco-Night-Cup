@@ -121,6 +121,21 @@ function rebuildGroupCompetitionData(group, now = new Date()) {
   return group;
 }
 
+function persistResourceUpdates(updates) {
+  if (!updates.length) return readEventData(EVENT_KEY);
+  updateEventData(EVENT_KEY, current => {
+    for (const update of updates) {
+      const group = current.groups?.groups?.[update.groupKey];
+      if (group) Object.assign(group, update);
+    }
+    current.meta = { ...(current.meta || {}), updatedAt: nowIso() };
+    return current;
+  });
+  const persisted = readEventData(EVENT_KEY);
+  updateGroupMessageRefs(EVENT_KEY, persisted, updates);
+  return persisted;
+}
+
 async function syncGroupResources(client, event, groupKeys = null) {
   const settings = readSettings();
   const roleSync = await ensureGroupRolesAndMembers({ client, event, settings });
@@ -146,12 +161,17 @@ async function syncGroupResources(client, event, groupKeys = null) {
       ...group,
       eventKey: EVENT_KEY,
       formatSize: event.format?.size,
-    }, { eventKey: EVENT_KEY }, resultsChannel);
+    }, {
+      eventKey: EVENT_KEY,
+      messageId: group.messageId || null,
+      headerMessageId: group.headerMessageId || null,
+      teamsMessageId: group.teamsMessageId || null,
+      tableMessageId: group.tableMessageId || null,
+      scheduleMessageId: group.scheduleMessageId || null,
+      resultsTableMessageId: group.resultsTableMessageId || null,
+      resultsScheduleMessageId: group.resultsScheduleMessageId || null,
+    }, resultsChannel);
     Object.assign(group, refs);
-
-    await ensureAttendancePost(client, EVENT_KEY, group.groupKey).catch(error => {
-      console.warn(`[bxl-manual-draw] Anwesenheitscheck Gruppe ${group.groupKey} konnte noch nicht aktualisiert werden: ${error.message}`);
-    });
 
     updates.push({
       groupKey: group.groupKey,
@@ -163,16 +183,14 @@ async function syncGroupResources(client, event, groupKeys = null) {
     });
   }
 
-  updateEventData(EVENT_KEY, current => {
-    for (const update of updates) {
-      const group = current.groups?.groups?.[update.groupKey];
-      if (group) Object.assign(group, update);
-    }
-    current.meta = { ...(current.meta || {}), updatedAt: nowIso() };
-    return current;
-  });
-  updateGroupMessageRefs(EVENT_KEY, readEventData(EVENT_KEY), updates);
-  return updates;
+  const persisted = persistResourceUpdates(updates);
+
+  for (const update of updates) {
+    await ensureAttendancePost(client, EVENT_KEY, update.groupKey).catch(error => {
+      console.warn(`[bxl-manual-draw] Anwesenheitscheck Gruppe ${update.groupKey} konnte noch nicht aktualisiert werden: ${error.message}`);
+    });
+  }
+  return { updates, event: persisted };
 }
 
 async function prepareManualDraw(client, now = new Date()) {
