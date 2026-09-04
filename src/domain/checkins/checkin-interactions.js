@@ -3,6 +3,7 @@
 const { EVENT_KEYS } = require('../../app/constants');
 const { checkInTeam, withdrawTeam } = require('./checkin-service');
 const { refreshCheckinMessage, refreshCheckinMessages } = require('./checkin-panel');
+const { refreshLivePanel: refreshBomberXLocoLivePanel } = require('./bomber-x-loco-precheckin');
 const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID } = require('../events/bomber-x-loco-config');
 
 const EPHEMERAL = 64;
@@ -15,10 +16,15 @@ function parseCheckinButton(customId) {
   return { action, eventKey };
 }
 
+async function refreshEventCheckinPanels(eventKey, client) {
+  await refreshCheckinMessage(eventKey, client);
+  if (eventKey === 'saturday') await refreshBomberXLocoLivePanel();
+}
+
 async function handleJoin(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
-  await refreshCheckinMessage(eventKey, client);
+  await refreshEventCheckinPanels(eventKey, client);
   if (result.alreadyCheckedIn) {
     await interaction.editReply('Dein Team ist für dieses Event bereits eingecheckt. Es wurde kein Duplikat erzeugt.');
     return true;
@@ -31,16 +37,17 @@ async function handleLeave(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const result = withdrawTeam({ eventKey, userId: interaction.user.id });
   if (!result.wasCheckedIn) {
-    await refreshCheckinMessage(eventKey, client);
+    await refreshEventCheckinPanels(eventKey, client);
     await interaction.editReply('Dein Team war für dieses Event nicht eingecheckt.');
     return true;
   }
   if (result.lateWithdrawal) {
     await refreshCheckinMessages(result.affectedEventKeys, client);
+    if ((result.affectedEventKeys || []).includes('saturday')) await refreshBomberXLocoLivePanel();
     await interaction.editReply('Abmeldung nach Deadline: Es wurde eine 7-Tage-Sperre erstellt und das Team aus allen Check-ins entfernt.');
     return true;
   }
-  await refreshCheckinMessage(eventKey, client);
+  await refreshEventCheckinPanels(eventKey, client);
   await interaction.editReply(`${result.team.clubName} wurde vom Event abgemeldet.`);
   return true;
 }
