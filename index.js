@@ -114,6 +114,7 @@ async function main() {
     try {
       runBootstrap();
       console.log(`Bot online as ${readyClient.user.tag}`);
+      await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Teams', () => teamSystem.init(client));
       await runStartupStep('Check-ins', () => checkinSystem.init(client));
       await runStartupStep('Knockout Royale', () => royaleSystem.init(client));
@@ -128,7 +129,6 @@ async function main() {
           console.error('[feedback] Einrichtung fehlgeschlagen; übrige Bot-Systeme starten trotzdem:', error);
         }
       });
-      await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Gruppen', () => groupSystem.init(client));
       await runStartupStep('K.O.-Runden', () => knockoutSystem.initKnockoutReleases(client));
       await runStartupStep('Größenvideo-Anforderung', () => videoRequestSystem.init(client));
