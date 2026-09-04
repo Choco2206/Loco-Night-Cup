@@ -3,6 +3,7 @@ const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 
 const BANLIST_FILE = path.join(process.cwd(), 'data', 'banlist.json');
+const MAX_LIST_MESSAGE_LENGTH = 1800;
 
 let clientRef = null;
 let midnightTimeoutRef = null;
@@ -24,6 +25,7 @@ function loadBanlist() {
   ensureFile(BANLIST_FILE, {
     infoMessageId: null,
     listMessageId: null,
+    listMessageIds: [],
     bans: [],
   });
 
@@ -31,9 +33,18 @@ function loadBanlist() {
     const raw = fs.readFileSync(BANLIST_FILE, 'utf8');
     const parsed = raw ? JSON.parse(raw) : {};
 
+    const listMessageIds = Array.isArray(parsed.listMessageIds)
+      ? parsed.listMessageIds.filter(Boolean).map(String)
+      : [];
+
+    if (!listMessageIds.length && parsed.listMessageId) {
+      listMessageIds.push(String(parsed.listMessageId));
+    }
+
     return {
       infoMessageId: parsed.infoMessageId || null,
       listMessageId: parsed.listMessageId || null,
+      listMessageIds,
       bans: Array.isArray(parsed.bans) ? parsed.bans : [],
     };
   } catch (error) {
@@ -42,6 +53,7 @@ function loadBanlist() {
     return {
       infoMessageId: null,
       listMessageId: null,
+      listMessageIds: [],
       bans: [],
     };
   }
@@ -106,7 +118,6 @@ function formatDateDE(dateString) {
 
 function cleanupExpiredBans(data) {
   const today = todayDateString();
-
   const before = data.bans.length;
 
   data.bans = data.bans.filter(ban => {
@@ -167,36 +178,102 @@ function buildInfoEmbed() {
     .setFooter({ text: 'Loco Night Cup • Fair bleiben oder Pause machen.' });
 }
 
-function buildBanlistText(data) {
+function buildBanBlock(ban, index) {
+  return [
+    `### ${index + 1}. ${ban.clubName}`,
+    `**VM / Co-VM:** ${getTeamMentions(ban)}`,
+    `**Grund:** ${ban.reason}`,
+    `**Sperre ab:** ${formatDateDE(ban.bannedAtDate)}`,
+    `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
+    ban.bannedByUserId ? `**Gesperrt von:** ${formatUserMention(ban.bannedByUserId)}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function buildBanlistTexts(data) {
   if (!data.bans.length) {
-    return [
+    return [[
       '## 🔴 Aktuell gesperrte Teams',
       '',
       '✅ Aktuell sind keine Teams gesperrt.',
-    ].join('\n');
+    ].join('\n')];
   }
 
-  const lines = [
-    '## 🔴 Aktuell gesperrte Teams',
-    '',
-  ];
+  const sortedBans = [...data.bans].sort((a, b) =>
+    String(a.bannedUntilDate).localeCompare(String(b.bannedUntilDate))
+  );
 
-  data.bans
-    .sort((a, b) => String(a.bannedUntilDate).localeCompare(String(b.bannedUntilDate)))
-    .forEach((ban, index) => {
-      lines.push(
-        [
-          `### ${index + 1}. ${ban.clubName}`,
-          `**VM / Co-VM:** ${getTeamMentions(ban)}`,
-          `**Grund:** ${ban.reason}`,
-          `**Sperre ab:** ${formatDateDE(ban.bannedAtDate)}`,
-          `**Sperre bis:** ${formatDateDE(ban.bannedUntilDate)}`,
-          '',
-        ].join('\n')
-      );
-    });
+  const messages = [];
+  let current = '## 🔴 Aktuell gesperrte Teams\n';
 
-  return lines.join('\n');
+  sortedBans.forEach((ban, index) => {
+    const block = buildBanBlock(ban, index);
+    const candidate = `${current}\n${block}\n`;
+
+    if (candidate.length > MAX_LIST_MESSAGE_LENGTH && current.trim()) {
+      messages.push(current.trim());
+      current = `## 🔴 Aktuell gesperrte Teams • Fortsetzung\n\n${block}\n`;
+    } else {
+      current = candidate;
+    }
+  });
+
+  if (current.trim()) {
+    messages.push(current.trim());
+  }
+
+  return messages;
+}
+
+async function syncBanlistMessages(channel, data) {
+  const contents = buildBanlistTexts(data);
+  const previousIds = Array.isArray(data.listMessageIds)
+    ? data.listMessageIds.filter(Boolean).map(String)
+    : [];
+
+  if (!previousIds.length && data.listMessageId) {
+    previousIds.push(String(data.listMessageId));
+  }
+
+  const nextIds = [];
+
+  for (let index = 0; index < contents.length; index += 1) {
+    const content = contents[index];
+    const existingId = previousIds[index] || null;
+    let message = await fetchMessage(channel, existingId);
+
+    if (message) {
+      await message.edit({
+        content,
+        allowedMentions: {
+          parse: ['users'],
+        },
+      });
+    } else {
+      message = await channel.send({
+        content,
+        allowedMentions: {
+          parse: ['users'],
+        },
+      });
+    }
+
+    nextIds.push(message.id);
+  }
+
+  for (const staleId of previousIds.slice(contents.length)) {
+    const staleMessage = await fetchMessage(channel, staleId);
+
+    if (staleMessage) {
+      try {
+        await staleMessage.delete();
+      } catch (error) {
+        console.warn(`⚠️ Alte Sperrlisten-Nachricht ${staleId} konnte nicht gelöscht werden:`, error);
+      }
+    }
+  }
+
+  data.listMessageIds = nextIds;
+  data.listMessageId = nextIds[0] || null;
 }
 
 async function refreshBanlistMessage() {
@@ -204,10 +281,9 @@ async function refreshBanlistMessage() {
   if (!channel) return;
 
   const data = loadBanlist();
-  const changed = cleanupExpiredBans(data);
+  cleanupExpiredBans(data);
 
   let infoMessage = await fetchMessage(channel, data.infoMessageId);
-  let listMessage = await fetchMessage(channel, data.listMessageId);
 
   if (!infoMessage) {
     infoMessage = await channel.send({
@@ -221,29 +297,8 @@ async function refreshBanlistMessage() {
     });
   }
 
-  if (!listMessage) {
-    listMessage = await channel.send({
-      content: buildBanlistText(data),
-      allowedMentions: {
-        parse: ['users'],
-      },
-    });
-
-    data.listMessageId = listMessage.id;
-  } else {
-    await listMessage.edit({
-      content: buildBanlistText(data),
-      allowedMentions: {
-        parse: ['users'],
-      },
-    });
-  }
-
-  if (changed) {
-    saveBanlist(data);
-  } else {
-    saveBanlist(data);
-  }
+  await syncBanlistMessages(channel, data);
+  saveBanlist(data);
 }
 
 function scheduleMidnightCleanup() {
@@ -328,6 +383,7 @@ module.exports = {
     ensureFile(BANLIST_FILE, {
       infoMessageId: null,
       listMessageId: null,
+      listMessageIds: [],
       bans: [],
     });
 
