@@ -73,7 +73,8 @@ function buildBomberXLocoPayload(event, settings) {
     `📅 Datum: ${formatDateTime(event.cycle?.eventDate ? `${event.cycle.eventDate}T12:00:00+02:00` : null, 'date')}`,
     '',
     `⏰ Offizieller Anmeldeschluss: ${formatDateTime(event.schedule?.deadlineAt)}`,
-    `🎲 Gruppenauslosung live bei **[Paddy HSV](${PADDY_HSV_TWITCH_URL})**: ${formatDateTime(event.schedule?.drawAt)}`,
+    `🎲 Gruppenauslosung live bei **Paddy HSV**: ${formatDateTime(event.schedule?.drawAt)}`,
+    `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
     '✅ Anwesenheits-Check: bis 20:00 Uhr',
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
@@ -86,7 +87,8 @@ function buildBomberXLocoPayload(event, settings) {
     formatTeams(event),
     '',
     '⚠️ Nach **18:30 Uhr** ist keine Anmeldung oder Abmeldung mehr möglich.',
-    `🎥 Die Gruppen werden anschließend **live bei [Paddy HSV](${PADDY_HSV_TWITCH_URL})** gezogen und von der Turnierleitung manuell zugeteilt.`,
+    '🎥 Die Gruppen werden anschließend **live bei Paddy HSV** gezogen und von der Turnierleitung manuell zugeteilt.',
+    `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
   ].join('\n');
   const checkinEmbed = new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Anmeldung').setDescription(description).setTimestamp();
 
@@ -112,7 +114,8 @@ function buildSaturdayBlockerPayload() {
         'Stattdessen spielen wir den **Bomber X Loco Cup**.',
         `Die Anmeldung läuft im <#${BOMBER_X_LOCO_CHECKIN_CHANNEL_ID}>.`,
         '**Anmeldeschluss: 18:30 Uhr.**',
-        `**Gruppenauslosung: 19:00 Uhr live bei [Paddy HSV](${PADDY_HSV_TWITCH_URL}).**`,
+        '**Gruppenauslosung: 19:00 Uhr live bei Paddy HSV.**',
+        `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('bomber_x_loco_redirect:saturday').setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success),
