@@ -51,7 +51,7 @@ function isAdminMember(member, settings) {
 function createPendingSlots(groupKey) {
   return Array.from({ length: BOMBER_X_LOCO_GROUP_SIZE }, (_, index) => ({
     slot: index + 1,
-    type: 'team',
+    type: 'pending',
     teamId: null,
     participantKey: `pending:${groupKey}:${index + 1}`,
     displayName: 'Noch nicht zugeteilt',
@@ -61,19 +61,23 @@ function createPendingSlots(groupKey) {
 
 function createEmptyManualGroups(size) {
   const count = Number(size) / BOMBER_X_LOCO_GROUP_SIZE;
-  return Object.fromEntries(GROUP_KEYS.slice(0, count).map(groupKey => [groupKey, {
-    groupKey,
-    name: `Gruppe ${groupKey}`,
-    roleId: null,
-    channelId: null,
-    resultsChannelId: null,
-    videoChannelId: null,
-    slots: createPendingSlots(groupKey),
-    standings: [],
-    matchdays: [],
-    manualDraw: true,
-    assignmentComplete: false,
-  }]));
+  return Object.fromEntries(GROUP_KEYS.slice(0, count).map(groupKey => {
+    const group = {
+      groupKey,
+      name: `Gruppe ${groupKey}`,
+      roleId: null,
+      channelId: null,
+      resultsChannelId: null,
+      videoChannelId: null,
+      slots: createPendingSlots(groupKey),
+      standings: [],
+      matchdays: [],
+      manualDraw: true,
+      assignmentComplete: false,
+    };
+    group.matchdays = createGroupMatchdays({ eventKey: EVENT_KEY, group, createdAt: nowIso() });
+    return [groupKey, group];
+  }));
 }
 
 function assignedTeamIds(event) {
@@ -115,9 +119,7 @@ function rebuildGroupCompetitionData(group, now = new Date()) {
     points: 0,
   }));
   group.assignmentComplete = teams.length === BOMBER_X_LOCO_GROUP_SIZE;
-  group.matchdays = group.assignmentComplete
-    ? createGroupMatchdays({ eventKey: EVENT_KEY, group, createdAt: nowIso(now) })
-    : [];
+  group.matchdays = createGroupMatchdays({ eventKey: EVENT_KEY, group, createdAt: nowIso(now) });
   return group;
 }
 
