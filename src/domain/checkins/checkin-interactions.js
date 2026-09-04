@@ -27,9 +27,25 @@ function parseCheckinButton(customId) {
   return { action, eventKey, legacyBomberButton: false };
 }
 
-async function handleJoin(interaction, client, eventKey, { legacyBomberButton = false } = {}) {
+function isBomberPanelInteraction(interaction, eventKey) {
+  return eventKey === 'saturday'
+    && String(interaction.channelId || interaction.message?.channelId || '') === String(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID)
+    && interaction.message;
+}
+
+async function bindClickedBomberPanel(interaction, client, eventKey) {
+  if (!isBomberPanelInteraction(interaction, eventKey)) return false;
+  return adoptBomberXLocoPanelMessage(interaction.message, client);
+}
+
+async function handleJoin(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
-  if (legacyBomberButton) await adoptBomberXLocoPanelMessage(interaction.message, client);
+
+  // Beim Bomber X Loco ist immer genau die angeklickte Nachricht das offizielle Panel.
+  // So kann kein veralteter specialMainMessageId dazu führen, dass eine andere Nachricht
+  // aktualisiert wird als die, auf der der User gerade An-/Abmelden drückt.
+  await bindClickedBomberPanel(interaction, client, eventKey);
+
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
   await refreshCheckinMessage(eventKey, client);
   if (result.alreadyCheckedIn) {
@@ -40,9 +56,13 @@ async function handleJoin(interaction, client, eventKey, { legacyBomberButton = 
   return true;
 }
 
-async function handleLeave(interaction, client, eventKey, { legacyBomberButton = false } = {}) {
+async function handleLeave(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
-  if (legacyBomberButton) await adoptBomberXLocoPanelMessage(interaction.message, client);
+
+  // Auch bei normalen checkin_leave:saturday-Buttons das angeklickte Bomber-Panel
+  // vor der Datenänderung binden, nicht nur bei alten Legacy-Buttons.
+  await bindClickedBomberPanel(interaction, client, eventKey);
+
   const result = withdrawTeam({ eventKey, userId: interaction.user.id });
   if (!result.wasCheckedIn) {
     await refreshCheckinMessage(eventKey, client);
@@ -79,12 +99,8 @@ async function handleInteraction(interaction, client) {
   if (!parsed) return false;
 
   try {
-    if (parsed.action === 'checkin_join') {
-      return await handleJoin(interaction, client, parsed.eventKey, parsed);
-    }
-    if (parsed.action === 'checkin_leave') {
-      return await handleLeave(interaction, client, parsed.eventKey, parsed);
-    }
+    if (parsed.action === 'checkin_join') return await handleJoin(interaction, client, parsed.eventKey);
+    if (parsed.action === 'checkin_leave') return await handleLeave(interaction, client, parsed.eventKey);
     return false;
   } catch (error) {
     const message = error?.message || 'Check-in konnte nicht verarbeitet werden.';
