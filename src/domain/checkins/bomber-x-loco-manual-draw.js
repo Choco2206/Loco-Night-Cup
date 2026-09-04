@@ -197,6 +197,9 @@ async function prepareManualDraw(client, now = new Date()) {
   let event = readEventData(EVENT_KEY);
   if (!isTargetEvent(event)) return { prepared: false, reason: 'not_target_event' };
   if (event.meta?.bomberManualDrawPreparedAt) return { prepared: false, reason: 'already_prepared', event };
+  if (now.getTime() < PREPARE_AT.getTime()) {
+    return { prepared: false, reason: 'too_early', event };
+  }
 
   if (!event.format?.lockedAt) {
     lockEventFormat(EVENT_KEY, null, now);
@@ -250,8 +253,9 @@ function scheduleManualDrawPreparation(client) {
 }
 
 function buildGroupSelect(event) {
-  const groups = Object.values(event.groups?.groups || {});
-  if (!groups.length) throw new Error('Die Gruppenkanäle sind noch nicht vorbereitet.');
+  const groups = Object.values(event.groups?.groups || {})
+    .filter(group => (group.slots || []).some(slot => !slot.teamId));
+  if (!groups.length) throw new Error('Alle Gruppen sind bereits vollständig zugeteilt.');
   return [new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('bxl_manual_group_select')
@@ -333,9 +337,19 @@ async function handleInteraction(interaction, client) {
 
   try {
     let event = readEventData(EVENT_KEY);
+    if (!isTargetEvent(event)) throw new Error('Dieser Button ist nur für den Bomber X Loco Cup am 19.09.2026 vorgesehen.');
+
     if (!event.meta?.bomberManualDrawPreparedAt) {
+      const now = new Date();
+      if (now.getTime() < PREPARE_AT.getTime()) {
+        await interaction.reply({
+          content: 'Die manuelle Gruppenzuteilung wird am Eventtag ab **18:45 Uhr** freigeschaltet. Bis dahin bleibt der Check-in normal geöffnet.',
+          flags: EPHEMERAL,
+        });
+        return true;
+      }
       await interaction.deferReply({ flags: EPHEMERAL });
-      await prepareManualDraw(client, new Date());
+      await prepareManualDraw(client, now);
       event = readEventData(EVENT_KEY);
       await interaction.editReply({ content: 'Wähle die Gruppe für die nächste Live-Auslosung.', components: buildGroupSelect(event) });
       return true;
