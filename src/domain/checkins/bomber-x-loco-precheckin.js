@@ -174,6 +174,12 @@ async function ensurePanel() {
   return true;
 }
 
+async function refreshLivePanel() {
+  const saturday = readEventData('saturday');
+  if (!isBomberXLocoEvent(saturday)) return false;
+  return ensurePanel();
+}
+
 async function migrateIntoSaturdayEvent() {
   const saturday = readEventData('saturday');
   if (!isBomberXLocoEvent(saturday)) return false;
@@ -264,4 +270,5 @@ module.exports = {
   },
   handleInteraction,
   migrateIntoSaturdayEvent,
+  refreshLivePanel,
 };
