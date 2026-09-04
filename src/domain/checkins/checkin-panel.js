@@ -83,6 +83,37 @@ async function refreshBomberXLocoPanel({ eventKey, event, client, settings, stat
   return true;
 }
 
+async function adoptBomberXLocoPanelMessage(message, client) {
+  if (!message || String(message.channelId) !== String(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID)) return false;
+
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const state = getMessageState(messages, 'saturday');
+  const previousMessageId = state.specialMainMessageId;
+
+  if (previousMessageId && String(previousMessageId) !== String(message.id)) {
+    const channel = await client.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
+    const previousMessage = channel ? await fetchMessage(channel, previousMessageId) : null;
+    if (previousMessage) await previousMessage.delete().catch(() => null);
+  }
+
+  const timestamp = new Date().toISOString();
+  updateJson(FILES.messages, createMessagesDefault(), current => {
+    const currentState = getMessageState(current, 'saturday');
+    currentState.specialChannelId = String(message.channelId);
+    currentState.specialMainMessageId = String(message.id);
+    currentState.updatedAt = timestamp;
+    if (!currentState.createdAt) currentState.createdAt = timestamp;
+    return current;
+  });
+
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const { event } = getPublicCheckinState('saturday');
+  if (isBomberXLocoEvent(event)) {
+    await message.edit(createEditPayload(buildBomberXLocoPayload(event, settings))).catch(() => null);
+  }
+  return true;
+}
+
 async function refreshCheckinMessage(eventKey, client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const { event } = getPublicCheckinState(eventKey);
@@ -141,4 +172,9 @@ async function ensureAllCheckinMessages(client) {
   await refreshCheckinMessages(EVENT_KEYS, client);
 }
 
-module.exports = { ensureAllCheckinMessages, refreshCheckinMessage, refreshCheckinMessages };
+module.exports = {
+  adoptBomberXLocoPanelMessage,
+  ensureAllCheckinMessages,
+  refreshCheckinMessage,
+  refreshCheckinMessages,
+};
