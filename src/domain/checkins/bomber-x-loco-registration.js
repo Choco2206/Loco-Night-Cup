@@ -20,6 +20,7 @@ const {
 const REGISTRATION_FILE = path.join(process.cwd(), 'data', 'bomber-x-loco-registration.json');
 const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
+const FORCE_REPOST_MARKER = 'forcedRepost20260904V3At';
 const EPHEMERAL = 64;
 let clientRef = null;
 let intervalRef = null;
@@ -179,6 +180,33 @@ async function ensurePanel() {
   return true;
 }
 
+async function forceRepostOnce() {
+  const state = readState();
+  if (state[FORCE_REPOST_MARKER]) return false;
+
+  const channel = await clientRef?.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
+  if (!channel?.send) throw new Error('Bomber-X-Loco-Check-in-Kanal konnte nicht gefunden werden.');
+
+  // Nur die Nachrichtenreferenz neu aufbauen. Die Teilnehmerliste bleibt unverändert.
+  if (state.messageId) {
+    const oldMessage = await channel.messages.fetch(String(state.messageId)).catch(() => null);
+    if (oldMessage) await oldMessage.delete().catch(() => null);
+  }
+  state.messageId = null;
+  writeState(state);
+
+  const created = await ensurePanel();
+  const after = readState();
+  if (!created || !after.messageId) {
+    throw new Error('Bomber-X-Loco-Check-in konnte beim einmaligen Repost nicht erstellt werden.');
+  }
+
+  after[FORCE_REPOST_MARKER] = new Date().toISOString();
+  writeState(after);
+  console.log(`[bomber-x-loco] Check-in einmalig neu gepostet: ${after.messageId}`);
+  return true;
+}
+
 async function handOverToSaturdayEvent() {
   const saturday = readEventData('saturday');
   if (!isBomberXLocoEvent(saturday) || String(saturday.cycle?.eventDate || '') !== BOMBER_X_LOCO_EVENT_DATE) return false;
@@ -263,6 +291,7 @@ async function reconcile() {
 module.exports = {
   async init(client) {
     clientRef = client;
+    await forceRepostOnce().catch(error => console.error(`[bomber-x-loco] Einmaliger Check-in-Repost fehlgeschlagen: ${error.message}`));
     await reconcile();
     if (!intervalRef) {
       intervalRef = setInterval(() => {
