@@ -5,24 +5,25 @@ const { findTeamById } = require('../teams/team-service');
 const { getFriendlyMatches } = require('./ea-clubs-client');
 const { sendTracker } = require('./tott-tracker');
 
-const MINIMUM_MATCHES = 3;
+const MINIMUM_MATCHES = 2;
+const MINIMUM_TEAM_MATCH_RATIO = 0.5;
 const FORMATION = { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 };
-const GOALKEEPER_WEIGHTS = {
-  savePercentage: 0.35, averageRating: 0.25, goalsConcededPerMatch: 0.15,
-  savesPerMatch: 0.15, cleanSheetPercentage: 0.10,
-};
-const POSITION_WEIGHTS = {
+const TOTT_SCORING = {
+  goalkeeper: {
+    rating: 1.15, goal: 10, assist: 6, cleanSheet: 5,
+    tackle: 0, tenPasses: 0.5, save: 0.75, manOfTheMatch: 3, win: 1,
+  },
   defender: {
-    tacklesPerMatch: 0.30, averageRating: 0.25, tacklePercentage: 0.20,
-    cleanSheetPercentage: 0.15, passPercentage: 0.10,
+    rating: 1.15, goal: 8, assist: 5, cleanSheet: 4,
+    tackle: 0.5, tenPasses: 1, save: 0, manOfTheMatch: 3, win: 1,
   },
   midfielder: {
-    averageRating: 0.20, assistsPerMatch: 0.20, passPercentage: 0.20,
-    tacklesPerMatch: 0.20, goalsPerMatch: 0.10, tacklePercentage: 0.10,
+    rating: 1.1, goal: 6, assist: 4, cleanSheet: 2,
+    tackle: 0.4, tenPasses: 1, save: 0, manOfTheMatch: 3, win: 1,
   },
   forward: {
-    goalsPerMatch: 0.30, averageRating: 0.25, assistsPerMatch: 0.20,
-    shotConversion: 0.15, passPercentage: 0.10,
+    rating: 1, goal: 5, assist: 3, cleanSheet: 1,
+    tackle: 0.25, tenPasses: 0.5, save: 0, manOfTheMatch: 3, win: 1,
   },
 };
 const RETRY_DELAYS_MS = [0, 30000, 120000, 300000, 600000, 900000, 900000, 1200000];
@@ -145,6 +146,8 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
       .filter(([key, opponent]) => String(key) !== String(rawClubId)
         && String(opponent?.clubId ?? opponent?.club_id ?? key) !== clubId)
       .map(([, opponent]) => clubGoals(opponent)).find(Number.isFinite);
+    const ownGoals = clubGoals(club);
+    const won = Number.isFinite(ownGoals) && Number.isFinite(goalsConceded) && ownGoals > goalsConceded ? 1 : 0;
     for (const [playerId, player] of Object.entries(players)) {
       const rating = Number(player?.rating);
       const position = normalizePosition(player?.pos ?? player?.position);
@@ -163,58 +166,45 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
         cleanSheets: Math.max(Number(player.cleansheetsany) || 0, Number(player.cleansheetsdef) || 0, Number(player.cleansheetsgk) || 0),
         passesMade: Number(player.passesmade ?? player.passesMade) || 0,
         passAttempts: Number(player.passattempts ?? player.passAttempts) || 0,
+        won,
       });
     }
   }
   return rows;
 }
 
-function normalizeMetric(players, field, lowerIsBetter = false) {
-  const values = players.map(player => Number(player[field])).filter(Number.isFinite);
-  if (!values.length) return players.forEach(player => { player[`${field}Score`] = 5; });
-  const min = Math.min(...values); const max = Math.max(...values);
-  for (const player of players) {
-    const value = Number(player[field]);
-    if (!Number.isFinite(value) || max === min) { player[`${field}Score`] = 5; continue; }
-    const normalized = (value - min) / (max - min);
-    player[`${field}Score`] = Number(((lowerIsBetter ? 1 - normalized : normalized) * 10).toFixed(4));
-  }
-}
-
-function addWeightedScores(players, weights, scoreField) {
-  if (!players.length) return;
-  Object.keys(weights).forEach(field => normalizeMetric(players, field));
-  for (const player of players) {
-    player[scoreField] = Number(Object.entries(weights)
-      .reduce((sum, [field, weight]) => sum + player[`${field}Score`] * weight, 0).toFixed(4));
-  }
-}
-
-function addGoalkeeperScores(players) {
-  if (!players.length) return;
-  normalizeMetric(players, 'savePercentage'); normalizeMetric(players, 'averageRating');
-  normalizeMetric(players, 'goalsConcededPerMatch', true); normalizeMetric(players, 'savesPerMatch');
-  normalizeMetric(players, 'cleanSheetPercentage');
-  for (const player of players) {
-    player.goalkeeperScore = Number((player.savePercentageScore * GOALKEEPER_WEIGHTS.savePercentage
-      + player.averageRatingScore * GOALKEEPER_WEIGHTS.averageRating
-      + player.goalsConcededPerMatchScore * GOALKEEPER_WEIGHTS.goalsConcededPerMatch
-      + player.savesPerMatchScore * GOALKEEPER_WEIGHTS.savesPerMatch
-      + player.cleanSheetPercentageScore * GOALKEEPER_WEIGHTS.cleanSheetPercentage).toFixed(4));
-  }
+function calculateTottPoints(player, position) {
+  const scoring = TOTT_SCORING[position];
+  if (!scoring) return 0;
+  return Number((
+    player.ratingTotal * scoring.rating
+    + player.goals * scoring.goal
+    + player.assists * scoring.assist
+    + player.cleanSheets * scoring.cleanSheet
+    + player.tacklesMade * scoring.tackle
+    + (player.passesMade / 10) * scoring.tenPasses
+    + player.saves * scoring.save
+    + player.manOfTheMatch * scoring.manOfTheMatch
+    + player.wins * scoring.win
+  ).toFixed(4));
 }
 
 function buildSelection(performances) {
+  const teamMatches = new Map();
   const aggregates = new Map();
   for (const row of performances || []) {
+    const teamId = String(row.teamId);
+    const lncMatchId = String(row.lncMatchId ?? row.eaMatchId ?? '');
+    if (!teamMatches.has(teamId)) teamMatches.set(teamId, new Set());
+    if (lncMatchId) teamMatches.get(teamId).add(lncMatchId);
     const key = `${row.teamId}:${row.playerId}`;
     const aggregate = aggregates.get(key) || {
       teamId: row.teamId, playerId: row.playerId, playerName: row.playerName,
-      ratings: [], positions: {}, goals: 0, assists: 0, manOfTheMatch: 0,
+      ratings: [], matchIds: new Set(), positions: {}, goals: 0, assists: 0, manOfTheMatch: 0,
       tacklesMade: 0, tackleAttempts: 0, shots: 0, saves: 0, goalsConceded: 0,
-      goalkeeperMatchesWithConcededData: 0, cleanSheets: 0, passesMade: 0, passAttempts: 0,
+      goalkeeperMatchesWithConcededData: 0, cleanSheets: 0, passesMade: 0, passAttempts: 0, wins: 0,
     };
-    aggregate.playerName = row.playerName; aggregate.ratings.push(Number(row.rating));
+    aggregate.playerName = row.playerName; aggregate.ratings.push(Number(row.rating)); aggregate.matchIds.add(lncMatchId);
     aggregate.positions[row.position] = (aggregate.positions[row.position] || 0) + 1;
     aggregate.goals += Number(row.goals) || 0; aggregate.assists += Number(row.assists) || 0;
     aggregate.manOfTheMatch += Number(row.manOfTheMatch) || 0;
@@ -225,18 +215,26 @@ function buildSelection(performances) {
     }
     aggregate.cleanSheets += Number(row.cleanSheets) || 0;
     aggregate.passesMade += Number(row.passesMade) || 0; aggregate.passAttempts += Number(row.passAttempts) || 0;
+    aggregate.wins += Number(row.won) || 0;
     aggregates.set(key, aggregate);
   }
-  const eligible = [...aggregates.values()].filter(item => item.ratings.length >= MINIMUM_MATCHES).map(item => {
+  const eligible = [...aggregates.values()].filter(item => {
+    const playedMatches = item.matchIds.size;
+    const requiredMatches = Math.max(MINIMUM_MATCHES,
+      Math.ceil((teamMatches.get(String(item.teamId))?.size || 0) * MINIMUM_TEAM_MATCH_RATIO));
+    return playedMatches >= requiredMatches;
+  }).map(item => {
     const lastPosition = performances.filter(row => `${row.teamId}:${row.playerId}` === `${item.teamId}:${item.playerId}`).at(-1)?.position;
     const position = Object.entries(item.positions)
       .sort((a, b) => b[1] - a[1] || Number(b[0] === lastPosition) - Number(a[0] === lastPosition))[0]?.[0] || null;
-    const averageRating = item.ratings.reduce((sum, rating) => sum + rating, 0) / item.ratings.length;
-    const matches = item.ratings.length; const goalkeeperMatches = item.positions.goalkeeper || 0;
+    const ratingTotal = item.ratings.reduce((sum, rating) => sum + rating, 0);
+    const matches = item.matchIds.size; const averageRating = ratingTotal / item.ratings.length;
+    const goalkeeperMatches = item.positions.goalkeeper || 0;
     const hasCompleteConcededData = goalkeeperMatches > 0 && item.goalkeeperMatchesWithConcededData === goalkeeperMatches;
     const saveDenominator = item.saves + item.goalsConceded;
     return {
-      ...item, position, matches, averageRating: Number(averageRating.toFixed(2)),
+      ...item, matchIds: undefined, position, matches, ratingTotal,
+      averageRating: Number(averageRating.toFixed(2)),
       savePercentage: hasCompleteConcededData && saveDenominator > 0 ? item.saves / saveDenominator : 0,
       goalsConcededPerMatch: hasCompleteConcededData ? item.goalsConceded / goalkeeperMatches : null,
       savesPerMatch: goalkeeperMatches > 0 ? item.saves / goalkeeperMatches : 0,
@@ -247,19 +245,16 @@ function buildSelection(performances) {
       goalsPerMatch: item.goals / matches, assistsPerMatch: item.assists / matches,
       shotConversion: item.shots > 0 ? item.goals / item.shots : 0,
     };
+  }).map(player => {
+    const totalTottPoints = calculateTottPoints(player, player.position);
+    return { ...player, totalTottPoints, tottPpg: Number((totalTottPoints / player.matches).toFixed(4)) };
   });
 
   const byPosition = Object.fromEntries(Object.keys(FORMATION).map(position => [position, eligible.filter(player => player.position === position)]));
-  addGoalkeeperScores(byPosition.goalkeeper);
-  addWeightedScores(byPosition.defender, POSITION_WEIGHTS.defender, 'positionScore');
-  addWeightedScores(byPosition.midfielder, POSITION_WEIGHTS.midfielder, 'positionScore');
-  addWeightedScores(byPosition.forward, POSITION_WEIGHTS.forward, 'positionScore');
-
-  const compareGoalkeepers = (a, b) => b.goalkeeperScore - a.goalkeeperScore || b.averageRating - a.averageRating || b.matches - a.matches;
-  const compareFieldPlayers = (a, b) => b.positionScore - a.positionScore || b.averageRating - a.averageRating
-    || b.matches - a.matches || b.manOfTheMatch - a.manOfTheMatch;
+  const comparePlayers = (a, b) => b.totalTottPoints - a.totalTottPoints || b.tottPpg - a.tottPpg
+    || b.averageRating - a.averageRating || b.manOfTheMatch - a.manOfTheMatch || b.matches - a.matches;
   return Object.fromEntries(Object.entries(FORMATION).map(([position, count]) => [
-    position, byPosition[position].sort(position === 'goalkeeper' ? compareGoalkeepers : compareFieldPlayers).slice(0, count),
+    position, byPosition[position].sort(comparePlayers).slice(0, count),
   ]));
 }
 
@@ -376,7 +371,7 @@ function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
 }
 
 module.exports = {
-  FORMATION, GOALKEEPER_WEIGHTS, POSITION_WEIGHTS, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES,
-  buildSelection, confirmedEventMatches, isRealEaMatch, normalizePosition, resumeRatingCaptures,
+  FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
+  buildSelection, calculateTottPoints, confirmedEventMatches, isRealEaMatch, normalizePosition, resumeRatingCaptures,
   scheduleRatingCapture, selectEaMatch,
 };

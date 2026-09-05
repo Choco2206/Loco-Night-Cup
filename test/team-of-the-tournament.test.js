@@ -2,7 +2,10 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { FORMATION, MINIMUM_MATCHES, buildSelection, confirmedEventMatches, normalizePosition, selectEaMatch } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
+const {
+  FORMATION, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
+  buildSelection, calculateTottPoints, confirmedEventMatches, normalizePosition, selectEaMatch,
+} = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
 const bomberXLocoLayout = require('../config/bomber-x-loco-tott-layout');
@@ -10,7 +13,8 @@ const { AUTO_CLEANUP_DELAY_MS, isTeamOfTheTournamentSettled } = require('../src/
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
   assert.deepEqual(FORMATION, { goalkeeper: 1, defender: 3, midfielder: 5, forward: 2 });
-  assert.equal(MINIMUM_MATCHES, 3);
+  assert.equal(MINIMUM_MATCHES, 2);
+  assert.equal(MINIMUM_TEAM_MATCH_RATIO, 0.5);
 });
 
 test('keeps event data until the Team of the Tournament workflow is settled', () => {
@@ -27,18 +31,54 @@ test('normalizes the four EA Clubs position groups', () => {
   assert.equal(normalizePosition('forward'), 'forward');
 });
 
-test('requires three matches and selects the highest average rating', () => {
+test('requires half of the team matches, rounded up, with a two-match safety minimum', () => {
+  const rows = [];
+  const add = (playerId, matchIndexes) => matchIndexes.forEach(index => rows.push({
+    lncMatchId: `m${index}`, teamId: 'team-a', playerId, playerName: playerId,
+    position: 'forward', rating: 8, goals: 0, assists: 0, manOfTheMatch: 0,
+  }));
+  add('all-five', [0, 1, 2, 3, 4]);
+  add('eligible-three', [0, 1, 2]);
+  add('ineligible-two', [0, 1]);
+  const selection = buildSelection(rows);
+  assert.deepEqual(selection.forward.map(player => player.playerId), ['all-five', 'eligible-three']);
+});
+
+test('allows two appearances when a team has the normal three group matches', () => {
+  const rows = [];
+  const add = (playerId, matchIndexes) => matchIndexes.forEach(index => rows.push({
+    lncMatchId: `m${index}`, teamId: 'team-a', playerId, playerName: playerId,
+    position: 'forward', rating, goals: 0, assists: 0, manOfTheMatch: 0,
+  }));
+  const rating = 8;
+  add('all-three', [0, 1, 2]);
+  add('eligible-two', [0, 1]);
+  add('ineligible-one', [0]);
+  const selection = buildSelection(rows);
+  assert.deepEqual(selection.forward.map(player => player.playerId), ['all-three', 'eligible-two']);
+});
+
+test('uses fixed TOTT points and counts goalkeeper goals', () => {
+  assert.equal(TOTT_SCORING.goalkeeper.goal, 10);
+  const points = calculateTottPoints({
+    ratingTotal: 8, goals: 1, assists: 0, cleanSheets: 1, tacklesMade: 0,
+    passesMade: 0, saves: 4, manOfTheMatch: 0, wins: 1,
+  }, 'goalkeeper');
+  assert.equal(points, 28.2);
+});
+
+test('ranks total points first and PPG only as a tiebreaker', () => {
   const rows = [];
   const add = (playerId, ratings) => ratings.forEach((rating, index) => rows.push({
     lncMatchId: `m${index}`, teamId: 'team-a', playerId, playerName: playerId,
     position: 'forward', rating, goals: 0, assists: 0, manOfTheMatch: 0,
   }));
-  add('eligible-high', [8, 9, 8.5]);
-  add('eligible-low', [7, 7.5, 8]);
-  add('ineligible', [10, 10]);
+  add('consistent-run', [7, 7, 7, 7]);
+  add('short-hot-run', [10, 10]);
   const selection = buildSelection(rows);
-  assert.deepEqual(selection.forward.map(player => player.playerId), ['eligible-high', 'eligible-low']);
-  assert.equal(selection.forward[0].averageRating, 8.5);
+  assert.deepEqual(selection.forward.map(player => player.playerId), ['consistent-run', 'short-hot-run']);
+  assert.equal(selection.forward[0].totalTottPoints, 28);
+  assert.equal(selection.forward[1].tottPpg, 10);
 });
 
 test('matches one linked club by oriented score and closest confirmation time', () => {
