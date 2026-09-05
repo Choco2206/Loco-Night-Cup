@@ -13,6 +13,8 @@ const {
   buildSaturdayBlockerPayload,
 } = require('./bomber-x-loco-checkin');
 
+const STALE_BOMBER_X_LOCO_MESSAGE_ID = '1545402690828501013';
+
 async function fetchMessage(channel, messageId) {
   if (!messageId) return null;
   return channel.messages.fetch(messageId).catch(() => null);
@@ -60,6 +62,28 @@ async function upsertMessage(channel, messageId, payload) {
   return message;
 }
 
+async function replaceStaleBomberXLocoMessage(specialChannel, state, payload) {
+  const storedId = String(state.specialMainMessageId || '');
+  const staleId = STALE_BOMBER_X_LOCO_MESSAGE_ID;
+
+  // Diese konkrete Nachricht wurde von Discord nicht mehr an die laufende
+  // Application geroutet. Sie wird einmal vollständig ersetzt statt editiert.
+  if (storedId !== staleId) return null;
+
+  const staleMessage = await fetchMessage(specialChannel, staleId);
+  if (staleMessage) await staleMessage.delete().catch(error => {
+    console.error('[checkin-panel] Alte Bomber X Loco Nachricht konnte nicht gelöscht werden:', error);
+  });
+
+  const newMessage = await specialChannel.send(payload);
+  console.log('[checkin-panel] Bomber X Loco Panel vollständig neu erstellt', {
+    oldMessageId: staleId,
+    newMessageId: newMessage.id,
+    channelId: specialChannel.id,
+  });
+  return newMessage;
+}
+
 async function refreshBomberXLocoPanel({ eventKey, event, client, settings, state }) {
   const specialChannel = await client.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
   if (!specialChannel?.send) {
@@ -67,7 +91,9 @@ async function refreshBomberXLocoPanel({ eventKey, event, client, settings, stat
     return false;
   }
 
-  const specialMessage = await upsertMessage(specialChannel, state.specialMainMessageId, buildBomberXLocoPayload(event, settings));
+  const payload = buildBomberXLocoPayload(event, settings);
+  const replacement = await replaceStaleBomberXLocoMessage(specialChannel, state, payload);
+  const specialMessage = replacement || await upsertMessage(specialChannel, state.specialMainMessageId, payload);
   const normalChannelId = settings.channels?.checkinChannelIds?.[eventKey];
   if (normalChannelId) {
     const normalChannel = await client.channels.fetch(normalChannelId).catch(() => null);
