@@ -2,15 +2,15 @@
   "version": 1,
   "eventKey": "saturday",
   "label": "Samstag",
-  "status": "idle",
-  "cycle": { "cycleKey": null, "eventDate": null, "timezone": "Europe/Berlin" },
-  "schedule": { "profile": "weekend_late_night", "deadlineTime": "23:30", "lateWindowUntilTime": "23:45", "drawTime": "23:50", "tournamentStartTime": "00:00", "checkinOpenAt": null, "deadlineAt": null, "lateWindowUntil": null, "drawAt": null, "tournamentStartAt": null, "resetAt": null },
-  "format": { "minimumRealTeams": 8, "allowedSizes": [8, 12, 14, 16, 18, 20, 24, 28, 32], "size": null, "realTeamCount": 0, "byeCount": 0, "waitlistCount": 0, "lockedAt": null },
-  "checkin": { "isOpen": false, "openedAt": null, "closedAt": null, "entries": [], "activeTeamIds": [], "waitlistTeamIds": [], "lateLeaveBans": [] },
+  "status": "checkin_open",
+  "cycle": { "cycleKey": "saturday_2026-09-19", "eventDate": "2026-09-19", "timezone": "Europe/Berlin" },
+  "schedule": { "profile": "weekend_late_night", "deadlineTime": "23:30", "lateWindowUntilTime": "23:45", "drawTime": "23:50", "tournamentStartTime": "00:00", "checkinOpenAt": null, "deadlineAt": "2026-09-19T16:30:00.000Z", "lateWindowUntil": "2026-09-19T16:30:00.000Z", "drawAt": "2026-09-19T17:00:00.000Z", "attendanceDeadlineAt": "2026-09-19T18:00:00.000Z", "tournamentStartAt": "2026-09-19T19:00:00.000Z", "resetAt": "2026-09-20T05:00:00.000Z" },
+  "format": { "minimumRealTeams": 6, "allowedSizes": [6, 12, 18, 24, 30, 36, 42, 48], "size": null, "realTeamCount": 0, "byeCount": 0, "waitlistCount": 0, "lockedAt": null },
+  "checkin": { "isOpen": true, "openedAt": "2026-09-05T00:00:00.000Z", "closedAt": null, "entries": [], "activeTeamIds": [], "waitlistTeamIds": [], "lateLeaveBans": [] },
   "byes": [],
   "groups": { "status": "not_created", "drawnAt": null, "drawnBy": null, "groups": {} },
   "knockout": { "status": "not_created", "createdAt": null, "source": { "qualifiedRule": null, "avoidSameGroupRematches": true }, "rounds": {} },
   "ceremony": { "status": "not_ready", "placements": { "firstTeamId": null, "secondTeamId": null, "thirdTeamId": null }, "postedAt": null, "postedMessageIds": [], "testRuns": [] },
-  "reset": { "status": "not_scheduled", "resetAt": null, "completedAt": null, "keepStats": true },
-  "meta": { "createdAt": null, "updatedAt": null, "cancelledAt": null, "cancelledByUserId": null, "cancelReason": null }
+  "reset": { "status": "not_scheduled", "resetAt": "2026-09-20T05:00:00.000Z", "completedAt": null, "keepStats": true },
+  "meta": { "createdAt": null, "updatedAt": "2026-09-05T00:00:00.000Z", "eventMode": "bomber_x_loco", "cancelledAt": null, "cancelledByUserId": null, "cancelReason": null }
 }

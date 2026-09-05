@@ -7,6 +7,7 @@ const {
   TOURNAMENT_FORMAT_SIZES,
   isLeaguePhaseFormat,
 } = require('../app/constants');
+const { BOMBER_X_LOCO_FORMAT_SIZES } = require('../domain/events/bomber-x-loco-config');
 const {
   hasNoDuplicates,
   requireArray,
@@ -44,8 +45,10 @@ function validateEvent(data, expectedEventKey = null) {
 
   if (requireObject(errors, data.format, 'format')) {
     const isRoyale = data.eventKey === 'saturday' && data.meta?.eventMode === 'knockout_royale';
-    const allowedFormatSizes = isRoyale ? [8, 16, 32] : TOURNAMENT_FORMAT_SIZES;
-    if (data.format.minimumRealTeams !== 8) errors.push('format.minimumRealTeams must be 8');
+    const isBomberXLoco = data.eventKey === 'saturday' && data.meta?.eventMode === 'bomber_x_loco';
+    const allowedFormatSizes = isRoyale ? [8, 16, 32] : isBomberXLoco ? BOMBER_X_LOCO_FORMAT_SIZES : TOURNAMENT_FORMAT_SIZES;
+    const minimumRealTeams = isBomberXLoco ? 6 : 8;
+    if (data.format.minimumRealTeams !== minimumRealTeams) errors.push(`format.minimumRealTeams must be ${minimumRealTeams}`);
     if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify(allowedFormatSizes)) {
       errors.push(`format.allowedSizes must be [${allowedFormatSizes.join(',')}]`);
     }
