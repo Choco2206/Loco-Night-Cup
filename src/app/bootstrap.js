@@ -1,55 +1,60 @@
 'use strict';
 
-const { initializeStorage, FILES, updateJson } = require('../storage');
+const { initializeStorage, FILES, readJson, updateJson } = require('../storage');
 const { createEventDefault } = require('../storage/defaults');
+const { TOURNAMENT_FORMAT_SIZES } = require('./constants');
 const { validateAllStorage } = require('../validation');
 const { repairTeamRuntimeData } = require('../domain/teams/team-runtime-repair');
-const {
-  BOMBER_X_LOCO_EVENT_DATE,
-  BOMBER_X_LOCO_FORMAT_SIZES,
-  buildBomberXLocoSchedule,
-} = require('../domain/events/bomber-x-loco-config');
 
-function activateBomberXLocoEvent(now = new Date()) {
-  const schedule = buildBomberXLocoSchedule(BOMBER_X_LOCO_EVENT_DATE);
-  if (now.getTime() >= schedule.resetAt.getTime()) return false;
+function repairPersistedSaturdayBeforeValidation(now = new Date()) {
+  const bomberDate = '2026-09-19';
+  const switchAt = new Date(`${bomberDate}T07:00:00+02:00`);
+  if (now.getTime() >= switchAt.getTime()) return false;
+
+  const current = readJson(FILES.events.saturday, createEventDefault('saturday'));
+  const allowedSizes = [...TOURNAMENT_FORMAT_SIZES];
+  const hasBomberFormat = Number(current.format?.minimumRealTeams) === 6
+    || JSON.stringify(current.format?.allowedSizes || []) !== JSON.stringify(allowedSizes)
+    || current.meta?.eventMode === 'bomber_x_loco'
+    || String(current.cycle?.eventDate || '') === bomberDate;
+
+  if (!hasBomberFormat) return false;
 
   updateJson(FILES.events.saturday, createEventDefault('saturday'), event => {
-    const timestamp = now.toISOString();
-    event.status = ['idle', 'checkin', 'checkin_open'].includes(event.status) ? 'checkin_open' : event.status;
-    event.cycle = {
-      ...(event.cycle || {}),
-      cycleKey: schedule.cycleKey,
-      eventDate: schedule.eventDate,
-      timezone: schedule.timeZone,
-    };
-    event.schedule = {
-      ...(event.schedule || {}),
-      deadlineAt: schedule.deadlineAt.toISOString(),
-      lateWindowUntil: schedule.lateWindowUntil.toISOString(),
-      drawAt: schedule.drawAt.toISOString(),
-      attendanceDeadlineAt: schedule.attendanceDeadlineAt.toISOString(),
-      tournamentStartAt: schedule.tournamentStartAt.toISOString(),
-      resetAt: schedule.resetAt.toISOString(),
-    };
     event.format = {
       ...(event.format || {}),
-      minimumRealTeams: 6,
-      allowedSizes: [...BOMBER_X_LOCO_FORMAT_SIZES],
+      minimumRealTeams: 8,
+      allowedSizes,
     };
-    event.checkin = { ...(event.checkin || {}), isOpen: true, openedAt: event.checkin?.openedAt || timestamp, closedAt: null };
-    event.reset = { ...(event.reset || {}), resetAt: schedule.resetAt.toISOString() };
-    event.meta = { ...(event.meta || {}), eventMode: schedule.eventMode, updatedAt: timestamp };
+
+    // Vor dem Bomber-Wochenende darf der persistierte Saturday-State nicht auf
+    // den 19.09. gepinnt bleiben. Die normalen Samstage 05.09. und 12.09. müssen
+    // weiter über den normalen Wochenzyklus laufen. Nur Sonder-Metadaten werden
+    // zurückgesetzt; echte laufende Turnierdaten werden nicht künstlich gelöscht.
+    if (event.meta?.eventMode === 'bomber_x_loco') {
+      event.meta = { ...(event.meta || {}), eventMode: 'night_cup', updatedAt: now.toISOString() };
+    }
+    if (String(event.cycle?.eventDate || '') === bomberDate) {
+      event.cycle = { ...(event.cycle || {}), cycleKey: null, eventDate: null };
+      event.schedule = {
+        ...(event.schedule || {}),
+        deadlineAt: null,
+        lateWindowUntil: null,
+        drawAt: null,
+        tournamentStartAt: null,
+        resetAt: null,
+      };
+    }
     return event;
   });
 
-  console.log('[bootstrap] Saturday-State als offiziellen Bomber X Loco Check-in aktiviert');
+  console.log('[bootstrap] Persistierter Saturday-State vor Validierung auf normalen Night-Cup repariert');
   return true;
 }
 
 function bootstrapPhaseOne() {
   initializeStorage();
-  activateBomberXLocoEvent();
+  repairPersistedSaturdayBeforeValidation();
   repairTeamRuntimeData();
   validateAllStorage();
 
@@ -60,6 +65,5 @@ function bootstrapPhaseOne() {
 }
 
 module.exports = {
-  activateBomberXLocoEvent,
   bootstrapPhaseOne,
 };
