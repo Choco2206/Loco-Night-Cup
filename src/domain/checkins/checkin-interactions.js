@@ -4,7 +4,6 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { checkInTeam, withdrawTeam } = require('./checkin-service');
 const { handleInteraction: handleBomberManualDrawInteraction } = require('./bomber-x-loco-manual-draw');
 const {
-  adoptBomberXLocoPanelMessage,
   refreshCheckinMessage,
   refreshCheckinMessages,
 } = require('./checkin-panel');
@@ -16,32 +15,20 @@ function parseCheckinButton(customId) {
   if (!customId || typeof customId !== 'string') return null;
 
   if (customId === 'bomber_x_loco_prejoin') {
-    return { action: 'checkin_join', eventKey: 'saturday', legacyBomberButton: true };
+    return { action: 'checkin_join', eventKey: 'saturday' };
   }
   if (customId === 'bomber_x_loco_preleave') {
-    return { action: 'checkin_leave', eventKey: 'saturday', legacyBomberButton: true };
+    return { action: 'checkin_leave', eventKey: 'saturday' };
   }
 
   const [action, eventKey] = customId.split(':');
   if (!['checkin_join', 'checkin_leave'].includes(action)) return null;
   if (!EVENT_KEYS.includes(eventKey)) return null;
-  return { action, eventKey, legacyBomberButton: false };
-}
-
-function isBomberPanelInteraction(interaction, eventKey) {
-  return eventKey === 'saturday'
-    && String(interaction.channelId || interaction.message?.channelId || '') === String(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID)
-    && interaction.message;
-}
-
-async function bindClickedBomberPanel(interaction, client, eventKey) {
-  if (!isBomberPanelInteraction(interaction, eventKey)) return false;
-  return adoptBomberXLocoPanelMessage(interaction.message, client);
+  return { action, eventKey };
 }
 
 async function handleJoin(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
-  await bindClickedBomberPanel(interaction, client, eventKey);
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
   await refreshCheckinMessage(eventKey, client);
   if (result.alreadyCheckedIn) {
@@ -54,7 +41,6 @@ async function handleJoin(interaction, client, eventKey) {
 
 async function handleLeave(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
-  await bindClickedBomberPanel(interaction, client, eventKey);
   const result = withdrawTeam({ eventKey, userId: interaction.user.id });
   if (!result.wasCheckedIn) {
     await refreshCheckinMessage(eventKey, client);
@@ -96,6 +82,15 @@ async function handleInteraction(interaction, client) {
     if (parsed.action === 'checkin_leave') return await handleLeave(interaction, client, parsed.eventKey);
     return false;
   } catch (error) {
+    console.error('[checkin] Interaction fehlgeschlagen', {
+      customId: interaction.customId,
+      eventKey: parsed.eventKey,
+      userId: interaction.user?.id,
+      channelId: interaction.channelId || interaction.message?.channelId,
+      messageId: interaction.message?.id,
+      error: error?.stack || error,
+    });
+
     const message = error?.message || 'Check-in konnte nicht verarbeitet werden.';
     if (interaction.deferred || interaction.replied) await interaction.editReply(message).catch(() => {});
     else await interaction.reply({ content: message, flags: EPHEMERAL }).catch(() => {});
