@@ -189,8 +189,15 @@ function calculateTottPoints(player, position) {
   ).toFixed(4));
 }
 
-function buildSelection(performances) {
+function buildSelection(performances, tournamentMatches = []) {
   const teamMatches = new Map();
+  const legacyWins = new Map();
+  for (const match of tournamentMatches || []) {
+    const homeGoals = Number(match?.result?.homeGoals); const awayGoals = Number(match?.result?.awayGoals);
+    if (!match?.id || !Number.isFinite(homeGoals) || !Number.isFinite(awayGoals)) continue;
+    legacyWins.set(`${match.id}:${match?.home?.teamId}`, homeGoals > awayGoals ? 1 : 0);
+    legacyWins.set(`${match.id}:${match?.away?.teamId}`, awayGoals > homeGoals ? 1 : 0);
+  }
   const aggregates = new Map();
   for (const row of performances || []) {
     const teamId = String(row.teamId);
@@ -215,7 +222,8 @@ function buildSelection(performances) {
     }
     aggregate.cleanSheets += Number(row.cleanSheets) || 0;
     aggregate.passesMade += Number(row.passesMade) || 0; aggregate.passAttempts += Number(row.passAttempts) || 0;
-    aggregate.wins += Number(row.won) || 0;
+    const storedWin = Number(row.won);
+    aggregate.wins += Number.isFinite(storedWin) ? storedWin : (legacyWins.get(`${lncMatchId}:${row.teamId}`) || 0);
     aggregates.set(key, aggregate);
   }
   const eligible = [...aggregates.values()].filter(item => {
@@ -268,7 +276,7 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
     if (!rows.length) return event;
     state.performances.push(...rows);
     state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), capturedAt: new Date().toISOString() });
-    state.selection = buildSelection(state.performances); state.updatedAt = new Date().toISOString();
+    state.selection = buildSelection(state.performances, confirmedEventMatches(event)); state.updatedAt = new Date().toISOString();
     event.ceremony.teamOfTheTournament = state; storedRows = rows; stored = true; return event;
   });
   return { stored, rows: storedRows };

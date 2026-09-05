@@ -81,6 +81,20 @@ test('ranks total points first and PPG only as a tiebreaker', () => {
   assert.equal(selection.forward[1].tottPpg, 10);
 });
 
+test('derives wins for performances captured before the points-system update', () => {
+  const performances = [0, 1].map(index => ({
+    lncMatchId: `m${index}`, teamId: 'team-a', playerId: 'legacy', playerName: 'Legacy',
+    position: 'forward', rating: 8, goals: 0, assists: 0, manOfTheMatch: 0,
+  }));
+  const tournamentMatches = [0, 1].map(index => ({
+    id: `m${index}`, home: { teamId: 'team-a' }, away: { teamId: 'team-b' },
+    result: { homeGoals: 1, awayGoals: 0 },
+  }));
+  const selection = buildSelection(performances, tournamentMatches);
+  assert.equal(selection.forward[0].wins, 2);
+  assert.equal(selection.forward[0].totalTottPoints, 18);
+});
+
 test('matches one linked club by oriented score and closest confirmation time', () => {
   const linkedTeam = { id: 'home', eaClub: { clubId: '101' } };
   const lncMatch = {
