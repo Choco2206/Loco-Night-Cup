@@ -7,7 +7,8 @@ const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const {
-  capturePendingMatchesNow, confirmedEventMatches, requiresEaCapture, resumeRatingCaptures,
+  buildRankings, capturePendingMatchesNow, confirmedEventMatches, requiresEaCapture, resumeRatingCaptures,
+  tottOpportunityMatches,
 } = require('./team-of-the-tournament-service');
 
 const TOTT_GRACE_PERIOD_MS = 5 * 60 * 1000;
@@ -16,6 +17,7 @@ const CONTINUOUS_RETRY_DELAY_MS = 15 * 60 * 1000;
 const TOTT_GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000;
 const LIVE_CHANNEL_ID = '1533394601220505641';
 const TEST_CHANNEL_ID = '1525035287971889173';
+const AUDIT_CHANNEL_ID = '1545836933102444635';
 const postTimers = new Map();
 
 function renderTeamOfTheTournament(input) {
@@ -221,6 +223,75 @@ async function testLiveTottChannel(client) {
   }
 }
 
+function formatAuditNumber(value) {
+  return Number(value || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function auditRankingMessages(title, players, selectedKeys) {
+  const lines = players.length ? players.map((player, index) => {
+    const selected = selectedKeys.has(`${player.teamId}:${player.playerId}`) ? ' 🏆 **TOTT**' : '';
+    const compensation = Number(player.compensationPoints) > 0
+      ? ` | Ausgleich +${formatAuditNumber(player.compensationPoints)}`
+      : '';
+    return `${index + 1}. **${player.playerName}** — ${findTeamById(player.teamId)?.clubName || 'Unbekanntes Team'}${selected}`
+      + `\n   Werte: Ø ${formatAuditNumber(player.averageRating)} | ${player.goals || 0} T | ${player.assists || 0} A`
+      + ` | ${player.cleanSheets || 0} CS | ${player.tacklesMade || 0} ZK | ${player.passesMade || 0} Pässe`
+      + ` | ${player.saves || 0} Paraden | ${player.manOfTheMatch || 0} MOTM | ${player.wins || 0} Siege`
+      + `\n   ${player.matches} Einsätze | ${formatAuditNumber(player.actualTottPoints)} echte Pkt.${compensation}`
+      + ` | **${formatAuditNumber(player.totalTottPoints)} gesamt** | PPG ${formatAuditNumber(player.tottPpg)}`;
+  }) : ['Keine berechtigten Spieler vorhanden.'];
+
+  const messages = []; let current = `## ${title}\n`;
+  for (const line of lines) {
+    const addition = `${line}\n`;
+    if ((current + addition).length > 1900) {
+      messages.push(current.trim());
+      current = `## ${title} · Fortsetzung\n${addition}`;
+    } else {
+      current += addition;
+    }
+  }
+  if (current.trim()) messages.push(current.trim());
+  return messages;
+}
+
+async function postTottAuditReport({ client, eventKey, event, state }) {
+  const channel = await client.channels.fetch(AUDIT_CHANNEL_ID);
+  if (!channel || typeof channel.send !== 'function') throw new Error(`TOTT-Nachweiskanal ${AUDIT_CHANNEL_ID} ist nicht beschreibbar.`);
+  const rankings = buildRankings(state.performances || [], tottOpportunityMatches(event));
+  const selectedKeys = new Set(Object.values(state.selection || {}).flat()
+    .map(player => `${player.teamId}:${player.playerId}`));
+  const eventName = event.label || event.name || eventKey;
+  const date = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric',
+  }).format(new Date());
+  const header = [
+    `# 📊 TOTT-AUSWERTUNG · ${eventName} · ${date}`,
+    '',
+    '## Verwendete Punktevergabe',
+    '**Torwart:** Rating × 1,15 | Tor +10 | Assist +6 | Clean Sheet +5 | 10 Pässe +0,5 | Parade +0,75 | MOTM +3 | Sieg +1',
+    '**Verteidigung:** Rating × 1,15 | Tor +8 | Assist +5 | Clean Sheet +4 | Zweikampf +0,5 | 10 Pässe +1 | MOTM +3 | Sieg +1',
+    '**Mittelfeld:** Rating × 1,10 | Tor +6 | Assist +4 | Clean Sheet +2 | Zweikampf +0,4 | 10 Pässe +1 | MOTM +3 | Sieg +1',
+    '**Sturm:** Rating × 1,00 | Tor +5 | Assist +3 | Clean Sheet +1 | Zweikampf +0,25 | 10 Pässe +0,5 | MOTM +3 | Sieg +1',
+    '',
+    '**Mindestteilnahme:** mindestens 50 % der Teamspiele, aufgerundet, sowie mindestens zwei echte erfasste Einsätze.',
+    '**Sortierung:** Gesamtpunkte → PPG → Ø-Rating → MOTM → Einsätze.',
+    '**Ausgleich:** Freilose, Def-Wins und weiterhin fehlende EA-Spiele werden über persönlichen Punkteschnitt und Einsatzquote ausgeglichen.',
+  ].join('\n');
+  await channel.send({ content: header, allowedMentions: { parse: [] } });
+
+  const labels = {
+    goalkeeper: '🧤 TORWART-RANKING', defender: '🛡️ VERTEIDIGER-RANKING',
+    midfielder: '⚙️ MITTELFELD-RANKING', forward: '⚽ STÜRMER-RANKING',
+  };
+  for (const position of ['goalkeeper', 'defender', 'midfielder', 'forward']) {
+    for (const content of auditRankingMessages(labels[position], rankings[position] || [], selectedKeys)) {
+      await channel.send({ content, allowedMentions: { parse: [] } });
+    }
+  }
+  return true;
+}
+
 async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   const event = readEventData(eventKey);
   const state = event.ceremony?.teamOfTheTournament;
@@ -266,6 +337,9 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
       postNextAttemptAt: null,
     });
     return stored;
+  });
+  await postTottAuditReport({ client, eventKey, event, state }).catch(error => {
+    console.warn(`[tott-audit] ${eventKey}: Nachweisbericht konnte nicht gepostet werden: ${error.message}`);
   });
   console.info(`[tott] ${eventKey}: TOTT erfolgreich veröffentlicht in Kanal ${channel.id}. Message-ID: ${imageMessage.id}`);
   return { posted: true, serialNumber, channelId: channel.id, imageMessageId: imageMessage.id, awardsMessageId: awardsMessage.id };
@@ -459,7 +533,8 @@ async function postTeamOfTheTournamentTest(client) {
 }
 
 module.exports = {
-  aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady, selectSpecialAwards,
+  aggregatePlayers, auditRankingMessages, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection,
+  closingRatingsReady, postTottAuditReport, selectSpecialAwards,
   getTargetChannel, initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest,
   scheduleTeamOfTheTournamentPost, testLiveTottChannel, workflowSnapshot,
 };

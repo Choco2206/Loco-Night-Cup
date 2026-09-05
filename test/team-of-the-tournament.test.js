@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   FORMATION, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
-  buildSelection, calculateTottPoints, confirmedEventMatches, normalizePosition, requiresEaCapture,
+  buildRankings, buildSelection, calculateTottPoints, confirmedEventMatches, normalizePosition, requiresEaCapture,
   selectEaMatch, tottOpportunityMatches,
 } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
-const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
+const { aggregatePlayers, auditRankingMessages, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
 const bomberXLocoLayout = require('../config/bomber-x-loco-tott-layout');
 const { AUTO_CLEANUP_DELAY_MS, isTeamOfTheTournamentSettled } = require('../src/domain/events/event-completion-policy');
@@ -139,6 +139,26 @@ test('compensates only the innocent winner of an awarded match', () => {
   const players = buildSelection(performances, opportunities).forward;
   assert.equal(players.find(player => player.teamId === 'winner').teamOpportunityMatches, 3);
   assert.equal(players.find(player => player.teamId === 'no-show').teamOpportunityMatches, 2);
+});
+
+test('keeps the complete ranking for the audit channel while selecting only the formation slots', () => {
+  const rows = ['one', 'two', 'three'].flatMap((playerId, playerIndex) => [0, 1].map(matchIndex => ({
+    lncMatchId: `m${matchIndex}`, teamId: 'team-a', playerId, playerName: playerId,
+    position: 'forward', rating: 9 - playerIndex, goals: 0, assists: 0, manOfTheMatch: 0,
+  })));
+  assert.equal(buildRankings(rows).forward.length, 3);
+  assert.equal(buildSelection(rows).forward.length, 2);
+});
+
+test('splits long audit rankings below the Discord message limit', () => {
+  const players = Array.from({ length: 80 }, (_, index) => ({
+    teamId: `team-${index}`, playerId: `player-${index}`, playerName: `Spieler ${index}`,
+    matches: 5, actualTottPoints: 50, compensationPoints: index % 2 ? 10 : 0,
+    totalTottPoints: index % 2 ? 60 : 50, tottPpg: 10,
+  }));
+  const messages = auditRankingMessages('⚽ STÜRMER-RANKING', players, new Set());
+  assert.ok(messages.length > 1);
+  assert.ok(messages.every(message => message.length <= 1900));
 });
 
 test('matches one linked club by oriented score and closest confirmation time', () => {

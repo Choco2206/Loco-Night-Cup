@@ -197,7 +197,7 @@ function calculateTottPoints(player, position) {
   ).toFixed(4));
 }
 
-function buildSelection(performances, tournamentMatches = []) {
+function buildRankings(performances, tournamentMatches = []) {
   const teamMatches = new Map();
   const opportunityMatches = new Map();
   const legacyWins = new Map();
@@ -299,8 +299,15 @@ function buildSelection(performances, tournamentMatches = []) {
   const byPosition = Object.fromEntries(Object.keys(FORMATION).map(position => [position, eligible.filter(player => player.position === position)]));
   const comparePlayers = (a, b) => b.totalTottPoints - a.totalTottPoints || b.tottPpg - a.tottPpg
     || b.averageRating - a.averageRating || b.manOfTheMatch - a.manOfTheMatch || b.matches - a.matches;
+  return Object.fromEntries(Object.keys(FORMATION).map(position => [
+    position, byPosition[position].sort(comparePlayers),
+  ]));
+}
+
+function buildSelection(performances, tournamentMatches = []) {
+  const rankings = buildRankings(performances, tournamentMatches);
   return Object.fromEntries(Object.entries(FORMATION).map(([position, count]) => [
-    position, byPosition[position].sort(comparePlayers).slice(0, count),
+    position, rankings[position].slice(0, count),
   ]));
 }
 
@@ -492,7 +499,7 @@ function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
 
 module.exports = {
   FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
-  buildSelection, calculateTottPoints, capturePendingMatchesNow, confirmedEventMatches, isRealEaMatch,
+  buildRankings, buildSelection, calculateTottPoints, capturePendingMatchesNow, confirmedEventMatches, isRealEaMatch,
   normalizePosition, refreshSelection, requiresEaCapture, resumeRatingCaptures, scheduleRatingCapture,
   selectEaMatch, tottOpportunityMatches,
 };
