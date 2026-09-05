@@ -13,7 +13,7 @@ const {
   buildSaturdayBlockerPayload,
 } = require('./bomber-x-loco-checkin');
 
-const STALE_BOMBER_X_LOCO_MESSAGE_ID = '1545402690828501013';
+const LEGACY_BOMBER_X_LOCO_MESSAGE_ID = '1545402690828501013';
 
 async function fetchMessage(channel, messageId) {
   if (!messageId) return null;
@@ -62,26 +62,42 @@ async function upsertMessage(channel, messageId, payload) {
   return message;
 }
 
-async function replaceStaleBomberXLocoMessage(specialChannel, state, payload) {
-  const storedId = String(state.specialMainMessageId || '');
-  const staleId = STALE_BOMBER_X_LOCO_MESSAGE_ID;
+async function removeLegacyBomberPanel(client) {
+  const specialChannel = await client.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
+  if (!specialChannel?.send) return false;
 
-  // Diese konkrete Nachricht wurde von Discord nicht mehr an die laufende
-  // Application geroutet. Sie wird einmal vollständig ersetzt statt editiert.
-  if (storedId !== staleId) return null;
+  const legacyMessage = await fetchMessage(specialChannel, LEGACY_BOMBER_X_LOCO_MESSAGE_ID);
+  if (!legacyMessage) return false;
 
-  const staleMessage = await fetchMessage(specialChannel, staleId);
-  if (staleMessage) await staleMessage.delete().catch(error => {
-    console.error('[checkin-panel] Alte Bomber X Loco Nachricht konnte nicht gelöscht werden:', error);
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const state = getMessageState(messages, 'saturday');
+  const storedMessageId = state.specialMainMessageId ? String(state.specialMainMessageId) : null;
+
+  // Alte Sondernachricht wirklich vollständig entfernen. Falls im Speicher noch
+  // eine andere alte Bomber-Nachricht referenziert ist, wird auch diese entfernt,
+  // damit anschließend genau ein frisches Panel vom laufenden Bot erstellt wird.
+  await legacyMessage.delete().catch(error => {
+    console.error('[checkin-panel] Legacy Bomber X Loco Panel konnte nicht gelöscht werden:', error);
   });
 
-  const newMessage = await specialChannel.send(payload);
-  console.log('[checkin-panel] Bomber X Loco Panel vollständig neu erstellt', {
-    oldMessageId: staleId,
-    newMessageId: newMessage.id,
+  if (storedMessageId && storedMessageId !== LEGACY_BOMBER_X_LOCO_MESSAGE_ID) {
+    const storedMessage = await fetchMessage(specialChannel, storedMessageId);
+    if (storedMessage) await storedMessage.delete().catch(() => null);
+  }
+
+  updateJson(FILES.messages, createMessagesDefault(), current => {
+    const currentState = getMessageState(current, 'saturday');
+    currentState.specialChannelId = String(specialChannel.id);
+    currentState.specialMainMessageId = null;
+    currentState.updatedAt = new Date().toISOString();
+    return current;
+  });
+
+  console.log('[checkin-panel] Altes Bomber X Loco Panel entfernt', {
+    oldMessageId: LEGACY_BOMBER_X_LOCO_MESSAGE_ID,
     channelId: specialChannel.id,
   });
-  return newMessage;
+  return true;
 }
 
 async function refreshBomberXLocoPanel({ eventKey, event, client, settings, state }) {
@@ -91,9 +107,15 @@ async function refreshBomberXLocoPanel({ eventKey, event, client, settings, stat
     return false;
   }
 
-  const payload = buildBomberXLocoPayload(event, settings);
-  const replacement = await replaceStaleBomberXLocoMessage(specialChannel, state, payload);
-  const specialMessage = replacement || await upsertMessage(specialChannel, state.specialMainMessageId, payload);
+  // Ab hier läuft der Bomber-Check-in wie der normale Check-in:
+  // eine gespeicherte Message-ID, upsert, dieselben checkin_join/checkin_leave Buttons
+  // und dieselbe Check-in-Service-Logik. Nur Darstellung/Kanal/48er-Format sind speziell.
+  const specialMessage = await upsertMessage(
+    specialChannel,
+    state.specialMainMessageId,
+    buildBomberXLocoPayload(event, settings),
+  );
+
   const normalChannelId = settings.channels?.checkinChannelIds?.[eventKey];
   if (normalChannelId) {
     const normalChannel = await client.channels.fetch(normalChannelId).catch(() => null);
@@ -156,7 +178,10 @@ async function refreshCheckinMessage(eventKey, client) {
       if (!currentState.createdAt) currentState.createdAt = timestamp;
       return current;
     });
-    console.log(`[checkin-panel] ${eventKey}: Bomber X Loco special panel refreshed`);
+    console.log(`[checkin-panel] ${eventKey}: Bomber X Loco special panel refreshed`, {
+      messageId: state.specialMainMessageId,
+      channelId: state.specialChannelId,
+    });
     return true;
   }
 
@@ -195,6 +220,9 @@ async function refreshCheckinMessages(eventKeys, client) {
 }
 
 async function ensureAllCheckinMessages(client) {
+  // Einmalige Migration der kaputten alten Bomber-Nachricht. Entscheidend ist die
+  // tatsächliche Discord-Message-ID, nicht was gerade in messages.json gespeichert ist.
+  await removeLegacyBomberPanel(client);
   await refreshCheckinMessages(EVENT_KEYS, client);
 }
 
