@@ -98,6 +98,16 @@ async function handleInteractionError(interaction, error) {
   console.error('Interaction handling failed:', error);
 }
 
+function isDirectCheckinButton(interaction) {
+  if (!interaction.isButton()) return false;
+  const customId = String(interaction.customId || '');
+  return customId.startsWith('checkin_join:')
+    || customId.startsWith('checkin_leave:')
+    || customId === 'bomber_x_loco_prejoin'
+    || customId === 'bomber_x_loco_preleave'
+    || customId === 'bomber_x_loco_redirect:saturday';
+}
+
 async function main() {
   if (!process.env.DISCORD_TOKEN) {
     runBootstrap();
@@ -150,6 +160,18 @@ async function main() {
 
   client.on(Events.InteractionCreate, async interaction => {
     try {
+      // Check-in-Buttons zuerst behandeln. Damit kann kein anderes System einen
+      // normalen oder Bomber-X-Loco-Check-in vorher abfangen oder blockieren.
+      if (isDirectCheckinButton(interaction)) {
+        console.log('[checkin] Button empfangen', {
+          customId: interaction.customId,
+          userId: interaction.user?.id,
+          channelId: interaction.channelId,
+          messageId: interaction.message?.id,
+        });
+        if (await checkinSystem.handleInteraction(interaction, client)) return;
+      }
+
       if (await feedbackSystem.handleInteraction(interaction, client)) return;
       if (await ticketSystem.handleInteraction(interaction, client)) return;
       if (await videoRequestSystem.handleInteraction(interaction, client)) return;
