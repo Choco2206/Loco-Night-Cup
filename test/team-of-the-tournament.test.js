@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   FORMATION, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
-  buildSelection, calculateTottPoints, confirmedEventMatches, normalizePosition, selectEaMatch,
+  buildSelection, calculateTottPoints, confirmedEventMatches, normalizePosition, requiresEaCapture,
+  selectEaMatch, tottOpportunityMatches,
 } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 const { aggregatePlayers, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
@@ -93,6 +94,51 @@ test('derives wins for performances captured before the points-system update', (
   const selection = buildSelection(performances, tournamentMatches);
   assert.equal(selection.forward[0].wins, 2);
   assert.equal(selection.forward[0].totalTottPoints, 18);
+});
+
+test('compensates a bye or missing EA match with the personal points average', () => {
+  const performances = [0, 1].map(index => ({
+    lncMatchId: `m${index}`, teamId: 'team-a', playerId: 'regular', playerName: 'Regular',
+    position: 'forward', rating: 8, goals: 0, assists: 0, manOfTheMatch: 0,
+  }));
+  const opportunities = [0, 1, 2].map(index => ({
+    id: `m${index}`, home: { type: 'team', teamId: 'team-a' }, away: { type: 'team', teamId: 'team-b' },
+    status: 'confirmed', result: { homeGoals: 1, awayGoals: 0 },
+  }));
+  const selection = buildSelection(performances, opportunities);
+  assert.equal(selection.forward[0].actualTottPoints, 18);
+  assert.equal(selection.forward[0].compensationPoints, 9);
+  assert.equal(selection.forward[0].totalTottPoints, 27);
+  assert.equal(selection.forward[0].projectedMatches, 3);
+});
+
+test('recognizes byes as opportunities and skips EA capture for marked forfeits', () => {
+  const event = {
+    groups: { groups: { A: { matchdays: [{ matches: [
+      { id: 'bye', status: 'bye', home: { type: 'team', teamId: 'a' }, away: { type: 'bye' } },
+      { id: 'forfeit', status: 'confirmed', home: { type: 'team', teamId: 'a' }, away: { type: 'team', teamId: 'b' }, result: { homeGoals: 3, awayGoals: 0, matchPlayed: false } },
+    ] }] } } },
+  };
+  assert.equal(tottOpportunityMatches(event).length, 2);
+  assert.equal(requiresEaCapture(tottOpportunityMatches(event).find(match => match.id === 'forfeit')), false);
+});
+
+test('compensates only the innocent winner of an awarded match', () => {
+  const performances = ['winner', 'no-show'].flatMap(teamId => [0, 1].map(index => ({
+    lncMatchId: `played-${index}`, teamId, playerId: teamId, playerName: teamId,
+    position: 'forward', rating: 8, goals: 0, assists: 0, manOfTheMatch: 0,
+  })));
+  const opportunities = [0, 1].map(index => ({
+    id: `played-${index}`, home: { type: 'team', teamId: 'winner' }, away: { type: 'team', teamId: 'no-show' },
+    status: 'confirmed', result: { homeGoals: 1, awayGoals: 0, matchPlayed: true },
+  }));
+  opportunities.push({
+    id: 'awarded', home: { type: 'team', teamId: 'winner' }, away: { type: 'team', teamId: 'no-show' },
+    status: 'confirmed', result: { homeGoals: 3, awayGoals: 0, matchPlayed: false },
+  });
+  const players = buildSelection(performances, opportunities).forward;
+  assert.equal(players.find(player => player.teamId === 'winner').teamOpportunityMatches, 3);
+  assert.equal(players.find(player => player.teamId === 'no-show').teamOpportunityMatches, 2);
 });
 
 test('matches one linked club by oriented score and closest confirmation time', () => {

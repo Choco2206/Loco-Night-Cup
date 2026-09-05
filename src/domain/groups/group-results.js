@@ -179,6 +179,7 @@ function applyReports(match) {
       awayGoals: Number(first.awayGoals),
       confirmedAt: nowIso(),
       source: 'teams',
+      matchPlayed: true,
     };
     return;
   }
@@ -309,8 +310,13 @@ function submitTeamResult({ eventKey, groupKey, matchId, participantKeyValue, us
   return outcome;
 }
 
-function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, awayGoals }) {
+function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, awayGoals, matchPlayed = true }) {
   let outcome;
+  const parsedHome = parseGoals(homeGoals, 'Heimtore');
+  const parsedAway = parseGoals(awayGoals, 'Auswärtstore');
+  if (!matchPlayed && parsedHome === parsedAway) {
+    throw new Error('Ein kampfloses Ergebnis braucht einen Sieger, zum Beispiel 3:0 oder 0:3.');
+  }
 
   updateEventData(eventKey, event => {
     const group = getGroup(event, groupKey);
@@ -324,11 +330,12 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     match.reports = [];
     match.confirmation = null;
     match.result = {
-      homeGoals: parseGoals(homeGoals, 'Heimtore'),
-      awayGoals: parseGoals(awayGoals, 'Auswärtstore'),
+      homeGoals: parsedHome,
+      awayGoals: parsedAway,
       confirmedAt: nowIso(),
       source: 'admin',
       adminUserId: String(adminUserId),
+      matchPlayed: Boolean(matchPlayed),
     };
     match.status = 'confirmed';
     match.adminDecision = {

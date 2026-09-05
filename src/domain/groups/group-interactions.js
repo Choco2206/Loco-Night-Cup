@@ -211,6 +211,18 @@ function replacementLetter(team) {
   return /^[A-ZÄÖÜ]$/.test(first) ? first : '#';
 }
 
+function buildAdminResultTypeSelect(eventKey, groupKey, matchId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`group_admin_result_type:${eventKey}:${groupKey}:${encodeURIComponent(matchId)}`)
+      .setPlaceholder('Wurde das Spiel ausgetragen?')
+      .addOptions(
+        { label: 'Spiel wurde gespielt', value: 'played', description: 'EA-Spiel suchen und echte Spielerwerte verwenden.' },
+        { label: 'Kampflos / nicht angetreten', value: 'forfeit', description: 'Keine EA-Suche; TOTT-Durchschnittsausgleich verwenden.' }
+      )
+  );
+}
+
 function buildReplacementLetterRows(eventKey, groupKey, participantKeyValue, teams) {
   const letters = [...new Set(teams.map(replacementLetter))].sort((a, b) => a.localeCompare(b, 'de'));
   return chunk(letters, SELECT_OPTION_LIMIT).map((letterChunk, index) => new ActionRowBuilder().addComponents(
@@ -354,9 +366,28 @@ async function handleAdminResultSelect(interaction, eventKey, groupKey, selected
   ));
   if (!match) throw new Error('Spiel wurde nicht gefunden.');
 
+  await interaction.update({
+    content: `**${matchLabel(match)}**\nWurde diese Begegnung tatsächlich gespielt?`,
+    components: [buildAdminResultTypeSelect(eventKey, groupKey, match.id)],
+  });
+  return true;
+}
+
+async function handleAdminResultTypeSelect(interaction, eventKey, groupKey, encodedMatchId) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein Admin-Ergebnis setzen.', flags: EPHEMERAL });
+    return true;
+  }
+  const matchId = decodeURIComponent(encodedMatchId);
+  const resultType = interaction.values?.[0];
+  if (!['played', 'forfeit'].includes(resultType)) throw new Error('Ergebnisart ist ungültig.');
+  const { group } = getGroupFromEvent(eventKey, groupKey);
+  const match = getAdminSelectableMatches(group).find(entry => String(entry.id) === String(matchId));
+  if (!match) throw new Error('Spiel wurde nicht gefunden.');
+
   await interaction.showModal(createScoreModal({
-    customId: `group_admin_result_modal:${eventKey}:${groupKey}:${match.id}`,
-    title: 'Admin-Ergebnis',
+    customId: `group_admin_result_modal:${eventKey}:${groupKey}:${resultType}:${encodeURIComponent(match.id)}`,
+    title: resultType === 'forfeit' ? 'Kampfloses Ergebnis' : 'Gespieltes Admin-Ergebnis',
     match,
   }));
   return true;
@@ -577,7 +608,7 @@ function resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroup
   throw new Error('Gruppe wurde nicht gefunden.');
 }
 
-async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, client) {
+async function handleAdminResultModal(interaction, eventKey, groupKey, resultType, matchId, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   if (!await isAdminAllowed(interaction)) {
     await interaction.editReply({ content: 'Du darfst kein Admin-Ergebnis setzen.' });
@@ -589,6 +620,7 @@ async function handleAdminResultModal(interaction, eventKey, groupKey, matchId, 
     groupKey,
     matchId,
     adminUserId: interaction.user.id,
+    matchPlayed: resultType !== 'forfeit',
     homeGoals: interaction.fields.getTextInputValue('home_goals'),
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
@@ -621,11 +653,12 @@ async function handleGroupInteraction(interaction, client) {
 
   if (interaction.isStringSelectMenu?.()) {
     const [action, parsedEventKey, parsedGroupKey, extraValue] = customId.split(':');
-    if (!['group_result_select', 'group_admin_result_matchday', 'group_admin_result_select', 'group_replacement_target', 'group_replacement_letter', 'group_replacement_page', 'group_replacement_team'].includes(action)) return false;
+    if (!['group_result_select', 'group_admin_result_matchday', 'group_admin_result_select', 'group_admin_result_type', 'group_replacement_target', 'group_replacement_letter', 'group_replacement_page', 'group_replacement_team'].includes(action)) return false;
     const { eventKey, groupKey } = resolveGroupInteractionContext(interaction, parsedEventKey, parsedGroupKey);
     if (action === 'group_result_select') return handleTeamResultSelect(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_matchday') return handleAdminMatchdaySelect(interaction, eventKey, groupKey);
     if (action === 'group_admin_result_select') return handleAdminResultSelect(interaction, eventKey, groupKey, extraValue);
+    if (action === 'group_admin_result_type') return handleAdminResultTypeSelect(interaction, eventKey, groupKey, customId.split(':').slice(3).join(':'));
     if (action === 'group_replacement_target') return handleReplacementTargetSelect(interaction, eventKey, groupKey);
     if (action === 'group_replacement_letter') return handleReplacementLetterSelect(interaction, eventKey, groupKey, extraValue);
     if (action === 'group_replacement_page') return handleReplacementPageSelect(interaction, eventKey, groupKey, extraValue, customId.split(':')[4]);
@@ -643,8 +676,9 @@ async function handleGroupInteraction(interaction, client) {
       return handleTeamResultModal(interaction, eventKey, groupKey, matchId, selectedParticipantKey, client);
     }
     if (action === 'group_admin_result_modal') {
-      const matchId = parts.slice(3).join(':');
-      return handleAdminResultModal(interaction, eventKey, groupKey, matchId, client);
+      const resultType = parts[3];
+      const matchId = decodeURIComponent(parts.slice(4).join(':'));
+      return handleAdminResultModal(interaction, eventKey, groupKey, resultType, matchId, client);
     }
   }
 

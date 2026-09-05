@@ -6,7 +6,9 @@ const { createSettingsDefault, createTottHistoryDefault } = require('../../stora
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
-const { confirmedEventMatches, resumeRatingCaptures } = require('./team-of-the-tournament-service');
+const {
+  capturePendingMatchesNow, confirmedEventMatches, requiresEaCapture, resumeRatingCaptures,
+} = require('./team-of-the-tournament-service');
 
 const TOTT_GRACE_PERIOD_MS = 5 * 60 * 1000;
 const POST_RETRY_DELAYS_MS = [120000, 120000, 300000, 600000, 900000, 900000, 1200000];
@@ -130,7 +132,7 @@ function workflowSnapshot(event) {
   const state = event.ceremony?.teamOfTheTournament || {};
   const confirmed = confirmedEventMatches(event);
   const capturedIds = new Set((state.capturedMatches || []).map(entry => String(entry.lncMatchId)));
-  const linked = confirmed.filter(match => [match.home?.teamId, match.away?.teamId]
+  const linked = confirmed.filter(requiresEaCapture).filter(match => [match.home?.teamId, match.away?.teamId]
     .map(findTeamById).some(team => team?.eaClub?.clubId));
   return {
     confirmedMatches: confirmed.length,
@@ -143,7 +145,7 @@ function workflowSnapshot(event) {
 
 function closingRatingsReady(event) {
   const captured = new Set((event.ceremony?.teamOfTheTournament?.capturedMatches || []).map(entry => String(entry.lncMatchId)));
-  return confirmedEventMatches(event).every(match => {
+  return confirmedEventMatches(event).filter(requiresEaCapture).every(match => {
     const linkedCount = [match.home?.teamId, match.away?.teamId]
       .map(findTeamById).filter(team => team?.eaClub?.clubId).length;
     return linkedCount === 0 || captured.has(String(match.id));
@@ -286,9 +288,13 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   let attempt = 0;
   const run = async () => {
     try {
+      if (attempt === 0) {
+        console.info(`[tott] ${eventKey}: kontrollierte EA-Abschlussprüfung wird ausgeführt.`);
+        await capturePendingMatchesNow(eventKey, readEventData(eventKey));
+      }
       const current = readEventData(eventKey);
-      const resumed = resumeRatingCaptures(eventKey, current);
       const snapshot = workflowSnapshot(current);
+      const resumed = snapshot.selectedPlayers >= 11 ? 0 : resumeRatingCaptures(eventKey, current);
       const now = new Date().toISOString();
       updatePostState(eventKey, {
         postStatus: 'pending', postAttempt: attempt + 1,

@@ -126,3 +126,42 @@ test('admin result selection includes completed matchdays in groups and league p
     ['day-1', 'day-2']
   );
 });
+
+test('stores whether a group admin result was played or awarded', () => {
+  const match = {
+    id: 'group-admin', matchday: 1, status: 'open', release: { releasedAt: new Date().toISOString() },
+    home: participant('home'), away: participant('away'), reports: [], result: null,
+  };
+  const group = { groupKey: 'A', slots: [match.home, match.away], matchdays: [{ matches: [match] }], standings: [] };
+  storedEvent = { groups: { status: 'created', groups: { A: group } }, meta: {} };
+  const outcome = groupResults.setAdminResult({
+    eventKey: 'monday', groupKey: 'A', matchId: match.id, adminUserId: 'admin',
+    homeGoals: '3', awayGoals: '0', matchPlayed: false,
+  });
+  assert.equal(outcome.match.result.source, 'admin');
+  assert.equal(outcome.match.result.matchPlayed, false);
+});
+
+test('stores whether a knockout admin result was played or awarded', () => {
+  const match = {
+    id: 'ko-admin', status: 'open', home: participant('home'), away: participant('away'),
+    reports: [], result: null, next: null, loserNext: null,
+  };
+  storedEvent = {
+    knockout: { status: 'running', rounds: { final: { status: 'open', matches: [match] } } },
+    ceremony: { status: 'not_ready', placements: {} }, meta: {},
+  };
+  const outcome = knockoutResults.setAdminResult({
+    eventKey: 'monday', roundKey: 'final', matchId: match.id, adminUserId: 'admin',
+    homeGoals: '3', awayGoals: '0', matchPlayed: false,
+  });
+  assert.equal(outcome.match.result.source, 'admin');
+  assert.equal(outcome.match.result.matchPlayed, false);
+});
+
+test('rejects a drawn score for a forfeited group match', () => {
+  assert.throws(() => groupResults.setAdminResult({
+    eventKey: 'monday', groupKey: 'A', matchId: 'unused', adminUserId: 'admin',
+    homeGoals: '0', awayGoals: '0', matchPlayed: false,
+  }), /braucht einen Sieger/);
+});

@@ -27,7 +27,7 @@ const TOTT_SCORING = {
   },
 };
 const RETRY_DELAYS_MS = [0, 30000, 120000, 300000, 600000, 900000, 900000, 1200000];
-const MAX_MATCH_TIME_DISTANCE_MS = 2 * 60 * 60 * 1000;
+const MAX_MATCH_TIME_DISTANCE_MS = 4 * 60 * 60 * 1000;
 const captureTimers = new Map();
 
 function normalizePosition(value) {
@@ -41,6 +41,10 @@ function normalizePosition(value) {
 
 function isRealEaMatch(lncMatch) {
   return lncMatch?.home?.type === 'team' && lncMatch?.away?.type === 'team';
+}
+
+function requiresEaCapture(lncMatch) {
+  return isRealEaMatch(lncMatch) && lncMatch?.result?.matchPlayed !== false;
 }
 
 function eaMatchId(match) {
@@ -70,9 +74,13 @@ function matchTimestampMs(match) {
 }
 
 function confirmedTimestampMs(lncMatch) {
-  const raw = lncMatch?.result?.confirmedAt ?? lncMatch?.confirmation?.confirmedAt;
-  const milliseconds = new Date(raw || 0).getTime();
-  return Number.isNaN(milliseconds) || milliseconds <= 0 ? null : milliseconds;
+  const candidates = [
+    ...(lncMatch?.reports || []).map(report => report?.submittedAt),
+    lncMatch?.confirmation?.startedAt,
+    lncMatch?.result?.confirmedAt,
+    lncMatch?.confirmation?.confirmedAt,
+  ].map(raw => new Date(raw || 0).getTime()).filter(value => Number.isFinite(value) && value > 0);
+  return candidates.length ? Math.min(...candidates) : null;
 }
 
 function eaClubEntry(match, eaClubId) {
@@ -191,9 +199,19 @@ function calculateTottPoints(player, position) {
 
 function buildSelection(performances, tournamentMatches = []) {
   const teamMatches = new Map();
+  const opportunityMatches = new Map();
   const legacyWins = new Map();
   for (const match of tournamentMatches || []) {
     const homeGoals = Number(match?.result?.homeGoals); const awayGoals = Number(match?.result?.awayGoals);
+    const participants = match?.result?.matchPlayed === false && Number.isFinite(homeGoals) && Number.isFinite(awayGoals)
+      ? [homeGoals > awayGoals ? match?.home : match?.away]
+      : [match?.home, match?.away];
+    for (const participant of participants) {
+      if (participant?.type !== 'team' || !participant.teamId || !match?.id) continue;
+      const teamId = String(participant.teamId);
+      if (!opportunityMatches.has(teamId)) opportunityMatches.set(teamId, new Set());
+      opportunityMatches.get(teamId).add(String(match.id));
+    }
     if (!match?.id || !Number.isFinite(homeGoals) || !Number.isFinite(awayGoals)) continue;
     legacyWins.set(`${match.id}:${match?.home?.teamId}`, homeGoals > awayGoals ? 1 : 0);
     legacyWins.set(`${match.id}:${match?.away?.teamId}`, awayGoals > homeGoals ? 1 : 0);
@@ -228,9 +246,15 @@ function buildSelection(performances, tournamentMatches = []) {
   }
   const eligible = [...aggregates.values()].filter(item => {
     const playedMatches = item.matchIds.size;
+    const capturedTeamMatches = teamMatches.get(String(item.teamId))?.size || 0;
+    const teamOpportunityMatches = Math.max(capturedTeamMatches,
+      opportunityMatches.get(String(item.teamId))?.size || 0);
+    const projectedMatches = capturedTeamMatches > 0
+      ? playedMatches * (teamOpportunityMatches / capturedTeamMatches)
+      : playedMatches;
     const requiredMatches = Math.max(MINIMUM_MATCHES,
-      Math.ceil((teamMatches.get(String(item.teamId))?.size || 0) * MINIMUM_TEAM_MATCH_RATIO));
-    return playedMatches >= requiredMatches;
+      Math.ceil(teamOpportunityMatches * MINIMUM_TEAM_MATCH_RATIO));
+    return projectedMatches >= requiredMatches;
   }).map(item => {
     const lastPosition = performances.filter(row => `${row.teamId}:${row.playerId}` === `${item.teamId}:${item.playerId}`).at(-1)?.position;
     const position = Object.entries(item.positions)
@@ -242,6 +266,9 @@ function buildSelection(performances, tournamentMatches = []) {
     const saveDenominator = item.saves + item.goalsConceded;
     return {
       ...item, matchIds: undefined, position, matches, ratingTotal,
+      capturedTeamMatches: teamMatches.get(String(item.teamId))?.size || 0,
+      teamOpportunityMatches: Math.max(teamMatches.get(String(item.teamId))?.size || 0,
+        opportunityMatches.get(String(item.teamId))?.size || 0),
       averageRating: Number(averageRating.toFixed(2)),
       savePercentage: hasCompleteConcededData && saveDenominator > 0 ? item.saves / saveDenominator : 0,
       goalsConcededPerMatch: hasCompleteConcededData ? item.goalsConceded / goalkeeperMatches : null,
@@ -254,8 +281,19 @@ function buildSelection(performances, tournamentMatches = []) {
       shotConversion: item.shots > 0 ? item.goals / item.shots : 0,
     };
   }).map(player => {
-    const totalTottPoints = calculateTottPoints(player, player.position);
-    return { ...player, totalTottPoints, tottPpg: Number((totalTottPoints / player.matches).toFixed(4)) };
+    const actualTottPoints = calculateTottPoints(player, player.position);
+    const opportunityFactor = player.capturedTeamMatches > 0
+      ? player.teamOpportunityMatches / player.capturedTeamMatches
+      : 1;
+    const totalTottPoints = Number((actualTottPoints * opportunityFactor).toFixed(4));
+    return {
+      ...player,
+      projectedMatches: Number((player.matches * opportunityFactor).toFixed(4)),
+      actualTottPoints,
+      compensationPoints: Number((totalTottPoints - actualTottPoints).toFixed(4)),
+      totalTottPoints,
+      tottPpg: Number((actualTottPoints / player.matches).toFixed(4)),
+    };
   });
 
   const byPosition = Object.fromEntries(Object.keys(FORMATION).map(position => [position, eligible.filter(player => player.position === position)]));
@@ -276,7 +314,7 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
     if (!rows.length) return event;
     state.performances.push(...rows);
     state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), capturedAt: new Date().toISOString() });
-    state.selection = buildSelection(state.performances, confirmedEventMatches(event)); state.updatedAt = new Date().toISOString();
+    state.selection = buildSelection(state.performances, tottOpportunityMatches(event)); state.updatedAt = new Date().toISOString();
     event.ceremony.teamOfTheTournament = state; storedRows = rows; stored = true; return event;
   });
   return { stored, rows: storedRows };
@@ -298,6 +336,7 @@ function linkedStatus(lncMatch) {
 
 async function captureOnce(eventKey, lncMatch) {
   if (!isRealEaMatch(lncMatch)) return { captured: false, reason: 'bye_or_non_real_match' };
+  if (!requiresEaCapture(lncMatch)) return { captured: false, reason: 'forfeit' };
   const teams = [lncMatch?.home?.teamId, lncMatch?.away?.teamId].map(findTeamById).filter(Boolean);
   const linked = teams.filter(team => team.eaClub?.clubId);
   if (!linked.length || !lncMatch?.result) return { captured: false, reason: 'no_linked_teams' };
@@ -314,7 +353,7 @@ async function captureOnce(eventKey, lncMatch) {
 }
 
 function scheduleRatingCapture(eventKey, lncMatch) {
-  if (!lncMatch?.id || lncMatch.status !== 'confirmed' || !isRealEaMatch(lncMatch)) return false;
+  if (!lncMatch?.id || lncMatch.status !== 'confirmed' || !requiresEaCapture(lncMatch)) return false;
   const key = `${eventKey}:${lncMatch.id}`;
   if (captureTimers.has(key)) return false;
   let attempt = 0; let firstWarningSent = false;
@@ -335,7 +374,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
           linkedStatus(lncMatch), details, '**Gespeichert:** ✅', ...fallbackWarning].join('\n'));
         captureTimers.delete(key); return;
       }
-      if (['no_linked_teams', 'bye_or_non_real_match'].includes(result.reason)) { captureTimers.delete(key); return; }
+      if (['no_linked_teams', 'bye_or_non_real_match', 'forfeit'].includes(result.reason)) { captureTimers.delete(key); return; }
     } catch (error) {
       lastError = error; console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
     }
@@ -359,13 +398,86 @@ function scheduleRatingCapture(eventKey, lncMatch) {
   captureTimers.set(key, true); run(); return true;
 }
 
-function confirmedEventMatches(event) {
+function allEventMatches(event) {
   const matches = [
     ...Object.values(event?.groups?.groups || {}).flatMap(group => group?.matchdays || []).flatMap(day => day?.matches || []),
     ...(event?.leaguePhase?.matchdays || []).flatMap(day => day?.matches || []),
     ...Object.values(event?.knockout?.rounds || {}).flatMap(round => round?.matches || []),
-  ].filter(match => match?.id && match.status === 'confirmed' && match.result && isRealEaMatch(match));
+  ].filter(match => match?.id);
   return [...new Map(matches.map(match => [String(match.id), match])).values()];
+}
+
+function confirmedEventMatches(event) {
+  return allEventMatches(event)
+    .filter(match => match.status === 'confirmed' && match.result && isRealEaMatch(match));
+}
+
+function tottOpportunityMatches(event) {
+  return allEventMatches(event).filter(match => {
+    if (isRealEaMatch(match)) return match.status === 'confirmed' && Boolean(match.result);
+    const participants = [match?.home, match?.away];
+    return participants.some(entry => entry?.type === 'team')
+      && participants.some(entry => entry?.type === 'bye')
+      && ['bye', 'confirmed'].includes(match.status);
+  });
+}
+
+function refreshSelection(eventKey) {
+  let selection = null;
+  updateEventData(eventKey, event => {
+    event.ceremony = event.ceremony || {};
+    const state = event.ceremony.teamOfTheTournament || { performances: [], capturedMatches: [], selection: null };
+    state.selection = buildSelection(state.performances || [], tottOpportunityMatches(event));
+    state.updatedAt = new Date().toISOString();
+    event.ceremony.teamOfTheTournament = state;
+    selection = state.selection;
+    return event;
+  });
+  return selection;
+}
+
+async function capturePendingMatchesNow(eventKey, event = readEventData(eventKey)) {
+  const state = event?.ceremony?.teamOfTheTournament || {};
+  const capturedIds = new Set((state.capturedMatches || []).map(entry => String(entry.lncMatchId)));
+  const pending = confirmedEventMatches(event)
+    .filter(requiresEaCapture)
+    .filter(match => !capturedIds.has(String(match.id)));
+  let captured = 0; let missing = 0; let skipped = 0;
+
+  for (const match of pending) {
+    const timerKey = `${eventKey}:${match.id}`;
+    const scheduled = captureTimers.get(timerKey);
+    if (scheduled && scheduled !== true) clearTimeout(scheduled);
+    captureTimers.delete(timerKey);
+    try {
+      const result = await captureOnce(eventKey, match);
+      if (result.captured) captured += 1;
+      else if (result.reason === 'no_linked_teams') skipped += 1;
+      else missing += 1;
+    } catch (error) {
+      missing += 1;
+      console.warn(`[tott] Abschlussprüfung ${eventKey}:${match.id} fehlgeschlagen: ${error.message}`);
+    }
+  }
+
+  refreshSelection(eventKey);
+  const latest = readEventData(eventKey);
+  const opportunities = tottOpportunityMatches(latest);
+  const forfeits = opportunities.filter(match => isRealEaMatch(match) && match.result?.matchPlayed === false).length;
+  const byes = opportunities.filter(match => !isRealEaMatch(match)).length;
+  await sendTracker([
+    '📊 **TOTT ABSCHLUSSPRÜFUNG**',
+    `Fehlende EA-Spiele geprüft: **${pending.length}**`,
+    `Davon nachträglich erfasst: **${captured}**`,
+    `Weiterhin nicht gefunden: **${missing}**`,
+    `Ohne EA-Club-Verknüpfung: **${skipped}**`,
+    `Kampflos gewertete Spiele: **${forfeits}**`,
+    `Freilose: **${byes}**`,
+    missing || forfeits || byes
+      ? '✅ Der persönliche TOTT-Durchschnittsausgleich wurde bei der finalen Berechnung berücksichtigt.'
+      : '✅ Alle vorgesehenen Leistungen konnten ohne Durchschnittsausgleich berechnet werden.',
+  ].join('\n'));
+  return { checked: pending.length, captured, missing, skipped, forfeits, byes };
 }
 
 function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
@@ -380,6 +492,7 @@ function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
 
 module.exports = {
   FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
-  buildSelection, calculateTottPoints, confirmedEventMatches, isRealEaMatch, normalizePosition, resumeRatingCaptures,
-  scheduleRatingCapture, selectEaMatch,
+  buildSelection, calculateTottPoints, capturePendingMatchesNow, confirmedEventMatches, isRealEaMatch,
+  normalizePosition, refreshSelection, requiresEaCapture, resumeRatingCaptures, scheduleRatingCapture,
+  selectEaMatch, tottOpportunityMatches,
 };

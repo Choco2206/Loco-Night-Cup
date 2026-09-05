@@ -116,7 +116,7 @@ function setNextParticipant(rounds, target, participant) {
   return true;
 }
 
-function applyConfirmedResult(event, match, { homeGoals, awayGoals, source, actorUserId }) {
+function applyConfirmedResult(event, match, { homeGoals, awayGoals, source, actorUserId, matchPlayed = true }) {
   assertNoDraw(homeGoals, awayGoals);
   const timestamp = nowIso();
   const { winner, loser } = chooseWinner(match, homeGoals, awayGoals);
@@ -127,6 +127,7 @@ function applyConfirmedResult(event, match, { homeGoals, awayGoals, source, acto
     confirmedAt: timestamp,
     source,
     adminUserId: source === 'admin' ? String(actorUserId) : null,
+    matchPlayed: Boolean(matchPlayed),
   };
   match.winner = cloneParticipant(winner);
   match.loser = cloneParticipant(loser);
@@ -301,7 +302,7 @@ function autoConfirmFirstReport({ eventKey, roundKey, matchId, now = new Date() 
   return outcome;
 }
 
-function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, awayGoals }) {
+function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, awayGoals, matchPlayed = true }) {
   let outcome;
   const parsedHome = parseGoals(homeGoals, 'Heimtore');
   const parsedAway = parseGoals(awayGoals, 'Auswärtstore');
@@ -327,6 +328,7 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
       awayGoals: parsedAway,
       source: 'admin',
       actorUserId: adminUserId,
+      matchPlayed,
     });
     event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
     outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed', confirmationNotice };

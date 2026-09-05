@@ -101,6 +101,18 @@ function buildMatchSelect(customId, entries) {
   );
 }
 
+function buildAdminResultTypeSelect(eventKey, roundKey, matchId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`ko_admin_result_type:${eventKey}:${roundKey}:${encodeURIComponent(matchId)}`)
+      .setPlaceholder('Wurde das Spiel ausgetragen?')
+      .addOptions(
+        { label: 'Spiel wurde gespielt', value: 'played', description: 'EA-Spiel suchen und echte Spielerwerte verwenden.' },
+        { label: 'Kampflos / nicht angetreten', value: 'forfeit', description: 'Keine EA-Suche; TOTT-Durchschnittsausgleich verwenden.' }
+      )
+  );
+}
+
 function clampPage(page, totalPages) {
   const parsed = Number(page);
   if (!Number.isInteger(parsed)) return 0;
@@ -274,9 +286,28 @@ async function handleAdminResultSelect(interaction, eventKey, roundKey) {
   const match = getAdminSelectableMatches(round).find(entry => String(entry.id) === String(matchId));
   if (!match) throw new Error('K.O.-Spiel wurde nicht gefunden.');
 
+  await interaction.update({
+    content: `**${matchLabel(match)}**\nWurde diese Begegnung tatsächlich gespielt?`,
+    components: [buildAdminResultTypeSelect(eventKey, roundKey, match.id)],
+  });
+  return true;
+}
+
+async function handleAdminResultTypeSelect(interaction, eventKey, roundKey, encodedMatchId) {
+  if (!await isAdminAllowed(interaction)) {
+    await interaction.reply({ content: 'Du darfst kein K.O.-Admin-Ergebnis setzen.', flags: EPHEMERAL });
+    return true;
+  }
+  const matchId = decodeURIComponent(encodedMatchId);
+  const resultType = interaction.values?.[0];
+  if (!['played', 'forfeit'].includes(resultType)) throw new Error('Ergebnisart ist ungültig.');
+  const { round } = getRoundFromEvent(eventKey, roundKey);
+  const match = getAdminSelectableMatches(round).find(entry => String(entry.id) === String(matchId));
+  if (!match) throw new Error('K.O.-Spiel wurde nicht gefunden.');
+
   await interaction.showModal(createScoreModal({
-    customId: `ko_admin_result_modal:${eventKey}:${roundKey}:${match.id}`,
-    title: 'K.O.-Admin-Ergebnis',
+    customId: `ko_admin_result_modal:${eventKey}:${roundKey}:${resultType}:${encodeURIComponent(match.id)}`,
+    title: resultType === 'forfeit' ? 'Kampfloses K.O.-Ergebnis' : 'Gespieltes Admin-Ergebnis',
     match,
   }));
   return true;
@@ -481,7 +512,7 @@ async function handleReplacementTeamSelect(interaction, eventKey, roundKey, matc
   return true;
 }
 
-async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, client) {
+async function handleAdminResultModal(interaction, eventKey, roundKey, resultType, matchId, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
   if (!await isAdminAllowed(interaction)) {
     await interaction.editReply({ content: 'Du darfst kein K.O.-Admin-Ergebnis setzen.' });
@@ -493,6 +524,7 @@ async function handleAdminResultModal(interaction, eventKey, roundKey, matchId, 
     roundKey,
     matchId,
     adminUserId: interaction.user.id,
+    matchPlayed: resultType !== 'forfeit',
     homeGoals: interaction.fields.getTextInputValue('home_goals'),
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
   });
@@ -528,6 +560,7 @@ async function handleKnockoutInteraction(interaction, client) {
     if (!EVENT_KEYS.includes(eventKey)) return false;
     if (action === 'ko_result_select') return handleTeamResultSelect(interaction, eventKey, roundKey);
     if (action === 'ko_admin_result_select') return handleAdminResultSelect(interaction, eventKey, roundKey);
+    if (action === 'ko_admin_result_type') return handleAdminResultTypeSelect(interaction, eventKey, roundKey, customId.split(':').slice(3).join(':'));
     if (action === 'ko_replace_match_select') return handleReplacementMatchSelect(interaction, eventKey, roundKey);
     if (action === 'ko_replace_side_select') return handleReplacementSideSelect(interaction, eventKey, roundKey, matchId);
     if (action === 'ko_replace_team_select') return handleReplacementTeamSelect(interaction, eventKey, roundKey, matchId, side, client);
@@ -537,7 +570,11 @@ async function handleKnockoutInteraction(interaction, client) {
     const [action, eventKey, roundKey, matchId, selectedParticipantKey] = customId.split(':');
     if (!EVENT_KEYS.includes(eventKey)) return false;
     if (action === 'ko_result_modal') return handleTeamResultModal(interaction, eventKey, roundKey, matchId, selectedParticipantKey, client);
-    if (action === 'ko_admin_result_modal') return handleAdminResultModal(interaction, eventKey, roundKey, matchId, client);
+    if (action === 'ko_admin_result_modal') {
+      const resultType = matchId;
+      const decodedMatchId = decodeURIComponent(customId.split(':').slice(4).join(':'));
+      return handleAdminResultModal(interaction, eventKey, roundKey, resultType, decodedMatchId, client);
+    }
   }
 
   return false;
