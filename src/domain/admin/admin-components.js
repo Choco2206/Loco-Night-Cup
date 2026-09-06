@@ -120,7 +120,8 @@ function buildAdminPanelPayload(selectedCategory = null) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin_tott_test').setLabel('TOTT-Grafik testen').setEmoji('⭐').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('admin_tott_channel_test').setLabel('TOTT-Kanal testen').setEmoji('📡').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_bxl_graphics_test').setLabel('Bomber X Loco Grafiken testen').setEmoji('💣').setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId('admin_bxl_graphics_test').setLabel('Bomber X Loco Grafiken testen').setEmoji('💣').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin_zwergen_graphics_test').setLabel('Zwergen-Cup Grafiken testen').setEmoji('🍄').setStyle(ButtonStyle.Success)
     ));
   }
   return { embeds: [embed], components };

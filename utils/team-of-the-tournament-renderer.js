@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const DEFAULT_LAYOUT = require('../config/team-of-the-tournament-layout');
 const BOMBER_X_LOCO_LAYOUT = require('../config/bomber-x-loco-tott-layout');
+const LOCO_ZWERGEN_CUP_LAYOUT = require('../config/loco-zwergen-cup-tott-layout');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
@@ -76,7 +77,9 @@ function orderedPlayers(selection) {
 }
 
 async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'default' }) {
-  const layout = variant === 'bomber_x_loco' ? BOMBER_X_LOCO_LAYOUT : DEFAULT_LAYOUT;
+  const layout = variant === 'bomber_x_loco'
+    ? BOMBER_X_LOCO_LAYOUT
+    : variant === 'loco_zwergen_cup' ? LOCO_ZWERGEN_CUP_LAYOUT : DEFAULT_LAYOUT;
   const template = await loadTemplate(layout);
   const canvas = getCanvas().createCanvas(template.width, template.height);
   const ctx = canvas.getContext('2d');
@@ -104,7 +107,9 @@ async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'd
       width: layout.serial.width, height: layout.serial.height,
     }, layout.serial.maxFontSize, 32);
   }
-  const prefix = variant === 'bomber_x_loco' ? 'bomber-x-loco-team-of-the-tournament' : 'team-of-the-tournament';
+  const prefix = variant === 'bomber_x_loco'
+    ? 'bomber-x-loco-team-of-the-tournament'
+    : variant === 'loco_zwergen_cup' ? 'loco-zwergen-cup-team-of-the-tournament' : 'team-of-the-tournament';
   return { buffer: canvas.toBuffer('image/png'), fileName: `${prefix}${layout.serial ? `-${serialNumber}` : ''}.png` };
 }
 

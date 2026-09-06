@@ -15,6 +15,8 @@ const {
 } = require('../teams/team-achievements');
 const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
+const { renderLocoZwergenCupCeremonyImage } = require('../../../utils/loco-zwergen-cup-ceremony-renderer');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const HALL_OF_FAME_TEST_CHANNEL_ID = '1525035287971889173';
@@ -350,6 +352,45 @@ function buildCeremonyText({ dayKey, teams, promotion = null }) {
   ].join('\n');
 }
 
+function buildLocoZwergenCupCeremonyText({ teams, promotion = null }) {
+  return [
+    '🏆 **SIEGEREHRUNG • LOCO ZWERGEN CUP**',
+    '',
+    'Zum Abschluss der FC-26-Zeit wollten wir uns noch ein kleines Gimmick gönnen. Kleine Männer, große Träume und ein Cup, bei dem heute trotzdem niemand etwas verschenkt hat. 🍄🐺',
+    '',
+    `🥇 **1. Platz • ${teams.first.clubName}**`,
+    '👑 Manager / Co-Manager:',
+    getTeamPings(teams.first),
+    ...buildPromotionBlock(promotion),
+    '',
+    'Ganz oben auf dem Zwergen-Thron. Verdient den Titel geholt und damit offiziell die größten Kleinen des Abends. 🏆',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    `🥈 **2. Platz • ${teams.second.clubName}**`,
+    '👑 Manager / Co-Manager:',
+    getTeamPings(teams.second),
+    '',
+    'Bis ins Finale durchgezogen und nur ganz knapp am goldenen Zwergenpokal vorbeigeschrammt. Starke Leistung! 👏',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    `🥉 **3. Platz • ${teams.third.clubName}**`,
+    '👑 Manager / Co-Manager:',
+    getTeamPings(teams.third),
+    '',
+    'Auch auf dem Treppchen gelandet und sich den bronzenen Zwerg mehr als verdient. 💪',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    '❤️ **Danke an alle Teilnehmer**',
+    '',
+    'Danke an alle Teams, die diesen kleinen Spaß-Cup zum Abschluss von FC 26 mit uns gespielt haben. Die Grafik war zwergig, der Ehrgeiz ganz sicher nicht.',
+    '',
+    'Gemeinsam immer loco. 🐺🍄',
+  ].join('\n');
+}
+
 function getStoredChampionPromotion(event, teams) {
   const promotion = event?.ceremony?.teamAchievements?.championPromotion || null;
   if (!promotion?.name) return null;
@@ -404,7 +445,10 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
   const achievements = applyTeamAchievementsForEvent(eventKey);
   const eventWithAchievements = readEventData(eventKey);
   const promotion = getStoredChampionPromotion(eventWithAchievements, teams);
-  const { buffer } = await renderHallOfFameCeremonyImage({ dayKey, teams });
+  const ceremonyRender = isLocoZwergenCupEvent(event)
+    ? await renderLocoZwergenCupCeremonyImage({ teams })
+    : await renderHallOfFameCeremonyImage({ dayKey, teams });
+  const { buffer } = ceremonyRender;
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
   const attachment = new AttachmentBuilder(buffer, {
@@ -417,7 +461,9 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     allowedMentions: { parse: ['everyone'] },
   });
   const textMessage = await channel.send({
-    content: buildCeremonyText({ dayKey, teams, promotion }),
+    content: isLocoZwergenCupEvent(event)
+      ? buildLocoZwergenCupCeremonyText({ teams, promotion })
+      : buildCeremonyText({ dayKey, teams, promotion }),
     allowedMentions: { parse: ['users'] },
   });
 
@@ -507,6 +553,7 @@ async function postHallOfFameTest({ guild, dayKey, firstTeamId, secondTeamId, th
 }
 
 module.exports = {
+  buildLocoZwergenCupCeremonyText,
   CEREMONY_BANNERS,
   CEREMONY_DAY_LABELS,
   CEREMONY_LOGO_POSITIONS,
@@ -522,4 +569,3 @@ module.exports = {
   renderHallOfFameCeremonyImage,
   renderHallOfFameTestImage,
 };
-

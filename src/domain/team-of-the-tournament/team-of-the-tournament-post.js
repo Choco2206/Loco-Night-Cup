@@ -4,6 +4,7 @@ const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const {
@@ -111,6 +112,18 @@ function buildIntroText({ test = false, variant = 'default' } = {}) {
       'Herzlichen Glückwunsch an alle Spieler, die es mit ihren Leistungen ins **Team of the Tournament** geschafft haben. Ihr habt Spiele entschieden, Verantwortung übernommen und auf der gemeinsamen Bühne von Bomber Cup und Loco Night Cup abgeliefert. 💣🐺',
       '',
       '**Das ist die beste Elf des Bomber X Loco Cups.**',
+    ].filter(entry => entry !== null).join('\n');
+  }
+  if (variant === 'loco_zwergen_cup') {
+    return [
+      test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
+      '@everyone',
+      '🍄 **LOCO ZWERGEN CUP – TEAM OF THE TOURNAMENT**',
+      'Kleine Männer, große Leistungen und elf Spieler, die auf dem Platz ganz sicher keine Zwerge waren.',
+      '',
+      'Herzlichen Glückwunsch an alle, die sich beim kleinen Abschluss-Gimmick unserer FC-26-Zeit einen Platz im **Team of the Tournament** verdient haben. Ihr habt gezaubert, geackert und den Zwergenwald ordentlich aufgemischt. 🐺',
+      '',
+      '**Das ist die stärkste Elf des Loco Zwergen Cups. Zwergen-Power pur!**',
     ].filter(entry => entry !== null).join('\n');
   }
   return [
@@ -307,18 +320,20 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   }
 
   const bomberXLoco = isBomberXLocoEvent(event);
+  const locoZwergenCup = isLocoZwergenCupEvent(event);
+  const variant = bomberXLoco ? 'bomber_x_loco' : locoZwergenCup ? 'loco_zwergen_cup' : 'default';
   const serialNumber = bomberXLoco ? null : reserveSerial(eventKey);
   const rendered = await renderTeamOfTheTournament({
     selection: state.selection,
     serialNumber,
-    variant: bomberXLoco ? 'bomber_x_loco' : 'default',
+    variant,
   });
   const awardsRendered = await renderSpecialAwards({
     awards: selectSpecialAwards(state.performances),
     serialNumber,
-    variant: bomberXLoco ? 'bomber_x_loco' : 'default',
+    variant,
   });
-  const intro = buildIntroText({ variant: bomberXLoco ? 'bomber_x_loco' : 'default' });
+  const intro = buildIntroText({ variant });
   const imageMessage = await channel.send({
     content: intro,
     files: [{ attachment: rendered.buffer, name: rendered.fileName }],

@@ -3,12 +3,14 @@
 const path = require('path');
 const LAYOUTS = require('../config/ko-image-layouts');
 const BOMBER_X_LOCO_LAYOUTS = require('../config/bomber-x-loco-ko-image-layouts');
+const LOCO_ZWERGEN_CUP_LAYOUTS = require('../config/loco-zwergen-cup-ko-image-layouts');
 const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupScheduleImage');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 
 const BOMBER_X_LOCO_CYCLE_KEY = 'saturday_2026-09-19';
+const LOCO_ZWERGEN_CUP_CYCLE_KEY = 'saturday_2026-09-12';
 let canvasApi = null;
 let renderSequence = 0;
 const templateCache = new Map();
@@ -21,6 +23,10 @@ function getCanvasApi() {
 
 function isBomberXLocoRender(eventId) {
   return String(eventId || '') === BOMBER_X_LOCO_CYCLE_KEY;
+}
+
+function isLocoZwergenCupRender(eventId) {
+  return String(eventId || '') === LOCO_ZWERGEN_CUP_CYCLE_KEY;
 }
 
 function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
@@ -53,9 +59,9 @@ function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
 
 function getKoLayout(options) {
   const key = getKoTemplate(options);
-  const layouts = isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]
-    ? BOMBER_X_LOCO_LAYOUTS
-    : LAYOUTS;
+  let layouts = LAYOUTS;
+  if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
+  else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;
   const layout = layouts[key];
   if (!layout) throw new Error(`K.O.-Layout fehlt: ${key}`);
   return { key, layout, layouts };

@@ -15,6 +15,7 @@ const {
   buildBomberXLocoSchedule,
   isBomberXLocoDate,
 } = require('../events/bomber-x-loco-config');
+const { isLocoZwergenCupDate } = require('../events/loco-zwergen-cup-config');
 
 function getTimeZone(settings, event = {}) {
   return event.cycle?.timezone || settings.timeProfiles?.timezone || DEFAULT_TIMEZONE;
@@ -141,7 +142,7 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
     };
   }
 
-  return {
+  const normalSchedule = {
     cycleKey: buildCycleKey(eventKey, eventDate),
     eventDate,
     timeZone,
@@ -150,8 +151,9 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
     drawAt: parseDateTime(eventDate, profile?.drawTime || event.schedule?.drawTime, profile?.drawIsNextDay === true || event.schedule?.drawIsNextDay === true, timeZone),
     tournamentStartAt: parseDateTime(eventDate, profile?.tournamentStartTime || event.schedule?.tournamentStartTime, profile?.startIsNextDay === true || event.schedule?.startIsNextDay === true, timeZone),
     resetAt: getCycleResetAt(eventDate, timeZone),
-    eventMode: 'night_cup',
+    eventMode: isLocoZwergenCupDate(eventKey, eventDate) ? 'loco_zwergen_cup' : 'night_cup',
   };
+  return normalSchedule;
 }
 
 function resetToOpenCheckinCycle(event) {

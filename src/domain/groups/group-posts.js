@@ -16,9 +16,12 @@ const { generateLiveTableImage } = require('../../../utils/generateLiveTableImag
 const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
 const { generateGroupScheduleImage } = require('../../../utils/generateGroupScheduleImage');
 const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
+const { generateLocoZwergenCupLiveTableImage } = require('../../../utils/generateLocoZwergenCupLiveTableImage');
+const { generateLocoZwergenCupMatchesImage } = require('../../../utils/generateLocoZwergenCupMatchesImage');
 const { EVENT_KEYS } = require('../../app/constants');
 const { readEventData } = require('../events/event-repository');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 function nowIso() {
   return new Date().toISOString();
@@ -82,16 +85,25 @@ async function upsertMessage(channel, messageId, payload, label, { sendIfMissing
 async function buildLiveTableImagePayload(group) {
   const event = group.eventKey ? readEventData(group.eventKey) : null;
   const rows = getLiveTableRows(group);
-  const image = isBomberXLocoEvent(event)
-    ? await generateBomberXLocoLiveTableImage({
+  let image;
+  if (isBomberXLocoEvent(event)) {
+    image = await generateBomberXLocoLiveTableImage({
         groupKey: group.groupKey,
         rows,
-      })
-    : await generateLiveTableImage({
+      });
+  } else if (isLocoZwergenCupEvent(event)) {
+    image = await generateLocoZwergenCupLiveTableImage({
+      groupKey: group.groupKey,
+      rows,
+      qualificationText: getQualificationText(group.formatSize),
+    });
+  } else {
+    image = await generateLiveTableImage({
         groupKey: group.groupKey,
         rows,
         qualificationText: getQualificationText(group.formatSize),
       });
+  }
 
   return {
     content: null,
@@ -107,12 +119,15 @@ async function buildLiveTableImagePayload(group) {
 
 async function buildScheduleImagePayload(group, { includeResultButtons = true } = {}) {
   const event = group.eventKey ? readEventData(group.eventKey) : null;
-  const image = isBomberXLocoEvent(event)
-    ? await generateBomberXLocoMatchesImage({ group })
-    : await generateGroupScheduleImage({
+  let image;
+  if (isBomberXLocoEvent(event)) image = await generateBomberXLocoMatchesImage({ group });
+  else if (isLocoZwergenCupEvent(event)) image = await generateLocoZwergenCupMatchesImage({ group });
+  else {
+    image = await generateGroupScheduleImage({
         group,
         debug: process.env.GROUP_SCHEDULE_DEBUG === 'true',
       });
+  }
   return {
     content: null,
     embeds: [new EmbedBuilder().setImage(`attachment://${image.fileName}`)],

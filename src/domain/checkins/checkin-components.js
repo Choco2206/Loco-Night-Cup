@@ -22,6 +22,7 @@ const {
   getProfileForEvent,
   getTournamentStartAt,
 } = require('./checkin-schedule');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 const TOURNAMENT_MILESTONES = TOURNAMENT_FORMAT_SIZES;
 const MAX_DISPLAY_SLOTS = 32;
@@ -210,7 +211,9 @@ function formatWaitlistSection(slotState) {
 }
 
 function getBannerAttachment(settings, event) {
-  const configuredPath = isRoyaleEvent(event)
+  const configuredPath = isLocoZwergenCupEvent(event)
+    ? 'assets/loco-zwerge-cup/check-in.jpeg'
+    : isRoyaleEvent(event)
     ? 'assets/knockout-royale/royale-check-in.png'
     : settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
   const absolutePath = path.isAbsolute(configuredPath)
@@ -249,6 +252,11 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
   const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
   const waitlistSection = formatWaitlistSection(slotState);
+  const title = isLocoZwergenCupEvent(event)
+    ? '🍄 Loco Zwergen Cup'
+    : isRoyaleEvent(event)
+      ? '🐺 Loco Knockout Royale'
+      : `🌕 Loco NightCup ${label}`;
 
   const description = [
     formatStatus(eventKey, event, settings, now),
@@ -275,7 +283,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
   ].filter(line => line !== null && line !== undefined).join('\n');
 
   return new EmbedBuilder()
-    .setTitle(isRoyaleEvent(event) ? '🐺 Loco Knockout Royale' : `🌕 Loco NightCup ${label}`)
+    .setTitle(title)
     .setColor(0xff0000)
     .setDescription(description)
     .setTimestamp(now);

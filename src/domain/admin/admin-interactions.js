@@ -11,6 +11,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { postTeamsWithoutEa } = require('./teams-without-ea');
 const { postBomberXLocoGraphicsTest } = require('./bomber-x-loco-graphics-test');
+const { postLocoZwergenCupGraphicsTest } = require('./loco-zwergen-cup-graphics-test');
 const { listVisibleTeams } = require('../teams/team-service');
 const { listActiveBans } = require('../bans');
 
@@ -354,9 +355,32 @@ async function handleBomberXLocoGraphicsTest(interaction) {
   return true;
 }
 
+async function handleLocoZwergenCupGraphicsTest(interaction) {
+  if (selectedAction(interaction) !== 'admin_zwergen_graphics_test') return false;
+  try {
+    await requireAdmin(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const result = await postLocoZwergenCupGraphicsTest({ guild: interaction.guild });
+    await interaction.editReply({
+      content: [
+        `✅ Loco-Zwergen-Cup-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
+        `Verwendete aktive Teams: ${result.teamCount}`,
+        `Testposts: ${result.messageIds.length}`,
+        'Es wurden keine Turnierdaten, Ergebnisse, Siege, Statistiken oder Rollen verändert.',
+      ].join('\n'), components: [], embeds: [],
+    });
+  } catch (error) {
+    const content = `❌ Loco-Zwergen-Cup-Grafiktest fehlgeschlagen: ${error.message}`;
+    if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [], embeds: [] }).catch(() => null);
+    else await interaction.reply({ content, flags: EPHEMERAL }).catch(() => null);
+  }
+  return true;
+}
+
 async function handleAdminInteraction(interaction, client) {
   if (await handleBanNavigation(interaction)) return true;
   if (await handleBomberXLocoGraphicsTest(interaction)) return true;
+  if (await handleLocoZwergenCupGraphicsTest(interaction)) return true;
   if (await handleTeamsWithoutEa(interaction, client)) return true;
   return restored.handleAdminInteraction(interaction, client);
 }
