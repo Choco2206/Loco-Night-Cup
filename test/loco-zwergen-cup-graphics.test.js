@@ -8,6 +8,7 @@ const awardsLayout = require('../config/loco-zwergen-cup-special-awards-layout')
 const ceremonyLayout = require('../config/loco-zwergen-cup-ceremony-layout');
 const scheduleLayout = require('../config/loco-zwergen-cup-group-schedule-layout');
 const { getKoLayout } = require('../utils/ko-image-renderer');
+const { buildIntroText } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 
 test('Zwergen layouts use only the dedicated JPEG templates', () => {
   assert.equal(tottLayout.template, 'assets/loco-zwerge-cup/team-of-the-tournament.jpeg');
@@ -31,4 +32,11 @@ test('KO selector keeps Bomber, Zwergen and default layouts separate', () => {
   assert.equal(getKoLayout({ phase: 'final', eventId: 'saturday_2026-09-12' }).layout.template, 'assets/loco-zwerge-cup/final.jpeg');
   assert.equal(getKoLayout({ phase: 'final', eventId: 'saturday_2026-09-19' }).layout.template, 'assets/bomber-x-loco/final.png');
   assert.equal(getKoLayout({ phase: 'final', eventId: 'saturday_2026-09-26' }).layout.template, 'assets/ko-phase/finale.png');
+});
+
+test('Zwergen TOTT test uses the dedicated event text', () => {
+  const text = buildIntroText({ test: true, variant: 'loco_zwergen_cup' });
+  assert.match(text, /TESTAUSGABE/);
+  assert.match(text, /LOCO ZWERGEN CUP/);
+  assert.match(text, /Zwergen-Power/);
 });

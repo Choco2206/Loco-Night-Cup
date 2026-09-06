@@ -12,7 +12,11 @@ const { generateLocoZwergenCupMatchesImage } = require('../../../utils/generateL
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
 const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
-const { buildTestPerformances, selectSpecialAwards } = require('../team-of-the-tournament/team-of-the-tournament-post');
+const {
+  buildIntroText,
+  buildTestPerformances,
+  selectSpecialAwards,
+} = require('../team-of-the-tournament/team-of-the-tournament-post');
 
 const TEST_EVENT_ID = 'saturday_2026-09-12';
 
@@ -98,7 +102,13 @@ async function postLocoZwergenCupGraphicsTest({ guild }) {
   const textMessage = await channel.send({ content: `🧪 **Siegerehrung • Textvorschau**\n\n${buildLocoZwergenCupCeremonyText({ teams: ceremonyTeams })}`, allowedMentions: { parse: [] } });
   messageIds.push(textMessage.id);
   const selection = buildTottSelection(teams);
-  messageIds.push(await sendImage(channel, 'Team of the Tournament', await renderTeamOfTheTournament({ selection, serialNumber: 99, variant: 'loco_zwergen_cup' }), 'loco-zwergen-cup-test-team-of-the-tournament.png'));
+  const tott = await renderTeamOfTheTournament({ selection, serialNumber: 99, variant: 'loco_zwergen_cup' });
+  const tottMessage = await channel.send({
+    content: buildIntroText({ test: true, variant: 'loco_zwergen_cup' }),
+    files: [new AttachmentBuilder(tott.buffer, { name: 'loco-zwergen-cup-test-team-of-the-tournament.png' })],
+    allowedMentions: { parse: [] },
+  });
+  messageIds.push(tottMessage.id);
   const awards = selectSpecialAwards(buildTestPerformances(selection));
   messageIds.push(await sendImage(channel, 'Special Awards', await renderSpecialAwards({ awards, serialNumber: 99, variant: 'loco_zwergen_cup' }), 'loco-zwergen-cup-test-special-awards.png'));
   return { channelId: channel.id, messageIds, teamCount: teams.length };
