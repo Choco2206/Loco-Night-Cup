@@ -63,6 +63,17 @@ async function postRelease(client, eventKey, dayNumber) {
     `\u{1F4E3} **Ligaphase \u2013 Spieltag ${dayNumber} ist freigegeben.**`,
     `\u{1F552} **${formatHm(releasedAt)}\u2013${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
     'Bitte tragt beide das Ergebnis unverz\u00FCglich nach dem Spiel ein.',
+    '',
+    '\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F WICHTIG BEI UNENTSCHIEDEN \u203C\uFE0F\u203C\uFE0F\u203C\uFE0F',
+    '',
+    'Da EA unentschiedene Spiele teilweise nicht vollst\u00E4ndig in der Match-Historie speichert, spielt ihr bitte in der Verl\u00E4ngerung weiter.',
+    '',
+    'Das Team mit Ansto\u00DF erzielt direkt ein Eigentor. Dieses Tor wird bei uns nicht gewertet, das offizielle Ergebnis bleibt das Unentschieden. So stellt ihr nur sicher, dass EA das Spiel inklusive aller Spielerstatistiken korrekt speichert.',
+    '',
+    'Wer das nicht macht, muss damit rechnen, dass die Statistiken dieses Spiels f\u00FCr Team of the Tournament und Special Awards fehlen.',
+    '',
+    '\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F',
+    '',
     'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
   ].join('\n');
   const message = await channel.send({

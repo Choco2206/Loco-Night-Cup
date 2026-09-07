@@ -185,6 +185,11 @@ async function postReleaseMessage(client, eventKey, event, groupKey, slot) {
     `✅ Gruppe ${groupKey}: Spieltag ${slot} ist freigegeben`, '',
     `Einladezeit: ${formatHm(new Date(release.inviteStartAt))} - ${formatHm(new Date(release.inviteEndAt))} Uhr`, '',
     '⚠️ Beide Teams müssen das Ergebnis eintragen.', '',
+    '‼️‼️‼️ WICHTIG BEI UNENTSCHIEDEN ‼️‼️‼️', '',
+    'Da EA unentschiedene Spiele teilweise nicht vollständig in der Match-Historie speichert, spielt ihr bitte in der Verlängerung weiter.', '',
+    'Das Team mit Anstoß erzielt direkt ein Eigentor. Dieses Tor wird bei uns nicht gewertet, das offizielle Ergebnis bleibt das Unentschieden. So stellt ihr nur sicher, dass EA das Spiel inklusive aller Spielerstatistiken korrekt speichert.', '',
+    'Wer das nicht macht, muss damit rechnen, dass die Statistiken dieses Spiels für Team of the Tournament und Special Awards fehlen.', '',
+    '‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️', '',
     'Sobald alle Ergebnisse dieses Spieltags in dieser Gruppe final bestätigt sind, wird automatisch nur in dieser Gruppe der nächste Spieltag freigegeben.',
   ].join('\n');
   const message = await channel.send({ content: group.roleId ? `<@&${group.roleId}>\n${content}` : content, allowedMentions: { parse: [], roles: group.roleId ? [group.roleId] : [] } }).catch(() => null);
