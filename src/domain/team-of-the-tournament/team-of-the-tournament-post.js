@@ -243,15 +243,12 @@ function formatAuditNumber(value) {
 function auditRankingMessages(title, players, selectedKeys) {
   const lines = players.length ? players.map((player, index) => {
     const selected = selectedKeys.has(`${player.teamId}:${player.playerId}`) ? ' 🏆 **TOTT**' : '';
-    const compensation = Number(player.compensationPoints) > 0
-      ? ` | Ausgleich +${formatAuditNumber(player.compensationPoints)}`
-      : '';
     return `${index + 1}. **${player.playerName}** — ${findTeamById(player.teamId)?.clubName || 'Unbekanntes Team'}${selected}`
       + `\n   Werte: Ø ${formatAuditNumber(player.averageRating)} | ${player.goals || 0} T | ${player.assists || 0} A`
       + ` | ${player.cleanSheets || 0} CS | ${player.tacklesMade || 0} ZK | ${player.passesMade || 0} Pässe`
       + ` | ${player.saves || 0} Paraden | ${player.manOfTheMatch || 0} MOTM | ${player.wins || 0} Siege`
-      + `\n   ${player.matches} Einsätze | ${formatAuditNumber(player.actualTottPoints)} echte Pkt.${compensation}`
-      + ` | **${formatAuditNumber(player.totalTottPoints)} gesamt** | PPG ${formatAuditNumber(player.tottPpg)}`;
+      + `\n   ${player.matches} Einsätze | **${formatAuditNumber(player.totalTottPoints)} Punkte**`
+      + ` | PPG ${formatAuditNumber(player.tottPpg)}`;
   }) : ['Keine berechtigten Spieler vorhanden.'];
 
   const messages = []; let current = `## ${title}\n`;
@@ -289,7 +286,7 @@ async function postTottAuditReport({ client, eventKey, event, state }) {
     '',
     '**Mindestteilnahme:** mindestens 50 % der Teamspiele, aufgerundet, sowie mindestens zwei echte erfasste Einsätze.',
     '**Sortierung:** Gesamtpunkte → PPG → Ø-Rating → MOTM → Einsätze.',
-    '**Ausgleich:** Freilose, Def-Wins und weiterhin fehlende EA-Spiele werden über persönlichen Punkteschnitt und Einsatzquote ausgeglichen.',
+    '**Fehlende Begegnungen:** Freilose, Def-Wins und nicht erfasste EA-Spiele ergeben keine künstlichen TOTT-Punkte.',
   ].join('\n');
   await channel.send({ content: header, allowedMentions: { parse: [] } });
 

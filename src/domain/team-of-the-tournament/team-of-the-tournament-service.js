@@ -285,13 +285,12 @@ function buildRankings(performances, tournamentMatches = []) {
     const opportunityFactor = player.capturedTeamMatches > 0
       ? player.teamOpportunityMatches / player.capturedTeamMatches
       : 1;
-    const totalTottPoints = Number((actualTottPoints * opportunityFactor).toFixed(4));
     return {
       ...player,
       projectedMatches: Number((player.matches * opportunityFactor).toFixed(4)),
       actualTottPoints,
-      compensationPoints: Number((totalTottPoints - actualTottPoints).toFixed(4)),
-      totalTottPoints,
+      compensationPoints: 0,
+      totalTottPoints: actualTottPoints,
       tottPpg: Number((actualTottPoints / player.matches).toFixed(4)),
     };
   });
@@ -481,8 +480,8 @@ async function capturePendingMatchesNow(eventKey, event = readEventData(eventKey
     `Kampflos gewertete Spiele: **${forfeits}**`,
     `Freilose: **${byes}**`,
     missing || forfeits || byes
-      ? '✅ Der persönliche TOTT-Durchschnittsausgleich wurde bei der finalen Berechnung berücksichtigt.'
-      : '✅ Alle vorgesehenen Leistungen konnten ohne Durchschnittsausgleich berechnet werden.',
+      ? '✅ Für nicht erfasste Begegnungen wurden keine künstlichen TOTT-Punkte vergeben.'
+      : '✅ Alle vorgesehenen Leistungen konnten anhand der erfassten EA-Daten berechnet werden.',
   ].join('\n'));
   return { checked: pending.length, captured, missing, skipped, forfeits, byes };
 }

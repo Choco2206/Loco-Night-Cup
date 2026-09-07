@@ -108,7 +108,7 @@ function buildAdminResultTypeSelect(eventKey, roundKey, matchId) {
       .setPlaceholder('Wurde das Spiel ausgetragen?')
       .addOptions(
         { label: 'Spiel wurde gespielt', value: 'played', description: 'EA-Spiel suchen und echte Spielerwerte verwenden.' },
-        { label: 'Kampflos / nicht angetreten', value: 'forfeit', description: 'Keine EA-Suche; TOTT-Durchschnittsausgleich verwenden.' }
+        { label: 'Kampflos / nicht angetreten', value: 'forfeit', description: 'Keine EA-Suche und keine künstlichen TOTT-Punkte.' }
       )
   );
 }

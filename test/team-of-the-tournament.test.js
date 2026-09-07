@@ -96,7 +96,7 @@ test('derives wins for performances captured before the points-system update', (
   assert.equal(selection.forward[0].totalTottPoints, 18);
 });
 
-test('compensates a bye or missing EA match with the personal points average', () => {
+test('does not add points for a bye or missing EA match', () => {
   const performances = [0, 1].map(index => ({
     lncMatchId: `m${index}`, teamId: 'team-a', playerId: 'regular', playerName: 'Regular',
     position: 'forward', rating: 8, goals: 0, assists: 0, manOfTheMatch: 0,
@@ -107,8 +107,8 @@ test('compensates a bye or missing EA match with the personal points average', (
   }));
   const selection = buildSelection(performances, opportunities);
   assert.equal(selection.forward[0].actualTottPoints, 18);
-  assert.equal(selection.forward[0].compensationPoints, 9);
-  assert.equal(selection.forward[0].totalTottPoints, 27);
+  assert.equal(selection.forward[0].compensationPoints, 0);
+  assert.equal(selection.forward[0].totalTottPoints, 18);
   assert.equal(selection.forward[0].projectedMatches, 3);
 });
 
@@ -123,7 +123,7 @@ test('recognizes byes as opportunities and skips EA capture for marked forfeits'
   assert.equal(requiresEaCapture(tottOpportunityMatches(event).find(match => match.id === 'forfeit')), false);
 });
 
-test('compensates only the innocent winner of an awarded match', () => {
+test('counts an awarded match opportunity only for the innocent winner', () => {
   const performances = ['winner', 'no-show'].flatMap(teamId => [0, 1].map(index => ({
     lncMatchId: `played-${index}`, teamId, playerId: teamId, playerName: teamId,
     position: 'forward', rating: 8, goals: 0, assists: 0, manOfTheMatch: 0,
