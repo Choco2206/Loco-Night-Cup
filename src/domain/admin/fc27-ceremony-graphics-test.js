@@ -5,6 +5,8 @@ const { listVisibleTeams } = require('../teams/team-service');
 const { CEREMONY_DAY_LABELS, HALL_OF_FAME_TEST_CHANNEL_ID } = require('../ceremony/ceremony-test-service');
 const { renderFc27CeremonyImage, resolveFc27TeamLogoPath } = require('../../../utils/fc27-ceremony-renderer');
 const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
+const { getWeekWindow } = require('../power-ranking/power-ranking-core');
+const { renderChampionGraphic } = require('../power-ranking/power-ranking-renderer');
 
 const DAYS = Object.freeze([
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -55,7 +57,18 @@ function buildFc27TestAwards(teams) {
   }]));
 }
 
-async function postFc27CeremonyGraphicsTest({ guild }) {
+function buildFc27TestChampion(team) {
+  return {
+    teamId: String(team.id),
+    teamName: team.clubName,
+    points: 50,
+    wins: 3,
+    finalAppearances: 5,
+    cups: 7,
+  };
+}
+
+async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   if (!guild) throw new Error('Der FC-27-Siegerehrungstest ist nur auf dem Server nutzbar.');
   const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
   if (!channel?.isTextBased?.() || !channel?.send) {
@@ -97,7 +110,21 @@ async function postFc27CeremonyGraphicsTest({ guild }) {
   });
   messageIds.push(awardsMessage.id);
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 1 };
+  const championTeam = pool[8] || pool[0];
+  const championRendered = await renderChampionGraphic({
+    week: getWeekWindow(now),
+    champion: buildFc27TestChampion(championTeam),
+    logoSnapshot: championTeam.logo || null,
+    variant: 'fc27',
+  });
+  const championMessage = await channel.send({
+    content: `🧪 **FC 27 • POWER-RANKING-CHAMPION**\nTestteam: ${championTeam.clubName}. Nur Vorschau; die aktive Wochenchampion-Grafik bleibt unverändert.`,
+    files: [new AttachmentBuilder(championRendered.buffer, { name: 'power-ranking-champion-fc27-test.png' })],
+    allowedMentions: { parse: [] },
+  });
+  messageIds.push(championMessage.id);
+
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 2 };
 }
 
 module.exports = {
@@ -105,6 +132,7 @@ module.exports = {
   REQUIRED_TEAM_COUNT,
   availableLogoTeams,
   buildFc27TestAwards,
+  buildFc27TestChampion,
   postFc27CeremonyGraphicsTest,
   spreadTeams,
   teamsForDay,

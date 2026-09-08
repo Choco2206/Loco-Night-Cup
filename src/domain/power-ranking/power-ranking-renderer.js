@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../../storage');
+const FC27_LAYOUT = require('../../../config/power-ranking-champion-fc27-layout');
 
 let fontsRegistered = false;
 const CHAMPION_TEMPLATE_PATH = 'assets/power-ranking/power-ranking-champion.png';
@@ -72,11 +73,57 @@ async function drawLogoOrPlaceholder(canvas, ctx, logoSnapshot, x, y, size) {
   return 'placeholder';
 }
 
-async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
+function drawFc27Text(ctx, value, field, scaleX, scaleY, { family = 'Black Ops One', weight = 400 } = {}) {
+  const text = String(value ?? '');
+  const maximum = field.maxFontSize * scaleY;
+  const minimum = field.minFontSize * scaleY;
+  const fontSize = fittedFontSize(ctx, text, (field.width - 18) * scaleX, maximum, minimum, family, weight);
+  ctx.font = `${weight} ${fontSize}px "${family}"`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, (field.x + field.width / 2) * scaleX, (field.y + field.height / 2) * scaleY);
+}
+
+async function renderFc27Champion(canvas, ctx, { week, champion, logoSnapshot, width, height }) {
+  const scaleX = width / FC27_LAYOUT.reference.width;
+  const scaleY = height / FC27_LAYOUT.reference.height;
+  const logoSize = Math.min(FC27_LAYOUT.logo.width * scaleX, FC27_LAYOUT.logo.height * scaleY);
+  await drawLogoOrPlaceholder(
+    canvas,
+    ctx,
+    logoSnapshot,
+    FC27_LAYOUT.logo.x * scaleX,
+    FC27_LAYOUT.logo.y * scaleY,
+    logoSize,
+  );
+
+  ctx.fillStyle = FC27_LAYOUT.textColor;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+  ctx.shadowBlur = 8 * scaleY;
+  drawFc27Text(ctx, champion.teamName, FC27_LAYOUT.teamName, scaleX, scaleY);
+  ctx.shadowBlur = 0;
+  drawFc27Text(ctx, champion.points, FC27_LAYOUT.points, scaleX, scaleY);
+  drawFc27Text(ctx, champion.wins, FC27_LAYOUT.stats.wins, scaleX, scaleY);
+  drawFc27Text(ctx, champion.finalAppearances, FC27_LAYOUT.stats.finalAppearances, scaleX, scaleY);
+  drawFc27Text(ctx, champion.cups, FC27_LAYOUT.stats.cups, scaleX, scaleY);
+  drawFc27Text(ctx, `KW ${week.calendarWeek}`, FC27_LAYOUT.calendarWeek, scaleX, scaleY, { family: 'Open Sans', weight: 700 });
+  drawFc27Text(
+    ctx,
+    `${formatGermanDate(week.startsAt)} – ${formatGermanDate(week.endsAt)}`,
+    FC27_LAYOUT.dateRange,
+    scaleX,
+    scaleY,
+    { family: 'Open Sans', weight: 700 },
+  );
+}
+
+async function renderChampionGraphic({ week, champion, logoSnapshot = null, variant = 'default' }) {
   const canvas = require('canvas');
   registerFonts(canvas);
-  const templatePath = path.resolve(ROOT_DIR, CHAMPION_TEMPLATE_PATH);
-  if (!fs.existsSync(templatePath)) throw new Error(`Power-Ranking-Vorlage fehlt: ${CHAMPION_TEMPLATE_PATH}`);
+  const isFc27 = variant === 'fc27';
+  const templateRelativePath = isFc27 ? FC27_LAYOUT.template : CHAMPION_TEMPLATE_PATH;
+  const templatePath = path.resolve(ROOT_DIR, templateRelativePath);
+  if (!fs.existsSync(templatePath)) throw new Error(`Power-Ranking-Vorlage fehlt: ${templateRelativePath}`);
   const template = await canvas.loadImage(templatePath);
   const width = template.naturalWidth || template.width;
   const height = template.naturalHeight || template.height;
@@ -85,6 +132,14 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null }) {
   const surface = canvas.createCanvas(width, height);
   const ctx = surface.getContext('2d');
   ctx.drawImage(template, 0, 0, width, height);
+
+  if (isFc27) {
+    await renderFc27Champion(canvas, ctx, { week, champion, logoSnapshot, width, height });
+    return {
+      buffer: surface.toBuffer('image/png'),
+      fileName: `power-ranking-champion-fc27-${week.weekKey}.png`,
+    };
+  }
 
   await drawLogoOrPlaceholder(
     canvas,
