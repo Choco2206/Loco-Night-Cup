@@ -7,6 +7,8 @@ const { renderFc27CeremonyImage, resolveFc27TeamLogoPath } = require('../../../u
 const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
 const { getWeekWindow } = require('../power-ranking/power-ranking-core');
 const { renderChampionGraphic } = require('../power-ranking/power-ranking-renderer');
+const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
+const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
 
 const DAYS = Object.freeze([
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -68,6 +70,34 @@ function buildFc27TestChampion(team) {
   };
 }
 
+function buildFc27TestGroup(teams) {
+  const participants = teams.slice(0, 4).map(team => ({
+    type: 'team',
+    teamId: String(team.id),
+    participantKey: `team:${team.id}`,
+    displayName: team.clubName,
+  }));
+  const pairings = [
+    [[0, 1], [2, 3]],
+    [[0, 2], [1, 3]],
+    [[0, 3], [1, 2]],
+  ];
+  return {
+    groupKey: 'A',
+    matchdays: pairings.map((day, dayIndex) => ({
+      matchday: dayIndex + 1,
+      matches: day.map(([home, away], matchIndex) => ({
+        id: `fc27-test-${dayIndex + 1}-${matchIndex + 1}`,
+        home: participants[home],
+        away: participants[away],
+        status: 'confirmed',
+        release: { releasedAt: new Date().toISOString() },
+        result: { homeGoals: dayIndex + matchIndex + 1, awayGoals: matchIndex, source: 'admin' },
+      })),
+    })),
+  };
+}
+
 async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   if (!guild) throw new Error('Der FC-27-Siegerehrungstest ist nur auf dem Server nutzbar.');
   const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
@@ -124,7 +154,37 @@ async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   });
   messageIds.push(championMessage.id);
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 2 };
+  const groupTeams = pool.slice(9, 13);
+  const tableRows = groupTeams.map((team, index) => ({
+    name: team.clubName,
+    played: 3,
+    wins: 3 - index,
+    draws: index % 2,
+    losses: index,
+    goalDifference: 6 - index * 3,
+    points: 9 - index * 2,
+  }));
+  const tableRendered = await generateFc27LiveTableImage({
+    groupKey: 'A',
+    rows: tableRows,
+    qualificationText: 'Platz 1-2 + die 2 besten Drittplatzierten qualifizieren sich',
+  });
+  const tableMessage = await channel.send({
+    content: '🧪 **FC 27 • LIVE-TABELLE**\nVier registrierte Teams mit Testwerten. Nur Vorschau.',
+    files: [new AttachmentBuilder(tableRendered, { name: 'live-table-fc27-test.png' })],
+    allowedMentions: { parse: [] },
+  });
+  messageIds.push(tableMessage.id);
+
+  const scheduleRendered = await generateFc27GroupScheduleImage({ group: buildFc27TestGroup(groupTeams) });
+  const scheduleMessage = await channel.send({
+    content: '🧪 **FC 27 • MATCHES**\nDrei Spieltage mit jeweils zwei Begegnungen. Nur Vorschau.',
+    files: [new AttachmentBuilder(scheduleRendered.buffer, { name: 'matches-fc27-test.png' })],
+    allowedMentions: { parse: [] },
+  });
+  messageIds.push(scheduleMessage.id);
+
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 4 };
 }
 
 module.exports = {
@@ -133,6 +193,7 @@ module.exports = {
   availableLogoTeams,
   buildFc27TestAwards,
   buildFc27TestChampion,
+  buildFc27TestGroup,
   postFc27CeremonyGraphicsTest,
   spreadTeams,
   teamsForDay,
