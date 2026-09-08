@@ -14,6 +14,7 @@ require('./result-auto-confirm.test');
 require('./team-of-the-tournament.test');
 require('./loco-zwergen-cup-event.test');
 require('./loco-zwergen-cup-graphics.test');
+require('./fc27-ceremony.test');
 require('./special-awards-renderer.test');
 require('./phase-deadline.test');
 require('./messages-validation.test');

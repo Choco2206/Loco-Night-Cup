@@ -12,6 +12,7 @@ const { createSettingsDefault } = require('../../storage/defaults');
 const { postTeamsWithoutEa } = require('./teams-without-ea');
 const { postBomberXLocoGraphicsTest } = require('./bomber-x-loco-graphics-test');
 const { postLocoZwergenCupGraphicsTest } = require('./loco-zwergen-cup-graphics-test');
+const { postFc27CeremonyGraphicsTest } = require('./fc27-ceremony-graphics-test');
 const { listVisibleTeams } = require('../teams/team-service');
 const { listActiveBans } = require('../bans');
 
@@ -377,10 +378,38 @@ async function handleLocoZwergenCupGraphicsTest(interaction) {
   return true;
 }
 
+async function handleFc27CeremonyGraphicsTest(interaction) {
+  if (selectedAction(interaction) !== 'admin_fc27_ceremony_test') return false;
+  try {
+    await requireAdmin(interaction);
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const result = await postFc27CeremonyGraphicsTest({ guild: interaction.guild });
+    await interaction.editReply({
+      content: [
+        `✅ Alle ${result.days} FC-27-Siegerehrungen wurden in <#${result.channelId}> gepostet.`,
+        `Verwendete aktive Teams mit Logo: ${result.teamCount}`,
+        'Jeder Wochentag verwendet drei andere Teams.',
+        'Es wurden keine Turnierdaten, Siege, Statistiken oder Rollen verändert.',
+      ].join('\n'),
+      components: [],
+      embeds: [],
+    });
+  } catch (error) {
+    const content = `❌ FC-27-Siegerehrungstest fehlgeschlagen: ${error.message}`;
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content, components: [], embeds: [] }).catch(() => null);
+    } else {
+      await interaction.reply({ content, flags: EPHEMERAL }).catch(() => null);
+    }
+  }
+  return true;
+}
+
 async function handleAdminInteraction(interaction, client) {
   if (await handleBanNavigation(interaction)) return true;
   if (await handleBomberXLocoGraphicsTest(interaction)) return true;
   if (await handleLocoZwergenCupGraphicsTest(interaction)) return true;
+  if (await handleFc27CeremonyGraphicsTest(interaction)) return true;
   if (await handleTeamsWithoutEa(interaction, client)) return true;
   return restored.handleAdminInteraction(interaction, client);
 }

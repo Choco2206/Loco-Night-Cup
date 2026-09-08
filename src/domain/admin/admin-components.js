@@ -66,6 +66,7 @@ const ADMIN_CATEGORIES = {
       ['admin_simulate_knockout', 'K.O.-Phase simulieren', 'K.O.-Phase eines Events simulieren'],
       ['admin_royale_sync', 'Royal synchronisieren', 'Check-in, Kanäle und aktuelle Runde aktualisieren'],
       ['admin_hof_test', 'Hall of Fame testen', 'Siegerehrung im Testkanal prüfen'],
+      ['admin_fc27_ceremony_test', 'FC-27-Siegerehrungen testen', 'Alle sieben neuen Tagesbilder mit unterschiedlichen Teams prüfen'],
       ['admin_power_ranking_test', 'Power Ranking testen', 'Wochenranking mit 20 Teams im Testkanal prüfen'],
       ['admin_power_ranking_champion_test', 'Champion der Woche testen', 'Power-Ranking-Champion-Grafik im Testkanal prüfen'],
       ['admin_ea_stats_test', 'EA-Statistik testen', 'EA-Verbindung und letzte Clubspiele prüfen'],
@@ -121,7 +122,8 @@ function buildAdminPanelPayload(selectedCategory = null) {
       new ButtonBuilder().setCustomId('admin_tott_test').setLabel('TOTT-Grafik testen').setEmoji('⭐').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('admin_tott_channel_test').setLabel('TOTT-Kanal testen').setEmoji('📡').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_bxl_graphics_test').setLabel('Bomber X Loco Grafiken testen').setEmoji('💣').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('admin_zwergen_graphics_test').setLabel('Zwergen-Cup Grafiken testen').setEmoji('🍄').setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId('admin_zwergen_graphics_test').setLabel('Zwergen-Cup Grafiken testen').setEmoji('🍄').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin_fc27_ceremony_test').setLabel('FC-27-Siegerehrungen testen').setEmoji('🏆').setStyle(ButtonStyle.Primary)
     ));
   }
   return { embeds: [embed], components };
