@@ -19,3 +19,10 @@ test('renders the Special Awards template as a Discord-ready PNG', async () => {
   assert.equal(rendered.buffer.subarray(1, 4).toString(), 'PNG');
   assert.ok(rendered.buffer.length > 100000);
 });
+
+test('renders the separately prepared FC 27 Special Awards variant', async () => {
+  const rendered = await renderSpecialAwards({ awards: {}, serialNumber: 27, variant: 'fc27' });
+  assert.equal(rendered.fileName, 'special-awards-fc27-27.png');
+  assert.equal(rendered.buffer.subarray(1, 4).toString(), 'PNG');
+  assert.ok(rendered.buffer.length > 100000);
+});

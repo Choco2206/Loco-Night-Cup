@@ -4,6 +4,7 @@ const { AttachmentBuilder } = require('discord.js');
 const { listVisibleTeams } = require('../teams/team-service');
 const { CEREMONY_DAY_LABELS, HALL_OF_FAME_TEST_CHANNEL_ID } = require('../ceremony/ceremony-test-service');
 const { renderFc27CeremonyImage, resolveFc27TeamLogoPath } = require('../../../utils/fc27-ceremony-renderer');
+const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
 
 const DAYS = Object.freeze([
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -32,6 +33,26 @@ function spreadTeams(teams, count) {
 function teamsForDay(pool, dayIndex) {
   const offset = dayIndex * 3;
   return { first: pool[offset], second: pool[offset + 1], third: pool[offset + 2] };
+}
+
+function buildFc27TestAwards(teams) {
+  const samples = [
+    ['goals', 'Knipser27', 16],
+    ['assists', 'VorlagenBoss', 12],
+    ['tacklesMade', 'Abräumer27', 23],
+    ['saves', 'SafeHands', 31],
+    ['cleanSheets', 'AbwehrChef', 5],
+    ['passesMade', 'PassMaschine', 140],
+    ['averageRating', 'MVPderNacht', 8.93],
+    ['manOfTheMatch', 'Matchwinner', 4],
+  ];
+  return Object.fromEntries(samples.map(([key, playerName, value], index) => [key, {
+    teamId: teams[index]?.id,
+    playerId: `fc27-award-test-${index}`,
+    playerName,
+    [key]: value,
+    averageRating: key === 'averageRating' ? value : 8.25,
+  }]));
 }
 
 async function postFc27CeremonyGraphicsTest({ guild }) {
@@ -67,13 +88,23 @@ async function postFc27CeremonyGraphicsTest({ guild }) {
     messageIds.push(message.id);
   }
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length };
+  const specialAwards = buildFc27TestAwards(pool.slice(0, 8));
+  const awardsRendered = await renderSpecialAwards({ awards: specialAwards, serialNumber: 27, variant: 'fc27' });
+  const awardsMessage = await channel.send({
+    content: '🧪 **FC 27 • SPECIAL AWARDS**\nAcht unterschiedliche registrierte Teamlogos mit Testnamen und Testwerten.',
+    files: [new AttachmentBuilder(awardsRendered.buffer, { name: 'special-awards-fc27-test.png' })],
+    allowedMentions: { parse: [] },
+  });
+  messageIds.push(awardsMessage.id);
+
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 1 };
 }
 
 module.exports = {
   DAYS,
   REQUIRED_TEAM_COUNT,
   availableLogoTeams,
+  buildFc27TestAwards,
   postFc27CeremonyGraphicsTest,
   spreadTeams,
   teamsForDay,

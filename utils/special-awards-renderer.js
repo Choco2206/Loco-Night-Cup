@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const DEFAULT_LAYOUT = require('../config/special-awards-layout');
+const FC27_LAYOUT = require('../config/special-awards-fc27-layout');
 const BOMBER_X_LOCO_LAYOUT = require('../config/bomber-x-loco-special-awards-layout');
 const LOCO_ZWERGEN_CUP_LAYOUT = require('../config/loco-zwergen-cup-special-awards-layout');
 const { ROOT_DIR } = require('../src/storage');
@@ -89,9 +90,13 @@ async function loadTemplate(layout) {
 }
 
 async function renderSpecialAwards({ awards, serialNumber, variant = 'default' }) {
-  const layout = variant === 'bomber_x_loco'
-    ? BOMBER_X_LOCO_LAYOUT
-    : variant === 'loco_zwergen_cup' ? LOCO_ZWERGEN_CUP_LAYOUT : DEFAULT_LAYOUT;
+  const layouts = {
+    default: DEFAULT_LAYOUT,
+    fc27: FC27_LAYOUT,
+    bomber_x_loco: BOMBER_X_LOCO_LAYOUT,
+    loco_zwergen_cup: LOCO_ZWERGEN_CUP_LAYOUT,
+  };
+  const layout = layouts[variant] || DEFAULT_LAYOUT;
   const template = await loadTemplate(layout);
   const canvas = getCanvas().createCanvas(template.width, template.height);
   const ctx = canvas.getContext('2d');
@@ -107,9 +112,13 @@ async function renderSpecialAwards({ awards, serialNumber, variant = 'default' }
   }
 
   if (layout.serial) drawCenteredText(ctx, `#${serialNumber}`, layout.serial, layout.serial.maxFontSize, 24, layout.textColor);
-  const prefix = variant === 'bomber_x_loco'
-    ? 'bomber-x-loco-special-awards'
-    : variant === 'loco_zwergen_cup' ? 'loco-zwergen-cup-special-awards' : 'special-awards';
+  const prefixes = {
+    default: 'special-awards',
+    fc27: 'special-awards-fc27',
+    bomber_x_loco: 'bomber-x-loco-special-awards',
+    loco_zwergen_cup: 'loco-zwergen-cup-special-awards',
+  };
+  const prefix = prefixes[variant] || prefixes.default;
   return { buffer: canvas.toBuffer('image/png'), fileName: `${prefix}${layout.serial ? `-${serialNumber}` : ''}.png` };
 }
 
