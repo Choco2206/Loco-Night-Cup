@@ -9,7 +9,9 @@ const {
 } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
 const { aggregatePlayers, auditRankingMessages, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
+const fc27Layout = require('../config/team-of-the-tournament-fc27-layout');
 const bomberXLocoLayout = require('../config/bomber-x-loco-tott-layout');
+const { renderTeamOfTheTournament } = require('../utils/team-of-the-tournament-renderer');
 const { AUTO_CLEANUP_DELAY_MS, isTeamOfTheTournamentSettled } = require('../src/domain/events/event-completion-policy');
 
 test('uses the fixed 1-3-5-2 Team of the Tournament formation', () => {
@@ -223,6 +225,27 @@ test('uses a separate serial-free Bomber X Loco Team of the Tournament layout', 
   assert.equal(Object.values(bomberXLocoLayout.slots).flat().length, 11);
   assert.equal(layout.template, 'assets/team-of-the-tournament/team-of-the-tournament.png');
   assert.equal(bomberXLocoLayout.template, 'assets/bomber-x-loco/team-of-the-tournament.jpg');
+});
+
+test('keeps the measured FC 27 Team of the Tournament layout ready but separate', () => {
+  assert.deepEqual(fc27Layout.reference, { width: 1024, height: 1536 });
+  assert.equal(fc27Layout.template, 'assets/team-of-the-tournament/team-of-the-tournament-fc27.jpeg');
+  assert.equal(Object.values(fc27Layout.slots).flat().length, 11);
+  assert.equal(fc27Layout.slots.forward.length, 2);
+  assert.equal(fc27Layout.slots.midfielder.length, 5);
+  assert.equal(fc27Layout.slots.defender.length, 3);
+  assert.equal(fc27Layout.slots.goalkeeper.length, 1);
+  assert.deepEqual(fc27Layout.slots.goalkeeper[0].logo, { centerX: 511, centerY: 1283, radius: 76 });
+});
+
+test('renders the dormant FC 27 Team of the Tournament variant on demand', async () => {
+  const rendered = await renderTeamOfTheTournament({
+    selection: { forward: [], midfielder: [], defender: [], goalkeeper: [] },
+    serialNumber: 27,
+    variant: 'fc27',
+  });
+  assert.equal(rendered.fileName, 'team-of-the-tournament-fc27-27.png');
+  assert.equal(rendered.buffer.subarray(1, 4).toString(), 'PNG');
 });
 
 test('builds eleven fictitious players for the admin graphic test', () => {
