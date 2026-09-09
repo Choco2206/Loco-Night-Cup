@@ -7,7 +7,7 @@ const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupSched
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 const { loadCanvasImage } = require('./canvas-image-loader');
 
-const TEMPLATE = 'assets/ko-phase/ko-verlauf-16-fc27.png';
+const TEMPLATE = 'assets/ko-phase/ko-verlauf-16-fc27.jpeg';
 const WIDTH = 1792;
 const HEIGHT = 1344;
 const RED = '#f12b45';

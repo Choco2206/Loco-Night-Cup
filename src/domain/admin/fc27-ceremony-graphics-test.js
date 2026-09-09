@@ -1,6 +1,8 @@
 'use strict';
 
+const path = require('path');
 const { AttachmentBuilder } = require('discord.js');
+const { ROOT_DIR } = require('../../storage');
 const { listVisibleTeams } = require('../teams/team-service');
 const { CEREMONY_DAY_LABELS, HALL_OF_FAME_TEST_CHANNEL_ID } = require('../ceremony/ceremony-test-service');
 const { renderFc27CeremonyImage, resolveFc27TeamLogoPath } = require('../../../utils/fc27-ceremony-renderer');
@@ -183,6 +185,13 @@ async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   });
   messageIds.push(intro.id);
 
+  const checkinMessage = await channel.send({
+    content: '🧪 **FC 27 • CHECK-IN**\nFeste FC-27-Vorlage ohne Änderung an einem echten Check-in.',
+    files: [new AttachmentBuilder(path.resolve(ROOT_DIR, 'assets/banners/check-in-fc27.jpeg'), { name: 'check-in-fc27-test.jpeg' })],
+    allowedMentions: { parse: [] },
+  });
+  messageIds.push(checkinMessage.id);
+
   for (const [dayIndex, dayKey] of DAYS.entries()) {
     const teams = teamsForDay(pool, dayIndex);
     const rendered = await renderFc27CeremonyImage({ dayKey, teams });
@@ -286,7 +295,7 @@ async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   });
   messageIds.push(await postFc27KoTestImage(channel, 'ROAD TO GLORY • 16 TEAMS', progressionRendered));
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 13 };
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 14 };
 }
 
 module.exports = {

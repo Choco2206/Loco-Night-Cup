@@ -53,7 +53,7 @@ const GRAPHICS_PROFILES = Object.freeze({
       ['assets/ko-phase/halbfinale-fc27.jpeg', 1024, 1536],
       ['assets/ko-phase/platz-3-fc27.jpeg', 1024, 1536],
       ['assets/ko-phase/finale-fc27.jpeg', 1024, 1536],
-      ['assets/ko-phase/ko-verlauf-16-fc27.png', 1792, 1344],
+      ['assets/ko-phase/ko-verlauf-16-fc27.jpeg', 1792, 1344],
       ['assets/team-of-the-tournament/team-of-the-tournament-fc27.jpeg', 1024, 1536],
       ['assets/special-awards/special-awards-fc27.jpeg', 1536, 1024],
       ['assets/power-ranking/power-ranking-champion-fc27.jpeg', 1254, 1254],
