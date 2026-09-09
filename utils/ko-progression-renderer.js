@@ -9,6 +9,7 @@ const { loadCanvasImage } = require('./canvas-image-loader');
 
 const TEMPLATE = 'assets/ko-phase/ko-verlauf-16-fc27.jpeg';
 const TEMPLATE_8 = 'assets/ko-phase/ko-verlauf-8-fc27.jpeg';
+const TEMPLATE_4 = 'assets/ko-phase/ko-verlauf-4-fc27.jpeg';
 const WIDTH = 1792;
 const HEIGHT = 1344;
 const RED = '#f12b45';
@@ -125,6 +126,11 @@ function drawConnectors8(ctx) {
   }
   drawConnector(ctx, [[760, 522], [896, 522], [896, 770]], GOLD);
   drawConnector(ctx, [[1032, 522], [896, 522]], GOLD);
+}
+
+function drawConnectors4(ctx) {
+  drawConnector(ctx, [[640, 482], [896, 482], [896, 770]], GOLD);
+  drawConnector(ctx, [[1152, 482], [896, 482]], GOLD);
 }
 
 function drawLabel(ctx, text, x, y, width) {
@@ -280,4 +286,40 @@ async function renderKoProgression8({ rounds, serialNumber = null, eventId = 'ev
   };
 }
 
-module.exports = { TEMPLATE, TEMPLATE_8, resultFor, renderKoProgression8, renderKoProgression16, winnerParticipant, winnerSide };
+async function renderKoProgression4({ rounds, serialNumber = null, eventId = 'event', version = Date.now() }) {
+  const template = await loadTemplate(TEMPLATE_4);
+  const canvas = getCanvasApi().createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(template, 0, 0, WIDTH, HEIGHT);
+  drawConnectors4(ctx);
+
+  const semis = roundMatches(rounds, 'semi_final');
+  await drawMatchCard(ctx, { match: semis[0], x: 300, y: 420, width: 340, label: 'HALBFINALE 1', color: RED });
+  await drawMatchCard(ctx, { match: semis[1], x: 1152, y: 420, width: 340, label: 'HALBFINALE 2', color: BLUE });
+  const final = roundMatches(rounds, 'final')[0];
+  await drawMatchCard(ctx, { match: final, x: 704, y: 770, width: 384, label: 'FINALE', color: GOLD, final: true });
+  await drawChampion(ctx, winnerParticipant(final));
+  await drawThirdPlace(ctx, roundMatches(rounds, 'third_place')[0]);
+  drawSerial(ctx, serialNumber);
+
+  renderSequence = (renderSequence + 1) % 1000000;
+  return {
+    buffer: canvas.toBuffer('image/png'),
+    fileName: `ko-verlauf-4-${String(eventId).replace(/[^a-z0-9_-]+/gi, '-')}-${version}-${renderSequence}.png`,
+    template: TEMPLATE_4,
+    width: WIDTH,
+    height: HEIGHT,
+  };
+}
+
+module.exports = {
+  TEMPLATE,
+  TEMPLATE_4,
+  TEMPLATE_8,
+  resultFor,
+  renderKoProgression4,
+  renderKoProgression8,
+  renderKoProgression16,
+  winnerParticipant,
+  winnerSide,
+};

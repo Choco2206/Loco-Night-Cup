@@ -12,7 +12,7 @@ const { renderChampionGraphic } = require('../power-ranking/power-ranking-render
 const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
 const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
-const { renderKoProgression8, renderKoProgression16 } = require('../../../utils/ko-progression-renderer');
+const { renderKoProgression4, renderKoProgression8, renderKoProgression16 } = require('../../../utils/ko-progression-renderer');
 
 const DAYS = Object.freeze([
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -184,6 +184,26 @@ function buildFc27Progression8Rounds(teams) {
   };
 }
 
+function buildFc27Progression4Rounds(teams) {
+  const participants = teams.slice(0, 4).map(fc27KoParticipant);
+  const match = (id, home, away, homeGoals, awayGoals) => ({
+    id: `fc27-progression-4-test-${id}`,
+    home,
+    away,
+    status: 'confirmed',
+    result: { homeGoals, awayGoals, source: 'admin-random-test' },
+  });
+  const semiFinal = [
+    match('sf-1', participants[0], participants[1], 2, 1),
+    match('sf-2', participants[2], participants[3], 1, 3),
+  ];
+  return {
+    semi_final: { matches: semiFinal },
+    final: { matches: [match('final', semiFinal[0].home, semiFinal[1].away, 2, 1)] },
+    third_place: { matches: [match('third', semiFinal[0].away, semiFinal[1].home, 3, 2)] },
+  };
+}
+
 async function postFc27KoTestImage(channel, title, rendered) {
   const message = await channel.send({
     content: `🧪 **FC 27 • ${title}**\nNur Vorschau; die aktiven K.O.-Grafiken bleiben unverändert.`,
@@ -330,7 +350,15 @@ async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   });
   messageIds.push(await postFc27KoTestImage(channel, 'ROAD TO GLORY • 8 TEAMS', progression8Rendered));
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 15 };
+  const progression4Rendered = await renderKoProgression4({
+    rounds: buildFc27Progression4Rounds(pool),
+    serialNumber: 27,
+    eventId: 'fc27-admin-test-progression-4',
+    version: Date.now(),
+  });
+  messageIds.push(await postFc27KoTestImage(channel, 'ROAD TO GLORY • 4 TEAMS', progression4Rendered));
+
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 16 };
 }
 
 module.exports = {
@@ -343,6 +371,7 @@ module.exports = {
   buildFc27KoMatches,
   buildFc27ProgressionRounds,
   buildFc27Progression8Rounds,
+  buildFc27Progression4Rounds,
   postFc27CeremonyGraphicsTest,
   spreadTeams,
   teamsForDay,

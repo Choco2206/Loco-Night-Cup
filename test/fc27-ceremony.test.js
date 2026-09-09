@@ -12,10 +12,10 @@ const groupScheduleLayout = require('../config/group-schedule-fc27-layout');
 const koLayout = require('../config/ko-image-layouts-fc27');
 const { ROOT_DIR } = require('../src/storage');
 const { getKoLayout } = require('../utils/ko-image-renderer');
-const { TEMPLATE: KO_PROGRESSION_TEMPLATE, TEMPLATE_8: KO_PROGRESSION_8_TEMPLATE, renderKoProgression8, renderKoProgression16 } = require('../utils/ko-progression-renderer');
+const { TEMPLATE: KO_PROGRESSION_TEMPLATE, TEMPLATE_4: KO_PROGRESSION_4_TEMPLATE, TEMPLATE_8: KO_PROGRESSION_8_TEMPLATE, renderKoProgression4, renderKoProgression8, renderKoProgression16 } = require('../utils/ko-progression-renderer');
 const { loadCanvasImage } = require('../utils/canvas-image-loader');
 const { TEST_VARIANTS } = require('../src/domain/knockout/knockout-image-test');
-const { DAYS, REQUIRED_TEAM_COUNT, buildFc27TestAwards, buildFc27TestChampion, buildFc27TestGroup, buildFc27KoMatches, buildFc27ProgressionRounds, buildFc27Progression8Rounds, spreadTeams, teamsForDay } = require('../src/domain/admin/fc27-ceremony-graphics-test');
+const { DAYS, REQUIRED_TEAM_COUNT, buildFc27TestAwards, buildFc27TestChampion, buildFc27TestGroup, buildFc27KoMatches, buildFc27ProgressionRounds, buildFc27Progression4Rounds, buildFc27Progression8Rounds, spreadTeams, teamsForDay } = require('../src/domain/admin/fc27-ceremony-graphics-test');
 
 test('FC 27 ceremony series defines one measured square slot per placement and day', () => {
   assert.equal(DAYS.length, 7);
@@ -190,6 +190,20 @@ test('FC 27 Road to Glory renders the 8-team quarter-final variant dynamically',
   assert.equal(rendered.height, 1344);
   assert.ok(rendered.buffer.length > 100000);
   assert.equal(rendered.template, KO_PROGRESSION_8_TEMPLATE);
+});
+
+test('FC 27 Road to Glory renders the 4-team semi-final variant dynamically', async () => {
+  const teams = Array.from({ length: 4 }, (_, index) => ({ id: `progression-4-team-${index}`, clubName: `Semi Team ${index}` }));
+  const rounds = buildFc27Progression4Rounds(teams);
+  assert.equal(rounds.semi_final.matches.length, 2);
+  assert.equal(rounds.final.matches.length, 1);
+  assert.equal(rounds.third_place.matches.length, 1);
+  assert.ok(fs.existsSync(path.join(ROOT_DIR, KO_PROGRESSION_4_TEMPLATE)));
+  const rendered = await renderKoProgression4({ rounds, serialNumber: 27, eventId: 'fc27-semi-test', version: 1 });
+  assert.equal(rendered.width, 1792);
+  assert.equal(rendered.height, 1344);
+  assert.ok(rendered.buffer.length > 100000);
+  assert.equal(rendered.template, KO_PROGRESSION_4_TEMPLATE);
 });
 
 test('FC 27 elimination-round logos use the individually measured logo fields', () => {
