@@ -4,6 +4,7 @@ const path = require('path');
 const LAYOUT = require('../config/group-schedule-fc27-layout');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
+const { loadCanvasImage } = require('./canvas-image-loader');
 const {
   drawFittedText,
   drawTeamLogoOrFallback,
@@ -24,7 +25,7 @@ function getCanvasApi() {
 
 function loadTemplate() {
   if (!templatePromise) {
-    templatePromise = getCanvasApi().loadImage(TEMPLATE_PATH).catch(error => {
+    templatePromise = loadCanvasImage(getCanvasApi(), TEMPLATE_PATH).catch(error => {
       templatePromise = null;
       throw error;
     });

@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../../storage');
 const FC27_LAYOUT = require('../../../config/power-ranking-champion-fc27-layout');
+const { loadCanvasImage } = require('../../../utils/canvas-image-loader');
 
 let fontsRegistered = false;
 const CHAMPION_TEMPLATE_PATH = 'assets/power-ranking/power-ranking-champion.png';
@@ -124,7 +125,7 @@ async function renderChampionGraphic({ week, champion, logoSnapshot = null, vari
   const templateRelativePath = isFc27 ? FC27_LAYOUT.template : CHAMPION_TEMPLATE_PATH;
   const templatePath = path.resolve(ROOT_DIR, templateRelativePath);
   if (!fs.existsSync(templatePath)) throw new Error(`Power-Ranking-Vorlage fehlt: ${templateRelativePath}`);
-  const template = await canvas.loadImage(templatePath);
+  const template = await loadCanvasImage(canvas, templatePath);
   const width = template.naturalWidth || template.width;
   const height = template.naturalHeight || template.height;
   const scaleX = width / 1254;

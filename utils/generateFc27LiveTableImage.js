@@ -3,6 +3,7 @@
 const path = require('path');
 const LAYOUT = require('../config/live-table-fc27-layout');
 const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts');
+const { loadCanvasImage } = require('./canvas-image-loader');
 
 const TEMPLATE_PATH = path.resolve(__dirname, '..', LAYOUT.template);
 let canvasApi = null;
@@ -16,7 +17,7 @@ function getCanvasApi() {
 
 function loadTemplate() {
   if (!templatePromise) {
-    templatePromise = getCanvasApi().loadImage(TEMPLATE_PATH).catch(error => {
+    templatePromise = loadCanvasImage(getCanvasApi(), TEMPLATE_PATH).catch(error => {
       templatePromise = null;
       throw error;
     });

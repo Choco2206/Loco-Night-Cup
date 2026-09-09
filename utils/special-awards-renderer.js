@@ -10,6 +10,7 @@ const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
+const { loadCanvasImage } = require('./canvas-image-loader');
 
 let canvasApi;
 const templatePromises = new Map();
@@ -64,11 +65,17 @@ async function drawTeamLogo(ctx, player, polygon, textColor) {
   ctx.save();
   clipPolygon(ctx, polygon);
   if (logoPath && fs.existsSync(logoPath)) {
-    const image = await getCanvas().loadImage(logoPath);
-    const scale = Math.min((bounds.width * 0.92) / image.width, (bounds.height * 0.92) / image.height);
-    const width = image.width * scale;
-    const height = image.height * scale;
-    ctx.drawImage(image, bounds.x + (bounds.width - width) / 2, bounds.y + (bounds.height - height) / 2, width, height);
+    try {
+      const image = await loadCanvasImage(getCanvas(), logoPath);
+      const scale = Math.min((bounds.width * 0.92) / image.width, (bounds.height * 0.92) / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      ctx.drawImage(image, bounds.x + (bounds.width - width) / 2, bounds.y + (bounds.height - height) / 2, width, height);
+    } catch (error) {
+      console.warn(`[SpecialAwards] Teamlogo konnte nicht geladen werden, Initialen werden verwendet: ${error.message}`);
+      const initials = String(team?.clubName || 'LNC').split(/\s+/).map(part => part[0]).join('').slice(0, 3).toUpperCase();
+      drawCenteredText(ctx, initials, bounds, 30, 18, textColor);
+    }
   } else if (player) {
     const initials = String(team?.clubName || 'LNC').split(/\s+/).map(part => part[0]).join('').slice(0, 3).toUpperCase();
     drawCenteredText(ctx, initials, bounds, 30, 18, textColor);
@@ -84,7 +91,10 @@ function awardValue(player, field) {
 
 async function loadTemplate(layout) {
   if (!templatePromises.has(layout.template)) {
-    templatePromises.set(layout.template, getCanvas().loadImage(path.resolve(ROOT_DIR, layout.template)));
+    templatePromises.set(layout.template, loadCanvasImage(getCanvas(), path.resolve(ROOT_DIR, layout.template)).catch(error => {
+      templatePromises.delete(layout.template);
+      throw error;
+    }));
   }
   return templatePromises.get(layout.template);
 }

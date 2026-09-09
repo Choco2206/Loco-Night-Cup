@@ -12,6 +12,7 @@ const groupScheduleLayout = require('../config/group-schedule-fc27-layout');
 const koLayout = require('../config/ko-image-layouts-fc27');
 const { ROOT_DIR } = require('../src/storage');
 const { getKoLayout } = require('../utils/ko-image-renderer');
+const { loadCanvasImage } = require('../utils/canvas-image-loader');
 const { TEST_VARIANTS } = require('../src/domain/knockout/knockout-image-test');
 const { DAYS, REQUIRED_TEAM_COUNT, buildFc27TestAwards, buildFc27TestChampion, buildFc27TestGroup, buildFc27KoMatches, spreadTeams, teamsForDay } = require('../src/domain/admin/fc27-ceremony-graphics-test');
 
@@ -50,10 +51,31 @@ test('FC 27 Special Awards use eight measured slots and eight different test tea
     'manOfTheMatch', 'passesMade', 'saves', 'tacklesMade',
   ]);
   assert.ok(specialAwardsLayout.awards.every(slot => slot.logo.length === 6));
+  assert.equal(specialAwardsLayout.awards.find(slot => slot.key === 'averageRating').logo[1][0], 634);
+  for (const key of ['assists', 'saves', 'passesMade']) {
+    const xs = specialAwardsLayout.awards.find(slot => slot.key === key).logo.map(([x]) => x);
+    assert.equal(Math.min(...xs), 1145);
+    assert.equal(Math.max(...xs), 1256);
+  }
   const teams = Array.from({ length: 8 }, (_, index) => ({ id: `award-team-${index}` }));
   const awards = buildFc27TestAwards(teams);
   assert.equal(Object.keys(awards).length, 8);
   assert.equal(new Set(Object.values(awards).map(award => award.teamId)).size, 8);
+});
+
+test('canvas image loader normalizes a JPEG when the direct decoder rejects it', async () => {
+  let calls = 0;
+  const canvasApi = {
+    async loadImage(source) {
+      calls += 1;
+      if (calls === 1) throw new Error('Unsupported marker type 0x77');
+      assert.ok(Buffer.isBuffer(source));
+      return { width: 1536, height: 1024 };
+    },
+  };
+  const image = await loadCanvasImage(canvasApi, path.join(ROOT_DIR, specialAwardsLayout.template));
+  assert.deepEqual(image, { width: 1536, height: 1024 });
+  assert.equal(calls, 2);
 });
 
 test('FC 27 Power Ranking Champion uses separately measured dynamic fields', () => {

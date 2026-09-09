@@ -9,6 +9,7 @@ const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupScheduleImage');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
+const { loadCanvasImage } = require('./canvas-image-loader');
 
 const BOMBER_X_LOCO_CYCLE_KEY = 'saturday_2026-09-19';
 const LOCO_ZWERGEN_CUP_CYCLE_KEY = 'saturday_2026-09-12';
@@ -72,7 +73,7 @@ function getKoLayout(options) {
 function loadTemplate(templatePath) {
   const absolute = path.resolve(ROOT_DIR, templatePath);
   if (!templateCache.has(absolute)) {
-    templateCache.set(absolute, getCanvasApi().loadImage(absolute).catch(error => {
+    templateCache.set(absolute, loadCanvasImage(getCanvasApi(), absolute).catch(error => {
       templateCache.delete(absolute);
       throw error;
     }));
