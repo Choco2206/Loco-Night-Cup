@@ -149,6 +149,7 @@ async function main() {
       await runStartupStep('Facebook Social Media', () => facebookFeedSystem.init(client));
       initPendingResultConfirmations(client);
       await runStartupStep('Live-Spielplan', () => liveScheduleSystem.refreshLiveScheduleForActiveEvents(client));
+      liveScheduleSystem.schedulePendingLiveScheduleCleanups(client);
       schedulePendingAutoCleanups(client);
       console.log('[startup] Alle Systeme initialisiert');
     } catch (error) {

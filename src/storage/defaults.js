@@ -328,6 +328,7 @@ function createMessagesDefault() {
       groupMessageIds: {},
       knockoutMessageIds: {},
       cleanupStatus: null,
+      cleanupScheduledAt: null,
       createdAt: null,
       updatedAt: null,
     },

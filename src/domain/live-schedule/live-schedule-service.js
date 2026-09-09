@@ -9,11 +9,13 @@ const { readEventData } = require('../events/event-repository');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { findTeamById } = require('../teams/team-service');
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
+const { parseDateTime } = require('../checkins/checkin-schedule');
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const PUBLIC_LIVE_SCHEDULE_CHANNEL_ID = '1516429776070508555';
 const PUBLIC_REBUILD_VERSION = 1;
+const liveScheduleCleanupTimers = new Map();
 const ROUND_LABELS = {
   round_of_32: 'Sechzehntelfinale',
   round_of_16: 'Achtelfinale',
@@ -252,6 +254,62 @@ async function cleanupLiveScheduleForEvent(client, eventKey) {
   return { cleaned: true, deletedMessageIds: knownMessageIds, orphanedCount };
 }
 
+function getLiveScheduleCleanupAt(event) {
+  const eventDate = event?.cycle?.eventDate;
+  if (!eventDate) return null;
+  const target = parseDateTime(eventDate, '13:00', true, event.cycle?.timezone || 'Europe/Berlin');
+  return target && !Number.isNaN(target.getTime()) ? target.toISOString() : null;
+}
+
+async function runLiveScheduleCleanup(client, eventKey, scheduledAt) {
+  liveScheduleCleanupTimers.delete(eventKey);
+  const state = readJson(FILES.messages, createMessagesDefault()).liveSchedule || {};
+  if (state.currentEventKey !== eventKey || state.cleanupScheduledAt !== scheduledAt) return false;
+  return cleanupLiveScheduleForEvent(client, eventKey);
+}
+
+function scheduleLiveScheduleCleanupForEvent(client, eventKey, event = null) {
+  if (!client || !EVENT_KEYS.includes(eventKey)) return null;
+  const currentEvent = event || readEventData(eventKey);
+  const existingState = readJson(FILES.messages, createMessagesDefault()).liveSchedule || {};
+  const scheduledAt = existingState.currentEventKey === eventKey && existingState.cleanupScheduledAt
+    ? existingState.cleanupScheduledAt
+    : getLiveScheduleCleanupAt(currentEvent);
+  if (!scheduledAt) return null;
+
+  updateJson(FILES.messages, createMessagesDefault(), messages => {
+    messages.liveSchedule = {
+      ...(messages.liveSchedule || {}),
+      currentEventKey: eventKey,
+      cleanupStatus: 'scheduled',
+      cleanupScheduledAt: scheduledAt,
+      updatedAt: nowIso(),
+    };
+    return messages;
+  });
+
+  const previous = liveScheduleCleanupTimers.get(eventKey);
+  if (previous) clearTimeout(previous);
+  const delay = Math.max(0, new Date(scheduledAt).getTime() - Date.now());
+  const timer = setTimeout(() => {
+    runLiveScheduleCleanup(client, eventKey, scheduledAt).catch(error => {
+      console.warn(`[live-schedule] Separater Cleanup für ${eventKey} fehlgeschlagen: ${error.message}`);
+    });
+  }, delay);
+  if (typeof timer.unref === 'function') timer.unref();
+  liveScheduleCleanupTimers.set(eventKey, timer);
+  console.log(`[live-schedule] Cleanup für ${eventKey} am Folgetag um 13:00 Uhr geplant (${scheduledAt}).`);
+  return { eventKey, scheduledAt, delayMs: delay };
+}
+
+function schedulePendingLiveScheduleCleanups(client) {
+  const state = readJson(FILES.messages, createMessagesDefault()).liveSchedule || {};
+  if (state.cleanupStatus !== 'scheduled' || !state.currentEventKey || !state.cleanupScheduledAt) return [];
+  const event = readEventData(state.currentEventKey);
+  const scheduled = scheduleLiveScheduleCleanupForEvent(client, state.currentEventKey, event);
+  return scheduled ? [scheduled] : [];
+}
+
 async function refreshLiveScheduleForActiveEvents(client) {
   for (const eventKey of EVENT_KEYS) {
     const event = readEventData(eventKey);
@@ -262,6 +320,9 @@ async function refreshLiveScheduleForActiveEvents(client) {
 
 module.exports = {
   cleanupLiveScheduleForEvent,
+  getLiveScheduleCleanupAt,
   refreshLiveSchedule,
   refreshLiveScheduleForActiveEvents,
+  scheduleLiveScheduleCleanupForEvent,
+  schedulePendingLiveScheduleCleanups,
 };

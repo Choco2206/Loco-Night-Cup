@@ -6,7 +6,7 @@ const { ensureEventCycle } = require('../checkins/checkin-schedule');
 const { refreshCheckinMessage } = require('../checkins/checkin-panel');
 const { scheduleCheckinEvent } = require('../checkins/checkin-reconcile');
 const { getConfiguredGuild, getTeamUserIds } = require('../groups/group-roles');
-const { cleanupLiveScheduleForEvent } = require('../live-schedule');
+const { scheduleLiveScheduleCleanupForEvent } = require('../live-schedule');
 const { findTeamById } = require('../teams/team-service');
 const { EVENT_KEYS } = require('../../app/constants');
 const { AUTO_CLEANUP_DELAY_MS, TOTT_CLEANUP_RECHECK_MS, isPowerRankingSettled, isTeamOfTheTournamentSettled } = require('./event-completion-policy');
@@ -342,14 +342,6 @@ function resetMessages(eventKey) {
     messages.knockout[eventKey] = defaults.knockout[eventKey];
     messages.ceremony[eventKey] = defaults.ceremony[eventKey];
 
-    if (messages.liveSchedule?.currentEventKey === eventKey) {
-      messages.liveSchedule.phase = null;
-      messages.liveSchedule.currentEventKey = null;
-      messages.liveSchedule.groupMessageIds = {};
-      messages.liveSchedule.knockoutMessageIds = {};
-      messages.liveSchedule.updatedAt = nowIso();
-    }
-
     messages.meta = { ...(messages.meta || {}), updatedAt: nowIso() };
     return messages;
   });
@@ -392,10 +384,7 @@ async function resetEventForTesting({ eventKey, actorUserId, client, guild = nul
   await clearKnockoutRoleMembers(targetGuild, activeSettings, summary);
   await deleteGroupChannels(client, groupRefs, summary);
   await deleteKnockoutChannels(client, knockoutChannelIds, summary);
-  summary.liveScheduleCleaned = await cleanupLiveScheduleForEvent(client, eventKey).catch(error => {
-    console.warn(`Event cleanup could not clean live schedule for ${eventKey}: ${error.message}`);
-    return { cleaned: false, deletedMessageIds: [] };
-  });
+  summary.liveScheduleCleanupScheduled = scheduleLiveScheduleCleanupForEvent(client, eventKey, event);
   const { cleanupEvent: cleanupTournamentLeadership } = require('../tournament-leadership');
   summary.tournamentLeadership = await cleanupTournamentLeadership(client, eventKey).catch(error => {
     console.warn(`[tournament-leadership] Bereinigung für ${eventKey} fehlgeschlagen: ${error.message}`);

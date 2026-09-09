@@ -9,6 +9,7 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { EVENT_KEYS } = require('../../app/constants');
+const { enqueueCoalesced } = require('../../app/async-coalescer');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { readEventData, updateEventData } = require('../events/event-repository');
@@ -529,7 +530,17 @@ async function buildRoundImagePayload(eventKey, event, roundKey, { includeButton
 }
 
 async function upsertMessage(channel, messageId, payload) {
-  const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
+  let existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
+  if (!existing) {
+    const expectedTitle = payload.embeds?.[0]?.data?.title || payload.embeds?.[0]?.title || null;
+    if (expectedTitle) {
+      const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+      existing = recent?.find(message => (
+        message.author?.id === channel.client.user.id
+        && message.embeds?.some(embed => embed.title === expectedTitle)
+      )) || null;
+    }
+  }
   return existing ? existing.edit(payload) : channel.send(payload);
 }
 
@@ -693,7 +704,7 @@ function updateKnockoutMessageState({ eventKey, event, categoryId, overview, rou
   });
 }
 
-async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
+async function performKnockoutPostUpsert({ client, guild = null, eventKey, event }) {
   if (!client) return null;
   const settings = readSettings();
   const targetGuild = guild || await getConfiguredGuild(client, settings);
@@ -830,6 +841,13 @@ async function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
     overviewMessageId: overviewMessage.id,
     roundPosts,
   };
+}
+
+function upsertKnockoutPost({ client, guild = null, eventKey, event }) {
+  return enqueueCoalesced(`knockout-post-write:${eventKey}`, async () => {
+    const latestEvent = readEventData(eventKey);
+    return performKnockoutPostUpsert({ client, guild, eventKey, event: latestEvent || event });
+  }, 0);
 }
 
 async function initKnockoutReleases(client) {

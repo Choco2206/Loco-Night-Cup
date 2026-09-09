@@ -20,8 +20,16 @@ assert.match(
 );
 assert.match(
   liveScheduleSource,
-  /cleanupLiveScheduleForEvent,\s*\n\s*refreshLiveSchedule/,
-  'Die Event-Bereinigung muss die Live-Spielplan-Bereinigung importieren können.',
+  /scheduleLiveScheduleCleanupForEvent,\s*\n\s*schedulePendingLiveScheduleCleanups/,
+  'Der öffentliche Spielplan muss einen eigenen, neustartsicheren Cleanup besitzen.',
+);
+assert.ok(
+  cleanupSource.includes('scheduleLiveScheduleCleanupForEvent(client, eventKey, event)'),
+  'Der normale Event-Cleanup muss den separaten Spielplan-Cleanup planen.',
+);
+assert.ok(
+  !cleanupSource.includes('cleanupLiveScheduleForEvent(client, eventKey)'),
+  'Der normale Event-Cleanup darf den öffentlichen Spielplan nicht direkt löschen.',
 );
 assert.match(
   liveScheduleSource,
