@@ -162,17 +162,23 @@ test('FC 27 K.O. test matches use registered team-shaped participants and confir
 
 test('FC 27 elimination-round logos use the individually measured logo fields', () => {
   assert.deepEqual(koLayout.round_of_16.matches[0].home.logo, {
-    centerX: 76, centerY: 531, width: 70, height: 70,
+    centerX: 76, centerY: 522, width: 70, height: 70,
   });
   assert.deepEqual(koLayout.round_of_16.matches[0].away.logo, {
-    centerX: 949, centerY: 531, width: 70, height: 70,
+    centerX: 949, centerY: 522, width: 70, height: 70,
   });
 
-  for (const key of ['quarter_final', 'semi_final', 'third_place', 'final']) {
+  const expectedCenters = {
+    quarter_final: [554, 719, 881, 1040],
+    semi_final: [614, 813],
+    third_place: [555],
+    final: [724],
+  };
+  for (const [key, centers] of Object.entries(expectedCenters)) {
     const match = koLayout[key].matches[0];
     assert.equal(match.home.logo.centerX, 85);
     assert.equal(match.away.logo.centerX, 939);
-    assert.equal(match.home.logo.centerY, match.home.teamName.y + 8);
-    assert.equal(match.away.logo.centerY, match.away.teamName.y + 8);
+    assert.deepEqual(koLayout[key].matches.map(row => row.home.logo.centerY), centers);
+    assert.deepEqual(koLayout[key].matches.map(row => row.away.logo.centerY), centers);
   }
 });
