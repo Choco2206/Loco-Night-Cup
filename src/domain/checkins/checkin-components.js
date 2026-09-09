@@ -23,6 +23,7 @@ const {
   getTournamentStartAt,
 } = require('./checkin-schedule');
 const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
+const { getGraphicsProfile } = require('../graphics/graphics-profile');
 
 const TOURNAMENT_MILESTONES = TOURNAMENT_FORMAT_SIZES;
 const MAX_DISPLAY_SLOTS = 32;
@@ -211,11 +212,12 @@ function formatWaitlistSection(slotState) {
 }
 
 function getBannerAttachment(settings, event) {
+  const graphicsProfile = getGraphicsProfile(settings);
   const configuredPath = isLocoZwergenCupEvent(event)
     ? 'assets/loco-zwerge-cup/check-in.jpeg'
     : isRoyaleEvent(event)
     ? 'assets/knockout-royale/royale-check-in.png'
-    : settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
+    : graphicsProfile.checkinBannerPath || settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
   const absolutePath = path.isAbsolute(configuredPath)
     ? configuredPath
     : path.join(ROOT_DIR, configuredPath);
@@ -320,6 +322,7 @@ function buildCheckinMessagePayload(eventKey, event, settings) {
   return {
     embeds,
     components: [buildCheckinButtons(eventKey, event, settings)],
+    attachments: [],
     files: bannerAttachment ? [bannerAttachment] : [],
   };
 }

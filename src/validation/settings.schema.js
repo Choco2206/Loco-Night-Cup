@@ -90,6 +90,12 @@ function validateSettings(data) {
     }
   }
 
+  if (requireObject(errors, data.graphics, 'graphics')) {
+    if (!['default', 'fc27'].includes(data.graphics.activeProfile)) {
+      errors.push('graphics.activeProfile must be default or fc27');
+    }
+  }
+
   if (requireObject(errors, data.categories, 'categories')) {
     [
       'welcomeCategoryId',

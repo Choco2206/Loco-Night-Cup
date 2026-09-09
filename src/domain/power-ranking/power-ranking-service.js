@@ -9,6 +9,7 @@ const { readTeamsData } = require('../teams/team-repository');
 const { calculateWeekRanking, evaluateTournament, getWeekWindow } = require('./power-ranking-core');
 const { readPowerRankingData, updatePowerRankingData } = require('./power-ranking-store');
 const { renderChampionGraphic } = require('./power-ranking-renderer');
+const { getGraphicsVariant } = require('../graphics/graphics-profile');
 
 const RECONCILE_INTERVAL_MS = 15 * 60 * 1000;
 let reconcileTimer = null;
@@ -261,6 +262,7 @@ async function publishChampionPost(client, weekKey, { renderGraphic = renderCham
     const graphic = await renderGraphic({
       week,
       champion,
+      variant: getGraphicsVariant(settings),
       logoSnapshot: currentTeam && currentTeam.status !== 'deleted' && currentTeam.logo
         ? currentTeam.logo
         : latestLogoSnapshot(data, weekKey, champion.teamId),

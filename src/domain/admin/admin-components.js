@@ -49,6 +49,7 @@ const ADMIN_CATEGORIES = {
       ['admin_teams_without_ea', 'Teams ohne EA-ID', 'Teams ohne verbundenen EA Club posten'],
       ['admin_teams_without_cup', 'Teams ohne Cup-Teilnahme', 'Teams ohne bisheriges bestätigtes Cup-Spiel anzeigen'],
       ['admin_stream_list_sync', '📺 Streamliste synchronisieren', 'Zentrale Team-Streamliste neu aufbauen'],
+      ['admin_graphics_profile', 'Grafiken umstellen', 'Aktives Grafikprofil sicher wechseln'],
     ],
   },
   tests: {

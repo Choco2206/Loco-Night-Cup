@@ -2,7 +2,7 @@
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
-const { createMessagesDefault } = require('../../storage/defaults');
+const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { refreshLiveSchedule } = require('../live-schedule');
 const { enqueueCoalesced } = require('../../app/async-coalescer');
 const {
@@ -18,10 +18,13 @@ const { generateGroupScheduleImage } = require('../../../utils/generateGroupSche
 const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
 const { generateLocoZwergenCupLiveTableImage } = require('../../../utils/generateLocoZwergenCupLiveTableImage');
 const { generateLocoZwergenCupMatchesImage } = require('../../../utils/generateLocoZwergenCupMatchesImage');
+const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
+const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
 const { EVENT_KEYS } = require('../../app/constants');
 const { readEventData } = require('../events/event-repository');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
+const { getGraphicsVariant } = require('../graphics/graphics-profile');
 
 function nowIso() {
   return new Date().toISOString();
@@ -84,6 +87,7 @@ async function upsertMessage(channel, messageId, payload, label, { sendIfMissing
 
 async function buildLiveTableImagePayload(group) {
   const event = group.eventKey ? readEventData(group.eventKey) : null;
+  const settings = readJson(FILES.settings, createSettingsDefault());
   const rows = getLiveTableRows(group);
   let image;
   if (isBomberXLocoEvent(event)) {
@@ -93,6 +97,12 @@ async function buildLiveTableImagePayload(group) {
       });
   } else if (isLocoZwergenCupEvent(event)) {
     image = await generateLocoZwergenCupLiveTableImage({
+      groupKey: group.groupKey,
+      rows,
+      qualificationText: getQualificationText(group.formatSize),
+    });
+  } else if (getGraphicsVariant(settings) === 'fc27') {
+    image = await generateFc27LiveTableImage({
       groupKey: group.groupKey,
       rows,
       qualificationText: getQualificationText(group.formatSize),
@@ -119,9 +129,11 @@ async function buildLiveTableImagePayload(group) {
 
 async function buildScheduleImagePayload(group, { includeResultButtons = true } = {}) {
   const event = group.eventKey ? readEventData(group.eventKey) : null;
+  const settings = readJson(FILES.settings, createSettingsDefault());
   let image;
   if (isBomberXLocoEvent(event)) image = await generateBomberXLocoMatchesImage({ group });
   else if (isLocoZwergenCupEvent(event)) image = await generateLocoZwergenCupMatchesImage({ group });
+  else if (getGraphicsVariant(settings) === 'fc27') image = await generateFc27GroupScheduleImage({ group });
   else {
     image = await generateGroupScheduleImage({
         group,

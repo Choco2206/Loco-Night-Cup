@@ -5,6 +5,7 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
+const { getGraphicsVariant } = require('../graphics/graphics-profile');
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const {
@@ -318,7 +319,12 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
 
   const bomberXLoco = isBomberXLocoEvent(event);
   const locoZwergenCup = isLocoZwergenCupEvent(event);
-  const variant = bomberXLoco ? 'bomber_x_loco' : locoZwergenCup ? 'loco_zwergen_cup' : 'default';
+  const settings = readJson(FILES.settings, createSettingsDefault());
+  const variant = bomberXLoco
+    ? 'bomber_x_loco'
+    : locoZwergenCup
+    ? 'loco_zwergen_cup'
+    : getGraphicsVariant(settings);
   const serialNumber = bomberXLoco ? null : reserveSerial(eventKey);
   const rendered = await renderTeamOfTheTournament({
     selection: state.selection,
@@ -530,8 +536,9 @@ async function postTeamOfTheTournamentTest(client) {
   const serialNumber = 1 + Math.floor(Math.random() * 10);
   const selection = buildTestSelection();
   const performances = buildTestPerformances(selection);
-  const rendered = await renderTeamOfTheTournament({ selection, serialNumber });
-  const awardsRendered = await renderSpecialAwards({ awards: selectSpecialAwards(performances), serialNumber });
+  const variant = getGraphicsVariant();
+  const rendered = await renderTeamOfTheTournament({ selection, serialNumber, variant });
+  const awardsRendered = await renderSpecialAwards({ awards: selectSpecialAwards(performances), serialNumber, variant });
   const message = await channel.send({
     content: buildIntroText({ test: true }),
     files: [{ attachment: rendered.buffer, name: `test-${rendered.fileName}` }], allowedMentions: { parse: [] },

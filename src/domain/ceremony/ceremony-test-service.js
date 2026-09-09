@@ -17,6 +17,8 @@ const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const { renderLocoZwergenCupCeremonyImage } = require('../../../utils/loco-zwergen-cup-ceremony-renderer');
+const { renderFc27CeremonyImage } = require('../../../utils/fc27-ceremony-renderer');
+const { getGraphicsVariant } = require('../graphics/graphics-profile');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const HALL_OF_FAME_TEST_CHANNEL_ID = '1525035287971889173';
@@ -445,8 +447,11 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
   const achievements = applyTeamAchievementsForEvent(eventKey);
   const eventWithAchievements = readEventData(eventKey);
   const promotion = getStoredChampionPromotion(eventWithAchievements, teams);
+  const graphicsVariant = getGraphicsVariant(readSettings());
   const ceremonyRender = isLocoZwergenCupEvent(event)
     ? await renderLocoZwergenCupCeremonyImage({ teams })
+    : graphicsVariant === 'fc27'
+    ? await renderFc27CeremonyImage({ dayKey, teams })
     : await renderHallOfFameCeremonyImage({ dayKey, teams });
   const { buffer } = ceremonyRender;
   const channel = await ensureHallOfFameChannel(guild);

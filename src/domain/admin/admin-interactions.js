@@ -13,6 +13,13 @@ const { postTeamsWithoutEa } = require('./teams-without-ea');
 const { postBomberXLocoGraphicsTest } = require('./bomber-x-loco-graphics-test');
 const { postLocoZwergenCupGraphicsTest } = require('./loco-zwergen-cup-graphics-test');
 const { postFc27CeremonyGraphicsTest } = require('./fc27-ceremony-graphics-test');
+const { refreshCheckinMessages } = require('../checkins/checkin-panel');
+const {
+  activateGraphicsProfile,
+  listGraphicsProfiles,
+  readGraphicsProfile,
+} = require('../graphics/graphics-profile');
+const { EVENT_KEYS } = require('../../app/constants');
 const { listVisibleTeams } = require('../teams/team-service');
 const { listActiveBans } = require('../bans');
 
@@ -406,8 +413,60 @@ async function handleFc27CeremonyGraphicsTest(interaction) {
   return true;
 }
 
+function graphicsProfileButtons(activeKey) {
+  return new ActionRowBuilder().addComponents(listGraphicsProfiles().map(profile => (
+    new ButtonBuilder()
+      .setCustomId(`admin_graphics_profile_set:${profile.key}`)
+      .setLabel(profile.key === 'default' ? 'Bisherige Grafiken aktivieren' : `${profile.label} aktivieren`)
+      .setEmoji(profile.key === activeKey ? '✅' : '🎨')
+      .setStyle(profile.key === 'default' ? ButtonStyle.Secondary : ButtonStyle.Primary)
+      .setDisabled(profile.key === activeKey)
+  )));
+}
+
+async function handleGraphicsProfile(interaction, client) {
+  const action = selectedAction(interaction);
+  if (action !== 'admin_graphics_profile' && !action.startsWith('admin_graphics_profile_set:')) return false;
+  try {
+    await requireAdmin(interaction);
+    if (action === 'admin_graphics_profile') {
+      const active = readGraphicsProfile();
+      await interaction.reply({
+        content: [
+          `Aktives Grafikprofil: **${active.label}**`,
+          '',
+          'Beim Wechsel werden zuerst alle benötigten Grafikdateien geprüft. Turnierdaten, Ergebnisse, Statistiken und Cleanup-Abläufe werden nicht verändert.',
+        ].join('\n'),
+        components: [graphicsProfileButtons(active.key)],
+        flags: EPHEMERAL,
+      });
+      return true;
+    }
+
+    const profileKey = action.split(':')[1] || '';
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const result = await activateGraphicsProfile(profileKey, interaction.user.id);
+    const refreshedCheckins = await refreshCheckinMessages(EVENT_KEYS, client);
+    await interaction.editReply({
+      content: [
+        `✅ Grafikprofil **${result.profile.label}** ist jetzt aktiv.`,
+        `${result.checkedAssets} Pflichtgrafiken wurden erfolgreich geprüft.`,
+        `${refreshedCheckins} Check-in-Panel${refreshedCheckins === 1 ? '' : 's'} wurden direkt aktualisiert.`,
+        'Turnierlogik, Ergebnisse, Statistiken und Cleanup-Abläufe blieben unverändert.',
+      ].join('\n'),
+      components: [],
+    });
+  } catch (error) {
+    const content = `❌ Grafikprofil wurde nicht umgestellt: ${error.message}`;
+    if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [] }).catch(() => null);
+    else await interaction.reply({ content, components: [], flags: EPHEMERAL }).catch(() => null);
+  }
+  return true;
+}
+
 async function handleAdminInteraction(interaction, client) {
   if (await handleBanNavigation(interaction)) return true;
+  if (await handleGraphicsProfile(interaction, client)) return true;
   if (await handleBomberXLocoGraphicsTest(interaction)) return true;
   if (await handleLocoZwergenCupGraphicsTest(interaction)) return true;
   if (await handleFc27CeremonyGraphicsTest(interaction)) return true;

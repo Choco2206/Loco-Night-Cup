@@ -18,6 +18,9 @@ const { findTeamById } = require('../teams/team-service');
 const { ROUND_LABELS } = require('./knockout-bracket');
 const { buildRoundReleasePayload, getRoundReminderAt, isRoundReadyForRelease, ROUND_VIDEO_CHANNEL_NAMES } = require('./knockout-release');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
+const { getGraphicsVariant } = require('../graphics/graphics-profile');
+const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
 const KNOCKOUT_OVERVIEW_CHANNEL_NAME = 'ko-phase';
@@ -491,10 +494,12 @@ function roundStatusContent(round) {
 
 async function buildOverviewImagePayload(eventKey, event) {
   const qualifiedTeams = event.knockout?.qualifiedTeams || [];
+  const settings = readJson(FILES.settings, createSettingsDefault());
   const image = await renderKoImage({
     phase: 'qualification_overview',
     qualifiedTeams,
     eventId: event.cycle?.cycleKey || eventKey,
+    variant: isBomberXLocoEvent(event) || isLocoZwergenCupEvent(event) ? null : getGraphicsVariant(settings),
   });
   return {
     content: null,
@@ -511,10 +516,12 @@ async function buildOverviewImagePayload(eventKey, event) {
 
 async function buildRoundImagePayload(eventKey, event, roundKey, { includeButtons = true } = {}) {
   const round = event.knockout?.rounds?.[roundKey];
+  const settings = readJson(FILES.settings, createSettingsDefault());
   const image = await renderKoImage({
     phase: roundKey,
     matches: round?.matches || [],
     eventId: event.cycle?.cycleKey || eventKey,
+    variant: isBomberXLocoEvent(event) || isLocoZwergenCupEvent(event) ? null : getGraphicsVariant(settings),
   });
   return {
     content: roundStatusContent(round),

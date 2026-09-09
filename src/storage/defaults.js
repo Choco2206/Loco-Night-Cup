@@ -434,6 +434,11 @@ function createSettingsDefault() {
       checkinBannerPath: 'data/assets/check-in.png',
       tournamentLeadershipBannerPath: 'assets/tournament-leadership/tournament-leadership-banner.png',
     },
+    graphics: {
+      activeProfile: 'default',
+      activatedAt: null,
+      activatedBy: null,
+    },
     categories: {
       welcomeCategoryId: null,
       systemCategoryId: null,

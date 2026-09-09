@@ -6,6 +6,7 @@ const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const { getWeekWindow } = require('./power-ranking-core');
 const { buildChampionPostContent, championContactUserIds, rankingPages } = require('./power-ranking-service');
 const { renderChampionGraphic } = require('./power-ranking-renderer');
+const { getGraphicsVariant } = require('../graphics/graphics-profile');
 
 function buildTestChampion(team) {
   return {
@@ -79,7 +80,12 @@ async function postPowerRankingChampionTest({ guild, teamId, now = new Date() })
 
   const week = getWeekWindow(now);
   const champion = buildTestChampion(team);
-  const graphic = await renderChampionGraphic({ week, champion, logoSnapshot: team.logo || null });
+  const graphic = await renderChampionGraphic({
+    week,
+    champion,
+    logoSnapshot: team.logo || null,
+    variant: getGraphicsVariant(),
+  });
   const attachment = new AttachmentBuilder(graphic.buffer, { name: graphic.fileName });
   const contactIds = championContactUserIds(team);
   const message = await channel.send({
