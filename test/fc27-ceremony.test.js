@@ -9,8 +9,11 @@ const specialAwardsLayout = require('../config/special-awards-fc27-layout');
 const championLayout = require('../config/power-ranking-champion-fc27-layout');
 const liveTableLayout = require('../config/live-table-fc27-layout');
 const groupScheduleLayout = require('../config/group-schedule-fc27-layout');
+const koLayout = require('../config/ko-image-layouts-fc27');
 const { ROOT_DIR } = require('../src/storage');
-const { DAYS, REQUIRED_TEAM_COUNT, buildFc27TestAwards, buildFc27TestChampion, buildFc27TestGroup, spreadTeams, teamsForDay } = require('../src/domain/admin/fc27-ceremony-graphics-test');
+const { getKoLayout } = require('../utils/ko-image-renderer');
+const { TEST_VARIANTS } = require('../src/domain/knockout/knockout-image-test');
+const { DAYS, REQUIRED_TEAM_COUNT, buildFc27TestAwards, buildFc27TestChampion, buildFc27TestGroup, buildFc27KoMatches, spreadTeams, teamsForDay } = require('../src/domain/admin/fc27-ceremony-graphics-test');
 
 test('FC 27 ceremony series defines one measured square slot per placement and day', () => {
   assert.equal(DAYS.length, 7);
@@ -97,4 +100,40 @@ test('FC 27 matches use three matchdays with two measured encounters each', () =
   assert.equal(group.matchdays.length, 3);
   assert.ok(group.matchdays.every(day => day.matches.length === 2));
   assert.equal(new Set(group.matchdays.flatMap(day => day.matches).flatMap(match => [match.home.teamId, match.away.teamId])).size, 4);
+});
+
+test('FC 27 K.O. series contains eight separately measured inactive templates', () => {
+  const expectedCounts = {
+    qualification_4: 4,
+    qualification_8: 8,
+    qualification_16: 16,
+    round_of_16: 8,
+    quarter_final: 4,
+    semi_final: 2,
+    third_place: 1,
+    final: 1,
+  };
+  for (const [key, count] of Object.entries(expectedCounts)) {
+    const selected = koLayout[key];
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, selected.template)), `missing FC 27 K.O. template for ${key}`);
+    assert.deepEqual(selected.reference, key.startsWith('qualification_')
+      ? { width: 1536, height: 1024 }
+      : { width: 1024, height: 1536 });
+    assert.equal((selected.slots || selected.matches).length, count);
+    const resolved = getKoLayout({
+      phase: key.startsWith('qualification_') ? 'qualification_overview' : key,
+      qualifiedTeamCount: key.startsWith('qualification_') ? count : 0,
+      variant: 'fc27',
+    });
+    assert.equal(resolved.layout.template, selected.template);
+    assert.ok(TEST_VARIANTS[`fc27_${key}`]);
+  }
+});
+
+test('FC 27 K.O. test matches use registered team-shaped participants and confirmed scores', () => {
+  const teams = Array.from({ length: 16 }, (_, index) => ({ id: `ko-team-${index}`, clubName: `K.O. Team ${index}` }));
+  const matches = buildFc27KoMatches(teams, 8);
+  assert.equal(matches.length, 8);
+  assert.equal(new Set(matches.flatMap(match => [match.home.teamId, match.away.teamId])).size, 16);
+  assert.ok(matches.every(match => match.status === 'confirmed' && match.result));
 });

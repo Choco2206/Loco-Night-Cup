@@ -14,6 +14,14 @@ const TEST_VARIANTS = Object.freeze({
   semi_final: { phase: 'semi_final', matches: 2, label: 'Halbfinale' },
   third_place: { phase: 'third_place', matches: 1, label: 'Platz 3' },
   final: { phase: 'final', matches: 1, label: 'Finale' },
+  fc27_qualification_4: { phase: 'qualification_overview', teams: 4, variant: 'fc27', label: 'FC 27: K.O.-Übersicht 4 Teams' },
+  fc27_qualification_8: { phase: 'qualification_overview', teams: 8, variant: 'fc27', label: 'FC 27: K.O.-Übersicht 8 Teams' },
+  fc27_qualification_16: { phase: 'qualification_overview', teams: 16, variant: 'fc27', label: 'FC 27: K.O.-Übersicht 16 Teams' },
+  fc27_round_of_16: { phase: 'round_of_16', matches: 8, variant: 'fc27', label: 'FC 27: Achtelfinale' },
+  fc27_quarter_final: { phase: 'quarter_final', matches: 4, variant: 'fc27', label: 'FC 27: Viertelfinale' },
+  fc27_semi_final: { phase: 'semi_final', matches: 2, variant: 'fc27', label: 'FC 27: Halbfinale' },
+  fc27_third_place: { phase: 'third_place', matches: 1, variant: 'fc27', label: 'FC 27: Spiel um Platz 3' },
+  fc27_final: { phase: 'final', matches: 1, variant: 'fc27', label: 'FC 27: Finale' },
   royal_8_kings_round_1: { phase: 'royal_8_kings_round_1', matches: 4, label: 'Royal 8er: König Runde 1' },
   royal_8_kings_round_2: { phase: 'royal_8_kings_round_2', matches: 2, label: 'Royal 8er: König Runde 2' },
   royal_8_kings_final: { phase: 'royal_8_kings_final', matches: 1, label: 'Royal 8er: König Finale' },
@@ -74,6 +82,7 @@ async function postKoImageTest({ guild, variantKey }) {
     qualifiedTeams,
     matches,
     eventId: `test-${variantKey}`,
+    variant: variant.variant || null,
   });
   const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
   if (!channel?.isTextBased?.()) throw new Error(`Testkanal nicht gefunden: ${HALL_OF_FAME_TEST_CHANNEL_ID}`);

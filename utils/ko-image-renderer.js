@@ -2,6 +2,7 @@
 
 const path = require('path');
 const LAYOUTS = require('../config/ko-image-layouts');
+const FC27_LAYOUTS = require('../config/ko-image-layouts-fc27');
 const BOMBER_X_LOCO_LAYOUTS = require('../config/bomber-x-loco-ko-image-layouts');
 const LOCO_ZWERGEN_CUP_LAYOUTS = require('../config/loco-zwergen-cup-ko-image-layouts');
 const { ROOT_DIR } = require('../src/storage');
@@ -60,7 +61,8 @@ function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
 function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
-  if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
+  if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
+  else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
   else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;
   const layout = layouts[key];
   if (!layout) throw new Error(`K.O.-Layout fehlt: ${key}`);
@@ -135,8 +137,8 @@ function drawScore(ctx, value, box, scaleX, scaleY, layouts) {
   });
 }
 
-async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId = 'event', version = Date.now() }) {
-  const { key, layout, layouts } = getKoLayout({ phase, qualifiedTeamCount: qualifiedTeams.length, eventId });
+async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId = 'event', version = Date.now(), variant = null }) {
+  const { key, layout, layouts } = getKoLayout({ phase, qualifiedTeamCount: qualifiedTeams.length, eventId, variant });
   const template = await loadTemplate(layout.template);
   const width = template.naturalWidth || template.width;
   const height = template.naturalHeight || template.height;

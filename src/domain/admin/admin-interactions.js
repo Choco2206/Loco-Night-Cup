@@ -386,7 +386,7 @@ async function handleFc27CeremonyGraphicsTest(interaction) {
     const result = await postFc27CeremonyGraphicsTest({ guild: interaction.guild });
     await interaction.editReply({
       content: [
-        `✅ Alle ${result.days} FC-27-Siegerehrungen, Special Awards, Power-Ranking-Champion, Live-Tabelle und Matches wurden in <#${result.channelId}> gepostet.`,
+        `✅ Alle ${result.days} FC-27-Siegerehrungen, Special Awards, Power-Ranking-Champion, Live-Tabelle, Matches und acht K.O.-Grafiken wurden in <#${result.channelId}> gepostet.`,
         `Testgrafiken insgesamt: ${result.graphics}`,
         `Verwendete aktive Teams mit Logo: ${result.teamCount}`,
         'Jeder Wochentag verwendet drei andere Teams.',

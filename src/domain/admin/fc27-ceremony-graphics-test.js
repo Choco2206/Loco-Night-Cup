@@ -9,6 +9,7 @@ const { getWeekWindow } = require('../power-ranking/power-ranking-core');
 const { renderChampionGraphic } = require('../power-ranking/power-ranking-renderer');
 const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
 const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
+const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const DAYS = Object.freeze([
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -98,6 +99,34 @@ function buildFc27TestGroup(teams) {
   };
 }
 
+function fc27KoParticipant(team, index) {
+  return {
+    type: 'team',
+    teamId: String(team.id),
+    participantKey: `team:${team.id}:fc27-ko-test:${index}`,
+    displayName: team.clubName,
+  };
+}
+
+function buildFc27KoMatches(teams, count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `fc27-ko-test-${count}-${index + 1}`,
+    home: fc27KoParticipant(teams[(index * 2) % teams.length], index * 2),
+    away: fc27KoParticipant(teams[(index * 2 + 1) % teams.length], index * 2 + 1),
+    status: 'confirmed',
+    result: { homeGoals: (index + 2) % 6, awayGoals: (index + 4) % 5, source: 'admin-random-test' },
+  }));
+}
+
+async function postFc27KoTestImage(channel, title, rendered) {
+  const message = await channel.send({
+    content: `🧪 **FC 27 • ${title}**\nNur Vorschau; die aktiven K.O.-Grafiken bleiben unverändert.`,
+    files: [new AttachmentBuilder(rendered.buffer, { name: rendered.fileName })],
+    allowedMentions: { parse: [] },
+  });
+  return message.id;
+}
+
 async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   if (!guild) throw new Error('Der FC-27-Siegerehrungstest ist nur auf dem Server nutzbar.');
   const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
@@ -184,7 +213,35 @@ async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
   });
   messageIds.push(scheduleMessage.id);
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 4 };
+  for (const [teamCount, title] of [[16, 'K.O.-ÜBERSICHT • 16 TEAMS'], [8, 'K.O.-ÜBERSICHT • 8 TEAMS'], [4, 'K.O.-ÜBERSICHT • 4 TEAMS']]) {
+    const rendered = await renderKoImage({
+      phase: 'qualification_overview',
+      qualifiedTeams: pool.slice(0, teamCount).map(fc27KoParticipant),
+      eventId: `fc27-admin-test-qualification-${teamCount}`,
+      version: Date.now(),
+      variant: 'fc27',
+    });
+    messageIds.push(await postFc27KoTestImage(channel, title, rendered));
+  }
+
+  for (const [phase, matchCount, title] of [
+    ['round_of_16', 8, 'ACHTELFINALE'],
+    ['quarter_final', 4, 'VIERTELFINALE'],
+    ['semi_final', 2, 'HALBFINALE'],
+    ['third_place', 1, 'SPIEL UM PLATZ 3'],
+    ['final', 1, 'FINALE'],
+  ]) {
+    const rendered = await renderKoImage({
+      phase,
+      matches: buildFc27KoMatches(pool, matchCount),
+      eventId: `fc27-admin-test-${phase}`,
+      version: Date.now(),
+      variant: 'fc27',
+    });
+    messageIds.push(await postFc27KoTestImage(channel, title, rendered));
+  }
+
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 12 };
 }
 
 module.exports = {
@@ -194,6 +251,7 @@ module.exports = {
   buildFc27TestAwards,
   buildFc27TestChampion,
   buildFc27TestGroup,
+  buildFc27KoMatches,
   postFc27CeremonyGraphicsTest,
   spreadTeams,
   teamsForDay,
