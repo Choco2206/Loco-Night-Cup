@@ -48,7 +48,7 @@ test('FC 27 profile selects the uploaded check-in banner', () => {
 test('all FC 27 graphics pass the activation preflight', async () => {
   const result = await validateGraphicsProfileAssets('fc27');
   assert.equal(result.profile.key, 'fc27');
-  assert.equal(result.checkedAssets, 21);
+  assert.equal(result.checkedAssets, 22);
 });
 
 test('existing graphics also remain a valid rollback profile', async () => {

@@ -10,6 +10,7 @@ const { renderChampionGraphic } = require('../power-ranking/power-ranking-render
 const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
 const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
+const { renderKoProgression16 } = require('../../../utils/ko-progression-renderer');
 
 const DAYS = Object.freeze([
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -116,6 +117,42 @@ function buildFc27KoMatches(teams, count) {
     status: 'confirmed',
     result: { homeGoals: (index + 2) % 6, awayGoals: (index + 4) % 5, source: 'admin-random-test' },
   }));
+}
+
+function buildFc27ProgressionRounds(teams) {
+  const participants = teams.slice(0, 16).map(fc27KoParticipant);
+  const match = (id, home, away, homeGoals, awayGoals) => ({
+    id: `fc27-progression-test-${id}`,
+    home,
+    away,
+    status: 'confirmed',
+    result: { homeGoals, awayGoals, source: 'admin-random-test' },
+  });
+  const roundOf16 = Array.from({ length: 8 }, (_, index) => match(
+    `r16-${index + 1}`,
+    participants[index * 2],
+    participants[index * 2 + 1],
+    index % 3 + 2,
+    index % 3,
+  ));
+  const r16Winners = roundOf16.map(entry => entry.home);
+  const quarterFinal = [
+    match('qf-1', r16Winners[0], r16Winners[1], 3, 1),
+    match('qf-2', r16Winners[2], r16Winners[3], 1, 2),
+    match('qf-3', r16Winners[4], r16Winners[5], 2, 0),
+    match('qf-4', r16Winners[6], r16Winners[7], 1, 3),
+  ];
+  const semiFinal = [
+    match('sf-1', quarterFinal[0].home, quarterFinal[1].away, 2, 1),
+    match('sf-2', quarterFinal[2].home, quarterFinal[3].away, 1, 3),
+  ];
+  return {
+    round_of_16: { matches: roundOf16 },
+    quarter_final: { matches: quarterFinal },
+    semi_final: { matches: semiFinal },
+    final: { matches: [match('final', semiFinal[0].home, semiFinal[1].away, 2, 1)] },
+    third_place: { matches: [match('third', semiFinal[0].away, semiFinal[1].home, 3, 2)] },
+  };
 }
 
 async function postFc27KoTestImage(channel, title, rendered) {
@@ -241,7 +278,15 @@ async function postFc27CeremonyGraphicsTest({ guild, now = new Date() }) {
     messageIds.push(await postFc27KoTestImage(channel, title, rendered));
   }
 
-  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 12 };
+  const progressionRendered = await renderKoProgression16({
+    rounds: buildFc27ProgressionRounds(pool),
+    serialNumber: 27,
+    eventId: 'fc27-admin-test-progression-16',
+    version: Date.now(),
+  });
+  messageIds.push(await postFc27KoTestImage(channel, 'ROAD TO GLORY • 16 TEAMS', progressionRendered));
+
+  return { channelId: channel.id, messageIds, teamCount: pool.length, days: DAYS.length, graphics: DAYS.length + 13 };
 }
 
 module.exports = {
@@ -252,6 +297,7 @@ module.exports = {
   buildFc27TestChampion,
   buildFc27TestGroup,
   buildFc27KoMatches,
+  buildFc27ProgressionRounds,
   postFc27CeremonyGraphicsTest,
   spreadTeams,
   teamsForDay,
