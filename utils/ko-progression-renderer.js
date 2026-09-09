@@ -8,6 +8,7 @@ const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 const { loadCanvasImage } = require('./canvas-image-loader');
 
 const TEMPLATE = 'assets/ko-phase/ko-verlauf-16-fc27.jpeg';
+const TEMPLATE_8 = 'assets/ko-phase/ko-verlauf-8-fc27.jpeg';
 const WIDTH = 1792;
 const HEIGHT = 1344;
 const RED = '#f12b45';
@@ -16,7 +17,7 @@ const GOLD = '#f1c54b';
 const SILVER = '#b9c1ce';
 const R16_Y = Object.freeze([180, 385, 590, 795]);
 let canvasApi = null;
-let templatePromise = null;
+const templatePromises = new Map();
 let renderSequence = 0;
 
 function getCanvasApi() {
@@ -25,14 +26,14 @@ function getCanvasApi() {
   return canvasApi;
 }
 
-function loadTemplate() {
-  if (!templatePromise) {
-    templatePromise = loadCanvasImage(getCanvasApi(), path.resolve(ROOT_DIR, TEMPLATE)).catch(error => {
-      templatePromise = null;
+function loadTemplate(templatePath) {
+  if (!templatePromises.has(templatePath)) {
+    templatePromises.set(templatePath, loadCanvasImage(getCanvasApi(), path.resolve(ROOT_DIR, templatePath)).catch(error => {
+      templatePromises.delete(templatePath);
       throw error;
-    });
+    }));
   }
-  return templatePromise;
+  return templatePromises.get(templatePath);
 }
 
 function roundedRect(ctx, x, y, width, height, radius) {
@@ -103,7 +104,7 @@ function drawConnector(ctx, points, color) {
   ctx.restore();
 }
 
-function drawConnectors(ctx) {
+function drawConnectors16(ctx) {
   R16_Y.map(y => y + 62).forEach((sourceY, index) => {
     const targetY = index < 2 ? 408 : 728;
     drawConnector(ctx, [[304, sourceY], [327, sourceY], [327, targetY], [348, targetY]], RED);
@@ -115,6 +116,15 @@ function drawConnectors(ctx) {
   }
   drawConnector(ctx, [[874, 568], [896, 568], [896, 760]], GOLD);
   drawConnector(ctx, [[918, 568], [896, 568]], GOLD);
+}
+
+function drawConnectors8(ctx) {
+  for (const sourceY of [312, 712]) {
+    drawConnector(ctx, [[390, sourceY], [425, sourceY], [425, 522], [460, 522]], RED);
+    drawConnector(ctx, [[1402, sourceY], [1367, sourceY], [1367, 522], [1332, 522]], BLUE);
+  }
+  drawConnector(ctx, [[760, 522], [896, 522], [896, 770]], GOLD);
+  drawConnector(ctx, [[1032, 522], [896, 522]], GOLD);
 }
 
 function drawLabel(ctx, text, x, y, width) {
@@ -204,11 +214,11 @@ function drawSerial(ctx, serialNumber) {
 }
 
 async function renderKoProgression16({ rounds, serialNumber = null, eventId = 'event', version = Date.now() }) {
-  const template = await loadTemplate();
+  const template = await loadTemplate(TEMPLATE);
   const canvas = getCanvasApi().createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(template, 0, 0, WIDTH, HEIGHT);
-  drawConnectors(ctx);
+  drawConnectors16(ctx);
 
   const roundOf16 = roundMatches(rounds, 'round_of_16');
   for (let index = 0; index < 4; index += 1) {
@@ -239,4 +249,35 @@ async function renderKoProgression16({ rounds, serialNumber = null, eventId = 'e
   };
 }
 
-module.exports = { TEMPLATE, resultFor, renderKoProgression16, winnerParticipant, winnerSide };
+async function renderKoProgression8({ rounds, serialNumber = null, eventId = 'event', version = Date.now() }) {
+  const template = await loadTemplate(TEMPLATE_8);
+  const canvas = getCanvasApi().createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(template, 0, 0, WIDTH, HEIGHT);
+  drawConnectors8(ctx);
+
+  const quarters = roundMatches(rounds, 'quarter_final');
+  await drawMatchCard(ctx, { match: quarters[0], x: 80, y: 250, width: 310, label: 'VIERTELFINALE 1', color: RED });
+  await drawMatchCard(ctx, { match: quarters[1], x: 80, y: 650, width: 310, label: 'VIERTELFINALE 2', color: RED });
+  await drawMatchCard(ctx, { match: quarters[2], x: 1402, y: 250, width: 310, label: 'VIERTELFINALE 3', color: BLUE });
+  await drawMatchCard(ctx, { match: quarters[3], x: 1402, y: 650, width: 310, label: 'VIERTELFINALE 4', color: BLUE });
+  const semis = roundMatches(rounds, 'semi_final');
+  await drawMatchCard(ctx, { match: semis[0], x: 460, y: 460, width: 300, label: 'HALBFINALE 1', color: RED });
+  await drawMatchCard(ctx, { match: semis[1], x: 1032, y: 460, width: 300, label: 'HALBFINALE 2', color: BLUE });
+  const final = roundMatches(rounds, 'final')[0];
+  await drawMatchCard(ctx, { match: final, x: 704, y: 770, width: 384, label: 'FINALE', color: GOLD, final: true });
+  await drawChampion(ctx, winnerParticipant(final));
+  await drawThirdPlace(ctx, roundMatches(rounds, 'third_place')[0]);
+  drawSerial(ctx, serialNumber);
+
+  renderSequence = (renderSequence + 1) % 1000000;
+  return {
+    buffer: canvas.toBuffer('image/png'),
+    fileName: `ko-verlauf-8-${String(eventId).replace(/[^a-z0-9_-]+/gi, '-')}-${version}-${renderSequence}.png`,
+    template: TEMPLATE_8,
+    width: WIDTH,
+    height: HEIGHT,
+  };
+}
+
+module.exports = { TEMPLATE, TEMPLATE_8, resultFor, renderKoProgression8, renderKoProgression16, winnerParticipant, winnerSide };
