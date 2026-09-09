@@ -15,6 +15,7 @@ const { getKoLayout } = require('../utils/ko-image-renderer');
 const { TEMPLATE: KO_PROGRESSION_TEMPLATE, TEMPLATE_4: KO_PROGRESSION_4_TEMPLATE, TEMPLATE_8: KO_PROGRESSION_8_TEMPLATE, renderKoProgression4, renderKoProgression8, renderKoProgression16 } = require('../utils/ko-progression-renderer');
 const { loadCanvasImage } = require('../utils/canvas-image-loader');
 const { TEST_VARIANTS } = require('../src/domain/knockout/knockout-image-test');
+const { getKoProgressionRenderer } = require('../src/domain/ceremony/ceremony-test-service');
 const { DAYS, REQUIRED_TEAM_COUNT, buildFc27TestAwards, buildFc27TestChampion, buildFc27TestGroup, buildFc27KoMatches, buildFc27ProgressionRounds, buildFc27Progression4Rounds, buildFc27Progression8Rounds, spreadTeams, teamsForDay } = require('../src/domain/admin/fc27-ceremony-graphics-test');
 
 test('FC 27 ceremony series defines one measured square slot per placement and day', () => {
@@ -175,6 +176,13 @@ test('FC 27 Road to Glory renders all 16 teams, results and the serial number dy
   assert.equal(rendered.height, 1344);
   assert.ok(rendered.buffer.length > 100000);
   assert.equal(rendered.template, KO_PROGRESSION_TEMPLATE);
+});
+
+test('FC 27 ceremony selects the Road to Glory graphic from the existing first K.O. round', () => {
+  assert.equal(getKoProgressionRenderer('round_of_16'), renderKoProgression16);
+  assert.equal(getKoProgressionRenderer('quarter_final'), renderKoProgression8);
+  assert.equal(getKoProgressionRenderer('semi_final'), renderKoProgression4);
+  assert.equal(getKoProgressionRenderer('final'), null);
 });
 
 test('FC 27 Road to Glory renders the 8-team quarter-final variant dynamically', async () => {

@@ -168,13 +168,35 @@ function closingRatingsReady(event) {
   });
 }
 
-function reserveSerial(eventKey) {
+function findReservedSerial(posts, eventKey, cycleKey) {
+  const normalizedCycleKey = cycleKey ? String(cycleKey) : null;
+  if (!normalizedCycleKey) return null;
+  const existing = (Array.isArray(posts) ? posts : []).find(entry => (
+    String(entry?.eventKey || '') === String(eventKey)
+    && String(entry?.cycleKey || '') === normalizedCycleKey
+    && Number(entry?.serialNumber) > 0
+  ));
+  return existing ? Number(existing.serialNumber) : null;
+}
+
+function reserveSerial(eventKey, cycleKey = null) {
   let serialNumber;
   updateJson(FILES.tottHistory, createTottHistoryDefault(), history => {
+    history.posts = Array.isArray(history.posts) ? history.posts : [];
+    const normalizedCycleKey = cycleKey ? String(cycleKey) : null;
+    const existingSerial = findReservedSerial(history.posts, eventKey, normalizedCycleKey);
+    if (existingSerial) {
+      serialNumber = existingSerial;
+      return history;
+    }
     serialNumber = Number(history.lastSerialNumber || 0) + 1;
     history.lastSerialNumber = serialNumber;
-    history.posts = Array.isArray(history.posts) ? history.posts : [];
-    history.posts.push({ eventKey, serialNumber, reservedAt: new Date().toISOString() });
+    history.posts.push({
+      eventKey,
+      cycleKey: normalizedCycleKey,
+      serialNumber,
+      reservedAt: new Date().toISOString(),
+    });
     return history;
   });
   return serialNumber;
@@ -325,7 +347,9 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     : locoZwergenCup
     ? 'loco_zwergen_cup'
     : getGraphicsVariant(settings);
-  const serialNumber = bomberXLoco ? null : reserveSerial(eventKey);
+  const serialNumber = bomberXLoco
+    ? null
+    : reserveSerial(eventKey, event?.cycle?.cycleKey || event?.cycle?.eventDate || null);
   const rendered = await renderTeamOfTheTournament({
     selection: state.selection,
     serialNumber,
@@ -553,7 +577,7 @@ async function postTeamOfTheTournamentTest(client) {
 
 module.exports = {
   aggregatePlayers, auditRankingMessages, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection,
-  closingRatingsReady, postTottAuditReport, selectSpecialAwards,
+  closingRatingsReady, findReservedSerial, postTottAuditReport, selectSpecialAwards,
   getTargetChannel, initTeamOfTheTournament, postTeamOfTheTournament, postTeamOfTheTournamentTest,
-  scheduleTeamOfTheTournamentPost, testLiveTottChannel, workflowSnapshot,
+  reserveSerial, scheduleTeamOfTheTournamentPost, testLiveTottChannel, workflowSnapshot,
 };

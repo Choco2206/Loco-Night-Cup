@@ -18,7 +18,13 @@ const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
 const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const { renderLocoZwergenCupCeremonyImage } = require('../../../utils/loco-zwergen-cup-ceremony-renderer');
 const { renderFc27CeremonyImage } = require('../../../utils/fc27-ceremony-renderer');
+const {
+  renderKoProgression4,
+  renderKoProgression8,
+  renderKoProgression16,
+} = require('../../../utils/ko-progression-renderer');
 const { getGraphicsVariant } = require('../graphics/graphics-profile');
+const { reserveSerial } = require('../team-of-the-tournament/team-of-the-tournament-post');
 
 const HALL_OF_FAME_CHANNEL_NAME = '👑-hall-of-fame';
 const HALL_OF_FAME_TEST_CHANNEL_ID = '1525035287971889173';
@@ -402,7 +408,28 @@ function getStoredChampionPromotion(event, teams) {
   };
 }
 
-function updateCeremonyMessageRefs(eventKey, { event, channelId, imageMessageId, textMessageId, timestamp }) {
+function getKoProgressionRenderer(firstRoundKey) {
+  return {
+    round_of_16: renderKoProgression16,
+    quarter_final: renderKoProgression8,
+    semi_final: renderKoProgression4,
+  }[firstRoundKey] || null;
+}
+
+async function renderFc27KoProgression({ event, eventKey, serialNumber }) {
+  const renderer = getKoProgressionRenderer(event?.knockout?.firstRoundKey);
+  if (!renderer) return null;
+  return renderer({
+    rounds: event?.knockout?.rounds || {},
+    serialNumber,
+    eventId: event?.cycle?.cycleKey || eventKey,
+    version: Date.now(),
+  });
+}
+
+function updateCeremonyMessageRefs(eventKey, {
+  event, channelId, imageMessageId, textMessageId, progressionMessageId = null, timestamp,
+}) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     messages.ceremony = messages.ceremony || {};
     messages.ceremony[eventKey] = messages.ceremony[eventKey] || {
@@ -418,6 +445,7 @@ function updateCeremonyMessageRefs(eventKey, { event, channelId, imageMessageId,
     messages.ceremony[eventKey].channelId = channelId;
     messages.ceremony[eventKey].imageMessageId = imageMessageId;
     messages.ceremony[eventKey].textMessageId = textMessageId;
+    messages.ceremony[eventKey].progressionMessageId = progressionMessageId;
     messages.ceremony[eventKey].postedAt = timestamp;
     messages.ceremony[eventKey].updatedAt = timestamp;
     messages.liveSchedule = messages.liveSchedule || {};
@@ -448,11 +476,21 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
   const eventWithAchievements = readEventData(eventKey);
   const promotion = getStoredChampionPromotion(eventWithAchievements, teams);
   const graphicsVariant = getGraphicsVariant(readSettings());
-  const ceremonyRender = isLocoZwergenCupEvent(event)
+  const locoZwergenCup = isLocoZwergenCupEvent(event);
+  const ceremonyRender = locoZwergenCup
     ? await renderLocoZwergenCupCeremonyImage({ teams })
     : graphicsVariant === 'fc27'
     ? await renderFc27CeremonyImage({ dayKey, teams })
     : await renderHallOfFameCeremonyImage({ dayKey, teams });
+  const progressionRenderer = graphicsVariant === 'fc27' && !locoZwergenCup
+    ? getKoProgressionRenderer(event?.knockout?.firstRoundKey)
+    : null;
+  const progressionSerialNumber = progressionRenderer
+    ? reserveSerial(eventKey, event?.cycle?.cycleKey || event?.cycle?.eventDate || null)
+    : null;
+  const progressionRender = progressionSerialNumber === null
+    ? null
+    : await renderFc27KoProgression({ event, eventKey, serialNumber: progressionSerialNumber });
   const { buffer } = ceremonyRender;
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
@@ -466,11 +504,17 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     allowedMentions: { parse: ['everyone'] },
   });
   const textMessage = await channel.send({
-    content: isLocoZwergenCupEvent(event)
+    content: locoZwergenCup
       ? buildLocoZwergenCupCeremonyText({ teams, promotion })
       : buildCeremonyText({ dayKey, teams, promotion }),
     allowedMentions: { parse: ['users'] },
   });
+  const progressionMessage = progressionRender
+    ? await channel.send({
+      files: [new AttachmentBuilder(progressionRender.buffer, { name: progressionRender.fileName })],
+      allowedMentions: { parse: [] },
+    })
+    : null;
 
   let updatedEvent;
   updateEventData(eventKey, storedEvent => {
@@ -481,7 +525,9 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     storedEvent.ceremony.channelId = channel.id;
     storedEvent.ceremony.imageMessageId = imageMessage.id;
     storedEvent.ceremony.textMessageId = textMessage.id;
-    storedEvent.ceremony.postedMessageIds = [imageMessage.id, textMessage.id];
+    storedEvent.ceremony.progressionMessageId = progressionMessage?.id || null;
+    storedEvent.ceremony.progressionSerialNumber = progressionSerialNumber;
+    storedEvent.ceremony.postedMessageIds = [imageMessage.id, textMessage.id, progressionMessage?.id].filter(Boolean);
     storedEvent.ceremony.cleanupStatus = 'scheduled';
     storedEvent.ceremony.cleanupScheduledAt = getAutoCleanupScheduledAt(timestamp);
     storedEvent.ceremony.cleanupCompletedAt = null;
@@ -494,6 +540,7 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     channelId: channel.id,
     imageMessageId: imageMessage.id,
     textMessageId: textMessage.id,
+    progressionMessageId: progressionMessage?.id || null,
     timestamp,
   });
   if (achievements.applied) {
@@ -515,6 +562,7 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     channelId: channel.id,
     imageMessageId: imageMessage.id,
     textMessageId: textMessage.id,
+    progressionMessageId: progressionMessage?.id || null,
     teams,
     dayKey,
     dayLabel: CEREMONY_DAY_LABELS[dayKey],
@@ -567,10 +615,12 @@ module.exports = {
   CEREMONY_LOGO_SCALE,
   CEREMONY_LOGO_Y_OFFSET,
   buildCeremonyText,
+  getKoProgressionRenderer,
   isCeremonyReady,
   maybePostHallOfFameCeremony,
   postHallOfFameCeremony,
   postHallOfFameTest,
   renderHallOfFameCeremonyImage,
   renderHallOfFameTestImage,
+  renderFc27KoProgression,
 };

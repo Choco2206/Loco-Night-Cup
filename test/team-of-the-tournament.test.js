@@ -7,7 +7,7 @@ const {
   buildRankings, buildSelection, calculateTottPoints, confirmedEventMatches, normalizePosition, requiresEaCapture,
   selectEaMatch, tottOpportunityMatches,
 } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-service');
-const { aggregatePlayers, auditRankingMessages, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
+const { aggregatePlayers, auditRankingMessages, buildAwardsText, buildIntroText, buildTestPerformances, buildTestSelection, closingRatingsReady, findReservedSerial } = require('../src/domain/team-of-the-tournament/team-of-the-tournament-post');
 const layout = require('../config/team-of-the-tournament-layout');
 const fc27Layout = require('../config/team-of-the-tournament-fc27-layout');
 const bomberXLocoLayout = require('../config/bomber-x-loco-tott-layout');
@@ -25,6 +25,17 @@ test('keeps event data until the Team of the Tournament workflow is settled', ()
   assert.equal(isTeamOfTheTournamentSettled({ knockout: { status: 'completed' }, ceremony: { teamOfTheTournament: { postStatus: 'pending' } } }), false);
   assert.equal(isTeamOfTheTournamentSettled({ knockout: { status: 'completed' }, ceremony: { teamOfTheTournament: { postStatus: 'posted' } } }), true);
   assert.equal(isTeamOfTheTournamentSettled({ knockout: { status: 'completed' }, ceremony: { teamOfTheTournament: { postStatus: 'skipped' } } }), true);
+});
+
+test('reuses one trophy serial within a tournament cycle without mixing weekly cycles', () => {
+  const posts = [
+    { eventKey: 'monday', cycleKey: 'monday_2026-09-07', serialNumber: 27 },
+    { eventKey: 'monday', cycleKey: 'monday_2026-09-14', serialNumber: 28 },
+  ];
+  assert.equal(findReservedSerial(posts, 'monday', 'monday_2026-09-07'), 27);
+  assert.equal(findReservedSerial(posts, 'monday', 'monday_2026-09-14'), 28);
+  assert.equal(findReservedSerial(posts, 'tuesday', 'monday_2026-09-07'), null);
+  assert.equal(findReservedSerial(posts, 'monday', null), null);
 });
 
 test('normalizes the four EA Clubs position groups', () => {
