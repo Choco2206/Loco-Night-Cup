@@ -131,6 +131,7 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
         groupMessageIds: {},
         knockoutMessageIds: {},
         cleanupStatus: 'rebuilding',
+        cleanupScheduledAt: null,
         publicRebuildKey: rebuildKey,
         updatedAt: nowIso(),
       };
@@ -139,7 +140,7 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
   } else if (shouldResetState(state, eventKey, cycleKey)) {
     await deleteKnownMessages(channel, state);
     updateJson(FILES.messages, createMessagesDefault(), current => {
-      current.liveSchedule = { ...(current.liveSchedule || {}), channelId: channel.id, currentEventKey: null, cycleKey: null, phase: null, headerMessageId: null, groupMessageIds: {}, knockoutMessageIds: {}, cleanupStatus: 'rebuilt', updatedAt: nowIso() };
+      current.liveSchedule = { ...(current.liveSchedule || {}), channelId: channel.id, currentEventKey: null, cycleKey: null, phase: null, headerMessageId: null, groupMessageIds: {}, knockoutMessageIds: {}, cleanupStatus: 'rebuilt', cleanupScheduledAt: null, updatedAt: nowIso() };
       return current;
     });
   }
@@ -245,6 +246,7 @@ async function cleanupLiveScheduleForEvent(client, eventKey) {
       groupMessageIds: {},
       knockoutMessageIds: {},
       cleanupStatus: 'cleaned',
+      cleanupScheduledAt: null,
       publicRebuildKey: null,
       updatedAt: nowIso(),
     };
@@ -272,7 +274,14 @@ function scheduleLiveScheduleCleanupForEvent(client, eventKey, event = null) {
   if (!client || !EVENT_KEYS.includes(eventKey)) return null;
   const currentEvent = event || readEventData(eventKey);
   const existingState = readJson(FILES.messages, createMessagesDefault()).liveSchedule || {};
-  const scheduledAt = existingState.currentEventKey === eventKey && existingState.cleanupScheduledAt
+  const currentCycleKey = getCycleKey(currentEvent);
+  const resumesAfterEventReset = existingState.cleanupStatus === 'scheduled'
+    && existingState.currentEventKey === eventKey
+    && existingState.cleanupScheduledAt
+    && existingState.cycleKey
+    && currentCycleKey
+    && existingState.cycleKey !== currentCycleKey;
+  const scheduledAt = resumesAfterEventReset
     ? existingState.cleanupScheduledAt
     : getLiveScheduleCleanupAt(currentEvent);
   if (!scheduledAt) return null;

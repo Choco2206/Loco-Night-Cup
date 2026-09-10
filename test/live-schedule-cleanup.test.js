@@ -33,6 +33,21 @@ assert.ok(
 );
 assert.match(
   liveScheduleSource,
+  /cleanupStatus: 'cleaned',\s*\n\s*cleanupScheduledAt: null/,
+  'Nach dem Spielplan-Cleanup darf kein alter Termin gespeichert bleiben.',
+);
+assert.match(
+  liveScheduleSource,
+  /cleanupStatus: 'rebuilding',\s*\n\s*cleanupScheduledAt: null/,
+  'Ein neuer Turnierzyklus muss einen alten Spielplan-Cleanup-Termin verwerfen.',
+);
+assert.ok(
+  liveScheduleSource.includes("existingState.cleanupStatus === 'scheduled'")
+    && liveScheduleSource.includes('existingState.cycleKey !== currentCycleKey'),
+  'Ein gespeicherter Termin darf nur zur Wiederaufnahme nach einem Event-Reset verwendet werden.',
+);
+assert.match(
+  liveScheduleSource,
   /renderLeagueTable\(currentEvent\.leaguePhase\)/,
   'Die Live-Tabelle muss für jede Ligaphase aus den Eventdaten gerendert werden.',
 );
