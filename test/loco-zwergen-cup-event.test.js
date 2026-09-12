@@ -17,6 +17,12 @@ const { buildKnockoutRounds } = require('../src/domain/knockout/knockout-bracket
 const { getAllowedSizes } = require('../src/domain/checkins/checkin-format');
 const { getQualificationText } = require('../src/domain/groups/group-embeds');
 const { validateEvent } = require('../src/validation/events.schema');
+const {
+  ROUND_CHANNEL_NAMES,
+  ROUND_RESULTS_CHANNEL_NAMES,
+  ROUND_ROLE_NAMES,
+} = require('../src/domain/knockout/knockout-posts');
+const { ROUND_VIDEO_CHANNEL_NAMES } = require('../src/domain/knockout/knockout-release');
 
 test('Loco Zwergen Cup is isolated to Saturday 12 September 2026', () => {
   assert.equal(isLocoZwergenCupDate('saturday', '2026-09-12'), true);
@@ -77,6 +83,13 @@ test('startup validation accepts a running 44-team Zwergen Cup before schedule s
 
   event.format.allowedSizes = [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
   assert.deepEqual(validateEvent(event, 'saturday'), []);
+});
+
+test('round of 32 uses the regular knockout channel structure', () => {
+  assert.equal(ROUND_CHANNEL_NAMES.round_of_32, 'ko-sechzehntelfinale');
+  assert.equal(ROUND_RESULTS_CHANNEL_NAMES.round_of_32, 'ergebnisse-sechzehntelfinale');
+  assert.equal(ROUND_VIDEO_CHANNEL_NAMES.round_of_32, 'größenvideo-ko-sechzehntelfinale');
+  assert.equal(ROUND_ROLE_NAMES.round_of_32, 'LNC K.O. Sechzehntelfinale');
 });
 
 test('group posts explain every expanded Zwergen qualification rule correctly', () => {

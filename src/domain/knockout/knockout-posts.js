@@ -25,6 +25,7 @@ const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const KNOCKOUT_CATEGORY_NAME = 'K.O.-Phase';
 const KNOCKOUT_OVERVIEW_CHANNEL_NAME = 'ko-phase';
 const ROUND_CHANNEL_NAMES = {
+  round_of_32: 'ko-sechzehntelfinale',
   round_of_16: 'ko-achtelfinale',
   quarter_final: 'ko-viertelfinale',
   semi_final: 'ko-halbfinale',
@@ -32,6 +33,7 @@ const ROUND_CHANNEL_NAMES = {
   final: 'ko-finale',
 };
 const ROUND_RESULTS_CHANNEL_NAMES = {
+  round_of_32: 'ergebnisse-sechzehntelfinale',
   round_of_16: 'ergebnisse-achtelfinale',
   quarter_final: 'ergebnisse-viertelfinale',
   semi_final: 'ergebnisse-halbfinale',
@@ -39,13 +41,14 @@ const ROUND_RESULTS_CHANNEL_NAMES = {
   final: 'ergebnisse-finale',
 };
 const ROUND_ROLE_NAMES = {
+  round_of_32: 'LNC K.O. Sechzehntelfinale',
   round_of_16: 'LNC K.O. Achtelfinale',
   quarter_final: 'LNC K.O. Viertelfinale',
   semi_final: 'LNC K.O. Halbfinale',
   third_place: 'LNC K.O. Spiel um Platz 3',
   final: 'LNC K.O. Finale',
 };
-const ROUND_ORDER = ['round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
+const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const roundReminderTimers = new Map();
 const STATUS_LABELS = {
   open: '⏳ Offen',

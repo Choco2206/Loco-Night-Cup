@@ -6,9 +6,6 @@ const { buildKnockoutRounds } = require('./knockout-bracket');
 const { qualifyTeams } = require('./knockout-qualification');
 const { qualifyLeagueTopEight } = require('../league-phase/league-phase-results');
 const { upsertKnockoutPost } = require('./knockout-posts');
-const { upsertBomberRound32Post } = require('./bomber-x-loco-round32-post');
-const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
-const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -121,44 +118,6 @@ async function createKnockoutPhase({ eventKey, actorUserId = null, client = null
       result = { event, knockout: event.knockout, post };
       return event;
     });
-  }
-
-  const currentAfterBasePost = readEventData(eventKey);
-  const needsRound32Post = (isBomberXLocoEvent(currentAfterBasePost) || isLocoZwergenCupEvent(currentAfterBasePost))
-    && currentAfterBasePost.knockout?.rounds?.round_of_32?.matches?.length > 0
-    && currentAfterBasePost.knockout.rounds.round_of_32.status !== 'not_needed';
-
-  if (needsRound32Post) {
-    const round32Post = await upsertBomberRound32Post({
-      client,
-      guild,
-      eventKey,
-      event: currentAfterBasePost,
-    });
-
-    if (round32Post) {
-      updateEventData(eventKey, event => {
-        const round = event.knockout?.rounds?.round_of_32;
-        if (round) {
-          round.channelId = round32Post.channelId || round.channelId || null;
-          round.messageId = round32Post.messageId || round.messageId || null;
-          round.resultsChannelId = round32Post.resultsChannelId || round.resultsChannelId || null;
-          round.resultsMessageId = round32Post.resultsMessageId || round.resultsMessageId || null;
-        }
-        event.knockout.meta = { ...(event.knockout.meta || {}), updatedAt: nowIso() };
-        event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
-        result = { event, knockout: event.knockout, post };
-        return event;
-      });
-
-      post = {
-        ...(post || {}),
-        roundPosts: {
-          ...(post?.roundPosts || {}),
-          round_of_32: round32Post,
-        },
-      };
-    }
   }
 
   await refreshLiveSchedule(client, eventKey, readEventData(eventKey)).catch(error => {
