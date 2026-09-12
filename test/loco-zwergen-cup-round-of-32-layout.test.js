@@ -8,7 +8,7 @@ const layouts = require('../config/loco-zwergen-cup-ko-image-layouts');
 
 test('maps all sixteen Zwergen Cup Sechzehntelfinale rows', () => {
   const layout = layouts.round_of_32;
-  assert.equal(layout.template, 'assets/loco-zwerge-cup/round-of-32.png');
+  assert.equal(layout.template, 'assets/loco-zwerge-cup/round-of-32.jpeg');
   assert.equal(layout.matches.length, 16);
   assert.deepEqual(layout.matches.map(match => match.score.y), [
     494, 549, 602, 655, 708, 761, 814, 867,

@@ -3,6 +3,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { findTeamById } = require('../teams/team-service');
 const { TOURNAMENT_FORMATS } = require('../../app/constants');
+const { getLocoZwergenCupFormat } = require('../events/loco-zwergen-cup-config');
 const { rankGroupRows } = require('./group-ranking');
 
 const STATUS_LABELS = {
@@ -138,9 +139,12 @@ function formatByeEntry(place) {
 }
 
 function getQualificationText(formatSize) {
-  const config = TOURNAMENT_FORMATS[Number(formatSize)];
+  const config = TOURNAMENT_FORMATS[Number(formatSize)] || getLocoZwergenCupFormat(formatSize);
   if (config?.bestFourths) {
-    return `\u{1f3c6} Weiterkommen: Platz 1 & 2 + die ${config.bestThirds} besten Drittplatzierten + der beste Viertplatzierte`;
+    const fourths = config.bestFourths === 1
+      ? 'der beste Viertplatzierte'
+      : `die ${config.bestFourths} besten Viertplatzierten`;
+    return `\u{1f3c6} Weiterkommen: Platz 1 & 2 + die ${config.bestThirds} besten Drittplatzierten + ${fourths}`;
   }
   if (config?.bestThirds) {
     return `\u{1f3c6} Weiterkommen: Platz 1 & 2 + die ${config.bestThirds} besten Drittplatzierten`;

@@ -15,6 +15,7 @@ const { createGroups } = require('../src/domain/groups/group-draw');
 const { qualifyTeams } = require('../src/domain/knockout/knockout-qualification');
 const { buildKnockoutRounds } = require('../src/domain/knockout/knockout-bracket');
 const { getAllowedSizes } = require('../src/domain/checkins/checkin-format');
+const { getQualificationText } = require('../src/domain/groups/group-embeds');
 
 test('Loco Zwergen Cup is isolated to Saturday 12 September 2026', () => {
   assert.equal(isLocoZwergenCupDate('saturday', '2026-09-12'), true);
@@ -63,6 +64,14 @@ test('expanded sizes do not change normal Night Cup or Bomber X Loco formats', (
   assert.equal(Math.max(...normalSizes), 32);
   assert.equal(Math.max(...zwergenSizes), 48);
   assert.deepEqual(bomberSizes, [6, 12, 18, 24, 30, 36, 42, 48]);
+});
+
+test('group posts explain every expanded Zwergen qualification rule correctly', () => {
+  assert.equal(getQualificationText(36), '🏆 Weiterkommen: Platz 1 & 2 + die 9 besten Drittplatzierten + die 5 besten Viertplatzierten');
+  assert.equal(getQualificationText(40), '🏆 Weiterkommen: Platz 1 & 2 + die 10 besten Drittplatzierten + die 2 besten Viertplatzierten');
+  assert.equal(getQualificationText(44), '🏆 Weiterkommen: Platz 1 & 2 + die 10 besten Drittplatzierten');
+  assert.equal(getQualificationText(48), '🏆 Weiterkommen: Platz 1 & 2 + die 8 besten Drittplatzierten');
+  assert.equal(getQualificationText(32), '🏆 Weiterkommen: Platz 1 & 2');
 });
 
 test('48 team Zwergen field creates twelve complete groups A to L', () => {
