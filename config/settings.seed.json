@@ -25,7 +25,11 @@
       "E": "1516429168676569269",
       "F": "1516429198594674708",
       "G": "1516429226264236082",
-      "H": "1516429256010240062"
+      "H": "1516429256010240062",
+      "I": null,
+      "J": null,
+      "K": null,
+      "L": null
     },
     "knockoutRoleIds": {
       "round_of_32": null,
@@ -82,7 +86,11 @@
       "E": null,
       "F": null,
       "G": null,
-      "H": null
+      "H": null,
+      "I": null,
+      "J": null,
+      "K": null,
+      "L": null
     },
     "knockoutOverviewChannelId": null,
     "knockoutChannelIds": {

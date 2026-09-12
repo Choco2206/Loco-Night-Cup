@@ -1,6 +1,6 @@
 'use strict';
 
-const { EVENT_KEYS } = require('../../app/constants');
+const { EVENT_KEYS, GROUP_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { getTournamentStartAt } = require('../checkins/checkin-schedule');
@@ -332,7 +332,7 @@ async function forceReleaseNextSlot(client, eventKey, now = new Date()) {
 
 function clearTimer(key) { const timer = timers.get(key); if (timer) clearTimeout(timer); timers.delete(key); }
 function clearEventTimers(eventKey) {
-  for (const groupKey of ['A','B','C','D','E','F','G','H']) for (let slot = 1; slot <= 5; slot += 1) {
+  for (const groupKey of GROUP_KEYS) for (let slot = 1; slot <= 5; slot += 1) {
     clearTimer(`${eventKey}:${groupKey}:release:${slot}`);
     clearTimer(`${eventKey}:${groupKey}:autoscore:${slot}`);
   }

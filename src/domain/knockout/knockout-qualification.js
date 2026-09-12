@@ -5,14 +5,15 @@ const { TOURNAMENT_FORMATS } = require('../../app/constants');
 const { compareThirdPlaceRows, rankGroupRows } = require('../groups/group-ranking');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { getBomberXLocoFormat, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { getLocoZwergenCupFormat, isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 const QUALIFICATION_RULES = TOURNAMENT_FORMATS;
 
 function configForEvent(event) {
   const formatSize = Number(event.format?.size || 0);
-  return isBomberXLocoEvent(event)
-    ? getBomberXLocoFormat(formatSize)
-    : QUALIFICATION_RULES[formatSize];
+  if (isBomberXLocoEvent(event)) return getBomberXLocoFormat(formatSize);
+  if (isLocoZwergenCupEvent(event)) return getLocoZwergenCupFormat(formatSize) || QUALIFICATION_RULES[formatSize];
+  return QUALIFICATION_RULES[formatSize];
 }
 
 function groupKeysForEvent(event) {

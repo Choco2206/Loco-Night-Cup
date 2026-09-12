@@ -15,7 +15,7 @@ const {
   buildBomberXLocoSchedule,
   isBomberXLocoDate,
 } = require('../events/bomber-x-loco-config');
-const { isLocoZwergenCupDate } = require('../events/loco-zwergen-cup-config');
+const { LOCO_ZWERGEN_CUP_FORMAT_SIZES, isLocoZwergenCupDate } = require('../events/loco-zwergen-cup-config');
 
 function getTimeZone(settings, event = {}) {
   return event.cycle?.timezone || settings.timeProfiles?.timezone || DEFAULT_TIMEZONE;
@@ -197,7 +197,9 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
     ? [8, 16, 32]
     : planned.eventMode === 'bomber_x_loco'
       ? BOMBER_X_LOCO_FORMAT_SIZES
-      : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
+      : planned.eventMode === 'loco_zwergen_cup'
+        ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
+        : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
   if (JSON.stringify(event.format.allowedSizes) !== JSON.stringify(allowedSizes)) { event.format.allowedSizes = [...allowedSizes]; changed = true; }
   if (planned.eventMode === 'bomber_x_loco' && Number(event.format.minimumRealTeams) !== 6) { event.format.minimumRealTeams = 6; changed = true; }
 

@@ -26,6 +26,7 @@ function round(template, centers, logoSize = 64) {
 }
 
 module.exports = Object.freeze({
+  round_of_32: round('round-of-32.png', [494, 549, 602, 655, 708, 761, 814, 867, 922, 975, 1028, 1081, 1134, 1187, 1240, 1293], 38),
   round_of_16: round('round-of-16.jpeg', [515, 618, 721, 825, 930, 1034, 1139, 1244], 54),
   quarter_final: round('quarter-final.jpeg', [671, 851, 1025, 1208]),
   semi_final: round('semi-final.jpeg', [776, 1044]),

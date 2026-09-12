@@ -151,7 +151,7 @@ function getWaitlistTeamIds(event) {
 
 function buildSlotState(event, settings) {
   const playableSlotCount = getPlayableSlotCount(event, settings);
-  const displaySlotCount = MAX_DISPLAY_SLOTS;
+  const displaySlotCount = Math.max(MAX_DISPLAY_SLOTS, ...getAllowedSizes(settings, event));
   const activeTeamIds = getActiveTeamIds(event);
   const waitlistTeamIds = getWaitlistTeamIds(event);
   const byeCount = getManualByeCount(event);
@@ -186,9 +186,9 @@ function formatMilestoneLine(size) {
 function formatSlotLines(slotState) {
   const lines = [];
   const playableSlotCount = slotState.playableSlotCount;
-  const milestones = slotState.isRoyale ? [8, 16, 32] : TOURNAMENT_MILESTONES;
+  const milestones = slotState.isRoyale ? [8, 16, 32] : slotState.milestones || TOURNAMENT_MILESTONES;
 
-  for (let slot = 1; slot <= MAX_DISPLAY_SLOTS; slot += 1) {
+  for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
     const label = slotState.participantLabels[slot - 1];
     const isWaitlistSlot = Boolean(playableSlotCount && slot > playableSlotCount && label);
     lines.push(`${slot}. ${label ? `${label}${isWaitlistSlot ? ' (WL)' : ''}` : '—'}`);
@@ -251,6 +251,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const tournamentStartAt = getTournamentStartAt(eventKey, event, settings, now);
   const slotState = buildSlotState(event, settings);
   slotState.isRoyale = isRoyaleEvent(event);
+  slotState.milestones = getAllowedSizes(settings, event);
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
   const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
   const waitlistSection = formatWaitlistSection(slotState);

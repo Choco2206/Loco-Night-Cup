@@ -7,6 +7,7 @@ const {
   BOMBER_X_LOCO_FORMAT_SIZES,
   isBomberXLocoEvent,
 } = require('../events/bomber-x-loco-config');
+const { LOCO_ZWERGEN_CUP_FORMAT_SIZES, isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 function uniqueStrings(values) {
   const seen = new Set();
@@ -54,6 +55,7 @@ function getManualByeCount(event) {
 
 function getAllowedSizes(settings, event) {
   if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
+  if (isLocoZwergenCupEvent(event)) return [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
 
   const allowedSizes = event.meta?.eventMode === 'knockout_royale' && Array.isArray(event.format?.allowedSizes)
     ? event.format.allowedSizes

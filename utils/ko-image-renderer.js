@@ -33,12 +33,13 @@ function isLocoZwergenCupRender(eventId) {
 
 function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
   const bomberXLoco = isBomberXLocoRender(eventId);
+  const locoZwergenCup = isLocoZwergenCupRender(eventId);
   if (phase === 'qualification_overview') {
     if (![4, 8, 16].includes(Number(qualifiedTeamCount))) throw new Error(`Keine K.O.-Uebersicht fuer ${qualifiedTeamCount} Teams.`);
     return `qualification_${Number(qualifiedTeamCount)}`;
   }
 
-  if (bomberXLoco && ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(phase)) {
+  if ((bomberXLoco || locoZwergenCup) && ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(phase)) {
     return phase;
   }
 

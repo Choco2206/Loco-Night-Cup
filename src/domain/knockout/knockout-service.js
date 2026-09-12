@@ -8,6 +8,7 @@ const { qualifyLeagueTopEight } = require('../league-phase/league-phase-results'
 const { upsertKnockoutPost } = require('./knockout-posts');
 const { upsertBomberRound32Post } = require('./bomber-x-loco-round32-post');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 
 function nowIso(now = new Date()) {
   return now.toISOString();
@@ -123,7 +124,7 @@ async function createKnockoutPhase({ eventKey, actorUserId = null, client = null
   }
 
   const currentAfterBasePost = readEventData(eventKey);
-  const needsRound32Post = isBomberXLocoEvent(currentAfterBasePost)
+  const needsRound32Post = (isBomberXLocoEvent(currentAfterBasePost) || isLocoZwergenCupEvent(currentAfterBasePost))
     && currentAfterBasePost.knockout?.rounds?.round_of_32?.matches?.length > 0
     && currentAfterBasePost.knockout.rounds.round_of_32.status !== 'not_needed';
 

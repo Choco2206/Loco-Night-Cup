@@ -10,6 +10,7 @@ const {
   BOMBER_X_LOCO_GROUP_SIZE,
   isBomberXLocoEvent,
 } = require('./bomber-x-loco-config');
+const { LOCO_ZWERGEN_CUP_FORMAT_SIZES, isLocoZwergenCupEvent } = require('./loco-zwergen-cup-config');
 
 function uniqueEntryTeamIds(entries) {
   const seen = new Set();
@@ -29,6 +30,7 @@ function getActiveManualByes(event) {
 
 function getAllowedSizes(settings, event) {
   if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
+  if (isLocoZwergenCupEvent(event)) return [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
   const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
     ? settings.tournament.allowedSizes
     : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;

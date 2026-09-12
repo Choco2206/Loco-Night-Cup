@@ -20,7 +20,7 @@ const EVENT_LABELS = {
   sunday: 'Sonntag',
 };
 
-const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 const TOURNAMENT_FORMAT_SIZES = [8, 12, 14, 16, 18, 20, 24, 28, 32];
 
 const LEAGUE_PHASE_FORMATS = {

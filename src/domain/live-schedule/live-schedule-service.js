@@ -11,7 +11,7 @@ const { findTeamById } = require('../teams/team-service');
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
 const { parseDateTime } = require('../checkins/checkin-schedule');
 
-const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const { GROUP_KEYS } = require('../../app/constants');
 const ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 const PUBLIC_LIVE_SCHEDULE_CHANNEL_ID = '1516429776070508555';
 const PUBLIC_REBUILD_VERSION = 1;

@@ -13,6 +13,7 @@ require('./group-video-channel.test');
 require('./result-auto-confirm.test');
 require('./team-of-the-tournament.test');
 require('./loco-zwergen-cup-event.test');
+require('./loco-zwergen-cup-round-of-32-layout.test');
 require('./loco-zwergen-cup-graphics.test');
 require('./fc27-ceremony.test');
 require('./graphics-profile.test');

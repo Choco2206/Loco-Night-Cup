@@ -13,6 +13,7 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const { findTeamById } = require('../teams/team-service');
 const { getTeamUserIds } = require('../groups/group-roles');
 const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 
 const ROUND_KEY = 'round_of_32';
@@ -144,7 +145,7 @@ async function upsertBomberRound32Post({ client, guild, eventKey, event }) {
 
 async function refreshEvent(client, eventKey) {
   const event = readEventData(eventKey);
-  if (!isBomberXLocoEvent(event)) { fingerprints.delete(eventKey); return false; }
+  if (!isBomberXLocoEvent(event) && !isLocoZwergenCupEvent(event)) { fingerprints.delete(eventKey); return false; }
   const fingerprint = roundFingerprint(event);
   if (!fingerprint || fingerprints.get(eventKey) === fingerprint) return false;
   const post = await upsertBomberRound32Post({ client, eventKey, event });
