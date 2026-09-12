@@ -15,6 +15,10 @@ const {
   requireObject,
   requireOneOf,
 } = require('./common');
+const {
+  LOCO_ZWERGEN_CUP_FORMAT_SIZES,
+  isLocoZwergenCupEvent,
+} = require('../domain/events/loco-zwergen-cup-config');
 
 function validateEvent(data, expectedEventKey = null) {
   const errors = [];
@@ -44,9 +48,17 @@ function validateEvent(data, expectedEventKey = null) {
 
   if (requireObject(errors, data.format, 'format')) {
     const isRoyale = data.eventKey === 'saturday' && data.meta?.eventMode === 'knockout_royale';
-    const allowedFormatSizes = isRoyale ? [8, 16, 32] : TOURNAMENT_FORMAT_SIZES;
+    const isZwergenCup = isLocoZwergenCupEvent(data);
+    const allowedFormatSizes = isRoyale
+      ? [8, 16, 32]
+      : isZwergenCup
+        ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
+        : TOURNAMENT_FORMAT_SIZES;
+    const acceptedStoredAllowedSizes = isZwergenCup
+      ? [LOCO_ZWERGEN_CUP_FORMAT_SIZES, TOURNAMENT_FORMAT_SIZES]
+      : [allowedFormatSizes];
     if (data.format.minimumRealTeams !== 8) errors.push('format.minimumRealTeams must be 8');
-    if (JSON.stringify(data.format.allowedSizes) !== JSON.stringify(allowedFormatSizes)) {
+    if (!acceptedStoredAllowedSizes.some(sizes => JSON.stringify(data.format.allowedSizes) === JSON.stringify(sizes))) {
       errors.push(`format.allowedSizes must be [${allowedFormatSizes.join(',')}]`);
     }
     if (data.format.size !== null && !allowedFormatSizes.includes(data.format.size)) {

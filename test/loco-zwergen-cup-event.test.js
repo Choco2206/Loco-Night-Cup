@@ -16,6 +16,7 @@ const { qualifyTeams } = require('../src/domain/knockout/knockout-qualification'
 const { buildKnockoutRounds } = require('../src/domain/knockout/knockout-bracket');
 const { getAllowedSizes } = require('../src/domain/checkins/checkin-format');
 const { getQualificationText } = require('../src/domain/groups/group-embeds');
+const { validateEvent } = require('../src/validation/events.schema');
 
 test('Loco Zwergen Cup is isolated to Saturday 12 September 2026', () => {
   assert.equal(isLocoZwergenCupDate('saturday', '2026-09-12'), true);
@@ -64,6 +65,18 @@ test('expanded sizes do not change normal Night Cup or Bomber X Loco formats', (
   assert.equal(Math.max(...normalSizes), 32);
   assert.equal(Math.max(...zwergenSizes), 48);
   assert.deepEqual(bomberSizes, [6, 12, 18, 24, 30, 36, 42, 48]);
+});
+
+test('startup validation accepts a running 44-team Zwergen Cup before schedule sync', () => {
+  const event = createEventDefault('saturday');
+  event.cycle.eventDate = '2026-09-12';
+  event.meta.eventMode = 'loco_zwergen_cup';
+  event.format.size = 44;
+
+  assert.deepEqual(validateEvent(event, 'saturday'), []);
+
+  event.format.allowedSizes = [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
+  assert.deepEqual(validateEvent(event, 'saturday'), []);
 });
 
 test('group posts explain every expanded Zwergen qualification rule correctly', () => {
