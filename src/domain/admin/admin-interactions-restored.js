@@ -735,7 +735,7 @@ function buildTeamDetailsEmbed(team) {
       { name: 'Registrierung', value: formatDate(team.meta?.createdAt), inline: true },
       { name: 'Sperrstatus', value: formatTeamBanStatus(team).slice(0, 1024), inline: true },
       { name: 'Logo', value: formatLogoStatus(team).slice(0, 1024), inline: true },
-      { name: 'Twitch', value: team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'Nicht hinterlegt', inline: true },
+      { name: 'Streams', value: team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'Nicht hinterlegt', inline: true },
       { name: 'Check-ins', value: formatCheckinStatuses(team.id).slice(0, 1024), inline: false }
     )
     .setFooter({ text: `Admin-Aktionen laufen eindeutig über Team-ID ${team.id}` })

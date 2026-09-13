@@ -191,28 +191,35 @@ function updateTeamName({ teamId, newClubName, actorUserId, settings }) {
 function normalizeTwitchUrl(value) {
   const input = String(value || '').trim();
   if (!input) return null;
-  const candidate = /^(?:https?:\/\/)?(?:www\.)?twitch\.tv\//i.test(input)
-    ? input
-    : `https://www.twitch.tv/${input.replace(/^@/, '')}`;
+  const hasAllowedHost = /^(?:https?:\/\/)?(?:www\.|m\.)?(?:twitch\.tv|youtube\.com|youtu\.be|tiktok\.com)\//i.test(input)
+    || /^(?:https?:\/\/)?(?:vm|vt)\.tiktok\.com\//i.test(input);
+  const candidate = hasAllowedHost ? input : `https://www.twitch.tv/${input.replace(/^@/, '')}`;
   let parsed;
   try {
-    parsed = new URL(candidate.startsWith('http') ? candidate : `https://${candidate}`);
+    parsed = new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`);
   } catch {
-    throw new Error('Bitte gib einen gültigen Twitch-Kanal an.');
+    throw new Error('Bitte gib einen gültigen Twitch-, YouTube- oder TikTok-Link an.');
   }
-  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  const host = parsed.hostname.toLowerCase().replace(/^(?:www\.|m\.)/, '');
   const parts = parsed.pathname.split('/').filter(Boolean);
-  if (host !== 'twitch.tv' || parts.length !== 1 || !/^[a-z0-9_]{4,25}$/i.test(parts[0])) {
-    throw new Error('Bitte gib einen Twitch-Kanalnamen oder einen direkten Twitch-Kanallink an.');
+  const isTwitch = host === 'twitch.tv' && parts.length === 1 && /^[a-z0-9_]{4,25}$/i.test(parts[0]);
+  const isYouTube = ['youtube.com', 'youtu.be'].includes(host) && parts.length >= 1;
+  const isTikTok = ['tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com'].includes(host) && parts.length >= 1;
+  if (!isTwitch && !isYouTube && !isTikTok) {
+    throw new Error('Erlaubt sind direkte Stream- oder Kanallinks von Twitch, YouTube und TikTok.');
   }
-  return `https://www.twitch.tv/${parts[0].toLowerCase()}`;
+  if (isTwitch) return `https://www.twitch.tv/${parts[0].toLowerCase()}`;
+  parsed.protocol = 'https:';
+  parsed.hostname = host;
+  parsed.hash = '';
+  return parsed.toString().replace(/\/$/, '');
 }
 
 function normalizeTwitchUrls(values) {
   const source = Array.isArray(values) ? values : [values];
   const normalized = source.map(normalizeTwitchUrl).filter(Boolean);
   const unique = [...new Set(normalized)];
-  if (unique.length > 3) throw new Error('Pro Team können maximal drei Twitch-Links hinterlegt werden.');
+  if (unique.length > 3) throw new Error('Pro Team können maximal drei Stream-Links hinterlegt werden.');
   return unique;
 }
 

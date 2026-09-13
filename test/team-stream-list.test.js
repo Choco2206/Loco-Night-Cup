@@ -5,9 +5,13 @@ const test = require('node:test');
 const { buildStreamListPages, HEADER } = require('../src/domain/teams/team-stream-list');
 const { isTeamMember, normalizeTwitchUrl, normalizeTwitchUrls } = require('../src/domain/teams/team-service');
 
-test('normalizes Twitch channel names and direct links', () => {
+test('normalizes Twitch channel names and accepts Twitch, YouTube and TikTok links', () => {
   assert.equal(normalizeTwitchUrl('Alpha_United'), 'https://www.twitch.tv/alpha_united');
   assert.equal(normalizeTwitchUrl('https://twitch.tv/BlackWolves/'), 'https://www.twitch.tv/blackwolves');
+  assert.equal(normalizeTwitchUrl('youtube.com/@LocoSquad'), 'https://youtube.com/@LocoSquad');
+  assert.equal(normalizeTwitchUrl('https://www.youtube.com/watch?v=abc123'), 'https://youtube.com/watch?v=abc123');
+  assert.equal(normalizeTwitchUrl('https://www.tiktok.com/@loco/live'), 'https://tiktok.com/@loco/live');
+  assert.equal(normalizeTwitchUrl('https://vm.tiktok.com/example/'), 'https://vm.tiktok.com/example');
   assert.equal(normalizeTwitchUrl(''), null);
   assert.throws(() => normalizeTwitchUrl('https://example.com/team'));
 });

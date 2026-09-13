@@ -392,8 +392,8 @@ async function handleModal(interaction, client) {
     await refreshTeamStreamList(client);
     await interaction.editReply({
       content: team.twitchUrls.length
-        ? `${team.twitchUrls.length} Twitch-Link(s) gespeichert:\n${team.twitchUrls.join('\n')}`
-        : 'Alle Twitch-Links wurden entfernt.',
+        ? `${team.twitchUrls.length} Stream-Link(s) gespeichert:\n${team.twitchUrls.join('\n')}`
+        : 'Alle Stream-Links wurden entfernt.',
     });
     return true;
   }

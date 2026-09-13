@@ -206,7 +206,7 @@ function buildTeamRegistrationGuideEmbed() {
       '',
       '> 🖼️ **Teamlogo hinterlegen oder ändern**',
       '> 👥 **Co-VMs hinzufügen oder entfernen**',
-      '> 🟣 **Twitch-Kanal hinterlegen oder ändern**',
+      '> 📺 **Stream-Link hinterlegen oder ändern**',
       '> 🎮 **EA-Club-ID hinterlegen oder ändern**',
       '> 🚪 **Dein Team verlassen**',
       '> 🗑️ **Dein Team vollständig löschen**',

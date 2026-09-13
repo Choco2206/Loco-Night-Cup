@@ -75,7 +75,7 @@ function buildRegisterModal(settings) {
 
   const twitchInputs = [1, 2, 3].map(index => new TextInputBuilder()
     .setCustomId(`twitch_url_${index}`)
-    .setLabel(`Twitch-Kanal oder Link ${index} (optional)`)
+    .setLabel(`Stream-Link ${index} (optional)`)
     .setStyle(TextInputStyle.Short)
     .setMaxLength(200)
     .setRequired(false));
@@ -124,11 +124,11 @@ function buildEditNameModal(team, settings) {
 function buildTwitchModal(team) {
   const modal = new ModalBuilder()
     .setCustomId(`team_twitch_modal:${team.id}`)
-    .setTitle('Twitch-Stream bearbeiten');
+    .setTitle('Stream-Links bearbeiten');
   const inputs = [1, 2, 3].map((index, offset) => {
     const input = new TextInputBuilder()
       .setCustomId(`twitch_url_${index}`)
-      .setLabel(`Twitch-Kanal oder Link ${index} (leer = entfernen)`)
+      .setLabel(`Stream-Link ${index} (leer = entfernen)`)
       .setStyle(TextInputStyle.Short)
       .setMaxLength(200)
       .setRequired(false);
@@ -206,7 +206,7 @@ function buildTeamEmbed(team, logoAttachment) {
       coManagers,
       '',
       logoLine,
-      `Twitch: ${team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'nicht hinterlegt'}`,
+      `Streams: ${team.twitchUrls?.length ? team.twitchUrls.join('\n') : 'nicht hinterlegt'}`,
       `EA-Club: ${team.eaClub ? `**${team.eaClub.name}** (ID: ${team.eaClub.clubId})` : 'nicht verknüpft – keine TOTT-Wertung'}`,
       '',
       ...achievementLines,
@@ -247,7 +247,7 @@ function buildMyTeamPayload(team, viewerUserId = null) {
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`team_twitch_open:${team.id}`)
-      .setLabel('📺 Twitch-Links')
+      .setLabel('📺 Stream-Links')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`team_remove_covm_open:${team.id}`)

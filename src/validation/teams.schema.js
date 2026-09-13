@@ -56,8 +56,8 @@ function validateTeam(team, index, seenTeamIds, seenActiveNames, seenActiveUsers
   if (team.twitchUrls.length > 3) errors.push(`${path}.twitchUrls must contain at most 3 links`);
   if (!hasNoDuplicates(team.twitchUrls)) errors.push(`${path}.twitchUrls must not contain duplicates`);
   for (const twitchUrl of team.twitchUrls) {
-    if (typeof twitchUrl !== 'string' || !/^https:\/\/(?:www\.)?twitch\.tv\/[a-z0-9_]{4,25}$/i.test(twitchUrl)) {
-      errors.push(`${path}.twitchUrls must contain only Twitch channel URLs`);
+    if (typeof twitchUrl !== 'string' || !/^https:\/\/(?:www\.)?(?:twitch\.tv|youtube\.com|youtu\.be|tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)\/.+/i.test(twitchUrl)) {
+      errors.push(`${path}.twitchUrls must contain only Twitch, YouTube or TikTok URLs`);
     }
   }
 
