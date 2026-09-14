@@ -9,6 +9,7 @@ const {
   buildLiveTableEmbed,
   buildScheduleEmbed,
   buildTeamOverviewEmbed,
+  getBomberXLocoQualificationText,
   getLiveTableRows,
   getQualificationText,
 } = require('./group-embeds');
@@ -92,9 +93,10 @@ async function buildLiveTableImagePayload(group) {
   let image;
   if (isBomberXLocoEvent(event)) {
     image = await generateBomberXLocoLiveTableImage({
-        groupKey: group.groupKey,
-        rows,
-      });
+      groupKey: group.groupKey,
+      rows,
+      qualificationText: getBomberXLocoQualificationText(group.formatSize),
+    });
   } else if (isLocoZwergenCupEvent(event)) {
     image = await generateLocoZwergenCupLiveTableImage({
       groupKey: group.groupKey,

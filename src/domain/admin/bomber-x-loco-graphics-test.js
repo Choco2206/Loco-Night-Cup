@@ -9,6 +9,7 @@ const {
   renderBomberXLocoCeremonyImage,
 } = require('../ceremony/bomber-x-loco-ceremony');
 const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
+const { getBomberXLocoQualificationText } = require('../groups/group-embeds');
 const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
 const { renderKoImage } = require('../../../utils/ko-image-renderer');
 const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
@@ -149,7 +150,11 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   });
   messageIds.push(intro.id);
 
-  const liveTable = await generateBomberXLocoLiveTableImage({ groupKey: 'A', rows: buildLiveRows(teams) });
+  const liveTable = await generateBomberXLocoLiveTableImage({
+    groupKey: 'A',
+    rows: buildLiveRows(teams),
+    qualificationText: getBomberXLocoQualificationText(30),
+  });
   messageIds.push(await sendImage(channel, 'Live-Tabelle • Gruppe A', liveTable, 'bomber-x-loco-test-live-table.png'));
 
   const group = buildGroup(teams);

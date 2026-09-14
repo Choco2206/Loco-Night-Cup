@@ -3,6 +3,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { findTeamById } = require('../teams/team-service');
 const { TOURNAMENT_FORMATS } = require('../../app/constants');
+const { getBomberXLocoFormat } = require('../events/bomber-x-loco-config');
 const { getLocoZwergenCupFormat } = require('../events/loco-zwergen-cup-config');
 const { rankGroupRows } = require('./group-ranking');
 
@@ -152,6 +153,25 @@ function getQualificationText(formatSize) {
   return '\u{1f3c6} Weiterkommen: Platz 1 & 2';
 }
 
+function getBomberXLocoQualificationText(formatSize) {
+  const config = getBomberXLocoFormat(formatSize);
+  if (!config) return '';
+
+  const direct = config.directPlaces === 1
+    ? 'Platz 1'
+    : `Platz 1 bis ${config.directPlaces}`;
+  if (!config.wildcardCount || !config.wildcardPlace) {
+    return `\u{1f3c6} Weiterkommen: ${direct}`;
+  }
+
+  const pluralPlaces = { 3: 'Drittplatzierten', 4: 'Viertplatzierten', 5: 'Fünftplatzierten' };
+  const singularPlaces = { 3: 'Drittplatzierte', 4: 'Viertplatzierte', 5: 'Fünftplatzierte' };
+  const wildcard = config.wildcardCount === 1
+    ? `der beste ${singularPlaces[config.wildcardPlace] || `auf Platz ${config.wildcardPlace}`}`
+    : `die ${config.wildcardCount} besten ${pluralPlaces[config.wildcardPlace] || `Teams auf Platz ${config.wildcardPlace}`}`;
+  return `\u{1f3c6} Weiterkommen: ${direct} + ${wildcard}`;
+}
+
 function formatParticipant(participant) {
   if (!participant) return 'TBD';
   if (participant.type === 'bye') return 'Freilos / spielfrei';
@@ -236,6 +256,7 @@ module.exports = {
   buildLiveTableEmbed,
   buildScheduleEmbed,
   buildTeamOverviewEmbed,
+  getBomberXLocoQualificationText,
   getLiveTableRows,
   getQualificationText,
 };
