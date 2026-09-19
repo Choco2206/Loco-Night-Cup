@@ -45,14 +45,18 @@ function formatSeparator(size) {
 }
 
 function formatTeams(event) {
-  const ids = getEntryTeamIds(event).slice(0, MAX_PARTICIPANTS);
+  const ids = getEntryTeamIds(event);
+  const waitlistIds = getWaitlistIds(event);
+  const waitlistSet = new Set(waitlistIds);
+  const activeIds = ids.filter(teamId => !waitlistSet.has(teamId)).slice(0, MAX_PARTICIPANTS);
   const activeByeCount = Math.min(
     getManualByeCount(event),
-    Math.max(0, MAX_PARTICIPANTS - ids.length),
+    Math.max(0, MAX_PARTICIPANTS - activeIds.length),
   );
   const labels = [
-    ...ids.map(teamName),
+    ...activeIds.map(teamName),
     ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos ${index + 1}` : 'Freilos'),
+    ...waitlistIds.map(teamId => `${teamName(teamId)} (WL)`),
   ];
   const lines = [];
   for (let index = 0; index < MAX_PARTICIPANTS; index += 1) {
@@ -72,7 +76,8 @@ function getWaitlistIds(event) {
   // Vor dem Format-Lock berechnet die Check-in-Logik die Warteliste bereits.
   // Der Fallback hält die Anzeige auch dann korrekt, wenn ein alter Datensatz
   // noch keine waitlistTeamIds gespeichert hat.
-  return storedWaitlist.length ? storedWaitlist : ids.slice(MAX_PARTICIPANTS);
+  const activeLimit = Number(event.format?.size) || MAX_PARTICIPANTS;
+  return storedWaitlist.length ? storedWaitlist : ids.slice(activeLimit);
 }
 
 function formatWaitlist(event) {
@@ -82,7 +87,7 @@ function formatWaitlist(event) {
     `**⚠️ Warteliste (${ids.length})**`,
     '_Diese Teams rücken bei einer Abmeldung automatisch in Anmeldereihenfolge nach._',
     '',
-    ...ids.map((teamId, index) => `${index + 1}. ${teamName(teamId)}`),
+    ...ids.map((teamId, index) => `${index + 1}. ${teamName(teamId)} (WL)`),
   ].join('\n');
 }
 
