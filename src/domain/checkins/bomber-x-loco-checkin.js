@@ -9,7 +9,7 @@ const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_FORMAT_SIZES,
 } = require('../events/bomber-x-loco-config');
-const { getEntryTeamIds } = require('./checkin-format');
+const { getEntryTeamIds, getManualByeCount } = require('./checkin-format');
 const { getCheckinWindowState } = require('./checkin-schedule');
 
 const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
@@ -31,12 +31,12 @@ function teamName(teamId) {
 }
 
 function currentFormat(event) {
-  const count = getEntryTeamIds(event).length;
+  const count = getEntryTeamIds(event).length + getManualByeCount(event);
   return [...BOMBER_X_LOCO_FORMAT_SIZES].filter(size => size <= count).pop() || null;
 }
 
 function nextFormat(event) {
-  const count = getEntryTeamIds(event).length;
+  const count = getEntryTeamIds(event).length + getManualByeCount(event);
   return BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
 }
 
@@ -46,10 +46,17 @@ function formatSeparator(size) {
 
 function formatTeams(event) {
   const ids = getEntryTeamIds(event).slice(0, MAX_PARTICIPANTS);
+  const activeByeCount = Math.min(
+    getManualByeCount(event),
+    Math.max(0, MAX_PARTICIPANTS - ids.length),
+  );
+  const labels = [
+    ...ids.map(teamName),
+    ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos ${index + 1}` : 'Freilos'),
+  ];
   const lines = [];
   for (let index = 0; index < MAX_PARTICIPANTS; index += 1) {
-    const teamId = ids[index];
-    lines.push(`${index + 1}. ${teamId ? teamName(teamId) : '—'}`);
+    lines.push(`${index + 1}. ${labels[index] || '—'}`);
     if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(formatSeparator(index + 1));
   }
   return lines.join('\n');
@@ -89,7 +96,9 @@ function getBanner() {
 
 function buildBomberXLocoPayload(event, settings) {
   const state = getCheckinWindowState('saturday', event, settings);
-  const count = getEntryTeamIds(event).length;
+  const realTeamCount = getEntryTeamIds(event).length;
+  const byeCount = getManualByeCount(event);
+  const count = realTeamCount + byeCount;
   const participantCount = Math.min(count, MAX_PARTICIPANTS);
   const waitlistCount = Math.max(0, count - MAX_PARTICIPANTS);
   const format = currentFormat(event);
@@ -106,8 +115,8 @@ function buildBomberXLocoPayload(event, settings) {
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
     `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
-    `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Teams`,
-    `⚠️ Warteliste: ${waitlistCount} Teams`,
+    `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Plätze${byeCount ? ` (${realTeamCount} Teams + ${byeCount} Freilos${byeCount === 1 ? '' : 'e'})` : ''}`,
+    `⚠️ Warteliste: ${waitlistCount} Teilnehmerplätze`,
     next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : '48er-Format erreicht • weitere Anmeldungen kommen auf die Warteliste',
     '',
     '**👥 Teilnehmende Teams**',
