@@ -80,26 +80,53 @@ function createEmptyManualGroups(size) {
   }));
 }
 
-function assignedTeamIds(event) {
+function participantKey(participant) {
+  if (participant?.type === 'bye') return `bye:${participant.byeId || participant.id}`;
+  if (participant?.type === 'team') return `team:${participant.teamId || participant.id}`;
+  return null;
+}
+
+function assignedParticipantKeys(event) {
   return Object.values(event.groups?.groups || {})
     .flatMap(group => group.slots || [])
-    .filter(slot => slot?.type === 'team' && slot.teamId)
-    .map(slot => String(slot.teamId));
+    .map(participantKey)
+    .filter(Boolean);
 }
 
-function lockedTeamIds(event) {
+function lockedParticipants(event) {
   return (event.format?.participants || [])
-    .filter(participant => participant?.type === 'team' && participant.teamId)
-    .map(participant => String(participant.teamId));
+    .filter(participant => participant?.type === 'team' || participant?.type === 'bye');
 }
 
-function availableTeams(event) {
-  const assigned = new Set(assignedTeamIds(event));
-  return lockedTeamIds(event)
-    .filter(teamId => !assigned.has(teamId))
-    .map(findTeamById)
+function availableParticipants(event) {
+  const assigned = new Set(assignedParticipantKeys(event));
+  let byeNumber = 0;
+  return lockedParticipants(event)
+    .map(participant => {
+      if (participant.type === 'bye') {
+        byeNumber += 1;
+        return {
+          type: 'bye',
+          byeId: String(participant.byeId),
+          displayName: `Freilos ${byeNumber}`,
+          value: `bye:${participant.byeId}`,
+        };
+      }
+      const team = findTeamById(participant.teamId);
+      if (!team) return null;
+      return {
+        type: 'team',
+        teamId: String(team.id),
+        displayName: team.clubName,
+        value: `team:${team.id}`,
+      };
+    })
     .filter(Boolean)
-    .sort((a, b) => String(a.clubName || '').localeCompare(String(b.clubName || ''), 'de'));
+    .filter(participant => !assigned.has(participant.value))
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'bye' ? -1 : 1;
+      return String(a.displayName || '').localeCompare(String(b.displayName || ''), 'de');
+    });
 }
 
 function rebuildGroupCompetitionData(group, now = new Date()) {
@@ -118,7 +145,7 @@ function rebuildGroupCompetitionData(group, now = new Date()) {
     goalDifference: 0,
     points: 0,
   }));
-  group.assignmentComplete = teams.length === BOMBER_X_LOCO_GROUP_SIZE;
+  group.assignmentComplete = (group.slots || []).every(slot => slot?.type === 'team' || slot?.type === 'bye');
   group.matchdays = createGroupMatchdays({ eventKey: EVENT_KEY, group, createdAt: nowIso(now) });
   return group;
 }
@@ -255,72 +282,104 @@ function scheduleManualDrawPreparation(client) {
 }
 
 function buildGroupSelect(event) {
+  const remainingParticipants = availableParticipants(event);
   const groups = Object.values(event.groups?.groups || {})
-    .filter(group => (group.slots || []).some(slot => !slot.teamId));
+    .filter(group => (group.slots || []).some(slot => slot?.type === 'pending' || slot?.pendingAssignment === true))
+    .filter(group => remainingParticipants.some(participant => participant.type === 'team'
+      || !(group.slots || []).some(slot => slot?.type === 'bye')));
   if (!groups.length) throw new Error('Alle Gruppen sind bereits vollständig zugeteilt.');
   return [new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('bxl_manual_group_select')
       .setPlaceholder('Gruppe auswählen')
       .addOptions(groups.map(group => {
-        const assigned = (group.slots || []).filter(slot => slot?.teamId).length;
+        const assigned = (group.slots || []).filter(slot => slot?.type === 'team' || slot?.type === 'bye').length;
         return {
           label: `Gruppe ${group.groupKey}`,
           value: String(group.groupKey),
-          description: `${assigned}/${BOMBER_X_LOCO_GROUP_SIZE} Teams zugeteilt`,
+          description: `${assigned}/${BOMBER_X_LOCO_GROUP_SIZE} Plätze zugeteilt`,
         };
       }))
   )];
 }
 
-function buildTeamSelectRows(event, groupKey) {
-  const teams = availableTeams(event);
-  if (!teams.length) throw new Error('Es gibt keine weiteren nicht zugeteilten Teams.');
+function buildParticipantSelectRows(event, groupKey) {
+  const group = event.groups?.groups?.[groupKey];
+  if (!group) throw new Error(`Gruppe ${groupKey} wurde nicht gefunden.`);
+  const groupHasBye = (group.slots || []).some(slot => slot?.type === 'bye');
+  const participants = availableParticipants(event)
+    .filter(participant => participant.type === 'team' || !groupHasBye);
+  if (!participants.length) throw new Error('Es gibt keine weiteren passenden Teilnehmerplätze für diese Gruppe.');
   const chunks = [];
-  for (let index = 0; index < teams.length; index += 25) chunks.push(teams.slice(index, index + 25));
+  for (let index = 0; index < participants.length; index += 25) chunks.push(participants.slice(index, index + 25));
   return chunks.slice(0, 2).map((chunk, index) => new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`bxl_manual_team_select:${groupKey}:${index}`)
-      .setPlaceholder(chunks.length > 1 ? `Team auswählen (${index + 1}/${chunks.length})` : 'Team auswählen')
-      .addOptions(chunk.map(team => ({
-        label: String(team.clubName || team.id).slice(0, 100),
-        value: String(team.id),
+      .setPlaceholder(chunks.length > 1 ? `Team oder Freilos auswählen (${index + 1}/${chunks.length})` : 'Team oder Freilos auswählen')
+      .addOptions(chunk.map(participant => ({
+        label: String(participant.displayName).slice(0, 100),
+        value: participant.value,
+        description: participant.type === 'bye' ? 'Gelocktes Freilos' : undefined,
       })))
   ));
 }
 
-async function assignTeamToGroup({ client, groupKey, teamId, actorUserId, now = new Date() }) {
-  let changedGroup = null;
-  updateEventData(EVENT_KEY, event => {
-    if (!isTargetEvent(event) || event.groups?.manualDraw !== true) throw new Error('Die manuelle Bomber-X-Loco-Auslosung ist nicht aktiv.');
-    const group = event.groups?.groups?.[groupKey];
-    if (!group) throw new Error(`Gruppe ${groupKey} wurde nicht gefunden.`);
-    if (!lockedTeamIds(event).includes(String(teamId))) throw new Error('Dieses Team gehört nicht zum gelockten Teilnehmerfeld.');
-    if (assignedTeamIds(event).includes(String(teamId))) throw new Error('Dieses Team wurde bereits einer Gruppe zugeteilt.');
-    const slot = (group.slots || []).find(entry => !entry.teamId);
-    if (!slot) throw new Error(`Gruppe ${groupKey} ist bereits voll.`);
-    const team = findTeamById(teamId);
+function assignParticipantInEvent(event, { groupKey, selectedValue, actorUserId, now = new Date() }) {
+  if (!isTargetEvent(event) || event.groups?.manualDraw !== true) throw new Error('Die manuelle Bomber-X-Loco-Auslosung ist nicht aktiv.');
+  const group = event.groups?.groups?.[groupKey];
+  if (!group) throw new Error(`Gruppe ${groupKey} wurde nicht gefunden.`);
+
+  const participant = lockedParticipants(event)
+    .find(entry => participantKey(entry) === String(selectedValue));
+  if (!participant) throw new Error('Dieser Teilnehmerplatz gehört nicht zum gelockten Teilnehmerfeld.');
+  if (assignedParticipantKeys(event).includes(String(selectedValue))) throw new Error('Dieser Teilnehmerplatz wurde bereits einer Gruppe zugeteilt.');
+  if (participant.type === 'bye' && (group.slots || []).some(slot => slot?.type === 'bye')) {
+    throw new Error(`Gruppe ${groupKey} hat bereits ein Freilos.`);
+  }
+
+  const slot = (group.slots || []).find(entry => entry?.type === 'pending' || entry?.pendingAssignment === true);
+  if (!slot) throw new Error(`Gruppe ${groupKey} ist bereits voll.`);
+
+  if (participant.type === 'bye') {
+    slot.type = 'bye';
+    slot.teamId = null;
+    slot.byeId = String(participant.byeId);
+    slot.participantKey = `bye:${participant.byeId}`;
+    slot.displayName = participant.displayName || 'Freilos';
+  } else {
+    const team = findTeamById(participant.teamId);
     if (!team) throw new Error('Team wurde nicht gefunden.');
     slot.type = 'team';
     slot.teamId = String(team.id);
+    delete slot.byeId;
     slot.participantKey = `team:${team.id}`;
     slot.displayName = team.clubName;
-    slot.pendingAssignment = false;
-    rebuildGroupCompetitionData(group, now);
-    event.groups.drawnAt = event.groups.drawnAt || nowIso(now);
-    event.groups.drawnBy = actorUserId ? String(actorUserId) : event.groups.drawnBy;
-    const allAssigned = assignedTeamIds(event).length === lockedTeamIds(event).length;
-    if (allAssigned) {
-      event.meta = { ...(event.meta || {}), bomberManualDrawCompletedAt: nowIso(now) };
-    }
-    event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
-    changedGroup = group;
+  }
+  slot.pendingAssignment = false;
+
+  rebuildGroupCompetitionData(group, now);
+  event.groups.drawnAt = event.groups.drawnAt || nowIso(now);
+  event.groups.drawnBy = actorUserId ? String(actorUserId) : event.groups.drawnBy;
+  const allAssigned = assignedParticipantKeys(event).length === lockedParticipants(event).length
+    && Object.values(event.groups?.groups || {}).every(entry => entry.assignmentComplete === true);
+  if (allAssigned) event.meta = { ...(event.meta || {}), bomberManualDrawCompletedAt: nowIso(now) };
+  event.meta = { ...(event.meta || {}), updatedAt: nowIso(now) };
+  return { event, group, participant, allAssigned };
+}
+
+async function assignParticipantToGroup({ client, groupKey, selectedValue, actorUserId, now = new Date() }) {
+  let changedGroup = null;
+  let assignedParticipant = null;
+  updateEventData(EVENT_KEY, event => {
+    const result = assignParticipantInEvent(event, { groupKey, selectedValue, actorUserId, now });
+    changedGroup = result.group;
+    assignedParticipant = result.participant;
     return event;
   });
 
   const event = readEventData(EVENT_KEY);
   await syncGroupResources(client, event, [groupKey]);
-  return { event: readEventData(EVENT_KEY), group: changedGroup };
+  return { event: readEventData(EVENT_KEY), group: changedGroup, participant: assignedParticipant };
 }
 
 async function handleInteraction(interaction, client) {
@@ -365,21 +424,23 @@ async function handleInteraction(interaction, client) {
     if (customId === 'bxl_manual_group_select') {
       const groupKey = interaction.values?.[0];
       await interaction.update({
-        content: `Gruppe **${groupKey}** ausgewählt. Welches gezogene Team soll dort hinein?`,
-        components: buildTeamSelectRows(event, groupKey),
+        content: `Gruppe **${groupKey}** ausgewählt. Welches gezogene Team oder Freilos soll dort hinein?`,
+        components: buildParticipantSelectRows(event, groupKey),
       });
       return true;
     }
 
     if (customId.startsWith('bxl_manual_team_select:')) {
       const [, groupKey] = customId.split(':');
-      const teamId = interaction.values?.[0];
+      const selectedValue = interaction.values?.[0];
       await interaction.deferUpdate();
-      const result = await assignTeamToGroup({ client, groupKey, teamId, actorUserId: interaction.user.id });
-      const team = findTeamById(teamId);
-      const remaining = availableTeams(result.event).length;
+      const result = await assignParticipantToGroup({ client, groupKey, selectedValue, actorUserId: interaction.user.id });
+      const assignedName = result.participant?.type === 'bye'
+        ? result.participant.displayName || 'Freilos'
+        : findTeamById(result.participant?.teamId)?.clubName || result.participant?.displayName || selectedValue;
+      const remaining = availableParticipants(result.event).length;
       await interaction.editReply({
-        content: `✅ **${team?.clubName || teamId}** wurde **Gruppe ${groupKey}** zugeteilt.${remaining ? ` Noch ${remaining} Team${remaining === 1 ? '' : 's'} offen.` : ' Die Live-Auslosung ist vollständig zugeteilt.'}`,
+        content: `✅ **${assignedName}** wurde **Gruppe ${groupKey}** zugeteilt.${remaining ? ` Noch ${remaining} Teilnehmer${remaining === 1 ? 'platz' : 'plätze'} offen.` : ' Die Live-Auslosung ist vollständig zugeteilt.'}`,
         components: remaining ? buildGroupSelect(result.event) : [],
       });
       return true;
@@ -395,7 +456,10 @@ async function handleInteraction(interaction, client) {
 }
 
 module.exports = {
-  assignTeamToGroup,
+  assignParticipantInEvent,
+  assignParticipantToGroup,
+  availableParticipants,
+  createEmptyManualGroups,
   handleInteraction,
   prepareManualDraw,
   scheduleManualDrawPreparation,
