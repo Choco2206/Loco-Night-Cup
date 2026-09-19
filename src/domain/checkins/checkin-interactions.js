@@ -7,7 +7,7 @@ const {
   refreshCheckinMessage,
   refreshCheckinMessages,
 } = require('./checkin-panel');
-const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID } = require('../events/bomber-x-loco-config');
+const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 const EPHEMERAL = 64;
 
@@ -33,6 +33,12 @@ async function handleJoin(interaction, client, eventKey) {
   await refreshCheckinMessage(eventKey, client);
   if (result.alreadyCheckedIn) {
     await interaction.editReply('Dein Team ist für dieses Event bereits eingecheckt. Es wurde kein Duplikat erzeugt.');
+    return true;
+  }
+  const waitlist = (result.event.checkin?.waitlistTeamIds || []).map(String);
+  const waitlistPosition = waitlist.indexOf(String(result.team.id));
+  if (isBomberXLocoEvent(result.event) && waitlistPosition >= 0) {
+    await interaction.editReply(`✅ ${result.team.clubName} wurde auf Wartelistenplatz ${waitlistPosition + 1} eingetragen und rückt bei einer Abmeldung automatisch nach.`);
     return true;
   }
   await interaction.editReply(`${result.team.clubName} wurde eingecheckt.`);

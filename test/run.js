@@ -16,6 +16,7 @@ require('./loco-zwergen-cup-event.test');
 require('./loco-zwergen-cup-round-of-32-layout.test');
 require('./loco-zwergen-cup-graphics.test');
 require('./bomber-x-loco-qualification-text.test');
+require('./bomber-x-loco-waitlist.test');
 require('./fc27-ceremony.test');
 require('./graphics-profile.test');
 require('./special-awards-renderer.test');

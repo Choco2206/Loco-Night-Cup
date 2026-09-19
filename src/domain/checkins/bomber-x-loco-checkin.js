@@ -15,6 +15,7 @@ const { getCheckinWindowState } = require('./checkin-schedule');
 const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
 const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
+const MAX_PARTICIPANTS = 48;
 
 function formatDateTime(value, type = 'time') {
   if (!value) return 'nicht gesetzt';
@@ -44,14 +45,38 @@ function formatSeparator(size) {
 }
 
 function formatTeams(event) {
-  const ids = getEntryTeamIds(event);
+  const ids = getEntryTeamIds(event).slice(0, MAX_PARTICIPANTS);
   const lines = [];
-  for (let index = 0; index < 48; index += 1) {
+  for (let index = 0; index < MAX_PARTICIPANTS; index += 1) {
     const teamId = ids[index];
     lines.push(`${index + 1}. ${teamId ? teamName(teamId) : '—'}`);
     if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(formatSeparator(index + 1));
   }
   return lines.join('\n');
+}
+
+function getWaitlistIds(event) {
+  const ids = getEntryTeamIds(event);
+  const entryIds = new Set(ids);
+  const storedWaitlist = (event.checkin?.waitlistTeamIds || [])
+    .map(String)
+    .filter(teamId => entryIds.has(teamId));
+
+  // Vor dem Format-Lock berechnet die Check-in-Logik die Warteliste bereits.
+  // Der Fallback hält die Anzeige auch dann korrekt, wenn ein alter Datensatz
+  // noch keine waitlistTeamIds gespeichert hat.
+  return storedWaitlist.length ? storedWaitlist : ids.slice(MAX_PARTICIPANTS);
+}
+
+function formatWaitlist(event) {
+  const ids = getWaitlistIds(event);
+  if (!ids.length) return null;
+  return [
+    `**⚠️ Warteliste (${ids.length})**`,
+    '_Diese Teams rücken bei einer Abmeldung automatisch in Anmeldereihenfolge nach._',
+    '',
+    ...ids.map((teamId, index) => `${index + 1}. ${teamName(teamId)}`),
+  ].join('\n');
 }
 
 function getBanner() {
@@ -65,6 +90,8 @@ function getBanner() {
 function buildBomberXLocoPayload(event, settings) {
   const state = getCheckinWindowState('saturday', event, settings);
   const count = getEntryTeamIds(event).length;
+  const participantCount = Math.min(count, MAX_PARTICIPANTS);
+  const waitlistCount = Math.max(0, count - MAX_PARTICIPANTS);
   const format = currentFormat(event);
   const next = nextFormat(event);
   const banner = getBanner();
@@ -79,8 +106,9 @@ function buildBomberXLocoPayload(event, settings) {
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
     `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
-    `👥 Angemeldet: ${count}/48 Teams`,
-    next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
+    `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Teams`,
+    `⚠️ Warteliste: ${waitlistCount} Teams`,
+    next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : '48er-Format erreicht • weitere Anmeldungen kommen auf die Warteliste',
     '',
     '**👥 Teilnehmende Teams**',
     '',
@@ -91,9 +119,13 @@ function buildBomberXLocoPayload(event, settings) {
     `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
   ].join('\n');
   const checkinEmbed = new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Anmeldung').setDescription(description).setTimestamp();
+  const waitlistDescription = formatWaitlist(event);
+  const waitlistEmbed = waitlistDescription
+    ? new EmbedBuilder().setColor(0xffa500).setTitle('Nachrücker').setDescription(waitlistDescription)
+    : null;
 
   return {
-    embeds: [banner.embed, checkinEmbed].filter(Boolean),
+    embeds: [banner.embed, checkinEmbed, waitlistEmbed].filter(Boolean),
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('checkin_join:saturday').setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(!state.canJoin),
       new ButtonBuilder().setCustomId('checkin_leave:saturday').setLabel('⬇️ Abmelden').setStyle(ButtonStyle.Danger).setDisabled(!state.canLeave),
@@ -127,4 +159,5 @@ module.exports = {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   buildBomberXLocoPayload,
   buildSaturdayBlockerPayload,
+  getWaitlistIds,
 };

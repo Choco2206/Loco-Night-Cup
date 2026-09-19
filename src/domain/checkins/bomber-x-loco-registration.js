@@ -24,6 +24,7 @@ const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const FORCE_REPOST_MARKER = 'forcedRepost20260904V3At';
 const SATURDAY_SEPARATION_MARKER = 'separatedFromSaturday20260905At';
 const EPHEMERAL = 64;
+const MAX_PARTICIPANTS = 48;
 let clientRef = null;
 let intervalRef = null;
 
@@ -127,6 +128,10 @@ function formatLines(entries) {
   return lines;
 }
 
+function formatWaitlistLines(entries) {
+  return entries.slice(MAX_PARTICIPANTS).map((entry, index) => `${index + 1} | ${teamName(entry.teamId)}`);
+}
+
 function stateFromLiveEvent(event) {
   return {
     ...readState(),
@@ -152,6 +157,8 @@ function buildPayload(state, { liveEvent = false } = {}) {
   const count = cleanEntries.length;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
+  const participantCount = Math.min(count, MAX_PARTICIPANTS);
+  const waitlistLines = formatWaitlistLines(cleanEntries);
   const closed = isRegistrationClosed();
   const bannerExists = fs.existsSync(BANNER_PATH);
   const bannerEmbed = bannerExists
@@ -171,12 +178,19 @@ function buildPayload(state, { liveEvent = false } = {}) {
       '🚀 Turnierstart: 21:00 Uhr',
       '',
       `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
-      `👥 Angemeldet: ${count}/48 Teams`,
-      next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : 'Maximales Format erreicht',
+      `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Teams`,
+      `⚠️ Warteliste: ${waitlistLines.length} Teams`,
+      next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : '48er-Format erreicht • weitere Anmeldungen kommen auf die Warteliste',
       '',
       '**👥 Teilnehmende Teams**',
       '',
       ...formatLines(cleanEntries),
+      ...(waitlistLines.length ? [
+        '',
+        `**⚠️ Warteliste (${waitlistLines.length})**`,
+        '_Diese Teams rücken bei einer Abmeldung automatisch in Anmeldereihenfolge nach._',
+        ...waitlistLines,
+      ] : []),
       '',
       '⚠️ Nach **18:30 Uhr** ist keine Anmeldung oder Abmeldung mehr möglich.',
       '🎥 Die Gruppen werden anschließend **live bei Paddy HSV** gezogen und von der Turnierleitung manuell zugeteilt.',
@@ -190,7 +204,7 @@ function buildPayload(state, { liveEvent = false } = {}) {
         .setCustomId(liveEvent ? 'checkin_join:saturday' : 'bomber_x_loco_join')
         .setLabel('⬆️ Anmelden')
         .setStyle(ButtonStyle.Success)
-        .setDisabled(closed || count >= 48),
+        .setDisabled(closed),
       new ButtonBuilder()
         .setCustomId(liveEvent ? 'checkin_leave:saturday' : 'bomber_x_loco_leave')
         .setLabel('⬇️ Abmelden')
@@ -344,11 +358,16 @@ async function handleInteraction(interaction) {
       const team = validTeamForUser(interaction.user.id);
       const index = state.entries.findIndex(entry => String(entry.teamId) === String(team.id));
       if (index !== -1) throw new Error('Dein Team ist bereits für den Bomber X Loco Cup angemeldet.');
-      if (state.entries.length >= 48) throw new Error('Der Bomber X Loco Cup ist bereits mit 48 Teams voll.');
       state.entries.push({ teamId: String(team.id), checkedInByUserId: String(interaction.user.id), checkedInAt: new Date().toISOString() });
+      const waitlistPosition = state.entries.length - MAX_PARTICIPANTS;
       writeState(state);
       await ensurePanel();
-      await interaction.reply({ content: `✅ **${team.clubName}** wurde angemeldet.`, flags: EPHEMERAL });
+      await interaction.reply({
+        content: waitlistPosition > 0
+          ? `✅ **${team.clubName}** wurde auf Wartelistenplatz **${waitlistPosition}** eingetragen und rückt bei einer Abmeldung automatisch nach.`
+          : `✅ **${team.clubName}** wurde angemeldet.`,
+        flags: EPHEMERAL,
+      });
       return true;
     }
 
