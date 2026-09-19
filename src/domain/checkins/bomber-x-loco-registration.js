@@ -118,18 +118,51 @@ function currentFormat(count) {
   return [...BOMBER_X_LOCO_FORMAT_SIZES].filter(size => size <= count).pop() || null;
 }
 
-function formatLines(entries) {
+function getActiveByes(state) {
+  return (Array.isArray(state.byes) ? state.byes : [])
+    .filter(bye => bye?.type === 'bye' && bye?.status === 'active');
+}
+
+function getWaitlistEntries(state, entries) {
+  if (Array.isArray(state.waitlistTeamIds)) {
+    const waitlistIds = new Set(state.waitlistTeamIds.map(String));
+    return entries.filter(entry => waitlistIds.has(String(entry.teamId)));
+  }
+  return entries.slice(MAX_PARTICIPANTS);
+}
+
+function formatLines(state, entries) {
+  const waitlistEntries = getWaitlistEntries(state, entries);
+  const waitlistIds = new Set(waitlistEntries.map(entry => String(entry.teamId)));
+  const activeEntries = entries.filter(entry => !waitlistIds.has(String(entry.teamId)));
+  const byes = getActiveByes(state);
+  const storedActiveByeCount = Number(state.format?.activeByeCount);
+  const activeByeCount = Math.min(
+    byes.length,
+    Math.max(0, MAX_PARTICIPANTS - activeEntries.length),
+    Number.isFinite(storedActiveByeCount) ? Math.max(0, storedActiveByeCount) : byes.length,
+  );
+  const labels = [
+    ...activeEntries.map(entry => teamName(entry.teamId)),
+    ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos ${index + 1}` : 'Freilos'),
+    ...waitlistEntries.map(entry => `${teamName(entry.teamId)} (WL)`),
+  ];
   const lines = [];
   for (let index = 0; index < 48; index += 1) {
-    const entry = entries[index];
-    lines.push(`${index + 1} | ${entry ? teamName(entry.teamId) : '—'}`);
+    lines.push(`${index + 1} | ${labels[index] || '—'}`);
     if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(`══════⬆️ ${index + 1}er Turnier ⬆️══════`);
   }
   return lines;
 }
 
-function formatWaitlistLines(entries) {
-  return entries.slice(MAX_PARTICIPANTS).map((entry, index) => `${index + 1} | ${teamName(entry.teamId)}`);
+function formatWaitlistLines(state, entries) {
+  const teamLines = getWaitlistEntries(state, entries)
+    .map((entry, index) => `${index + 1} | ${teamName(entry.teamId)} (WL)`);
+  const waitlistByeCount = Math.max(0, getActiveByes(state).length - Number(state.format?.activeByeCount || 0));
+  return [
+    ...teamLines,
+    ...Array.from({ length: waitlistByeCount }, (_, index) => `${teamLines.length + index + 1} | Freilos (WL)`),
+  ];
 }
 
 function stateFromLiveEvent(event) {
@@ -140,6 +173,10 @@ function stateFromLiveEvent(event) {
       checkedInByUserId: String(entry.checkedInByUserId || ''),
       checkedInAt: entry.checkedInAt || null,
     }))),
+    activeTeamIds: Array.isArray(event.checkin?.activeTeamIds) ? event.checkin.activeTeamIds.map(String) : [],
+    waitlistTeamIds: Array.isArray(event.checkin?.waitlistTeamIds) ? event.checkin.waitlistTeamIds.map(String) : [],
+    byes: Array.isArray(event.byes) ? event.byes.map(bye => ({ ...bye })) : [],
+    format: { ...(event.format || {}) },
   };
 }
 
@@ -154,11 +191,12 @@ function syncStateFromLiveEvent(event) {
 
 function buildPayload(state, { liveEvent = false } = {}) {
   const cleanEntries = normalizeEntries(state.entries);
-  const count = cleanEntries.length;
+  const byeCount = getActiveByes(state).length;
+  const count = cleanEntries.length + byeCount;
   const format = currentFormat(count);
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
   const participantCount = Math.min(count, MAX_PARTICIPANTS);
-  const waitlistLines = formatWaitlistLines(cleanEntries);
+  const waitlistLines = formatWaitlistLines(state, cleanEntries);
   const closed = isRegistrationClosed();
   const bannerExists = fs.existsSync(BANNER_PATH);
   const bannerEmbed = bannerExists
@@ -178,13 +216,13 @@ function buildPayload(state, { liveEvent = false } = {}) {
       '🚀 Turnierstart: 21:00 Uhr',
       '',
       `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
-      `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Teams`,
-      `⚠️ Warteliste: ${waitlistLines.length} Teams`,
+      `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Plätze${byeCount ? ` (${cleanEntries.length} Teams + ${byeCount} Freilos${byeCount === 1 ? '' : 'e'})` : ''}`,
+      `⚠️ Warteliste: ${waitlistLines.length} Teilnehmerplätze`,
       next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : '48er-Format erreicht • weitere Anmeldungen kommen auf die Warteliste',
       '',
       '**👥 Teilnehmende Teams**',
       '',
-      ...formatLines(cleanEntries),
+      ...formatLines(state, cleanEntries),
       ...(waitlistLines.length ? [
         '',
         `**⚠️ Warteliste (${waitlistLines.length})**`,
@@ -420,4 +458,6 @@ module.exports = {
   handleInteraction,
   handOverToSaturdayEvent,
   ensurePanel,
+  buildPayload,
+  stateFromLiveEvent,
 };

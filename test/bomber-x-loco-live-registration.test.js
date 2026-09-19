@@ -1,0 +1,56 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const Module = require('module');
+
+test('live Bomber registration keeps manual byes and marks waitlist teams', () => {
+  const originalLoad = Module._load;
+  Module._load = function load(request, parent, isMain) {
+    if (request === '../teams/team-service' && parent?.filename.endsWith('bomber-x-loco-registration.js')) {
+      return {
+        findNonDeletedTeamByUserId: () => null,
+        findTeamById: teamId => ({ id: String(teamId), clubName: `Team ${teamId}`, status: 'active', registrationStatus: 'complete' }),
+        isTeamMember: () => false,
+      };
+    }
+    if (request === './checkin-ban-integration' && parent?.filename.endsWith('bomber-x-loco-registration.js')) {
+      return { findActiveBanForTeamOrManagers: () => null };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  const modulePath = require.resolve('../src/domain/checkins/bomber-x-loco-registration');
+  delete require.cache[modulePath];
+  const { buildPayload, stateFromLiveEvent } = require(modulePath);
+  Module._load = originalLoad;
+
+  const teamIds = Array.from({ length: 47 }, (_, index) => String(index + 1));
+  const baseEvent = {
+    checkin: {
+      entries: teamIds.map(teamId => ({ teamId })),
+      activeTeamIds: teamIds.slice(0, 42),
+      waitlistTeamIds: teamIds.slice(42),
+    },
+    format: { size: 42, activeByeCount: 0 },
+    byes: [],
+  };
+
+  const withoutBye = buildPayload(stateFromLiveEvent(baseEvent), { liveEvent: true });
+  const withoutByeText = withoutBye.embeds.map(embed => embed.toJSON().description || '').join('\n');
+  assert.match(withoutByeText, /43 \| Team 43 \(WL\)/);
+  assert.match(withoutByeText, /47 \| Team 47 \(WL\)/);
+
+  const withByeEvent = {
+    ...baseEvent,
+    checkin: { ...baseEvent.checkin, activeTeamIds: teamIds, waitlistTeamIds: [] },
+    format: { size: 48, activeByeCount: 1 },
+    byes: [{ type: 'bye', status: 'active', id: 'bye_saturday_1' }],
+  };
+  const withBye = buildPayload(stateFromLiveEvent(withByeEvent), { liveEvent: true });
+  const withByeText = withBye.embeds.map(embed => embed.toJSON().description || '').join('\n');
+  assert.match(withByeText, /Aktuelles Format: 48er Turnier/);
+  assert.match(withByeText, /Teilnehmerfeld: 48\/48 Plätze \(47 Teams \+ 1 Freilos\)/);
+  assert.match(withByeText, /48 \| Freilos/);
+  assert.doesNotMatch(withByeText, /Team 43 \(WL\)/);
+});
