@@ -22,7 +22,7 @@ test('live Bomber registration keeps manual byes and marks waitlist teams', () =
 
   const modulePath = require.resolve('../src/domain/checkins/bomber-x-loco-registration');
   delete require.cache[modulePath];
-  const { buildPayload, stateFromLiveEvent } = require(modulePath);
+  const { buildPayload, resetRegistrationForReschedule, stateFromLiveEvent } = require(modulePath);
   Module._load = originalLoad;
 
   const teamIds = Array.from({ length: 47 }, (_, index) => String(index + 1));
@@ -53,4 +53,26 @@ test('live Bomber registration keeps manual byes and marks waitlist teams', () =
   assert.match(withByeText, /Teilnehmerfeld: 48\/48 Plätze \(47 Teams \+ 1 Freilos\)/);
   assert.match(withByeText, /48 \| Freilos/);
   assert.doesNotMatch(withByeText, /Team 43 \(WL\)/);
+
+  const oldState = {
+    eventDate: '2026-09-19',
+    entries: [{ teamId: '1' }, { teamId: '2' }],
+    activeTeamIds: ['1'],
+    waitlistTeamIds: ['2'],
+    byes: [{ id: 'old-bye', status: 'active' }],
+    format: { size: 48 },
+    handedOverAt: '2026-09-19T18:00:00.000Z',
+  };
+  assert.equal(resetRegistrationForReschedule(oldState, new Date('2026-09-20T12:00:00.000Z')), true);
+  assert.equal(oldState.eventDate, '2026-09-25');
+  assert.deepEqual(oldState.entries, []);
+  assert.deepEqual(oldState.activeTeamIds, []);
+  assert.deepEqual(oldState.waitlistTeamIds, []);
+  assert.deepEqual(oldState.byes, []);
+  assert.deepEqual(oldState.format, {});
+  assert.equal(oldState.handedOverAt, null);
+
+  oldState.entries.push({ teamId: 'new-team' });
+  assert.equal(resetRegistrationForReschedule(oldState, new Date('2026-09-21T12:00:00.000Z')), false);
+  assert.deepEqual(oldState.entries, [{ teamId: 'new-team' }]);
 });

@@ -23,7 +23,7 @@ const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
 const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const FORCE_REPOST_MARKER = 'forcedRepost20260904V3At';
-const SATURDAY_SEPARATION_MARKER = 'separatedFromSaturday20260905At';
+const RESCHEDULE_RESET_MARKER = 'resetForReschedule20260925At';
 const EPHEMERAL = 64;
 const MAX_PARTICIPANTS = Math.max(...BOMBER_X_LOCO_FORMAT_SIZES);
 let clientRef = null;
@@ -53,6 +53,19 @@ function writeState(state) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   state.updatedAt = new Date().toISOString();
   fs.writeFileSync(REGISTRATION_FILE, JSON.stringify(state, null, 2), 'utf8');
+}
+
+function resetRegistrationForReschedule(state, now = new Date()) {
+  if (state[RESCHEDULE_RESET_MARKER]) return false;
+  state.eventDate = BOMBER_X_LOCO_EVENT_DATE;
+  state.entries = [];
+  state.activeTeamIds = [];
+  state.waitlistTeamIds = [];
+  state.byes = [];
+  state.format = {};
+  state.handedOverAt = null;
+  state[RESCHEDULE_RESET_MARKER] = now.toISOString();
+  return true;
 }
 
 function registrationDeadline() {
@@ -442,16 +455,13 @@ module.exports = {
   async init(client) {
     clientRef = client;
 
-    // Einmalige Korrektur der versehentlichen Vermischung: Die Einträge im
-    // Saturday-Event gehören zum normalen Cup am 05.09. und bleiben dort.
-    // Der eigenständige Bomber-Check-in für den 19.09. beginnt leer.
-    const separatedState = readState();
-    if (!separatedState[SATURDAY_SEPARATION_MARKER]) {
-      separatedState.entries = [];
-      separatedState.handedOverAt = null;
-      separatedState[SATURDAY_SEPARATION_MARKER] = new Date().toISOString();
-      writeState(separatedState);
-      console.log('[bomber-x-loco] Bomber-Anmeldeliste vom Saturday-Check-in getrennt und leer gestartet');
+    // Der abgesagte Cup vom 19.09. darf keine Teilnehmer in den Ersatztermin
+    // am 25.09. übernehmen. Der Marker verhindert, dass spätere Neustarts neu
+    // eingegangene Anmeldungen erneut löschen.
+    const registrationState = readState();
+    if (resetRegistrationForReschedule(registrationState)) {
+      writeState(registrationState);
+      console.log('[bomber-x-loco] Alte Anmeldung geleert; Ersatztermin 25.09. startet mit leerer Liste');
     }
 
     await forceRepostOnce().catch(error => console.error(`[bomber-x-loco] Einmaliger Check-in-Repost fehlgeschlagen: ${error.message}`));
@@ -467,5 +477,6 @@ module.exports = {
   handOverToEvent,
   ensurePanel,
   buildPayload,
+  resetRegistrationForReschedule,
   stateFromLiveEvent,
 };
