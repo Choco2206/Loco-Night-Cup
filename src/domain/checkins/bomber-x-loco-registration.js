@@ -23,7 +23,7 @@ const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
 const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const FORCE_REPOST_MARKER = 'forcedRepost20260904V3At';
-const RESCHEDULE_RESET_MARKER = 'resetForReschedule20260925At';
+const RESCHEDULE_RESET_MARKER = 'resetForReschedule20260925V2At';
 const EPHEMERAL = 64;
 const MAX_PARTICIPANTS = Math.max(...BOMBER_X_LOCO_FORMAT_SIZES);
 let clientRef = null;
@@ -55,6 +55,11 @@ function writeState(state) {
   fs.writeFileSync(REGISTRATION_FILE, JSON.stringify(state, null, 2), 'utf8');
 }
 
+function isTargetEvent(event) {
+  return isBomberXLocoEvent(event)
+    && String(event.cycle?.eventDate || '') === BOMBER_X_LOCO_EVENT_DATE;
+}
+
 function resetRegistrationForReschedule(state, now = new Date()) {
   if (state[RESCHEDULE_RESET_MARKER]) return false;
   state.eventDate = BOMBER_X_LOCO_EVENT_DATE;
@@ -65,6 +70,52 @@ function resetRegistrationForReschedule(state, now = new Date()) {
   state.format = {};
   state.handedOverAt = null;
   state[RESCHEDULE_RESET_MARKER] = now.toISOString();
+  return true;
+}
+
+function resetEventForReschedule(event, now = new Date()) {
+  if (!isTargetEvent(event)) return false;
+  event.status = 'checkin_open';
+  event.checkin = {
+    ...(event.checkin || {}),
+    isOpen: true,
+    closedAt: null,
+    entries: [],
+    activeTeamIds: [],
+    waitlistTeamIds: [],
+    lateLeaveBans: [],
+  };
+  event.byes = [];
+  event.format = {
+    ...(event.format || {}),
+    minimumRealTeams: 6,
+    allowedSizes: [...BOMBER_X_LOCO_FORMAT_SIZES],
+    size: null,
+    realTeamCount: 0,
+    byeCount: 0,
+    activeByeCount: 0,
+    waitlistByeCount: 0,
+    waitlistCount: 0,
+    lockedAt: null,
+    lockedByUserId: null,
+    participants: [],
+  };
+  event.groups = { status: 'not_created', drawnAt: null, drawnBy: null, groups: {} };
+  event.knockout = {
+    status: 'not_created',
+    createdAt: null,
+    source: { qualifiedRule: null, avoidSameGroupRematches: true },
+    rounds: {},
+  };
+  event.ceremony = {
+    ...(event.ceremony || {}),
+    status: 'not_ready',
+    placements: { firstTeamId: null, secondTeamId: null, thirdTeamId: null },
+    postedAt: null,
+    postedMessageIds: [],
+    testRuns: [],
+  };
+  event.meta = { ...(event.meta || {}), rescheduleResetAt: now.toISOString(), updatedAt: now.toISOString() };
   return true;
 }
 
@@ -460,8 +511,12 @@ module.exports = {
     // eingegangene Anmeldungen erneut löschen.
     const registrationState = readState();
     if (resetRegistrationForReschedule(registrationState)) {
+      updateEventData(BOMBER_X_LOCO_EVENT_KEY, event => {
+        resetEventForReschedule(event);
+        return event;
+      });
       writeState(registrationState);
-      console.log('[bomber-x-loco] Alte Anmeldung geleert; Ersatztermin 25.09. startet mit leerer Liste');
+      console.log('[bomber-x-loco] Alte Anmeldung und Freitag-Eventstand geleert; Ersatztermin 25.09. startet leer');
     }
 
     await forceRepostOnce().catch(error => console.error(`[bomber-x-loco] Einmaliger Check-in-Repost fehlgeschlagen: ${error.message}`));
@@ -477,6 +532,7 @@ module.exports = {
   handOverToEvent,
   ensurePanel,
   buildPayload,
+  resetEventForReschedule,
   resetRegistrationForReschedule,
   stateFromLiveEvent,
 };

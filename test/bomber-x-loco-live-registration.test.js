@@ -22,7 +22,7 @@ test('live Bomber registration keeps manual byes and marks waitlist teams', () =
 
   const modulePath = require.resolve('../src/domain/checkins/bomber-x-loco-registration');
   delete require.cache[modulePath];
-  const { buildPayload, resetRegistrationForReschedule, stateFromLiveEvent } = require(modulePath);
+  const { buildPayload, resetEventForReschedule, resetRegistrationForReschedule, stateFromLiveEvent } = require(modulePath);
   Module._load = originalLoad;
 
   const teamIds = Array.from({ length: 47 }, (_, index) => String(index + 1));
@@ -71,6 +71,34 @@ test('live Bomber registration keeps manual byes and marks waitlist teams', () =
   assert.deepEqual(oldState.byes, []);
   assert.deepEqual(oldState.format, {});
   assert.equal(oldState.handedOverAt, null);
+
+  const oldEvent = {
+    status: 'checkin_open',
+    cycle: { eventDate: '2026-09-25' },
+    meta: { eventMode: 'bomber_x_loco' },
+    checkin: {
+      isOpen: true,
+      entries: [{ teamId: '1' }, { teamId: '2' }],
+      activeTeamIds: ['1'],
+      waitlistTeamIds: ['2'],
+      lateLeaveBans: [{ teamId: 'old' }],
+    },
+    byes: [{ id: 'old-bye', status: 'active' }],
+    format: { size: 48, lockedAt: '2026-09-19T18:00:00.000Z', participants: [{ teamId: '1' }] },
+    groups: { status: 'completed', groups: { A: {} } },
+    knockout: { status: 'created', rounds: { round_of_32: {} } },
+    ceremony: { status: 'ready', postedAt: '2026-09-19T23:00:00.000Z' },
+  };
+  assert.equal(resetEventForReschedule(oldEvent, new Date('2026-09-20T12:00:00.000Z')), true);
+  assert.deepEqual(oldEvent.checkin.entries, []);
+  assert.deepEqual(oldEvent.checkin.activeTeamIds, []);
+  assert.deepEqual(oldEvent.checkin.waitlistTeamIds, []);
+  assert.deepEqual(oldEvent.byes, []);
+  assert.equal(oldEvent.format.size, null);
+  assert.equal(oldEvent.format.lockedAt, null);
+  assert.deepEqual(oldEvent.format.participants, []);
+  assert.equal(oldEvent.groups.status, 'not_created');
+  assert.equal(oldEvent.knockout.status, 'not_created');
 
   oldState.entries.push({ teamId: 'new-team' });
   assert.equal(resetRegistrationForReschedule(oldState, new Date('2026-09-21T12:00:00.000Z')), false);
