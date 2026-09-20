@@ -6,11 +6,11 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { getPublicCheckinState } = require('./checkin-service');
 const { buildCheckinMessagePayload } = require('./checkin-components');
 const { getCheckinWindowState } = require('./checkin-schedule');
-const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { BOMBER_X_LOCO_EVENT_KEY, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   buildBomberXLocoPayload,
-  buildSaturdayBlockerPayload,
+  buildBomberXLocoBlockerPayload,
 } = require('./bomber-x-loco-checkin');
 
 const LEGACY_BOMBER_X_LOCO_MESSAGE_ID = '1545402690828501013';
@@ -70,7 +70,7 @@ async function removeLegacyBomberPanel(client) {
   if (!legacyMessage) return false;
 
   const messages = readJson(FILES.messages, createMessagesDefault());
-  const state = getMessageState(messages, 'saturday');
+  const state = getMessageState(messages, BOMBER_X_LOCO_EVENT_KEY);
   const storedMessageId = state.specialMainMessageId ? String(state.specialMainMessageId) : null;
 
   // Alte Sondernachricht wirklich vollständig entfernen. Falls im Speicher noch
@@ -86,7 +86,7 @@ async function removeLegacyBomberPanel(client) {
   }
 
   updateJson(FILES.messages, createMessagesDefault(), current => {
-    const currentState = getMessageState(current, 'saturday');
+    const currentState = getMessageState(current, BOMBER_X_LOCO_EVENT_KEY);
     currentState.specialChannelId = String(specialChannel.id);
     currentState.specialMainMessageId = null;
     currentState.updatedAt = new Date().toISOString();
@@ -109,7 +109,7 @@ async function refreshBomberXLocoPanel({ eventKey, event, client, settings, stat
 
   // Ab hier läuft der Bomber-Check-in wie der normale Check-in:
   // eine gespeicherte Message-ID, upsert, dieselben checkin_join/checkin_leave Buttons
-  // und dieselbe Check-in-Service-Logik. Nur Darstellung/Kanal/48er-Format sind speziell.
+  // und dieselbe Check-in-Service-Logik. Nur Darstellung, Kanal und Formate sind speziell.
   const specialMessage = await upsertMessage(
     specialChannel,
     state.specialMainMessageId,
@@ -120,7 +120,7 @@ async function refreshBomberXLocoPanel({ eventKey, event, client, settings, stat
   if (normalChannelId) {
     const normalChannel = await client.channels.fetch(normalChannelId).catch(() => null);
     if (normalChannel?.send) {
-      const blockerMessage = await upsertMessage(normalChannel, state.mainMessageId, buildSaturdayBlockerPayload());
+      const blockerMessage = await upsertMessage(normalChannel, state.mainMessageId, buildBomberXLocoBlockerPayload());
       state.channelId = normalChannel.id;
       state.mainMessageId = blockerMessage.id;
     }
@@ -135,7 +135,7 @@ async function adoptBomberXLocoPanelMessage(message, client) {
   if (!message || String(message.channelId) !== String(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID)) return false;
 
   const messages = readJson(FILES.messages, createMessagesDefault());
-  const state = getMessageState(messages, 'saturday');
+  const state = getMessageState(messages, BOMBER_X_LOCO_EVENT_KEY);
   const previousMessageId = state.specialMainMessageId;
 
   if (previousMessageId && String(previousMessageId) !== String(message.id)) {
@@ -146,7 +146,7 @@ async function adoptBomberXLocoPanelMessage(message, client) {
 
   const timestamp = new Date().toISOString();
   updateJson(FILES.messages, createMessagesDefault(), current => {
-    const currentState = getMessageState(current, 'saturday');
+    const currentState = getMessageState(current, BOMBER_X_LOCO_EVENT_KEY);
     currentState.specialChannelId = String(message.channelId);
     currentState.specialMainMessageId = String(message.id);
     currentState.updatedAt = timestamp;
@@ -155,7 +155,7 @@ async function adoptBomberXLocoPanelMessage(message, client) {
   });
 
   const settings = readJson(FILES.settings, createSettingsDefault());
-  const { event } = getPublicCheckinState('saturday');
+  const { event } = getPublicCheckinState(BOMBER_X_LOCO_EVENT_KEY);
   if (isBomberXLocoEvent(event)) {
     await message.edit(createEditPayload(buildBomberXLocoPayload(event, settings))).catch(() => null);
   }

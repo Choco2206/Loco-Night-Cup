@@ -31,13 +31,14 @@ test('Loco Zwergen Cup is isolated to Saturday 12 September 2026', () => {
   assert.equal(isLocoZwergenCupEvent({ meta: { eventMode: 'loco_zwergen_cup' } }), true);
 });
 
-test('schedule selects Zwergen, Bomber and normal Saturday independently', () => {
+test('schedule selects Zwergen, Bomber and normal cups independently', () => {
   const settings = createSettingsDefault();
   const event = createEventDefault('saturday');
   event.cycle = { eventDate: '2026-09-12', timezone: 'Europe/Berlin' };
   assert.equal(getPlannedSchedule('saturday', event, settings, new Date('2026-09-12T10:00:00Z')).eventMode, 'loco_zwergen_cup');
-  event.cycle.eventDate = '2026-09-19';
-  assert.equal(getPlannedSchedule('saturday', event, settings, new Date('2026-09-19T10:00:00Z')).eventMode, 'bomber_x_loco');
+  const friday = createEventDefault('friday');
+  friday.cycle = { eventDate: '2026-09-25', timezone: 'Europe/Berlin' };
+  assert.equal(getPlannedSchedule('friday', friday, settings, new Date('2026-09-25T10:00:00Z')).eventMode, 'bomber_x_loco');
   event.cycle.eventDate = '2026-09-26';
   assert.equal(getPlannedSchedule('saturday', event, settings, new Date('2026-09-26T10:00:00Z')).eventMode, 'night_cup');
 });
@@ -63,14 +64,14 @@ test('Zwergen Cup alone supports 36, 40, 44 and 48 teams', () => {
   }
 });
 
-test('expanded sizes do not change normal Night Cup or Bomber X Loco formats', () => {
+test('expanded sizes stay isolated to their intended events', () => {
   const settings = createSettingsDefault();
   const normalSizes = getAllowedSizes(settings, { meta: { eventMode: 'night_cup' } });
   const zwergenSizes = getAllowedSizes(settings, { meta: { eventMode: 'loco_zwergen_cup' } });
   const bomberSizes = getAllowedSizes(settings, { meta: { eventMode: 'bomber_x_loco' } });
   assert.equal(Math.max(...normalSizes), 32);
   assert.equal(Math.max(...zwergenSizes), 48);
-  assert.deepEqual(bomberSizes, [6, 12, 18, 24, 30, 36, 42, 48]);
+  assert.deepEqual(bomberSizes, [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]);
 });
 
 test('startup validation accepts a running 44-team Zwergen Cup before schedule sync', () => {

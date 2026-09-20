@@ -28,7 +28,7 @@ test('Bomber X Loco keeps 48 participants and displays later entries as an order
 
   const event = {
     status: 'checkin_open',
-    cycle: { eventDate: '2026-09-19' },
+    cycle: { eventDate: '2026-09-25' },
     schedule: {
       deadlineAt: '2099-09-19T16:30:00.000Z',
       drawAt: '2099-09-19T17:00:00.000Z',
@@ -52,12 +52,55 @@ test('Bomber X Loco keeps 48 participants and displays later entries as an order
   assert.match(descriptions, /3\. Team 51 \(WL\)/);
 });
 
+test('Bomber X Loco promotes the 54er waitlist at 60 teams and starts a new waitlist at team 61', () => {
+  const { buildBomberXLocoPayload, getWaitlistIds } = require('../src/domain/checkins/bomber-x-loco-checkin');
+  const createEvent = count => {
+    const teamIds = Array.from({ length: count }, (_, index) => String(index + 1));
+    const size = count >= 60 ? 60 : 54;
+    return {
+      status: 'checkin_open',
+      cycle: { eventDate: '2026-09-25' },
+      schedule: {
+        deadlineAt: '2099-09-25T16:30:00.000Z',
+        drawAt: '2099-09-25T17:00:00.000Z',
+        tournamentStartAt: '2099-09-25T19:00:00.000Z',
+      },
+      format: { size },
+      checkin: {
+        isOpen: true,
+        entries: teamIds.map(teamId => ({ teamId })),
+        activeTeamIds: teamIds.slice(0, size),
+        waitlistTeamIds: teamIds.slice(size),
+      },
+      byes: [],
+    };
+  };
+
+  const at57 = createEvent(57);
+  assert.deepEqual(getWaitlistIds(at57), ['55', '56', '57']);
+  const text57 = buildBomberXLocoPayload(at57, {}).embeds.map(embed => embed.toJSON().description || '').join('\n');
+  assert.match(text57, /55\. Team 55 \(WL\)/);
+  assert.match(text57, /57\. Team 57 \(WL\)/);
+
+  const at60 = createEvent(60);
+  assert.deepEqual(getWaitlistIds(at60), []);
+  const text60 = buildBomberXLocoPayload(at60, {}).embeds.map(embed => embed.toJSON().description || '').join('\n');
+  assert.match(text60, /Teilnehmerfeld: 60\/60 Plätze/);
+  assert.doesNotMatch(text60, /Team 55 \(WL\)/);
+
+  const at61 = createEvent(61);
+  assert.deepEqual(getWaitlistIds(at61), ['61']);
+  const text61 = buildBomberXLocoPayload(at61, {}).embeds.map(embed => embed.toJSON().description || '').join('\n');
+  assert.match(text61, /Warteliste: 1 Teilnehmerplätze/);
+  assert.match(text61, /1\. Team 61 \(WL\)/);
+});
+
 test('Bomber X Loco displays one manual bye as the 48th participant slot', () => {
   const teamIds = Array.from({ length: 47 }, (_, index) => String(index + 1));
   const { buildBomberXLocoPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
   const event = {
     status: 'checkin_open',
-    cycle: { eventDate: '2026-09-19' },
+    cycle: { eventDate: '2026-09-25' },
     schedule: {
       deadlineAt: '2099-09-19T16:30:00.000Z',
       drawAt: '2099-09-19T17:00:00.000Z',
@@ -86,7 +129,7 @@ test('Bomber X Loco marks teams as waitlisted after the bye is removed', () => {
   const { buildBomberXLocoPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
   const event = {
     status: 'checkin_open',
-    cycle: { eventDate: '2026-09-19' },
+    cycle: { eventDate: '2026-09-25' },
     schedule: {
       deadlineAt: '2099-09-19T16:30:00.000Z',
       drawAt: '2099-09-19T17:00:00.000Z',

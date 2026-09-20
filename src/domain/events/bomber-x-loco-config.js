@@ -1,8 +1,9 @@
 'use strict';
 
-const BOMBER_X_LOCO_EVENT_DATE = '2026-09-19';
+const BOMBER_X_LOCO_EVENT_DATE = '2026-09-25';
+const BOMBER_X_LOCO_EVENT_KEY = 'friday';
 const BOMBER_X_LOCO_CHECKIN_CHANNEL_ID = '1542823464434671676';
-const BOMBER_X_LOCO_FORMAT_SIZES = [6, 12, 18, 24, 30, 36, 42, 48];
+const BOMBER_X_LOCO_FORMAT_SIZES = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60];
 const BOMBER_X_LOCO_GROUP_SIZE = 6;
 const BOMBER_X_LOCO_MATCHDAYS = 5;
 const BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME = '18:30';
@@ -19,10 +20,12 @@ const BOMBER_X_LOCO_FORMATS = {
   36: { groupCount: 6, qualifiedCount: 16, directPlaces: 2, wildcardPlace: 3, wildcardCount: 4, firstRoundKey: 'round_of_16', rule: 'top2_plus_4_best_thirds' },
   42: { groupCount: 7, qualifiedCount: 32, directPlaces: 4, wildcardPlace: 5, wildcardCount: 4, firstRoundKey: 'round_of_32', rule: 'top4_plus_4_best_fifths' },
   48: { groupCount: 8, qualifiedCount: 32, directPlaces: 4, wildcardPlace: null, wildcardCount: 0, firstRoundKey: 'round_of_32', rule: 'top4' },
+  54: { groupCount: 9, qualifiedCount: 32, directPlaces: 3, wildcardPlace: 4, wildcardCount: 5, firstRoundKey: 'round_of_32', rule: 'top3_plus_5_best_fourths' },
+  60: { groupCount: 10, qualifiedCount: 32, directPlaces: 3, wildcardPlace: 4, wildcardCount: 2, firstRoundKey: 'round_of_32', rule: 'top3_plus_2_best_fourths' },
 };
 
 function isBomberXLocoDate(eventKey, eventDate) {
-  return eventKey === 'saturday' && eventDate === BOMBER_X_LOCO_EVENT_DATE;
+  return eventKey === BOMBER_X_LOCO_EVENT_KEY && eventDate === BOMBER_X_LOCO_EVENT_DATE;
 }
 
 function isBomberXLocoEvent(event) {
@@ -32,7 +35,7 @@ function isBomberXLocoEvent(event) {
 function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE) {
   const offset = '+02:00';
   return {
-    cycleKey: `saturday_${eventDate}`,
+    cycleKey: `${BOMBER_X_LOCO_EVENT_KEY}_${eventDate}`,
     eventDate,
     timeZone: 'Europe/Berlin',
     deadlineAt: new Date(`${eventDate}T${BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME}:00${offset}`),
@@ -41,7 +44,7 @@ function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE) {
     drawAt: new Date(`${eventDate}T${BOMBER_X_LOCO_DRAW_TIME}:00${offset}`),
     attendanceDeadlineAt: new Date(`${eventDate}T${BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00${offset}`),
     tournamentStartAt: new Date(`${eventDate}T${BOMBER_X_LOCO_TOURNAMENT_START_TIME}:00${offset}`),
-    resetAt: new Date('2026-09-20T07:00:00+02:00'),
+    resetAt: new Date('2026-09-26T07:00:00+02:00'),
     eventMode: 'bomber_x_loco',
   };
 }
@@ -55,6 +58,7 @@ module.exports = {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_DRAW_TIME,
   BOMBER_X_LOCO_EVENT_DATE,
+  BOMBER_X_LOCO_EVENT_KEY,
   BOMBER_X_LOCO_FORMAT_SIZES,
   BOMBER_X_LOCO_FORMATS,
   BOMBER_X_LOCO_GROUP_SIZE,

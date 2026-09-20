@@ -12,6 +12,7 @@ const { recalculateCheckinFormat } = require('./checkin-format');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_EVENT_DATE,
+  BOMBER_X_LOCO_EVENT_KEY,
   BOMBER_X_LOCO_FORMAT_SIZES,
   BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME,
   isBomberXLocoEvent,
@@ -24,7 +25,7 @@ const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const FORCE_REPOST_MARKER = 'forcedRepost20260904V3At';
 const SATURDAY_SEPARATION_MARKER = 'separatedFromSaturday20260905At';
 const EPHEMERAL = 64;
-const MAX_PARTICIPANTS = 48;
+const MAX_PARTICIPANTS = Math.max(...BOMBER_X_LOCO_FORMAT_SIZES);
 let clientRef = null;
 let intervalRef = null;
 
@@ -36,7 +37,12 @@ function readState() {
   try {
     if (!fs.existsSync(REGISTRATION_FILE)) return initialState();
     const parsed = JSON.parse(fs.readFileSync(REGISTRATION_FILE, 'utf8') || '{}');
-    return { ...initialState(), ...parsed, entries: Array.isArray(parsed.entries) ? parsed.entries : [] };
+    const state = { ...initialState(), ...parsed, entries: Array.isArray(parsed.entries) ? parsed.entries : [] };
+    if (state.eventDate !== BOMBER_X_LOCO_EVENT_DATE) {
+      state.eventDate = BOMBER_X_LOCO_EVENT_DATE;
+      state.handedOverAt = null;
+    }
+    return state;
   } catch {
     return initialState();
   }
@@ -128,7 +134,8 @@ function getWaitlistEntries(state, entries) {
     const waitlistIds = new Set(state.waitlistTeamIds.map(String));
     return entries.filter(entry => waitlistIds.has(String(entry.teamId)));
   }
-  return entries.slice(MAX_PARTICIPANTS);
+  const activeLimit = Number(state.format?.size) || currentFormat(entries.length + getActiveByes(state).length) || MAX_PARTICIPANTS;
+  return entries.slice(activeLimit);
 }
 
 function formatLines(state, entries) {
@@ -148,7 +155,7 @@ function formatLines(state, entries) {
     ...waitlistEntries.map(entry => `${teamName(entry.teamId)} (WL)`),
   ];
   const lines = [];
-  for (let index = 0; index < 48; index += 1) {
+  for (let index = 0; index < MAX_PARTICIPANTS; index += 1) {
     lines.push(`${index + 1} | ${labels[index] || '—'}`);
     if (BOMBER_X_LOCO_FORMAT_SIZES.includes(index + 1)) lines.push(`══════⬆️ ${index + 1}er Turnier ⬆️══════`);
   }
@@ -194,9 +201,10 @@ function buildPayload(state, { liveEvent = false } = {}) {
   const byeCount = getActiveByes(state).length;
   const count = cleanEntries.length + byeCount;
   const format = currentFormat(count);
+  const participantCapacity = format || MAX_PARTICIPANTS;
   const next = BOMBER_X_LOCO_FORMAT_SIZES.find(size => size > count) || null;
-  const participantCount = Math.min(count, MAX_PARTICIPANTS);
   const waitlistLines = formatWaitlistLines(state, cleanEntries);
+  const participantCount = Math.min(count - waitlistLines.length, participantCapacity);
   const closed = isRegistrationClosed();
   const bannerExists = fs.existsSync(BANNER_PATH);
   const bannerEmbed = bannerExists
@@ -207,7 +215,7 @@ function buildPayload(state, { liveEvent = false } = {}) {
     .setTitle('💣🐺 Bomber X Loco Cup • Anmeldung')
     .setDescription([
       closed ? '🔴 **Anmeldung geschlossen**' : '🟢 **Anmeldung geöffnet**',
-      '📅 Samstag, 19.09.2026',
+      '📅 Freitag, 25.09.2026',
       '',
       '⏰ Offizieller Anmeldeschluss: 18:30 Uhr',
       '🎲 Gruppenauslosung live bei Paddy HSV: 19:00 Uhr',
@@ -216,9 +224,9 @@ function buildPayload(state, { liveEvent = false } = {}) {
       '🚀 Turnierstart: 21:00 Uhr',
       '',
       `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
-      `👥 Teilnehmerfeld: ${participantCount}/${MAX_PARTICIPANTS} Plätze${byeCount ? ` (${cleanEntries.length} Teams + ${byeCount} Freilos${byeCount === 1 ? '' : 'e'})` : ''}`,
+      `👥 Teilnehmerfeld: ${participantCount}/${participantCapacity} Plätze${byeCount ? ` (${cleanEntries.length} Teams + ${byeCount} Freilos${byeCount === 1 ? '' : 'e'})` : ''}`,
       `⚠️ Warteliste: ${waitlistLines.length} Teilnehmerplätze`,
-      next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : '48er-Format erreicht • weitere Anmeldungen kommen auf die Warteliste',
+      next ? `Nächster Schritt: ${next} Teams • noch ${next - count} erforderlich` : `${MAX_PARTICIPANTS}er-Format erreicht • weitere Anmeldungen kommen auf die Warteliste`,
       '',
       '**👥 Teilnehmende Teams**',
       '',
@@ -239,12 +247,12 @@ function buildPayload(state, { liveEvent = false } = {}) {
     embeds: [bannerEmbed, checkinEmbed].filter(Boolean),
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(liveEvent ? 'checkin_join:saturday' : 'bomber_x_loco_join')
+        .setCustomId(liveEvent ? `checkin_join:${BOMBER_X_LOCO_EVENT_KEY}` : 'bomber_x_loco_join')
         .setLabel('⬆️ Anmelden')
         .setStyle(ButtonStyle.Success)
         .setDisabled(closed),
       new ButtonBuilder()
-        .setCustomId(liveEvent ? 'checkin_leave:saturday' : 'bomber_x_loco_leave')
+        .setCustomId(liveEvent ? `checkin_leave:${BOMBER_X_LOCO_EVENT_KEY}` : 'bomber_x_loco_leave')
         .setLabel('⬇️ Abmelden')
         .setStyle(ButtonStyle.Danger)
         .setDisabled(closed),
@@ -259,14 +267,14 @@ function buildPayload(state, { liveEvent = false } = {}) {
 
 async function ensurePanel() {
   if (!clientRef) return false;
-  const saturday = readEventData('saturday');
-  const liveEvent = isBomberXLocoEvent(saturday) && String(saturday.cycle?.eventDate || '') === BOMBER_X_LOCO_EVENT_DATE;
+  const event = readEventData(BOMBER_X_LOCO_EVENT_KEY);
+  const liveEvent = isBomberXLocoEvent(event) && String(event.cycle?.eventDate || '') === BOMBER_X_LOCO_EVENT_DATE;
   const channel = await clientRef.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
   if (!channel?.send) return false;
 
   let storedState = readCleanState();
-  if (liveEvent && storedState.handedOverAt) storedState = syncStateFromLiveEvent(saturday);
-  const renderState = liveEvent ? stateFromLiveEvent(saturday) : storedState;
+  if (liveEvent && storedState.handedOverAt) storedState = syncStateFromLiveEvent(event);
+  const renderState = liveEvent ? stateFromLiveEvent(event) : storedState;
   let message = storedState.messageId ? await channel.messages.fetch(storedState.messageId).catch(() => null) : null;
 
   // Den bereits geposteten, aber fälschlich mit den Teams vom 05.09. befüllten
@@ -274,7 +282,7 @@ async function ensurePanel() {
   // statt eine zweite Nachricht daneben zu erstellen.
   if (!message) {
     const messages = readJson(FILES.messages, createMessagesDefault());
-    const currentPanelId = messages.checkins?.saturday?.specialMainMessageId;
+    const currentPanelId = messages.checkins?.[BOMBER_X_LOCO_EVENT_KEY]?.specialMainMessageId;
     if (currentPanelId) {
       message = await channel.messages.fetch(String(currentPanelId)).catch(() => null);
       if (message) {
@@ -301,10 +309,10 @@ async function ensurePanel() {
   if (liveEvent) {
     updateJson(FILES.messages, createMessagesDefault(), messages => {
       messages.checkins = messages.checkins || {};
-      messages.checkins.saturday = messages.checkins.saturday || {};
-      messages.checkins.saturday.specialChannelId = BOMBER_X_LOCO_CHECKIN_CHANNEL_ID;
-      messages.checkins.saturday.specialMainMessageId = message.id;
-      messages.checkins.saturday.updatedAt = new Date().toISOString();
+      messages.checkins[BOMBER_X_LOCO_EVENT_KEY] = messages.checkins[BOMBER_X_LOCO_EVENT_KEY] || {};
+      messages.checkins[BOMBER_X_LOCO_EVENT_KEY].specialChannelId = BOMBER_X_LOCO_CHECKIN_CHANNEL_ID;
+      messages.checkins[BOMBER_X_LOCO_EVENT_KEY].specialMainMessageId = message.id;
+      messages.checkins[BOMBER_X_LOCO_EVENT_KEY].updatedAt = new Date().toISOString();
       return messages;
     });
   }
@@ -337,19 +345,19 @@ async function forceRepostOnce() {
   return true;
 }
 
-async function handOverToSaturdayEvent() {
-  const saturday = readEventData('saturday');
-  if (!isBomberXLocoEvent(saturday) || String(saturday.cycle?.eventDate || '') !== BOMBER_X_LOCO_EVENT_DATE) return false;
+async function handOverToEvent() {
+  const eventState = readEventData(BOMBER_X_LOCO_EVENT_KEY);
+  if (!isBomberXLocoEvent(eventState) || String(eventState.cycle?.eventDate || '') !== BOMBER_X_LOCO_EVENT_DATE) return false;
   const state = readCleanState();
 
   if (state.handedOverAt) {
-    syncStateFromLiveEvent(saturday);
+    syncStateFromLiveEvent(eventState);
     return false;
   }
 
   const settings = readJson(FILES.settings, createSettingsDefault());
 
-  updateEventData('saturday', event => {
+  updateEventData(BOMBER_X_LOCO_EVENT_KEY, event => {
     event.checkin = event.checkin || {};
     event.checkin.entries = Array.isArray(event.checkin.entries) ? event.checkin.entries : [];
     const existing = new Set(event.checkin.entries.map(entry => String(entry.teamId)));
@@ -370,9 +378,9 @@ async function handOverToSaturdayEvent() {
     return event;
   });
 
-  const liveEvent = readEventData('saturday');
+  const liveEvent = readEventData(BOMBER_X_LOCO_EVENT_KEY);
   const synced = syncStateFromLiveEvent(liveEvent);
-  console.log(`[bomber-x-loco] Offizieller Check-in an Saturday-Event übergeben: ${synced.entries.length} Teams`);
+  console.log(`[bomber-x-loco] Offizieller Check-in an ${BOMBER_X_LOCO_EVENT_KEY}-Event übergeben: ${synced.entries.length} Teams`);
   await ensurePanel();
   return true;
 }
@@ -383,9 +391,9 @@ async function handleInteraction(interaction) {
 
   try {
     if (isRegistrationClosed()) throw new Error('Die Anmeldung für den Bomber X Loco Cup ist seit 18:30 Uhr geschlossen.');
-    const saturday = readEventData('saturday');
-    if (isBomberXLocoEvent(saturday) && String(saturday.cycle?.eventDate || '') === BOMBER_X_LOCO_EVENT_DATE) {
-      await handOverToSaturdayEvent();
+    const eventState = readEventData(BOMBER_X_LOCO_EVENT_KEY);
+    if (isBomberXLocoEvent(eventState) && String(eventState.cycle?.eventDate || '') === BOMBER_X_LOCO_EVENT_DATE) {
+      await handOverToEvent();
       await ensurePanel();
       throw new Error('Der Bomber X Loco Cup läuft jetzt im Event-State. Bitte nutze denselben Anmelde-Post erneut.');
     }
@@ -425,7 +433,7 @@ async function handleInteraction(interaction) {
 }
 
 async function reconcile() {
-  const handedOver = await handOverToSaturdayEvent();
+  const handedOver = await handOverToEvent();
   if (!handedOver) await ensurePanel();
   return true;
 }
@@ -456,7 +464,7 @@ module.exports = {
     }
   },
   handleInteraction,
-  handOverToSaturdayEvent,
+  handOverToEvent,
   ensurePanel,
   buildPayload,
   stateFromLiveEvent,

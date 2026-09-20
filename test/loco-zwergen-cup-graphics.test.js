@@ -30,7 +30,7 @@ test('Zwergen match and knockout layouts contain the normal tournament row count
 
 test('KO selector keeps Bomber, Zwergen and default layouts separate', () => {
   assert.equal(getKoLayout({ phase: 'final', eventId: 'saturday_2026-09-12' }).layout.template, 'assets/loco-zwerge-cup/final.jpeg');
-  assert.equal(getKoLayout({ phase: 'final', eventId: 'saturday_2026-09-19' }).layout.template, 'assets/bomber-x-loco/final.png');
+  assert.equal(getKoLayout({ phase: 'final', eventId: 'friday_2026-09-25' }).layout.template, 'assets/bomber-x-loco/final.png');
   assert.equal(getKoLayout({ phase: 'final', eventId: 'saturday_2026-09-26' }).layout.template, 'assets/ko-phase/finale.png');
 });
 

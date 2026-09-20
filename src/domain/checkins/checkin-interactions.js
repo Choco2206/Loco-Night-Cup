@@ -7,7 +7,7 @@ const {
   refreshCheckinMessage,
   refreshCheckinMessages,
 } = require('./checkin-panel');
-const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID, BOMBER_X_LOCO_EVENT_KEY, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 const EPHEMERAL = 64;
 
@@ -15,10 +15,10 @@ function parseCheckinButton(customId) {
   if (!customId || typeof customId !== 'string') return null;
 
   if (customId === 'bomber_x_loco_prejoin') {
-    return { action: 'checkin_join', eventKey: 'saturday' };
+    return { action: 'checkin_join', eventKey: BOMBER_X_LOCO_EVENT_KEY };
   }
   if (customId === 'bomber_x_loco_preleave') {
-    return { action: 'checkin_leave', eventKey: 'saturday' };
+    return { action: 'checkin_leave', eventKey: BOMBER_X_LOCO_EVENT_KEY };
   }
 
   const [action, eventKey] = customId.split(':');
@@ -67,12 +67,12 @@ async function handleInteraction(interaction, client) {
   if (await handleBomberManualDrawInteraction(interaction, client)) return true;
   if (!interaction.isButton()) return false;
 
-  if (interaction.customId === 'bomber_x_loco_redirect:saturday') {
+  if (interaction.customId === `bomber_x_loco_redirect:${BOMBER_X_LOCO_EVENT_KEY}`) {
     await interaction.reply({
       content: [
-        '💣🐺 **Für diesen Samstag findet kein regulärer Loco Night Cup statt.**',
+        '💣🐺 **Für diesen Freitag findet kein regulärer Loco Night Cup statt.**',
         '',
-        'Am **19.09.2026** läuft stattdessen der **Bomber X Loco Cup**.',
+        'Am **25.09.2026** läuft stattdessen der **Bomber X Loco Cup**.',
         `Wenn ihr teilnehmen wollt, meldet euch hier an: <#${BOMBER_X_LOCO_CHECKIN_CHANNEL_ID}>`,
       ].join('\n'),
       flags: EPHEMERAL,

@@ -73,7 +73,7 @@ test('manual Bomber draw persists a bye slot and generates bye matches safely', 
     };
   }
   const event = {
-    cycle: { eventDate: '2026-09-19' },
+    cycle: { eventDate: '2026-09-25' },
     meta: { eventMode: 'bomber_x_loco' },
     format: { participants: [...teamParticipants, { type: 'bye', byeId: 'bye_saturday_1', displayName: 'Freilos' }] },
     groups: { manualDraw: true, groups },
@@ -83,7 +83,7 @@ test('manual Bomber draw persists a bye slot and generates bye matches safely', 
     groupKey: 'A',
     selectedValue: 'bye:bye_saturday_1',
     actorUserId: 'admin',
-    now: new Date('2026-09-19T17:00:00.000Z'),
+    now: new Date('2026-09-25T17:00:00.000Z'),
   });
 
   assert.equal(result.group.slots[5].type, 'bye');
@@ -91,5 +91,5 @@ test('manual Bomber draw persists a bye slot and generates bye matches safely', 
   assert.equal(result.group.assignmentComplete, true);
   assert.equal(result.allAssigned, true);
   assert.ok(result.group.matchdays.flatMap(matchday => matchday.matches).some(match => match.status === 'bye'));
-  assert.equal(event.meta.bomberManualDrawCompletedAt, '2026-09-19T17:00:00.000Z');
+  assert.equal(event.meta.bomberManualDrawCompletedAt, '2026-09-25T17:00:00.000Z');
 });

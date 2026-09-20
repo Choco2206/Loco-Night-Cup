@@ -19,7 +19,7 @@ const {
   selectSpecialAwards,
 } = require('../team-of-the-tournament/team-of-the-tournament-post');
 
-const BOMBER_X_LOCO_TEST_EVENT_ID = 'saturday_2026-09-19';
+const BOMBER_X_LOCO_TEST_EVENT_ID = 'friday_2026-09-25';
 
 function availableTeams() {
   const teams = listVisibleTeams().filter(team => team?.status === 'active' && team?.clubName);

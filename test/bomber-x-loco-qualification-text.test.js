@@ -17,6 +17,8 @@ test('describes every Bomber X Loco qualification rule for the live table', () =
     36: '🏆 Weiterkommen: Platz 1 bis 2 + die 4 besten Drittplatzierten',
     42: '🏆 Weiterkommen: Platz 1 bis 4 + die 4 besten Fünftplatzierten',
     48: '🏆 Weiterkommen: Platz 1 bis 4',
+    54: '🏆 Weiterkommen: Platz 1 bis 3 + die 5 besten Viertplatzierten',
+    60: '🏆 Weiterkommen: Platz 1 bis 3 + die 2 besten Viertplatzierten',
   };
 
   for (const [formatSize, text] of Object.entries(expected)) {
@@ -24,13 +26,15 @@ test('describes every Bomber X Loco qualification rule for the live table', () =
   }
 });
 
-test('startup validation accepts the live 48-team Bomber X Loco event', () => {
-  const event = createEventDefault('saturday');
+test('startup validation accepts the live 54- and 60-team Bomber X Loco event', () => {
+  const event = createEventDefault('friday');
   event.meta.eventMode = 'bomber_x_loco';
-  event.cycle.eventDate = '2026-09-19';
+  event.cycle.eventDate = '2026-09-25';
   event.format.minimumRealTeams = 6;
   event.format.allowedSizes = [...BOMBER_X_LOCO_FORMAT_SIZES];
-  event.format.size = 48;
+  event.format.size = 54;
+  assert.deepEqual(validateEvent(event, 'friday'), []);
 
-  assert.deepEqual(validateEvent(event, 'saturday'), []);
+  event.format.size = 60;
+  assert.deepEqual(validateEvent(event, 'friday'), []);
 });

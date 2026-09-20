@@ -22,13 +22,14 @@ const { createGroupMatchdays } = require('../groups/group-matches');
 const { ensureAttendancePost } = require('../groups/attendance-service');
 const {
   BOMBER_X_LOCO_EVENT_DATE,
+  BOMBER_X_LOCO_EVENT_KEY,
   BOMBER_X_LOCO_GROUP_SIZE,
   isBomberXLocoEvent,
 } = require('../events/bomber-x-loco-config');
 
-const EVENT_KEY = 'saturday';
+const EVENT_KEY = BOMBER_X_LOCO_EVENT_KEY;
 const PREPARE_AT = new Date(`${BOMBER_X_LOCO_EVENT_DATE}T18:45:00+02:00`);
-const EVENT_END = new Date('2026-09-20T07:00:00+02:00');
+const EVENT_END = new Date('2026-09-26T07:00:00+02:00');
 const EPHEMERAL = 64;
 let prepareTimer = null;
 
@@ -398,7 +399,7 @@ async function handleInteraction(interaction, client) {
 
   try {
     let event = readEventData(EVENT_KEY);
-    if (!isTargetEvent(event)) throw new Error('Dieser Button ist nur für den Bomber X Loco Cup am 19.09.2026 vorgesehen.');
+    if (!isTargetEvent(event)) throw new Error('Dieser Button ist nur für den Bomber X Loco Cup am 25.09.2026 vorgesehen.');
 
     if (!event.meta?.bomberManualDrawPreparedAt) {
       const now = new Date();

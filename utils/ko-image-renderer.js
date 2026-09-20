@@ -11,7 +11,7 @@ const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupSched
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 const { loadCanvasImage } = require('./canvas-image-loader');
 
-const BOMBER_X_LOCO_CYCLE_KEY = 'saturday_2026-09-19';
+const BOMBER_X_LOCO_CYCLE_KEY = 'friday_2026-09-25';
 const LOCO_ZWERGEN_CUP_CYCLE_KEY = 'saturday_2026-09-12';
 let canvasApi = null;
 let renderSequence = 0;
