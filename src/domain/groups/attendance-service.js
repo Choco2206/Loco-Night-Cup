@@ -57,7 +57,7 @@ function ensureState(scope, event) {
     : [];
   const activeTeamIds = new Set(getScopeTeamIds(scope));
   scope.attendance.presentTeamIds = scope.attendance.presentTeamIds.filter(teamId => activeTeamIds.has(teamId));
-  // Für Bomber X Loco die neue 20:00-Grenze auch dann übernehmen, wenn vorher bereits 20:58 gespeichert war.
+  // Für Bomber X Loco die aktuelle Frist auch bei bereits gespeichertem Check-in übernehmen.
   if (closeAt && (isBomberXLocoEvent(event) || !scope.attendance.closesAt)) {
     scope.attendance.closesAt = closeAt.toISOString();
   }
@@ -88,7 +88,7 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
       `**${present.size}/${teamIds.length} Teams anwesend**`,
       'Bitte drückt auf **Anwesend**, um euer Team einzuchecken.',
       isBomber ? '' : null,
-      isBomber ? '**Die Anwesenheitsabfrage endet um 20:00 Uhr.**' : null,
+      isBomber ? '**Die Anwesenheitsabfrage endet um 20:55 Uhr.**' : null,
     ].filter(line => line !== null).join('\n'))
     .setFooter({ text: isBomber ? 'BOMBER X LOCO \u2022 READY FOR KICK-OFF' : 'VM AURA \u2022 LOCO DNA \u2022 READY FOR KICK-OFF' });
   const row = new ActionRowBuilder().addComponents(

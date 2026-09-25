@@ -114,7 +114,7 @@ function buildBomberXLocoPayload(event, settings) {
     `⏰ Offizieller Anmeldeschluss: ${formatDateTime(event.schedule?.deadlineAt)}`,
     `🎲 Gruppenauslosung live bei **Paddy HSV**: ${formatDateTime(event.schedule?.drawAt)}`,
     `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
-    '✅ Anwesenheits-Check: bis 20:00 Uhr',
+    '✅ Anwesenheits-Check: bis 20:55 Uhr',
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
     `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
@@ -158,7 +158,7 @@ function buildBomberXLocoBlockerPayload() {
         'Stattdessen spielen wir den **Bomber X Loco Cup**.',
         `Die Anmeldung läuft im <#${BOMBER_X_LOCO_CHECKIN_CHANNEL_ID}>.`,
         '**Anmeldeschluss: 18:30 Uhr.**',
-        '**Gruppenauslosung: 19:00 Uhr live bei Paddy HSV.**',
+        '**Gruppenauslosung: 20:00 Uhr live bei Paddy HSV.**',
         `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(

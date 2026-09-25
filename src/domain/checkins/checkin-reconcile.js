@@ -97,8 +97,8 @@ function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
       `Finales Format: **${currentFormatLabel(event)}**`,
       `Aktive Teams: **${getActiveTeamCount(event)}**`,
       `Warteliste/Überschuss: **${waitlistCount}**`, '',
-      '🎲 Die Gruppenauslosung startet um **19:00 Uhr**.',
-      '✅ Danach läuft in jeder Gruppe die Anwesenheitsabfrage bis **20:00 Uhr**.',
+      '🎲 Die Gruppenauslosung startet um **20:00 Uhr**.',
+      '✅ Danach läuft in jeder Gruppe die Anwesenheitsabfrage bis **20:55 Uhr**.',
       '🚀 Turnierstart ist um **21:00 Uhr**.',
     ].join('\n');
   }
