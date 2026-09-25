@@ -18,6 +18,7 @@ const {
   getGroupUserIds,
 } = require('../groups/group-channels');
 const { upsertGroupPosts, updateGroupMessageRefs } = require('../groups/group-posts');
+const { refreshLiveSchedule } = require('../live-schedule');
 const { createGroupMatchdays } = require('../groups/group-matches');
 const { ensureAttendancePost } = require('../groups/attendance-service');
 const {
@@ -262,6 +263,9 @@ async function prepareManualDraw(client, now = new Date()) {
 
   event = readEventData(EVENT_KEY);
   await syncGroupResources(client, event);
+  await refreshLiveSchedule(client, EVENT_KEY).catch(error => {
+    console.warn(`[bxl-manual-draw] Öffentlicher Spielplan nach Vorbereitung fehlgeschlagen: ${error.message}`);
+  });
   return { prepared: true, event: readEventData(EVENT_KEY) };
 }
 
@@ -313,7 +317,7 @@ function buildParticipantSelectRows(event, groupKey) {
   if (!participants.length) throw new Error('Es gibt keine weiteren passenden Teilnehmerplätze für diese Gruppe.');
   const chunks = [];
   for (let index = 0; index < participants.length; index += 25) chunks.push(participants.slice(index, index + 25));
-  return chunks.slice(0, 2).map((chunk, index) => new ActionRowBuilder().addComponents(
+  return chunks.map((chunk, index) => new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`bxl_manual_team_select:${groupKey}:${index}`)
       .setPlaceholder(chunks.length > 1 ? `Team oder Freilos auswählen (${index + 1}/${chunks.length})` : 'Team oder Freilos auswählen')
@@ -380,6 +384,9 @@ async function assignParticipantToGroup({ client, groupKey, selectedValue, actor
 
   const event = readEventData(EVENT_KEY);
   await syncGroupResources(client, event, [groupKey]);
+  refreshLiveSchedule(client, EVENT_KEY).catch(error => {
+    console.warn(`[bxl-manual-draw] Öffentlicher Spielplan nach Gruppenzuteilung fehlgeschlagen: ${error.message}`);
+  });
   return { event: readEventData(EVENT_KEY), group: changedGroup, participant: assignedParticipant };
 }
 
