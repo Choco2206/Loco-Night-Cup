@@ -48,14 +48,35 @@ function eventDisplayLabel(event) {
     : `Loco Night Cup ${event?.label || event?.eventKey}`;
 }
 function buildGroupEmbed(event, group) {
-  const table = sortedStandings(group).map((row, index) => `${index + 1}. ${row.displayName || findTeamById(row.teamId)?.clubName || row.teamId} • P ${row.points} • Diff ${row.goalDifference >= 0 ? '+' : ''}${row.goalDifference}`);
-  const matches = getGroupMatches(group).map((match, index) => `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatGroupStatus(match)}`);
-  return new EmbedBuilder().setTitle(`📋 Gruppe ${group.groupKey}`).setColor(0xff0000).setDescription(['**Live-Tabelle**', '', table.join('\n') || 'Noch keine Tabelle.', '', '**Spielplan**', '', matches.join('\n') || 'Noch kein Spielplan.'].join('\n')).setFooter({ text: `${eventDisplayLabel(event)} • Gruppenphase` }).setTimestamp(new Date());
+  const table = sortedStandings(group).map((row, index) => `**${index + 1}.** ${row.displayName || findTeamById(row.teamId)?.clubName || row.teamId} · ${row.points} P · ${row.goalDifference >= 0 ? '+' : ''}${row.goalDifference} Diff`);
+  const allMatches = getGroupMatches(group);
+  const completed = allMatches.filter(match => isByeMatch(match) || (match.status === 'confirmed' && match.result)).length;
+  const progress = allMatches.length ? Math.round(completed / allMatches.length * 10) : 0;
+  const matchdays = (group.matchdays || []).map(matchday => [
+    `**Spieltag ${matchday.matchday}**`,
+    ...(matchday.matches || []).map(match => `• ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} · ${formatGroupStatus(match)}`),
+  ].join('\n'));
+  return new EmbedBuilder().setTitle(`📋 Gruppe ${group.groupKey}`).setColor(0xff0000).setDescription([
+    '**Live-Tabelle**',
+    table.join('\n') || 'Noch keine Tabelle.',
+    '',
+    `**Fortschritt**  ${'🟥'.repeat(progress)}${'⬛'.repeat(10 - progress)}  ${completed}/${allMatches.length} Spiele`,
+    '',
+    '**Begegnungen**',
+    matchdays.join('\n\n') || 'Noch kein Spielplan.',
+  ].join('\n')).setFooter({ text: `${eventDisplayLabel(event)} • Gruppenphase` }).setTimestamp(new Date());
 }
 function roundTitle(roundKey) { if (roundKey === 'third_place') return '🥉 Spiel um Platz 3'; if (roundKey === 'final') return '👑 Finale'; return `🏆 ${ROUND_LABELS[roundKey] || roundKey}`; }
 function buildRoundEmbed(event, roundKey, round) {
   const matches = (round.matches || []).map((match, index) => `${index + 1}. ${resolveParticipantName(match.home)} vs ${resolveParticipantName(match.away)} • ${formatKnockoutStatus(match)}`);
-  return new EmbedBuilder().setTitle(roundTitle(roundKey)).setColor(roundKey === 'final' ? 0xf2c94c : 0xff0000).setDescription(matches.join('\n') || 'Diese Runde ist noch nicht bereit.').setFooter({ text: `${eventDisplayLabel(event)} • K.O.-Phase` }).setTimestamp(new Date());
+  const completed = (round.matches || []).filter(match => isByeMatch(match) || (match.status === 'confirmed' && match.result)).length;
+  const total = (round.matches || []).length;
+  const progress = total ? Math.round(completed / total * 10) : 0;
+  return new EmbedBuilder().setTitle(roundTitle(roundKey)).setColor(roundKey === 'final' ? 0xf2c94c : 0xff0000).setDescription([
+    `**Fortschritt**  ${'🟥'.repeat(progress)}${'⬛'.repeat(10 - progress)}  ${completed}/${total} Spiele`,
+    '',
+    matches.join('\n') || 'Diese Runde ist noch nicht bereit.',
+  ].join('\n')).setFooter({ text: `${eventDisplayLabel(event)} • K.O.-Phase` }).setTimestamp(new Date());
 }
 function headerPayload(event, phase) {
   const size = event.format?.size ? `${event.format.size}er Cup` : 'Cup';
@@ -169,9 +190,25 @@ async function performLiveScheduleRefresh(client, eventKey, event = null) {
   });
 
   if (phase === 'groups') {
+    // Recover posts sent before their ID could be saved, and remove stale duplicates.
+    const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
     for (const group of activeGroups(currentEvent)) {
-      const message = await upsertMessage(channel, groupMessageIds[group.groupKey], { embeds: [buildGroupEmbed(currentEvent, group)], allowedMentions: { parse: [] } });
+      const embed = buildGroupEmbed(currentEvent, group);
+      const candidates = recent?.filter(message => message.author?.id === client.user.id
+        && message.embeds?.[0]?.title === embed.data.title
+        && message.embeds?.[0]?.footer?.text === embed.data.footer.text) || null;
+      const known = await fetchMessage(channel, groupMessageIds[group.groupKey]);
+      const existing = known || candidates?.first() || null;
+      const payload = { embeds: [embed], allowedMentions: { parse: [] } };
+      const message = existing ? await existing.edit(payload) : await channel.send(payload);
       groupMessageIds[group.groupKey] = message.id;
+      updateJson(FILES.messages, createMessagesDefault(), current => {
+        current.liveSchedule = { ...(current.liveSchedule || {}), groupMessageIds: { ...(current.liveSchedule?.groupMessageIds || {}), [group.groupKey]: message.id }, updatedAt: nowIso() };
+        return current;
+      });
+      for (const duplicate of candidates?.values() || []) {
+        if (duplicate.id !== message.id) await duplicate.delete().catch(() => null);
+      }
     }
   } else if (phase === 'league') {
     const table = await renderLeagueTable(currentEvent.leaguePhase);
