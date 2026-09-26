@@ -7,7 +7,7 @@ const { ensureEventCycle, getCheckinWindowState, getPlannedSchedule } = require(
 const { validateEvent } = require('../src/validation/events.schema');
 const { createEmptyManualGroups } = require('../src/domain/checkins/bomber-x-loco-manual-draw');
 const { isHalloweenChannel } = require('../src/domain/checkins/halloween-channel');
-const { buildBomberXLocoBlockerPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
+const { buildBomberXLocoBlockerPayload, buildBomberXLocoPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
 const { HALLOWEEN_CHECKIN_CHANNEL_ID } = require('../src/domain/events/bomber-x-loco-config');
 const { isBomberXLocoDate } = require('../src/domain/events/bomber-x-loco-config');
 
@@ -58,4 +58,13 @@ test('Friday panel points to the Halloween check-in and switches to today wordin
   assert.match(today.embeds[0].toJSON().description, /Heute findet kein regulärer/);
   assert.match(today.embeds[0].toJSON().description, /<#1542823464434671676>/);
   assert.equal(today.components[0].components[0].data.disabled, false);
+});
+
+test('Halloween check-in uses its own artwork instead of the promotional poster', () => {
+  const settings = createSettingsDefault();
+  const event = createEventDefault('bomber_halloween');
+  ensureEventCycle('bomber_halloween', event, settings, new Date('2026-09-26T10:00:00Z'));
+  const payload = buildBomberXLocoPayload(event, settings);
+  assert.equal(payload.files[0].name, 'bomber-x-loco-halloween-check-in.png');
+  assert.match(payload.embeds[0].toJSON().image.url, /bomber-x-loco-halloween-check-in\.png/);
 });

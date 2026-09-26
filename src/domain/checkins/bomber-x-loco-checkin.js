@@ -17,8 +17,8 @@ const { getCheckinWindowState } = require('./checkin-schedule');
 
 const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
-const HALLOWEEN_BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco-halloween', 'check-in.jpg');
-const HALLOWEEN_BANNER_NAME = 'bomber-x-loco-halloween-check-in.jpg';
+const HALLOWEEN_BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco-halloween', 'check-in.png');
+const HALLOWEEN_BANNER_NAME = 'bomber-x-loco-halloween-check-in.png';
 const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const MAX_PARTICIPANTS = Math.max(...BOMBER_X_LOCO_FORMAT_SIZES);
 
