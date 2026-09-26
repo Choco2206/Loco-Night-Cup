@@ -1,13 +1,15 @@
 'use strict';
 
 const { EVENT_KEYS } = require('../../app/constants');
+const { FILES, readJson } = require('../../storage');
+const { createSettingsDefault } = require('../../storage/defaults');
 const { checkInTeam, withdrawTeam } = require('./checkin-service');
 const { handleInteraction: handleBomberManualDrawInteraction } = require('./bomber-x-loco-manual-draw');
 const {
   refreshCheckinMessage,
   refreshCheckinMessages,
 } = require('./checkin-panel');
-const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID, BOMBER_X_LOCO_EVENT_KEY, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID, BOMBER_X_LOCO_EVENT_KEY, HALLOWEEN_EVENT_KEY, HALLOWEEN_CHECKIN_CHANNEL_ID, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
 const EPHEMERAL = 64;
 
@@ -77,6 +79,13 @@ async function handleInteraction(interaction, client) {
       ].join('\n'),
       flags: EPHEMERAL,
     });
+    return true;
+  }
+
+  if (interaction.customId === `bomber_x_loco_redirect:${HALLOWEEN_EVENT_KEY}`) {
+    const settings = readJson(FILES.settings, createSettingsDefault());
+    const channelId = HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY];
+    await interaction.reply({ content: `💣🐺🎃 Am **30.10.2026** läuft der **Bomber X Loco Halloween Cup**. Anmeldung im <#${channelId}>.`, flags: EPHEMERAL });
     return true;
   }
 

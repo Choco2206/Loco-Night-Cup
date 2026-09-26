@@ -44,7 +44,7 @@ function sortedStandings(group) {
 }
 function eventDisplayLabel(event) {
   return event?.meta?.eventMode === 'bomber_x_loco'
-    ? 'Bomber X Loco Cup'
+    ? (event.eventKey === 'bomber_halloween' ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup')
     : `Loco Night Cup ${event?.label || event?.eventKey}`;
 }
 function buildGroupEmbed(event, group) {

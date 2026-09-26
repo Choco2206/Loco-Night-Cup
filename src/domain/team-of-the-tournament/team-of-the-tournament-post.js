@@ -102,8 +102,14 @@ function selectSpecialAwards(performances) {
   };
 }
 
-function buildIntroText({ test = false, variant = 'default' } = {}) {
+function buildIntroText({ test = false, variant = 'default', eventKey = null } = {}) {
   if (variant === 'bomber_x_loco') {
+    if (eventKey === 'bomber_halloween') return [
+      test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
+      '@everyone',
+      '🎃🏆 **BOMBER X LOCO HALLOWEEN CUP – TEAM OF THE TOURNAMENT**',
+      'Elf Spieler haben sich an diesem Halloween-Abend ihren Platz in der besten Elf verdient. Glückwunsch an euch! 💣🐺🎃',
+    ].filter(entry => entry !== null).join('\n');
     return [
       test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
       '@everyone',
@@ -360,7 +366,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     serialNumber,
     variant,
   });
-  const intro = buildIntroText({ variant });
+  const intro = buildIntroText({ variant, eventKey });
   const imageMessage = await channel.send({
     content: intro,
     files: [{ attachment: rendered.buffer, name: rendered.fileName }],

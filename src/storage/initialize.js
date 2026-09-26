@@ -324,6 +324,13 @@ function removeLegacyResetTimeFromSettings(settings) {
 function removeLegacyResetTimeFromSettingsFile() {
   const settings = readJson(FILES.settings, createSettingsDefault());
   let changed = false;
+  // New one-off events need a nullable channel entry in existing installations.
+  settings.channels = settings.channels || {};
+  settings.channels.checkinChannelIds = settings.channels.checkinChannelIds || {};
+  if (settings.channels.checkinChannelIds.bomber_halloween === undefined) {
+    settings.channels.checkinChannelIds.bomber_halloween = null;
+    changed = true;
+  }
   changed = removeLegacyResetTimeFromSettings(settings) || changed;
   changed = migrateUnifiedNightScheduleSettings(settings) || changed;
   if (changed) writeJsonAtomic(FILES.settings, settings);

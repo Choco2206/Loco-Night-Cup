@@ -12,6 +12,8 @@ const DEFAULT_TIMEZONE = 'Europe/Berlin';
 const { buildRoyaleSchedule, isRoyaleEventDate } = require('../royale/royale-schedule');
 const {
   BOMBER_X_LOCO_FORMAT_SIZES,
+  HALLOWEEN_EVENT_DATE,
+  HALLOWEEN_EVENT_KEY,
   buildBomberXLocoSchedule,
   isBomberXLocoDate,
 } = require('../events/bomber-x-loco-config');
@@ -101,6 +103,7 @@ function getCurrentCycleDateValue(eventKey, event = {}, now = new Date(), settin
 }
 
 function getEventDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
+  if (eventKey === HALLOWEEN_EVENT_KEY) return HALLOWEEN_EVENT_DATE;
   const timeZone = getTimeZone(settings, event);
   if (event.cycle?.eventDate) {
     const resetAt = getCycleResetAt(event.cycle.eventDate, timeZone);
@@ -129,7 +132,7 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
   const timeZone = getTimeZone(settings, event);
 
   if (isBomberXLocoDate(eventKey, eventDate)) {
-    return buildBomberXLocoSchedule(eventDate);
+    return buildBomberXLocoSchedule(eventDate, eventKey);
   }
 
   if (eventKey === 'saturday' && isRoyaleEventDate(eventDate)) {
@@ -229,6 +232,9 @@ function isAfterDeadline(eventKey, event, settings, now = new Date()) { const d 
 function canUseCheckinStatus(status) { return CHECKIN_EVENT_STATUSES.includes(status); }
 
 function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
+  if (eventKey === 'friday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
+    return { label: 'Halloween Cup', phase: 'special_event', canJoin: false, canLeave: false };
+  }
   if (['checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) return { label: 'Geschlossen', phase: event.status, canJoin: false, canLeave: false };
   if (event.status === 'cancelled') return { label: 'Abgesagt', phase: 'cancelled', canJoin: false, canLeave: false };
   if (event.status === 'reset') return { label: 'Reset', phase: 'reset', canJoin: false, canLeave: false };

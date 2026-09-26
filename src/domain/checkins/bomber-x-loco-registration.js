@@ -502,9 +502,29 @@ async function reconcile() {
   return true;
 }
 
+async function archiveCompletedPanel(client) {
+  const channel = await client.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
+  if (!channel?.messages) return;
+  const state = readState();
+  const messages = readJson(FILES.messages, createMessagesDefault());
+  const ids = new Set([state.messageId, messages.checkins?.[BOMBER_X_LOCO_EVENT_KEY]?.specialMainMessageId].filter(Boolean).map(String));
+  for (const id of ids) {
+    const message = await channel.messages.fetch(id).catch(() => null);
+    if (message) await message.edit({ components: [] }).catch(error => {
+      console.warn(`[bomber-x-loco] Completed panel ${id} could not be disabled: ${error.message}`);
+    });
+  }
+}
+
 module.exports = {
   async init(client) {
     clientRef = client;
+    // One-time September registration is over. Keep its state for history, but
+    // remove active buttons and never re-open or repost it on later restarts.
+    if (isRegistrationClosed()) {
+      await archiveCompletedPanel(client);
+      return;
+    }
 
     // Der abgesagte Cup vom 19.09. darf keine Teilnehmer in den Ersatztermin
     // am 25.09. übernehmen. Der Marker verhindert, dass spätere Neustarts neu

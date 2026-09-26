@@ -10,6 +10,9 @@ const BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME = '18:30';
 const BOMBER_X_LOCO_DRAW_TIME = '20:00';
 const BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME = '20:55';
 const BOMBER_X_LOCO_TOURNAMENT_START_TIME = '21:00';
+const HALLOWEEN_EVENT_KEY = 'bomber_halloween';
+const HALLOWEEN_EVENT_DATE = '2026-10-30';
+const HALLOWEEN_CHECKIN_CHANNEL_ID = '1542823464434671676';
 
 const BOMBER_X_LOCO_FORMATS = {
   6: { groupCount: 1, qualifiedCount: 4, directPlaces: 4, wildcardPlace: null, wildcardCount: 0, firstRoundKey: 'semi_final', rule: 'top4' },
@@ -25,26 +28,32 @@ const BOMBER_X_LOCO_FORMATS = {
 };
 
 function isBomberXLocoDate(eventKey, eventDate) {
-  return eventKey === BOMBER_X_LOCO_EVENT_KEY && eventDate === BOMBER_X_LOCO_EVENT_DATE;
+  return (eventKey === BOMBER_X_LOCO_EVENT_KEY && eventDate === BOMBER_X_LOCO_EVENT_DATE)
+    || (eventKey === HALLOWEEN_EVENT_KEY && eventDate === HALLOWEEN_EVENT_DATE);
 }
 
 function isBomberXLocoEvent(event) {
   return event?.meta?.eventMode === 'bomber_x_loco';
 }
 
-function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE) {
-  const offset = '+02:00';
+function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE, eventKey = BOMBER_X_LOCO_EVENT_KEY) {
+  const halloween = eventKey === HALLOWEEN_EVENT_KEY;
+  const offset = halloween ? '+01:00' : '+02:00';
+  const drawTime = halloween ? '19:00' : BOMBER_X_LOCO_DRAW_TIME;
+  const attendanceTime = halloween ? '20:15' : BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME;
+  const resetDate = new Date(`${eventDate}T07:00:00${offset}`);
+  resetDate.setUTCDate(resetDate.getUTCDate() + 1);
   return {
-    cycleKey: `${BOMBER_X_LOCO_EVENT_KEY}_${eventDate}`,
+    cycleKey: `${eventKey}_${eventDate}`,
     eventDate,
     timeZone: 'Europe/Berlin',
     deadlineAt: new Date(`${eventDate}T${BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME}:00${offset}`),
     // Kein Late-Check-in: die Late-Grenze liegt absichtlich exakt auf dem Anmeldeschluss.
     lateWindowUntil: new Date(`${eventDate}T${BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME}:00${offset}`),
-    drawAt: new Date(`${eventDate}T${BOMBER_X_LOCO_DRAW_TIME}:00${offset}`),
-    attendanceDeadlineAt: new Date(`${eventDate}T${BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00${offset}`),
+    drawAt: new Date(`${eventDate}T${drawTime}:00${offset}`),
+    attendanceDeadlineAt: new Date(`${eventDate}T${attendanceTime}:00${offset}`),
     tournamentStartAt: new Date(`${eventDate}T${BOMBER_X_LOCO_TOURNAMENT_START_TIME}:00${offset}`),
-    resetAt: new Date('2026-09-26T07:00:00+02:00'),
+    resetAt: resetDate,
     eventMode: 'bomber_x_loco',
   };
 }
@@ -65,6 +74,9 @@ module.exports = {
   BOMBER_X_LOCO_MATCHDAYS,
   BOMBER_X_LOCO_REGISTRATION_DEADLINE_TIME,
   BOMBER_X_LOCO_TOURNAMENT_START_TIME,
+  HALLOWEEN_CHECKIN_CHANNEL_ID,
+  HALLOWEEN_EVENT_DATE,
+  HALLOWEEN_EVENT_KEY,
   buildBomberXLocoSchedule,
   getBomberXLocoFormat,
   isBomberXLocoDate,

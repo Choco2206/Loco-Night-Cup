@@ -105,7 +105,8 @@ function isDirectCheckinButton(interaction) {
     || customId.startsWith('checkin_leave:')
     || customId === 'bomber_x_loco_prejoin'
     || customId === 'bomber_x_loco_preleave'
-    || customId === 'bomber_x_loco_redirect:friday';
+    || customId === 'bomber_x_loco_redirect:friday'
+    || customId === 'bomber_x_loco_redirect:bomber_halloween';
 }
 
 async function main() {

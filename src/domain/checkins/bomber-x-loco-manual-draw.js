@@ -25,20 +25,29 @@ const {
   BOMBER_X_LOCO_EVENT_DATE,
   BOMBER_X_LOCO_EVENT_KEY,
   BOMBER_X_LOCO_GROUP_SIZE,
+  HALLOWEEN_EVENT_DATE,
+  HALLOWEEN_EVENT_KEY,
+  HALLOWEEN_CHECKIN_CHANNEL_ID,
   isBomberXLocoEvent,
 } = require('../events/bomber-x-loco-config');
 
 const EVENT_KEY = BOMBER_X_LOCO_EVENT_KEY;
 const PREPARE_AT = new Date(`${BOMBER_X_LOCO_EVENT_DATE}T18:45:00+02:00`);
 const EVENT_END = new Date('2026-09-26T07:00:00+02:00');
+const HALLOWEEN_PREPARE_AT = new Date(`${HALLOWEEN_EVENT_DATE}T18:45:00+01:00`);
+const HALLOWEEN_END = new Date('2026-10-31T07:00:00+01:00');
 const EPHEMERAL = 64;
 let prepareTimer = null;
 
 function nowIso(now = new Date()) { return now.toISOString(); }
 function readSettings() { return readJson(FILES.settings, createSettingsDefault()); }
 function isTargetEvent(event) {
-  return isBomberXLocoEvent(event) && String(event.cycle?.eventDate || '') === BOMBER_X_LOCO_EVENT_DATE;
+  return isBomberXLocoEvent(event) && (
+    ((!event.eventKey || event.eventKey === EVENT_KEY) && event.cycle?.eventDate === BOMBER_X_LOCO_EVENT_DATE)
+    || (event.eventKey === HALLOWEEN_EVENT_KEY && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE)
+  );
 }
+function prepareAt(eventKey) { return eventKey === HALLOWEEN_EVENT_KEY ? HALLOWEEN_PREPARE_AT : PREPARE_AT; }
 
 function isAdminMember(member, settings) {
   const roleIds = [
@@ -61,7 +70,7 @@ function createPendingSlots(groupKey) {
   }));
 }
 
-function createEmptyManualGroups(size) {
+function createEmptyManualGroups(size, eventKey = EVENT_KEY) {
   const count = Number(size) / BOMBER_X_LOCO_GROUP_SIZE;
   return Object.fromEntries(GROUP_KEYS.slice(0, count).map(groupKey => {
     const group = {
@@ -77,7 +86,7 @@ function createEmptyManualGroups(size) {
       manualDraw: true,
       assignmentComplete: false,
     };
-    group.matchdays = createGroupMatchdays({ eventKey: EVENT_KEY, group, createdAt: nowIso() });
+    group.matchdays = createGroupMatchdays({ eventKey, group, createdAt: nowIso() });
     return [groupKey, group];
   }));
 }
@@ -131,7 +140,7 @@ function availableParticipants(event) {
     });
 }
 
-function rebuildGroupCompetitionData(group, now = new Date()) {
+function rebuildGroupCompetitionData(group, now = new Date(), eventKey = EVENT_KEY) {
   const teams = (group.slots || []).filter(slot => slot?.type === 'team' && slot.teamId);
   group.standings = teams.map(slot => ({
     slot: slot.slot,
@@ -148,13 +157,13 @@ function rebuildGroupCompetitionData(group, now = new Date()) {
     points: 0,
   }));
   group.assignmentComplete = (group.slots || []).every(slot => slot?.type === 'team' || slot?.type === 'bye');
-  group.matchdays = createGroupMatchdays({ eventKey: EVENT_KEY, group, createdAt: nowIso(now) });
+  group.matchdays = createGroupMatchdays({ eventKey, group, createdAt: nowIso(now) });
   return group;
 }
 
-function persistResourceUpdates(updates) {
-  if (!updates.length) return readEventData(EVENT_KEY);
-  updateEventData(EVENT_KEY, current => {
+function persistResourceUpdates(updates, eventKey = EVENT_KEY) {
+  if (!updates.length) return readEventData(eventKey);
+  updateEventData(eventKey, current => {
     for (const update of updates) {
       const group = current.groups?.groups?.[update.groupKey];
       if (group) Object.assign(group, update);
@@ -162,12 +171,13 @@ function persistResourceUpdates(updates) {
     current.meta = { ...(current.meta || {}), updatedAt: nowIso() };
     return current;
   });
-  const persisted = readEventData(EVENT_KEY);
-  updateGroupMessageRefs(EVENT_KEY, persisted, updates);
+  const persisted = readEventData(eventKey);
+  updateGroupMessageRefs(eventKey, persisted, updates);
   return persisted;
 }
 
 async function syncGroupResources(client, event, groupKeys = null) {
+  const eventKey = event.eventKey || EVENT_KEY;
   const settings = readSettings();
   const roleSync = await ensureGroupRolesAndMembers({ client, event, settings });
   const guild = roleSync.guild;
@@ -190,10 +200,10 @@ async function syncGroupResources(client, event, groupKeys = null) {
 
     const refs = await upsertGroupPosts(channel, {
       ...group,
-      eventKey: EVENT_KEY,
+      eventKey,
       formatSize: event.format?.size,
     }, {
-      eventKey: EVENT_KEY,
+      eventKey,
       messageId: group.messageId || null,
       headerMessageId: group.headerMessageId || null,
       teamsMessageId: group.teamsMessageId || null,
@@ -214,33 +224,33 @@ async function syncGroupResources(client, event, groupKeys = null) {
     });
   }
 
-  const persisted = persistResourceUpdates(updates);
+  const persisted = persistResourceUpdates(updates, eventKey);
 
   for (const update of updates) {
-    await ensureAttendancePost(client, EVENT_KEY, update.groupKey).catch(error => {
+    await ensureAttendancePost(client, eventKey, update.groupKey).catch(error => {
       console.warn(`[bxl-manual-draw] Anwesenheitscheck Gruppe ${update.groupKey} konnte noch nicht aktualisiert werden: ${error.message}`);
     });
   }
   return { updates, event: persisted };
 }
 
-async function prepareManualDraw(client, now = new Date()) {
-  let event = readEventData(EVENT_KEY);
+async function prepareManualDraw(client, now = new Date(), eventKey = EVENT_KEY) {
+  let event = readEventData(eventKey);
   if (!isTargetEvent(event)) return { prepared: false, reason: 'not_target_event' };
   if (event.meta?.bomberManualDrawPreparedAt) return { prepared: false, reason: 'already_prepared', event };
-  if (now.getTime() < PREPARE_AT.getTime()) {
+  if (now.getTime() < prepareAt(eventKey).getTime()) {
     return { prepared: false, reason: 'too_early', event };
   }
 
   if (!event.format?.lockedAt) {
-    lockEventFormat(EVENT_KEY, null, now);
-    event = readEventData(EVENT_KEY);
+    lockEventFormat(eventKey, null, now);
+    event = readEventData(eventKey);
   }
   if (!event.format?.size || Number(event.format.size) % BOMBER_X_LOCO_GROUP_SIZE !== 0) {
     throw new Error('Für die Live-Auslosung ist noch kein gültiges Bomber-X-Loco-Format gelockt.');
   }
 
-  updateEventData(EVENT_KEY, current => {
+  updateEventData(eventKey, current => {
     const timestamp = nowIso(now);
     current.status = 'groups';
     current.groups = {
@@ -250,7 +260,7 @@ async function prepareManualDraw(client, now = new Date()) {
       drawnBy: null,
       manualDraw: true,
       manualDrawHost: 'Paddy HSV',
-      groups: createEmptyManualGroups(current.format.size),
+      groups: createEmptyManualGroups(current.format.size, eventKey),
     };
     current.meta = {
       ...(current.meta || {}),
@@ -261,18 +271,26 @@ async function prepareManualDraw(client, now = new Date()) {
     return current;
   });
 
-  event = readEventData(EVENT_KEY);
+  event = readEventData(eventKey);
   await syncGroupResources(client, event);
-  await refreshLiveSchedule(client, EVENT_KEY).catch(error => {
+  await refreshLiveSchedule(client, eventKey).catch(error => {
     console.warn(`[bxl-manual-draw] Öffentlicher Spielplan nach Vorbereitung fehlgeschlagen: ${error.message}`);
   });
-  return { prepared: true, event: readEventData(EVENT_KEY) };
+  return { prepared: true, event: readEventData(eventKey) };
 }
 
 function scheduleManualDrawPreparation(client) {
   if (prepareTimer) clearTimeout(prepareTimer);
   prepareTimer = null;
   const now = new Date();
+  if (now >= HALLOWEEN_END) return;
+  if (now >= HALLOWEEN_PREPARE_AT) {
+    prepareManualDraw(client, now, HALLOWEEN_EVENT_KEY).catch(error => console.error('[bxl-manual-draw] Halloween preparation failed:', error));
+  } else {
+    const halloweenTimer = setTimeout(() => scheduleManualDrawPreparation(client),
+      Math.min(2 ** 31 - 1, HALLOWEEN_PREPARE_AT.getTime() - now.getTime()));
+    if (typeof halloweenTimer.unref === 'function') halloweenTimer.unref();
+  }
   if (now >= EVENT_END) return;
   if (now >= PREPARE_AT) {
     prepareManualDraw(client, now).catch(error => console.error('[bxl-manual-draw] Vorbereitung fehlgeschlagen:', error));
@@ -362,7 +380,7 @@ function assignParticipantInEvent(event, { groupKey, selectedValue, actorUserId,
   }
   slot.pendingAssignment = false;
 
-  rebuildGroupCompetitionData(group, now);
+  rebuildGroupCompetitionData(group, now, event.eventKey);
   event.groups.drawnAt = event.groups.drawnAt || nowIso(now);
   event.groups.drawnBy = actorUserId ? String(actorUserId) : event.groups.drawnBy;
   const allAssigned = assignedParticipantKeys(event).length === lockedParticipants(event).length
@@ -372,22 +390,22 @@ function assignParticipantInEvent(event, { groupKey, selectedValue, actorUserId,
   return { event, group, participant, allAssigned };
 }
 
-async function assignParticipantToGroup({ client, groupKey, selectedValue, actorUserId, now = new Date() }) {
+async function assignParticipantToGroup({ client, groupKey, selectedValue, actorUserId, eventKey = EVENT_KEY, now = new Date() }) {
   let changedGroup = null;
   let assignedParticipant = null;
-  updateEventData(EVENT_KEY, event => {
+  updateEventData(eventKey, event => {
     const result = assignParticipantInEvent(event, { groupKey, selectedValue, actorUserId, now });
     changedGroup = result.group;
     assignedParticipant = result.participant;
     return event;
   });
 
-  const event = readEventData(EVENT_KEY);
+  const event = readEventData(eventKey);
   await syncGroupResources(client, event, [groupKey]);
-  refreshLiveSchedule(client, EVENT_KEY).catch(error => {
+  refreshLiveSchedule(client, eventKey).catch(error => {
     console.warn(`[bxl-manual-draw] Öffentlicher Spielplan nach Gruppenzuteilung fehlgeschlagen: ${error.message}`);
   });
-  return { event: readEventData(EVENT_KEY), group: changedGroup, participant: assignedParticipant };
+  return { event: readEventData(eventKey), group: changedGroup, participant: assignedParticipant };
 }
 
 async function handleInteraction(interaction, client) {
@@ -396,6 +414,8 @@ async function handleInteraction(interaction, client) {
       && !customId.startsWith('bxl_manual_team_select:')) return false;
 
   const settings = readSettings();
+  const halloweenChannelId = HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY];
+  const eventKey = halloweenChannelId && String(interaction.channelId) === String(halloweenChannelId) ? HALLOWEEN_EVENT_KEY : EVENT_KEY;
   const member = interaction.guild
     ? await interaction.guild.members.fetch(interaction.user.id).catch(() => interaction.member)
     : null;
@@ -405,21 +425,21 @@ async function handleInteraction(interaction, client) {
   }
 
   try {
-    let event = readEventData(EVENT_KEY);
-    if (!isTargetEvent(event)) throw new Error('Dieser Button ist nur für den Bomber X Loco Cup am 25.09.2026 vorgesehen.');
+    let event = readEventData(eventKey);
+    if (!isTargetEvent(event)) throw new Error('Dieser Button ist nur für die aktive Bomber X Loco Auslosung vorgesehen.');
 
     if (!event.meta?.bomberManualDrawPreparedAt) {
       const now = new Date();
-      if (now.getTime() < PREPARE_AT.getTime()) {
+      if (now.getTime() < prepareAt(eventKey).getTime()) {
         await interaction.reply({
-          content: 'Die manuelle Gruppenzuteilung wird am Eventtag ab **18:45 Uhr** freigeschaltet. Bis dahin bleibt der Check-in normal geöffnet.',
+        content: 'Die manuelle Gruppenzuteilung wird am Eventtag ab **18:45 Uhr** freigeschaltet.',
           flags: EPHEMERAL,
         });
         return true;
       }
       await interaction.deferReply({ flags: EPHEMERAL });
-      await prepareManualDraw(client, now);
-      event = readEventData(EVENT_KEY);
+      await prepareManualDraw(client, now, eventKey);
+      event = readEventData(eventKey);
       await interaction.editReply({ content: 'Wähle die Gruppe für die nächste Live-Auslosung.', components: buildGroupSelect(event) });
       return true;
     }
@@ -442,7 +462,7 @@ async function handleInteraction(interaction, client) {
       const [, groupKey] = customId.split(':');
       const selectedValue = interaction.values?.[0];
       await interaction.deferUpdate();
-      const result = await assignParticipantToGroup({ client, groupKey, selectedValue, actorUserId: interaction.user.id });
+      const result = await assignParticipantToGroup({ client, groupKey, selectedValue, actorUserId: interaction.user.id, eventKey });
       const assignedName = result.participant?.type === 'bye'
         ? result.participant.displayName || 'Freilos'
         : findTeamById(result.participant?.teamId)?.clubName || result.participant?.displayName || selectedValue;

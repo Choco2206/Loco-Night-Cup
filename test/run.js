@@ -16,6 +16,7 @@ require('./loco-zwergen-cup-event.test');
 require('./loco-zwergen-cup-round-of-32-layout.test');
 require('./loco-zwergen-cup-graphics.test');
 require('./bomber-x-loco-qualification-text.test');
+require('./halloween-event.test');
 require('./bomber-x-loco-waitlist.test');
 require('./bomber-x-loco-live-registration.test');
 require('./bomber-x-loco-manual-draw.test');

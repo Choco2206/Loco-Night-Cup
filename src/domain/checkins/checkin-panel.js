@@ -5,8 +5,9 @@ const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { getPublicCheckinState } = require('./checkin-service');
 const { buildCheckinMessagePayload } = require('./checkin-components');
-const { getCheckinWindowState } = require('./checkin-schedule');
-const { BOMBER_X_LOCO_EVENT_KEY, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { resolveHalloweenChannel } = require('./halloween-channel');
+const { getCheckinWindowState, toDateOnly } = require('./checkin-schedule');
+const { BOMBER_X_LOCO_EVENT_KEY, HALLOWEEN_EVENT_KEY, HALLOWEEN_CHECKIN_CHANNEL_ID, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   buildBomberXLocoPayload,
@@ -63,6 +64,7 @@ async function upsertMessage(channel, messageId, payload) {
 }
 
 async function removeLegacyBomberPanel(client) {
+  if (Date.now() >= new Date('2026-09-26T07:00:00+02:00').getTime()) return false;
   const specialChannel = await client.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
   if (!specialChannel?.send) return false;
 
@@ -101,7 +103,12 @@ async function removeLegacyBomberPanel(client) {
 }
 
 async function refreshBomberXLocoPanel({ eventKey, event, client, settings, state }) {
-  const specialChannel = await client.channels.fetch(BOMBER_X_LOCO_CHECKIN_CHANNEL_ID).catch(() => null);
+  const specialChannelId = eventKey === HALLOWEEN_EVENT_KEY
+    ? HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY]
+    : BOMBER_X_LOCO_CHECKIN_CHANNEL_ID;
+  const specialChannel = eventKey === HALLOWEEN_EVENT_KEY
+    ? await resolveHalloweenChannel(client, settings)
+    : await client.channels.fetch(specialChannelId).catch(() => null);
   if (!specialChannel?.send) {
     console.warn(`[checkin-panel] ${eventKey}: Bomber X Loco channel not writable`);
     return false;
@@ -117,7 +124,7 @@ async function refreshBomberXLocoPanel({ eventKey, event, client, settings, stat
   );
 
   const normalChannelId = settings.channels?.checkinChannelIds?.[eventKey];
-  if (normalChannelId) {
+  if (normalChannelId && eventKey !== HALLOWEEN_EVENT_KEY) {
     const normalChannel = await client.channels.fetch(normalChannelId).catch(() => null);
     if (normalChannel?.send) {
       const blockerMessage = await upsertMessage(normalChannel, state.mainMessageId, buildBomberXLocoBlockerPayload());
@@ -193,7 +200,9 @@ async function refreshCheckinMessage(eventKey, client) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) return false;
 
-  const payload = buildCheckinMessagePayload(eventKey, event, settings);
+  const payload = eventKey === 'friday' && event.cycle?.eventDate === '2026-10-30'
+    ? buildBomberXLocoBlockerPayload({ halloween: true, today: toDateOnly(new Date()) === '2026-10-30', channelId: HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY] })
+    : buildCheckinMessagePayload(eventKey, event, settings);
   await deleteSummaryMessageIfOpen({ channel, state, eventKey, event, settings });
   const hasStaleChannelRef = state.channelId && String(state.channelId) !== String(channel.id);
   const message = await upsertMessage(channel, hasStaleChannelRef ? null : state.mainMessageId, payload);

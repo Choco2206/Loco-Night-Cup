@@ -24,7 +24,7 @@ function getCanvasApi() {
 }
 
 function isBomberXLocoRender(eventId) {
-  return String(eventId || '') === BOMBER_X_LOCO_CYCLE_KEY;
+  return [BOMBER_X_LOCO_CYCLE_KEY, 'bomber_halloween_2026-10-30'].includes(String(eventId || ''));
 }
 
 function isLocoZwergenCupRender(eventId) {

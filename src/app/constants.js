@@ -8,6 +8,7 @@ const EVENT_KEYS = [
   'friday',
   'saturday',
   'sunday',
+  'bomber_halloween',
 ];
 
 const EVENT_LABELS = {
@@ -18,6 +19,7 @@ const EVENT_LABELS = {
   friday: 'Freitag',
   saturday: 'Samstag',
   sunday: 'Sonntag',
+  bomber_halloween: 'Bomber X Loco Halloween Cup',
 };
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -100,6 +102,7 @@ const EVENT_PROFILE_BY_KEY = {
   friday: 'weekend_late_night',
   saturday: 'weekend_late_night',
   sunday: 'weekend_night',
+  bomber_halloween: 'weekend_late_night',
 };
 
 const DATA_VERSION = 1;

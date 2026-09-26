@@ -100,7 +100,19 @@ function promotionLines(promotion) {
   ];
 }
 
-function buildBomberXLocoCeremonyText({ teams, promotion = null }) {
+function buildBomberXLocoCeremonyText({ teams, promotion = null, halloween = false }) {
+  if (halloween) return [
+    '🎃🏆 **BOMBER X LOCO HALLOWEEN CUP • 30.10.2026**', '',
+    'Der Halloween Cup ist gespielt. Das ist eure Top 3:', '',
+    `🥇 **1. Platz • ${teams.first.clubName}**`,
+    `👑 VM / Co-VM: ${teamPings(teams.first)}`,
+    ...promotionLines(promotion), '',
+    `🥈 **2. Platz • ${teams.second.clubName}**`,
+    `👑 VM / Co-VM: ${teamPings(teams.second)}`, '',
+    `🥉 **3. Platz • ${teams.third.clubName}**`,
+    `👑 VM / Co-VM: ${teamPings(teams.third)}`, '',
+    'Danke an alle Teams, die diesen Abend mit uns gespielt haben. 💣🐺🎃',
+  ].join('\n');
   return [
     '🏆 **BOMBER X LOCO CUP • FC 27 OPENING CUP**',
     '',
@@ -198,7 +210,8 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   const timestamp = new Date().toISOString();
 
   const imageMessage = await channel.send({ content: '@everyone', files: [new AttachmentBuilder(image.buffer, { name: `bomber-x-loco-ceremony-${Date.now()}.png` })], allowedMentions: { parse: ['everyone'] } });
-  const textMessage = await channel.send({ content: buildBomberXLocoCeremonyText({ teams, promotion }), allowedMentions: { parse: ['users'] } });
+  const halloween = eventKey === 'bomber_halloween';
+  const textMessage = await channel.send({ content: buildBomberXLocoCeremonyText({ teams, promotion, halloween }), allowedMentions: { parse: ['users'] } });
 
   let updatedEvent;
   updateEventData(eventKey, storedEvent => {
@@ -225,7 +238,7 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   }
 
   scheduleAutoCleanupForEvent({ eventKey, guild, scheduledAt: updatedEvent.ceremony.cleanupScheduledAt, client: guild.client });
-  return { channelId: channel.id, imageMessageId: imageMessage.id, textMessageId: textMessage.id, teams, dayKey: 'saturday', dayLabel: 'Bomber X Loco Cup' };
+  return { channelId: channel.id, imageMessageId: imageMessage.id, textMessageId: textMessage.id, teams, dayKey: eventKey, dayLabel: halloween ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup' };
 }
 
 async function maybePostBomberXLocoCeremony({ guild, eventKey }) {

@@ -8,6 +8,7 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const {
   BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME,
   isBomberXLocoEvent,
+  HALLOWEEN_EVENT_KEY,
 } = require('../events/bomber-x-loco-config');
 const { findTeamById, isTeamMember } = require('../teams/team-service');
 
@@ -32,7 +33,8 @@ function getScopeTeamIds(scope) {
 function bomberAttendanceCloseAt(event) {
   const eventDate = event.cycle?.eventDate;
   if (!eventDate) return null;
-  const date = new Date(`${eventDate}T${BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00+02:00`);
+  const halloween = event.eventKey === HALLOWEEN_EVENT_KEY;
+  const date = new Date(`${eventDate}T${halloween ? '20:15' : BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00${halloween ? '+01:00' : '+02:00'}`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -71,6 +73,7 @@ function teamName(teamId) {
 function buildAttendancePayload(eventKey, groupKey, scope) {
   const event = readEventData(eventKey);
   const isBomber = isBomberXLocoEvent(event);
+  const halloween = eventKey === HALLOWEEN_EVENT_KEY;
   const present = new Set(scope.attendance?.presentTeamIds || []);
   const teamIds = getScopeTeamIds(scope);
   const lines = teamIds.map(teamId => `${present.has(teamId) ? '\u2705' : '\u2B1C'} **${teamName(teamId)}**`);
@@ -80,7 +83,7 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
     .setTitle(title)
     .setDescription([
       isBomber
-        ? 'Zeigt kurz, dass ihr bereit für den Bomber X Loco Cup seid.'
+        ? `Zeigt kurz, dass ihr bereit für den Bomber X Loco ${halloween ? 'Halloween ' : ''}Cup seid.`
         : 'Zeigt kurz, dass ihr bereit für den Loco Night Cup seid.',
       '',
       ...lines,
@@ -88,7 +91,7 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
       `**${present.size}/${teamIds.length} Teams anwesend**`,
       'Bitte drückt auf **Anwesend**, um euer Team einzuchecken.',
       isBomber ? '' : null,
-      isBomber ? '**Die Anwesenheitsabfrage endet um 20:55 Uhr.**' : null,
+      isBomber ? `**Die Anwesenheitsabfrage endet um ${halloween ? '20:15' : '20:55'} Uhr.**` : null,
     ].filter(line => line !== null).join('\n'))
     .setFooter({ text: isBomber ? 'BOMBER X LOCO \u2022 READY FOR KICK-OFF' : 'VM AURA \u2022 LOCO DNA \u2022 READY FOR KICK-OFF' });
   const row = new ActionRowBuilder().addComponents(

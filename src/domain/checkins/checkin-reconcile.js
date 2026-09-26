@@ -9,6 +9,7 @@ const { maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-release
 const { createRoyaleFromSaturdayCheckin } = require('../royale/royale-service');
 const { recalculateCheckinFormat } = require('./checkin-format');
 const { readEventData, updateEventData } = require('./checkin-repository');
+const { HALLOWEEN_EVENT_KEY, HALLOWEEN_EVENT_DATE, HALLOWEEN_CHECKIN_CHANNEL_ID } = require('../events/bomber-x-loco-config');
 const { refreshCheckinMessage } = require('./checkin-panel');
 const {
   getDeadlineAt,
@@ -16,6 +17,7 @@ const {
   ensureEventCycle,
   getLateWindowUntil,
   getTournamentStartAt,
+  toDateOnly,
 } = require('./checkin-schedule');
 
 const SAFETY_RECONCILE_INTERVAL_MS = 5 * 60 * 1000;
@@ -71,12 +73,13 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
   const minimum = minimumTeams(settings, event);
   const validTeamCount = getValidRealTeamCount(event, now);
   if (isBomberXLoco(event)) {
+    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
     return [
-      '❌ **Bomber X Loco Cup abgesagt**', '',
+      `❌ **${title} abgesagt**`, '',
       'Zum offiziellen Anmeldeschluss sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.', '',
       `Mindestanzahl: **${minimum} Teams**`,
       `Aktuell gültige Teams: **${validTeamCount}**`, '',
-      'Der Bomber X Loco Cup kann daher leider nicht stattfinden.',
+      `Der ${title} kann daher leider nicht stattfinden.`,
     ].join('\n');
   }
   return [
@@ -91,14 +94,17 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
 function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
   const waitlistCount = getWaitlistOverflowCount(event);
   if (isBomberXLoco(event)) {
+    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
+    const drawTime = getDrawAt(eventKey, event, settings, now)?.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+    const attendanceTime = event.eventKey === HALLOWEEN_EVENT_KEY ? '20:15' : '20:55';
     return [
-      '✅ **Bomber X Loco Cup findet statt**', '',
+      `✅ **${title} findet statt**`, '',
       'Der offizielle Anmeldeschluss ist erreicht. Die Anmeldung ist geschlossen.', '',
       `Finales Format: **${currentFormatLabel(event)}**`,
       `Aktive Teams: **${getActiveTeamCount(event)}**`,
       `Warteliste/Überschuss: **${waitlistCount}**`, '',
-      '🎲 Die Gruppenauslosung startet um **20:00 Uhr**.',
-      '✅ Danach läuft in jeder Gruppe die Anwesenheitsabfrage bis **20:55 Uhr**.',
+      `🎲 Die Gruppenauslosung startet um **${drawTime} Uhr**.`,
+      `✅ Danach läuft in jeder Gruppe die Anwesenheitsabfrage bis **${attendanceTime} Uhr**.`,
       '🚀 Turnierstart ist um **21:00 Uhr**.',
     ].join('\n');
   }
@@ -196,7 +202,9 @@ function markCheckinOpen(eventKey, now) {
 }
 
 async function getCheckinChannel(client, eventKey, settings) {
-  const channelId = settings.channels?.checkinChannelIds?.[eventKey];
+  const channelId = eventKey === HALLOWEEN_EVENT_KEY
+    ? HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[eventKey]
+    : settings.channels?.checkinChannelIds?.[eventKey];
   if (!client || !channelId) return null;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   return channel?.send ? channel : null;
@@ -422,6 +430,17 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
   const settings = readSettings();
   const repaired = repairEventCycle(eventKey, settings, now);
   const event = repaired.event;
+  if (eventKey === 'friday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
+    const today = toDateOnly(now) === HALLOWEEN_EVENT_DATE;
+    if (repaired.changed || (today && !event.meta?.halloweenTodayNoticeAt)) {
+      const posted = await refreshCheckinMessage(eventKey, client);
+      if (today && posted) updateEventData(eventKey, current => {
+        current.meta = { ...(current.meta || {}), halloweenTodayNoticeAt: nowIso(now) };
+        return current;
+      });
+    }
+    return { changed: repaired.changed, event };
+  }
   if (RECONCILE_SKIP_STATUSES.has(event.status) || event.status === 'cancelled') return { changed: false, event };
   const deadlineAt = getDeadlineAt(eventKey, event, settings, now);
   const lateWindowUntil = getLateWindowUntil(eventKey, event, settings, now);

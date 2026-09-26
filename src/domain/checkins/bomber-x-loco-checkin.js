@@ -9,12 +9,16 @@ const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_EVENT_KEY,
   BOMBER_X_LOCO_FORMAT_SIZES,
+  HALLOWEEN_EVENT_KEY,
+  HALLOWEEN_CHECKIN_CHANNEL_ID,
 } = require('../events/bomber-x-loco-config');
 const { getEntryTeamIds, getManualByeCount } = require('./checkin-format');
 const { getCheckinWindowState } = require('./checkin-schedule');
 
 const BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'check-in.png');
 const BANNER_NAME = 'bomber-x-loco-check-in.png';
+const HALLOWEEN_BANNER_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco-halloween', 'check-in.jpg');
+const HALLOWEEN_BANNER_NAME = 'bomber-x-loco-halloween-check-in.jpg';
 const PADDY_HSV_TWITCH_URL = 'https://www.twitch.tv/Paddyhsv';
 const MAX_PARTICIPANTS = Math.max(...BOMBER_X_LOCO_FORMAT_SIZES);
 
@@ -88,16 +92,22 @@ function formatWaitlist(event) {
   ].join('\n');
 }
 
-function getBanner() {
-  if (!fs.existsSync(BANNER_PATH)) return { embed: null, files: [] };
+function getBanner(event) {
+  const halloween = event.eventKey === HALLOWEEN_EVENT_KEY;
+  const bannerPath = halloween ? HALLOWEEN_BANNER_PATH : BANNER_PATH;
+  const bannerName = halloween ? HALLOWEEN_BANNER_NAME : BANNER_NAME;
+  if (!fs.existsSync(bannerPath)) return { embed: null, files: [] };
   return {
-    embed: new EmbedBuilder().setColor(0xff0000).setImage(`attachment://${BANNER_NAME}`),
-    files: [{ attachment: BANNER_PATH, name: BANNER_NAME }],
+    embed: new EmbedBuilder().setColor(halloween ? 0xff6a00 : 0xff0000).setImage(`attachment://${bannerName}`),
+    files: [{ attachment: bannerPath, name: bannerName }],
   };
 }
 
 function buildBomberXLocoPayload(event, settings) {
-  const state = getCheckinWindowState(BOMBER_X_LOCO_EVENT_KEY, event, settings);
+  const eventKey = event.eventKey || BOMBER_X_LOCO_EVENT_KEY;
+  const halloween = eventKey === HALLOWEEN_EVENT_KEY;
+  const title = halloween ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
+  const state = getCheckinWindowState(eventKey, event, settings);
   const realTeamCount = getEntryTeamIds(event).length;
   const byeCount = getManualByeCount(event);
   const count = realTeamCount + byeCount;
@@ -106,15 +116,15 @@ function buildBomberXLocoPayload(event, settings) {
   const waitlistCount = getWaitlistIds(event).length;
   const participantCount = Math.min(count - waitlistCount, participantCapacity);
   const next = nextFormat(event);
-  const banner = getBanner();
+  const banner = getBanner(event);
   const description = [
     state.canJoin ? '🟢 **Anmeldung geöffnet**' : '🔴 **Anmeldung geschlossen**',
-    `📅 Datum: ${formatDateTime(event.cycle?.eventDate ? `${event.cycle.eventDate}T12:00:00+02:00` : null, 'date')}`,
+    `📅 Datum: ${formatDateTime(event.cycle?.eventDate ? `${event.cycle.eventDate}T12:00:00Z` : null, 'date')}`,
     '',
     `⏰ Offizieller Anmeldeschluss: ${formatDateTime(event.schedule?.deadlineAt)}`,
     `🎲 Gruppenauslosung live bei **Paddy HSV**: ${formatDateTime(event.schedule?.drawAt)}`,
     `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
-    '✅ Anwesenheits-Check: bis 20:55 Uhr',
+    `✅ Anwesenheits-Check: bis ${halloween ? '20:15' : '20:55'} Uhr`,
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
     `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
@@ -126,11 +136,11 @@ function buildBomberXLocoPayload(event, settings) {
     '',
     formatTeams(event),
     '',
-    '⚠️ Nach **18:30 Uhr** ist keine Anmeldung oder Abmeldung mehr möglich.',
+    `⚠️ Nach **${formatDateTime(event.schedule?.deadlineAt)} Uhr** ist keine Anmeldung oder Abmeldung mehr möglich.`,
     '🎥 Die Gruppen werden anschließend **live bei Paddy HSV** gezogen und von der Turnierleitung manuell zugeteilt.',
     `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
   ].join('\n');
-  const checkinEmbed = new EmbedBuilder().setColor(0xff0000).setTitle('💣🐺 Bomber X Loco Cup • Anmeldung').setDescription(description).setTimestamp();
+  const checkinEmbed = new EmbedBuilder().setColor(halloween ? 0xff6a00 : 0xff0000).setTitle(`${halloween ? '💣🐺🎃' : '💣🐺'} ${title} • Anmeldung`).setDescription(description).setTimestamp();
   const waitlistDescription = formatWaitlist(event);
   const waitlistEmbed = waitlistDescription
     ? new EmbedBuilder().setColor(0xffa500).setTitle('Nachrücker').setDescription(waitlistDescription)
@@ -139,36 +149,38 @@ function buildBomberXLocoPayload(event, settings) {
   return {
     embeds: [banner.embed, checkinEmbed, waitlistEmbed].filter(Boolean),
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`checkin_join:${BOMBER_X_LOCO_EVENT_KEY}`).setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(!state.canJoin),
-      new ButtonBuilder().setCustomId(`checkin_leave:${BOMBER_X_LOCO_EVENT_KEY}`).setLabel('⬇️ Abmelden').setStyle(ButtonStyle.Danger).setDisabled(!state.canLeave),
+      new ButtonBuilder().setCustomId(`checkin_join:${eventKey}`).setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(!state.canJoin),
+      new ButtonBuilder().setCustomId(`checkin_leave:${eventKey}`).setLabel('⬇️ Abmelden').setStyle(ButtonStyle.Danger).setDisabled(!state.canLeave),
       new ButtonBuilder().setCustomId('bxl_manual_group_assignment').setLabel('🎲 Gruppenzuteilung').setStyle(ButtonStyle.Primary),
     )],
     files: banner.files,
   };
 }
 
-function buildBomberXLocoBlockerPayload() {
+function buildBomberXLocoBlockerPayload({ halloween = false, today = false, channelId = BOMBER_X_LOCO_CHECKIN_CHANNEL_ID } = {}) {
+  const title = halloween ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
   return {
     embeds: [new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle('💣🐺 Bomber X Loco Cup am 25.09.2026')
+      .setTitle(`${halloween ? '💣🐺🎃' : '💣🐺'} ${title} am ${halloween ? '30.10.2026' : '25.09.2026'}`)
       .setDescription([
-        '**Für diesen Freitag findet kein regulärer Loco Night Cup statt.**',
+        today ? '**Heute findet kein regulärer Loco Night Cup statt.**' : '**Für diesen Freitag findet kein regulärer Loco Night Cup statt.**',
         '',
-        'Stattdessen spielen wir den **Bomber X Loco Cup**.',
-        `Die Anmeldung läuft im <#${BOMBER_X_LOCO_CHECKIN_CHANNEL_ID}>.`,
+        `${today ? 'Heute spielen wir' : 'Stattdessen spielen wir'} den **${title}**.`,
+        channelId ? `Die Anmeldung läuft im <#${channelId}>.` : 'Die Anmeldung folgt im Eventkanal.',
         '**Anmeldeschluss: 18:30 Uhr.**',
-        '**Gruppenauslosung: 20:00 Uhr live bei Paddy HSV.**',
+        `**Gruppenauslosung: ${halloween ? '19:00' : '20:00'} Uhr live bei Paddy HSV.**`,
         `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`bomber_x_loco_redirect:${BOMBER_X_LOCO_EVENT_KEY}`).setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`bomber_x_loco_redirect:${halloween ? HALLOWEEN_EVENT_KEY : BOMBER_X_LOCO_EVENT_KEY}`).setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(!channelId),
     )],
   };
 }
 
 module.exports = {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
+  HALLOWEEN_CHECKIN_CHANNEL_ID,
   buildBomberXLocoPayload,
   buildBomberXLocoBlockerPayload,
   getWaitlistIds,
