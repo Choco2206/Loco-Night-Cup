@@ -8,7 +8,10 @@ const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 // Current Bomber X Loco matches artwork was measured directly at 1024 x 1535.
 const WIDTH = 1024;
 const HEIGHT = 1535;
-const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png');
+const BACKGROUNDS = Object.freeze({
+  regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png'),
+  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches.png'),
+});
 
 // Five matchdays, three matches per matchday. Every coordinate below belongs
 // specifically to matches.png and must not be reused by another template.
@@ -38,7 +41,7 @@ const LAYOUT = Object.freeze({
 });
 
 let canvasApi = null;
-let backgroundPromise = null;
+const backgroundPromises = new Map();
 const logoCache = new Map();
 
 function getCanvasApi() {
@@ -51,14 +54,16 @@ function setFont(ctx, size, family, weight = '400') {
   setCanvasFont(ctx, size, family, weight);
 }
 
-function loadBackground() {
-  if (!backgroundPromise) {
-    backgroundPromise = getCanvasApi().loadImage(BACKGROUND).catch(error => {
-      backgroundPromise = null;
+function loadBackground(eventKey) {
+  const variant = eventKey === 'bomber_halloween' ? 'halloween' : 'regular';
+  if (!backgroundPromises.has(variant)) {
+    const promise = getCanvasApi().loadImage(BACKGROUNDS[variant]).catch(error => {
+      backgroundPromises.delete(variant);
       throw error;
     });
+    backgroundPromises.set(variant, promise);
   }
-  return backgroundPromise;
+  return backgroundPromises.get(variant);
 }
 
 function participantTeam(participant) {
@@ -163,7 +168,7 @@ async function drawMatch(ctx, match, y) {
 }
 
 async function generateBomberXLocoMatchesImage({ group }) {
-  const background = await loadBackground();
+  const background = await loadBackground(group.eventKey);
   const { createCanvas } = getCanvasApi();
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');

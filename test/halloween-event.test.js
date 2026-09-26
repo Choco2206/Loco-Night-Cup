@@ -10,6 +10,7 @@ const { isHalloweenChannel } = require('../src/domain/checkins/halloween-channel
 const { buildBomberXLocoBlockerPayload, buildBomberXLocoPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
 const { HALLOWEEN_CHECKIN_CHANNEL_ID } = require('../src/domain/events/bomber-x-loco-config');
 const { isBomberXLocoDate } = require('../src/domain/events/bomber-x-loco-config');
+const { generateBomberXLocoMatchesImage, BOMBER_X_LOCO_MATCHES_LAYOUT } = require('../utils/generateBomberXLocoMatchesImage');
 
 test('Halloween runs alongside normal Fridays with its own six-team format and Berlin winter times', () => {
   const settings = createSettingsDefault();
@@ -67,4 +68,15 @@ test('Halloween check-in uses its own artwork instead of the promotional poster'
   const payload = buildBomberXLocoPayload(event, settings);
   assert.equal(payload.files[0].name, 'bomber-x-loco-halloween-check-in.png');
   assert.match(payload.embeds[0].toJSON().image.url, /bomber-x-loco-halloween-check-in\.png/);
+});
+
+test('Halloween matchdays use the separate portrait artwork with five times three slots', async () => {
+  const group = { eventKey: 'bomber_halloween', groupKey: 'B', matchdays: [] };
+  const halloween = await generateBomberXLocoMatchesImage({ group });
+  const regular = await generateBomberXLocoMatchesImage({ group: { ...group, eventKey: 'bomber_x_loco' } });
+  assert.equal(BOMBER_X_LOCO_MATCHES_LAYOUT.matchRowsY.length, 5);
+  assert.ok(BOMBER_X_LOCO_MATCHES_LAYOUT.matchRowsY.every(day => day.length === 3));
+  assert.equal(halloween.width, 1024);
+  assert.equal(halloween.height, 1535);
+  assert.notDeepEqual(halloween.buffer, regular.buffer);
 });
