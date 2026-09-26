@@ -21,7 +21,7 @@ const matches = centersY.map(y => Object.freeze({
 
 module.exports = Object.freeze({
   round_of_32: Object.freeze({
-    template: 'assets/bomber-x-loco-halloween/round-of-32.png',
+    template: 'assets/bomber-x-loco-halloween/round-of-32-v2.png',
     reference,
     kind: 'round',
     matches: Object.freeze(matches),

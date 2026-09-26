@@ -10,6 +10,7 @@ const { isHalloweenChannel } = require('../src/domain/checkins/halloween-channel
 const { buildBomberXLocoBlockerPayload, buildBomberXLocoPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
 const { HALLOWEEN_CHECKIN_CHANNEL_ID } = require('../src/domain/events/bomber-x-loco-config');
 const { isBomberXLocoDate } = require('../src/domain/events/bomber-x-loco-config');
+const { getKoLayout, renderKoImage } = require('../utils/ko-image-renderer');
 const { generateBomberXLocoMatchesImage, BOMBER_X_LOCO_MATCHES_LAYOUT, BOMBER_X_LOCO_HALLOWEEN_MATCHES_LAYOUT } = require('../utils/generateBomberXLocoMatchesImage');
 
 test('Halloween runs alongside normal Fridays with its own six-team format and Berlin winter times', () => {
@@ -82,4 +83,25 @@ test('Halloween matchdays use the separate portrait artwork with five times thre
   assert.equal(halloween.width, 1024);
   assert.equal(halloween.height, 1535);
   assert.notDeepEqual(halloween.buffer, regular.buffer);
+});
+
+test('Halloween round of 32 renders all sixteen matches on its own measured artwork', async () => {
+  const eventId = 'bomber_halloween_2026-10-30';
+  const halloween = getKoLayout({ phase: 'round_of_32', eventId });
+  const regular = getKoLayout({ phase: 'round_of_32', eventId: 'friday_2026-09-25' });
+  assert.equal(halloween.layout.matches.length, 16);
+  assert.equal(halloween.layout.matches[15].score.y, 1396);
+  assert.equal(halloween.layout.template, 'assets/bomber-x-loco-halloween/round-of-32-v2.png');
+  assert.notEqual(halloween.layout.template, regular.layout.template);
+
+  const matches = Array.from({ length: 16 }, (_, index) => ({
+    home: { type: 'placeholder', displayName: `Heimteam ${index + 1}` },
+    away: { type: 'placeholder', displayName: `Gastteam ${index + 1}` },
+    status: 'confirmed',
+    result: { homeGoals: index % 5, awayGoals: 1 },
+  }));
+  const image = await renderKoImage({ phase: 'round_of_32', eventId, matches, version: 'layout-test' });
+  assert.equal(image.width, 1024);
+  assert.equal(image.height, 1536);
+  assert.ok(image.buffer.length > 100_000);
 });
