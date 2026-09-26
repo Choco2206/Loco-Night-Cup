@@ -10,7 +10,7 @@ const WIDTH = 1024;
 const HEIGHT = 1535;
 const BACKGROUNDS = Object.freeze({
   regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png'),
-  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches.png'),
+  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches-v2.png'),
 });
 
 // Five matchdays, three matches per matchday. Every coordinate below belongs
