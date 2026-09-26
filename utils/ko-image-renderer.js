@@ -4,6 +4,7 @@ const path = require('path');
 const LAYOUTS = require('../config/ko-image-layouts');
 const FC27_LAYOUTS = require('../config/ko-image-layouts-fc27');
 const BOMBER_X_LOCO_LAYOUTS = require('../config/bomber-x-loco-ko-image-layouts');
+const BOMBER_X_LOCO_HALLOWEEN_LAYOUTS = require('../config/bomber-x-loco-halloween-ko-image-layouts');
 const LOCO_ZWERGEN_CUP_LAYOUTS = require('../config/loco-zwergen-cup-ko-image-layouts');
 const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
@@ -64,6 +65,7 @@ function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
   if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
+  else if (options.eventId === 'bomber_halloween_2026-10-30' && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
   else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
   else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;
   const layout = layouts[key];
