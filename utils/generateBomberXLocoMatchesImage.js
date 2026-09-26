@@ -10,7 +10,7 @@ const WIDTH = 1024;
 const HEIGHT = 1535;
 const BACKGROUNDS = Object.freeze({
   regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png'),
-  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches-v2.png'),
+  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches-v3.png'),
 });
 
 // Five matchdays, three matches per matchday. Every coordinate below belongs
@@ -38,6 +38,28 @@ const LAYOUT = Object.freeze({
   awayNameMaxWidth: 220,
   awayLogoX: 860,
   logoSize: 30,
+});
+
+// Measured against the Halloween artwork (1024 x 1535). The group cartouche
+// and all 15 pennants are separate from the regular cup's geometry.
+const HALLOWEEN_LAYOUT = Object.freeze({
+  title: { x: 512, y: 563, maxWidth: 180 },
+  matchRowsY: Object.freeze([
+    Object.freeze([668, 705, 742]),
+    Object.freeze([842, 879, 916]),
+    Object.freeze([1016, 1053, 1090]),
+    Object.freeze([1190, 1227, 1264]),
+    Object.freeze([1364, 1401, 1438]),
+  ]),
+  homeLogoX: 122,
+  homeNameX: 275,
+  homeNameMaxWidth: 260,
+  scoreX: 512,
+  scoreMaxWidth: 86,
+  awayNameX: 749,
+  awayNameMaxWidth: 260,
+  awayLogoX: 902,
+  logoSize: 26,
 });
 
 let canvasApi = null;
@@ -121,9 +143,9 @@ function normalizedScore(result) {
   return `${Number(home)} : ${Number(away)}`;
 }
 
-function drawTitle(ctx, groupKey) {
+function drawTitle(ctx, groupKey, layout) {
   const text = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
-  fitFont(ctx, text, LAYOUT.title.maxWidth, 30, 20, 'Oxanium', '700');
+  fitFont(ctx, text, layout.title.maxWidth, 30, 20, 'Oxanium', '700');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 3;
@@ -131,38 +153,38 @@ function drawTitle(ctx, groupKey) {
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.shadowColor = 'rgba(255,170,40,0.7)';
   ctx.shadowBlur = 7;
-  ctx.strokeText(text, LAYOUT.title.x, LAYOUT.title.y);
+  ctx.strokeText(text, layout.title.x, layout.title.y);
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(text, LAYOUT.title.x, LAYOUT.title.y);
+  ctx.fillText(text, layout.title.x, layout.title.y);
   ctx.shadowBlur = 0;
 }
 
-async function drawMatch(ctx, match, y) {
+async function drawMatch(ctx, match, y, layout) {
   const homeName = participantName(match?.home);
   const awayName = participantName(match?.away);
   const [homeLogo, awayLogo] = await Promise.all([loadLogo(match?.home), loadLogo(match?.away)]);
 
-  drawLogo(ctx, homeLogo, LAYOUT.homeLogoX, y, LAYOUT.logoSize);
-  drawLogo(ctx, awayLogo, LAYOUT.awayLogoX, y, LAYOUT.logoSize);
+  drawLogo(ctx, homeLogo, layout.homeLogoX, y, layout.logoSize);
+  drawLogo(ctx, awayLogo, layout.awayLogoX, y, layout.logoSize);
 
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = 'rgba(0,0,0,0.75)';
   ctx.shadowBlur = 3;
   ctx.textBaseline = 'middle';
 
-  fitFont(ctx, homeName, LAYOUT.homeNameMaxWidth, 22, 11);
+  fitFont(ctx, homeName, layout.homeNameMaxWidth, 22, 11);
   ctx.textAlign = 'center';
-  ctx.fillText(homeName, LAYOUT.homeNameX, y);
+  ctx.fillText(homeName, layout.homeNameX, y);
 
-  fitFont(ctx, awayName, LAYOUT.awayNameMaxWidth, 22, 11);
+  fitFont(ctx, awayName, layout.awayNameMaxWidth, 22, 11);
   ctx.textAlign = 'center';
-  ctx.fillText(awayName, LAYOUT.awayNameX, y);
+  ctx.fillText(awayName, layout.awayNameX, y);
 
   const score = normalizedScore(match?.result);
   if (score && match?.status === 'confirmed') {
-    fitFont(ctx, score, LAYOUT.scoreMaxWidth, 22, 14, 'Oxanium', '700');
+    fitFont(ctx, score, layout.scoreMaxWidth, 22, 14, 'Oxanium', '700');
     ctx.textAlign = 'center';
-    ctx.fillText(score, LAYOUT.scoreX, y);
+    ctx.fillText(score, layout.scoreX, y);
   }
   ctx.shadowBlur = 0;
 }
@@ -173,7 +195,8 @@ async function generateBomberXLocoMatchesImage({ group }) {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
-  drawTitle(ctx, group.groupKey);
+  const layout = group.eventKey === 'bomber_halloween' ? HALLOWEEN_LAYOUT : LAYOUT;
+  drawTitle(ctx, group.groupKey, layout);
 
   const matchdays = (group.matchdays || []).slice(0, 5);
   for (let dayIndex = 0; dayIndex < 5; dayIndex += 1) {
@@ -181,7 +204,7 @@ async function generateBomberXLocoMatchesImage({ group }) {
     for (let matchIndex = 0; matchIndex < 3; matchIndex += 1) {
       const match = matches[matchIndex];
       if (!match) continue;
-      await drawMatch(ctx, match, LAYOUT.matchRowsY[dayIndex][matchIndex]);
+      await drawMatch(ctx, match, layout.matchRowsY[dayIndex][matchIndex], layout);
     }
   }
 
@@ -195,5 +218,6 @@ async function generateBomberXLocoMatchesImage({ group }) {
 
 module.exports = {
   BOMBER_X_LOCO_MATCHES_LAYOUT: LAYOUT,
+  BOMBER_X_LOCO_HALLOWEEN_MATCHES_LAYOUT: HALLOWEEN_LAYOUT,
   generateBomberXLocoMatchesImage,
 };
