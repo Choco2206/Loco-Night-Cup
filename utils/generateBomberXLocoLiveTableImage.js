@@ -7,7 +7,10 @@ const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 
 const WIDTH = 1536;
 const HEIGHT = 864;
-const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png');
+const BACKGROUNDS = Object.freeze({
+  regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png'),
+  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'live-table.png'),
+});
 
 // Individually measured against the current 1536x864 Bomber X Loco live-table template.
 // Header strip: qualification on the left/centre, group label on the right.
@@ -30,7 +33,7 @@ const LAYOUT = Object.freeze({
 });
 
 let canvasApi = null;
-let backgroundPromise = null;
+const backgroundPromises = new Map();
 const logoCache = new Map();
 
 function getCanvasApi() {
@@ -41,14 +44,16 @@ function getCanvasApi() {
 function ensureFonts() { ensureCanvasFontsRegistered(getCanvasApi()); }
 function setFont(ctx, size, family, weight = '400') { setCanvasFont(ctx, size, family, weight); }
 
-async function loadBackground() {
-  if (!backgroundPromise) {
-    backgroundPromise = getCanvasApi().loadImage(BACKGROUND).catch(error => {
-      backgroundPromise = null;
+async function loadBackground(eventKey) {
+  const variant = eventKey === 'bomber_halloween' ? 'halloween' : 'regular';
+  if (!backgroundPromises.has(variant)) {
+    const promise = getCanvasApi().loadImage(BACKGROUNDS[variant]).catch(error => {
+      backgroundPromises.delete(variant);
       throw error;
     });
+    backgroundPromises.set(variant, promise);
   }
-  return backgroundPromise;
+  return backgroundPromises.get(variant);
 }
 
 function findTeamForRow(row) {
@@ -175,10 +180,10 @@ async function drawRows(ctx, rows) {
   ctx.shadowBlur = 0;
 }
 
-async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualificationText = '' }) {
+async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualificationText = '', eventKey = '' }) {
   ensureFonts();
   const { createCanvas } = getCanvasApi();
-  const background = await loadBackground();
+  const background = await loadBackground(eventKey);
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
