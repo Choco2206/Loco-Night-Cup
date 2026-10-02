@@ -2,6 +2,7 @@
 
 const { readTeamsData, updateTeamsData } = require('./team-repository');
 const { createEmptyHistory } = require('./team-achievements');
+const { isTeamOrUserBanned } = require('../bans/ban-service');
 
 function nowIso() {
   return new Date().toISOString();
@@ -377,6 +378,16 @@ function clearExpiredLogoUploads(now = new Date()) {
   return expired;
 }
 
+function assertCoManagerHasNoActiveBan(userId, settings) {
+  if (!isTeamOrUserBanned(String(userId))) return;
+  const channelId = settings.channels?.banlistChannelId;
+  throw new Error([
+    '🚫 Dieser Spieler kann nicht als Co-VM hinzugefügt werden, da er eine aktive Sperre hat.',
+    channelId ? `Weitere Informationen findest du in der Sperrliste: <#${channelId}>.` : 'Weitere Informationen findest du im Sperrlisten-Kanal.',
+    'Dein Team und eure Turnieranmeldung bleiben unverändert.',
+  ].join('\n'));
+}
+
 function addCoManager({ teamId, userId, actorUserId, settings }) {
   let updatedTeam;
   updateTeamsData(data => {
@@ -388,6 +399,8 @@ function addCoManager({ teamId, userId, actorUserId, settings }) {
     if (team.coManagers.some(co => String(co.userId) === String(userId))) throw new Error('Dieser User ist bereits Co-VM.');
 
     assertUserAvailable(data.teams, userId, team.id);
+
+    assertCoManagerHasNoActiveBan(userId, settings);
 
     team.coManagers.push({
       userId: String(userId),
@@ -412,6 +425,8 @@ function adminAddCoManager({ teamId, userId, actorUserId, settings }) {
     if (team.coManagers.some(co => String(co.userId) === String(userId))) throw new Error('Dieser User ist bereits Co-VM.');
 
     assertUserAvailable(data.teams, userId, team.id);
+
+    assertCoManagerHasNoActiveBan(userId, settings);
 
     team.coManagers.push({
       userId: String(userId),
