@@ -27,6 +27,10 @@ function phaseConfig(phase) {
   return LEAGUE_PHASE_FORMATS[Number(phase?.formatSize || phase?.slots?.length)];
 }
 
+function isManualMatchday(dayNumber) {
+  return Number(dayNumber) === 4;
+}
+
 function dayComplete(day, phase) {
   const config = phaseConfig(phase);
   return Boolean(config)
@@ -57,7 +61,9 @@ async function postRelease(client, eventKey, dayNumber) {
     `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**`,
     `🕒 **${formatHm(releasedAt)}–${formatHm(inviteUntil)} Uhr: Zeit zum Einladen.**`,
     `Alle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`,
-    'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
+    isManualMatchday(dayNumber)
+      ? 'Spieltag 4 hat keine automatische Wertung. Offene Spiele bleiben bis zur Ergebnisbestätigung offen.'
+      : 'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
   ].join('\n');
   const safeReleaseContent = [
     `\u{1F4E3} **Ligaphase \u2013 Spieltag ${dayNumber} ist freigegeben.**`,
@@ -74,7 +80,9 @@ async function postRelease(client, eventKey, dayNumber) {
     '',
     '\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F\u203C\uFE0F',
     '',
-    'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
+    isManualMatchday(dayNumber)
+      ? 'Spieltag 4 hat keine automatische Wertung. Offene Spiele bleiben bis zur Ergebnisbestätigung offen.'
+      : 'Nach 25 Minuten werden noch offene Spiele automatisch ausgewertet.',
   ].join('\n');
   const message = await channel.send({
     content: `📣 **Ligaphase – Spieltag ${dayNumber} ist freigegeben.**\nAlle ${phaseConfig(phase).matchesPerDay} Begegnungen dieses Spieltags können jetzt gemeldet werden.`,
@@ -111,7 +119,7 @@ async function releaseLeagueMatchday(client, eventKey, dayNumber, now = new Date
     day.status = 'open';
     day.releasedAt = day.releasedAt || timestamp;
     const existingDeadline = day.autoScoreAt ? new Date(day.autoScoreAt) : null;
-    day.autoScoreAt = existingDeadline && !Number.isNaN(existingDeadline.getTime()) && existingDeadline.getTime() > now.getTime()
+    day.autoScoreAt = isManualMatchday(dayNumber) ? null : existingDeadline && !Number.isNaN(existingDeadline.getTime()) && existingDeadline.getTime() > now.getTime()
       ? existingDeadline.toISOString()
       : new Date(now.getTime() + MATCHDAY_DURATION_MS).toISOString();
     day.autoScoredAt = null;
@@ -211,11 +219,12 @@ async function advanceLeaguePhase(client, eventKey, now = new Date()) {
 }
 
 async function applyLeagueMatchdayDeadline(client, eventKey, dayNumber, now = new Date()) {
+  if (isManualMatchday(dayNumber)) return false;
   const autoConfirmedMatches = [];
   updateEventData(eventKey, event => {
     const phase = event.leaguePhase;
     const day = phase?.matchdays?.[dayNumber - 1];
-    if (!day || day.status !== 'open') return event;
+    if (!day || day.status !== 'open' || isManualMatchday(dayNumber)) return event;
     for (const match of day.matches || []) {
       if (match.status === 'confirmed' || match.home?.type !== 'team' || match.away?.type !== 'team') continue;
       const reports = [...new Map((match.reports || []).map(report => [String(report.participantKey), report])).values()];
@@ -274,6 +283,7 @@ function scheduleLeaguePhase(client, eventKey, explicit = null) {
   let target = explicit;
   let callback = () => maybeReleaseLeagueStart(client, eventKey).catch(console.error);
   if (day?.status === 'open' && !dayComplete(day, phase)) {
+    if (isManualMatchday(current)) return;
     if (day.autoScoredAt && !day.autoScoreAt) return;
     target = day.autoScoreAt
       ? new Date(day.autoScoreAt)
