@@ -132,7 +132,14 @@ function messagesAreOutOfOrder(messages) {
 }
 
 function isOverviewBlock(message) {
-  return message.content === 'Noch keine Teams registriert.' || (/^🔴 \*\*\d+ \| /u.test(message.content || '') && message.content.includes('👑 **VM:**') && message.content.includes('🤝 **Co-VM:**'));
+  const content = String(message.content || '').trim();
+  if (content === 'Noch keine Teams registriert.') return true;
+  // Older versions placed bold markers around the whole heading/label.
+  // Recognize both layouts, only in our own numbered team-list messages.
+  const plain = content.replace(/\*\*/g, '');
+  return /^🔴\s+\d+\s*\|\s*[^\n]+/u.test(plain)
+    && /^👑\s+VM:\s*/mu.test(plain)
+    && /^🤝\s+Co-VM:\s*/mu.test(plain);
 }
 
 async function discoverOverviewMessages(channel, botId) {
@@ -215,6 +222,7 @@ function refreshRegisteredTeamsOverview(client) {
 
 module.exports = {
   messagesAreOutOfOrder,
+  isOverviewBlock,
   syncListMessages,
   buildTeamBlocks,
   formatUser,

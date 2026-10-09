@@ -2,7 +2,7 @@
 const assert = require('assert');
 const { test } = require('node:test');
 const { profileLink, resolveProfileLinks } = require('../src/domain/teams/user-profile-links');
-const { syncListMessages } = require('../src/domain/teams/team-overview');
+const { syncListMessages, isOverviewBlock } = require('../src/domain/teams/team-overview');
 test('fresh names, fallback hierarchy and escaped profile labels', async () => {
   let name = 'A*[B]';
   let count = 0;
@@ -27,4 +27,13 @@ test('recover orphan blocks and reuse chronological order, preserve unrelated po
   const channel = { messages: { fetch: async () => page }, send: async () => { throw Error('Existing blocks should be reused'); } };
   assert.deepStrictEqual(await syncListMessages(channel, ['3', '1'], ['A', 'B'], 'bot'), ['1', '2']);
   assert.strictEqual(last.deleted, true); assert.strictEqual(unrelated.deleted, undefined);
+});
+
+test('recognize historical bold layouts without matching unrelated messages', () => {
+  for (const content of [
+    '🔴 **353 | Zürich X**\n👑 **VM:** <@123>\n🤝 **Co-VM:** Keine',
+    '**🔴 353 | Zürich X**\n👑 **VM:** <@123>\n🤝 **Co-VM:** Keine',
+    '**🔴 355 | ZwergenToGlory**\n👑 **VM**: <@123>\n🤝 **Co-VM**: Keine',
+  ]) assert.strictEqual(isOverviewBlock({ content }), true);
+  assert.strictEqual(isOverviewBlock({ content: 'Hallo VM: <@123>' }), false);
 });
