@@ -6,6 +6,7 @@ require('./team-stream-list.test');
 require('./co-manager-ban.test');
 require('./team-overview.test');
 require('./user-profile-links.test');
+require('./my-team-profile-interaction.test');
 require('./event-schedule-times.test');
 require('./power-ranking.test');
 require('./knockout-release.test');
