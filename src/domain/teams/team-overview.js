@@ -1,6 +1,6 @@
 'use strict';
 
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, MessageFlags } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { listVisibleTeams } = require('./team-service');
@@ -105,6 +105,7 @@ function createListPayload(content) {
   return {
     content,
     embeds: [],
+    flags: MessageFlags.SuppressEmbeds,
     allowedMentions: { parse: [] },
   };
 }

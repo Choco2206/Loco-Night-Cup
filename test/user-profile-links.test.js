@@ -11,7 +11,7 @@ test('fresh names, fallback hierarchy and escaped profile labels', async () => {
   const teams = [{ manager: { userId: '1' }, coManagers: [{ userId: '2' }, { userId: '3' }, { userId: '1' }] }];
   const before = JSON.stringify(teams);
   let links = await resolveProfileLinks(client, guild, teams);
-  assert.strictEqual(links.get('1'), '[@A\\*[B]](https://discord.com/users/1)'.replace('[B]', '\\[B\\]'));
+  assert.strictEqual(links.get('1'), '[@A*[B]](https://discord.com/users/1)'.replace('[B]', '\\[B\\]'));
   assert.strictEqual(links.get('2'), profileLink('2', 'Global'));
   assert.strictEqual(links.get('3'), profileLink('3', 'Username'));
   name = 'New'; links = await resolveProfileLinks(client, guild, teams);
@@ -20,7 +20,7 @@ test('fresh names, fallback hierarchy and escaped profile labels', async () => {
   assert.strictEqual(JSON.stringify(teams), before);
 });
 test('recover orphan blocks and reuse chronological order, preserve unrelated posts', async () => {
-  const make = (id, time, content) => ({ id, createdTimestamp: time, author: { id: 'bot' }, content, edit: async function(payload) { this.content = payload.content; assert.deepStrictEqual(payload.allowedMentions.parse, []); return this; }, delete: async function() { this.deleted = true; } });
+  const make = (id, time, content) => ({ id, createdTimestamp: time, author: { id: 'bot' }, content, edit: async function(payload) { this.content = payload.content; assert.deepStrictEqual(payload.allowedMentions.parse, []); assert.strictEqual(payload.flags, 4); return this; }, delete: async function() { this.deleted = true; } });
   const block = '🔴 **01 | Club**\n👑 **VM:** x\n🤝 **Co-VM:** Keine';
   const first = make('1', 1, block), orphan = make('2', 2, block), last = make('3', 3, block), unrelated = make('4', 4, 'Other');
   const page = new Map([first, orphan, last, unrelated].map(m => [m.id, m])); page.last = () => unrelated;
@@ -36,4 +36,8 @@ test('recognize historical bold layouts without matching unrelated messages', ()
     '**🔴 355 | ZwergenToGlory**\n👑 **VM**: <@123>\n🤝 **Co-VM**: Keine',
   ]) assert.strictEqual(isOverviewBlock({ content }), true);
   assert.strictEqual(isOverviewBlock({ content: 'Hallo VM: <@123>' }), false);
+});
+
+test('profile labels preserve pipes and underscores without added backslashes', () => {
+  assert.strictEqual(profileLink('1', 'FC VM | Hasanii_LP'), '[@FC VM | Hasanii_LP](https://discord.com/users/1)');
 });

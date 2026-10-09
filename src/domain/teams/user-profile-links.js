@@ -4,9 +4,14 @@ function escapeLabel(value) {
   return String(value || '').replace(/[\r\n\t]/g, ' ').replace(/([\\`*_{}\[\]()<>~|])/g, '\\$1');
 }
 
+function escapeProfileLabel(value) {
+  // Link labels are text: escape their delimiters, not ordinary name punctuation.
+  return String(value || '').replace(/[\r\n\t]/g, ' ').replace(/([\\\[\]])/g, '\\$1');
+}
+
 function profileLink(userId, name = 'Unbekannter Nutzer') {
   if (!userId) return 'Kein VM';
-  return `[@${escapeLabel(String(name).slice(0, 100))}](https://discord.com/users/${userId})`;
+  return `[@${escapeProfileLabel(String(name).slice(0, 100))}](https://discord.com/users/${userId})`;
 }
 
 async function resolveProfileLinks(client, guild, teams) {
