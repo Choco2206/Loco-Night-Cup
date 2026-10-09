@@ -153,6 +153,11 @@ async function main() {
       liveScheduleSystem.schedulePendingLiveScheduleCleanups(client);
       schedulePendingAutoCleanups(client);
       console.log('[startup] Alle Systeme initialisiert');
+      // Display-only work runs after essential tournament systems have started.
+      console.log('[team-overview] Aktualisierung im Hintergrund gestartet');
+      teamSystem.refreshRegisteredTeamsOverview(client).catch(error => {
+        console.error('[team-overview] Hintergrundaktualisierung fehlgeschlagen; Bot bleibt online:', error);
+      });
     } catch (error) {
       console.error('Startup validation failed:', error);
       process.exitCode = 1;

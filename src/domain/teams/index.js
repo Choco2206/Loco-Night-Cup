@@ -29,7 +29,8 @@ async function init(client) {
     await refreshCheckinMessages([...new Set(affectedEventKeys)], client);
   }
 
-  await refreshRegisteredTeamsOverview(client);
+  // The full overview is refreshed after all startup systems are ready.
+  // Fresh Discord names for hundreds of managers must not hold up startup.
   await refreshTeamStreamList(client).catch(error => {
     console.warn(`[team-stream-list] Streamliste konnte nicht initialisiert werden: ${error.message}`);
   });
@@ -76,6 +77,7 @@ async function handleGuildMemberRemove(member, client) {
 }
 
 module.exports = {
+  refreshRegisteredTeamsOverview,
   handleGuildMemberRemove,
   handleInteraction,
   handleMessage,
