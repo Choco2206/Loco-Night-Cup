@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveProfileLinks } = require('./user-profile-links');
+
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { removeTeamFromAllEvents } = require('../checkins/checkin-service');
@@ -152,7 +154,7 @@ async function showMyTeam(interaction) {
   requireGuild(interaction);
   const team = findNonDeletedTeamByUserId(interaction.user.id);
   if (!team) throw new Error('Du bist aktuell keinem Team zugeordnet.');
-  await interaction.reply({ ...buildMyTeamPayload(team, interaction.user.id), flags: EPHEMERAL });
+  await interaction.reply({ ...buildMyTeamPayload(team, interaction.user.id, await resolveProfileLinks(client, interaction.guild, [team])), flags: EPHEMERAL });
   return true;
 }
 

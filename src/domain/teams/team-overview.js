@@ -4,6 +4,8 @@ const { EmbedBuilder } = require('discord.js');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { listVisibleTeams } = require('./team-service');
+const { resolveProfileLinks, profileLink, escapeLabel } = require('./user-profile-links');
+let refreshQueue = Promise.resolve();
 
 const TEAM_LIST_CHUNK_LIMIT = 1850;
 const MISSING_MEMBER_LABEL = '⚠️ Nicht mehr auf dem Server';
@@ -77,25 +79,25 @@ function formatTeamNumber(index) {
   return String(index + 1).padStart(2, '0');
 }
 
-function formatUser(userId) {
+function formatUser(userId, links = new Map()) {
   if (!userId) return MISSING_MEMBER_LABEL;
-  return `<@${userId}>`;
+  return links.get(String(userId)) || profileLink(userId);
 }
 
-function formatCoManagers(team) {
+function formatCoManagers(team, links) {
   const coManagers = Array.isArray(team.coManagers) ? team.coManagers : [];
   if (!coManagers.length) return 'Keine';
 
   const uniqueUserIds = [...new Set(coManagers.map(coManager => String(coManager?.userId || '')).filter(Boolean))];
   if (!uniqueUserIds.length) return 'Keine';
-  return uniqueUserIds.map(formatUser).join(', ');
+  return uniqueUserIds.map(id => formatUser(id, links)).join(', ');
 }
 
-function buildTeamBlocks(teams) {
+function buildTeamBlocks(teams, links) {
   return uniqueSortedTeams(teams).map((team, index) => [
-    `🔴 **${formatTeamNumber(index)} | ${team.clubName}**`,
-    `👑 **VM:** ${formatUser(team.manager?.userId)}`,
-    `🤝 **Co-VM:** ${formatCoManagers(team)}`,
+    `🔴 **${formatTeamNumber(index)} | ${escapeLabel(team.clubName)}**`,
+    `👑 **VM:** ${formatUser(team.manager?.userId, links)}`,
+    `🤝 **Co-VM:** ${formatCoManagers(team, links)}`,
   ].join('\n'));
 }
 
@@ -103,13 +105,16 @@ function createListPayload(content) {
   return {
     content,
     embeds: [],
-    allowedMentions: { parse: ['users'] },
+    allowedMentions: { parse: [] },
   };
 }
 
 async function fetchTrackedMessage(channel, messageId) {
   if (!messageId) return null;
-  return channel.messages.fetch(String(messageId)).catch(() => null);
+  return channel.messages.fetch(String(messageId)).catch(error => {
+    if (error.code === 10008) return null;
+    throw error;
+  });
 }
 
 async function syncHeaderMessage(channel, trackedId, teams) {
@@ -122,32 +127,52 @@ async function syncHeaderMessage(channel, trackedId, teams) {
   return channel.send(payload);
 }
 
-async function syncListMessages(channel, trackedIds, chunks) {
-  const ids = Array.isArray(trackedIds) ? trackedIds.map(String) : [];
-  const nextIds = [];
+function messagesAreOutOfOrder(messages) {
+  return messages.some((message, index) => index > 0 && message.createdTimestamp < messages[index - 1].createdTimestamp);
+}
 
-  for (let index = 0; index < chunks.length; index += 1) {
-    const existing = await fetchTrackedMessage(channel, ids[index]);
-    if (existing) {
-      await existing.edit(createListPayload(chunks[index]));
-      nextIds.push(String(existing.id));
-    } else {
-      const created = await channel.send(createListPayload(chunks[index]));
-      nextIds.push(String(created.id));
+function isOverviewBlock(message) {
+  return message.content === 'Noch keine Teams registriert.' || (/^🔴 \*\*\d+ \| /u.test(message.content || '') && message.content.includes('👑 **VM:**') && message.content.includes('🤝 **Co-VM:**'));
+}
+
+async function discoverOverviewMessages(channel, botId) {
+  const found = [];
+  let before;
+  for (;;) {
+    const page = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!page.size) break;
+    for (const message of page.values()) {
+      if (message.author?.id === botId && isOverviewBlock(message)) found.push(message);
+    }
+    before = page.last().id;
+    if (page.size < 100) break;
+  }
+  return found.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+}
+
+async function syncListMessages(channel, trackedIds, chunks, botId) {
+  const discovered = await discoverOverviewMessages(channel, botId);
+  const byId = new Map(discovered.map(message => [String(message.id), message]));
+  for (const id of new Set(trackedIds || [])) {
+    if (!byId.has(String(id))) {
+      const message = await fetchTrackedMessage(channel, id);
+      if (message?.author?.id === botId && isOverviewBlock(message)) byId.set(String(id), message);
     }
   }
-
-  // Wenn durch gelöschte Teams weniger Blöcke benötigt werden, nur die
-  // überzähligen bisher getrackten Listen-Nachrichten entfernen.
-  for (let index = chunks.length; index < ids.length; index += 1) {
-    const obsolete = await fetchTrackedMessage(channel, ids[index]);
-    if (obsolete) await obsolete.delete().catch(() => null);
+  // Reuse the actual chronological order, including recovered untracked blocks.
+  const existing = [...byId.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+  const nextIds = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const message = existing[index]
+      ? await existing[index].edit(createListPayload(chunks[index]))
+      : await channel.send(createListPayload(chunks[index]));
+    nextIds.push(String(message.id));
   }
-
+  for (const obsolete of existing.slice(chunks.length)) await obsolete.delete();
   return nextIds;
 }
 
-async function refreshRegisteredTeamsOverview(client) {
+async function runRefresh(client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const messages = readJson(FILES.messages, createMessagesDefault());
   const channelId = settings.channels.registeredTeamsChannelId || REGISTERED_TEAMS_CHANNEL_ID;
@@ -160,11 +185,12 @@ async function refreshRegisteredTeamsOverview(client) {
   }
 
   const teams = uniqueSortedTeams(listVisibleTeams());
-  const chunks = chunkBlocks(buildTeamBlocks(teams));
+  const links = await resolveProfileLinks(client, channel.guild, teams);
+  const chunks = chunkBlocks(buildTeamBlocks(teams, links));
   const tracked = messages.teams?.registeredTeamsOverview || {};
 
   const header = await syncHeaderMessage(channel, tracked.headerMessageId, teams);
-  const nextIds = await syncListMessages(channel, tracked.listMessageIds, chunks);
+  const nextIds = await syncListMessages(channel, tracked.listMessageIds, chunks, client.user.id);
 
   updateJson(FILES.messages, createMessagesDefault(), current => {
     current.teams.registeredTeamsOverview.channelId = channel.id;
@@ -181,7 +207,15 @@ async function refreshRegisteredTeamsOverview(client) {
   return true;
 }
 
+function refreshRegisteredTeamsOverview(client) {
+  const refresh = refreshQueue.then(() => runRefresh(client));
+  refreshQueue = refresh.catch(() => {});
+  return refresh;
+}
+
 module.exports = {
+  messagesAreOutOfOrder,
+  syncListMessages,
   buildTeamBlocks,
   formatUser,
   refreshRegisteredTeamsOverview,

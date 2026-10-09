@@ -160,9 +160,9 @@ function formatPercent(value) {
   return `${value.toFixed(1).replace('.', ',')} %`;
 }
 
-function buildTeamEmbed(team, logoAttachment) {
+function buildTeamEmbed(team, logoAttachment, links = new Map()) {
   const coManagers = team.coManagers.length
-    ? team.coManagers.map(co => `• ${mention(co.userId)}`).join('\n')
+    ? team.coManagers.map(co => `• ${links.get(String(co.userId)) || mention(co.userId)}`).join('\n')
     : 'Keine Co-VMs';
 
   const logoLine = team.logo?.fileName
@@ -200,7 +200,7 @@ function buildTeamEmbed(team, logoAttachment) {
       `Status: **${team.status}**`,
       `Registrierung: **${team.registrationStatus}**`,
       '',
-      `VM: ${mention(team.manager?.userId)}`,
+      `VM: ${links.get(String(team.manager?.userId)) || mention(team.manager?.userId)}`,
       '',
       `Co-VMs (${team.coManagers.length}/5)`,
       coManagers,
@@ -222,7 +222,7 @@ function buildTeamEmbed(team, logoAttachment) {
   return embed;
 }
 
-function buildMyTeamPayload(team, viewerUserId = null) {
+function buildMyTeamPayload(team, viewerUserId = null, links = new Map()) {
   const logoAttachment = getLogoAttachment(team);
   const isManager = viewerUserId && team.manager?.userId && String(team.manager.userId) === String(viewerUserId);
   const row1 = new ActionRowBuilder().addComponents(
@@ -266,7 +266,7 @@ function buildMyTeamPayload(team, viewerUserId = null) {
   );
 
   return {
-    embeds: [buildTeamEmbed(team, logoAttachment)],
+    embeds: [buildTeamEmbed(team, logoAttachment, links)],
     components: [row1, row2],
     files: logoAttachment ? [logoAttachment] : [],
     allowedMentions: { parse: ['users'] },
