@@ -152,7 +152,8 @@ function normalizeEntries(entries, now = new Date()) {
 
 function readCleanState() {
   const state = readState();
-  const cleaned = normalizeEntries(state.entries);
+  const normalized = normalizeEntries(state.entries);
+  const cleaned = state.format?.lockedAt ? normalized : require('../premium/premium-store').sortPremiumEntries(normalized, findTeamById);
   const changed = cleaned.length !== state.entries.length
     || cleaned.some((entry, index) => String(entry.teamId) !== String(state.entries[index]?.teamId));
   if (changed) {
@@ -181,7 +182,7 @@ function registeredTeamForUser(state, userId) {
 }
 
 function teamName(teamId) {
-  return findTeamById(teamId)?.clubName || `Unbekanntes Team (${teamId})`;
+  return (findTeamById(teamId)?.clubName || `Unbekanntes Team (${teamId})`) + require('../premium/premium-store').premiumLabel(teamId);
 }
 
 function currentFormat(count) {

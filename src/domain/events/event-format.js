@@ -4,6 +4,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { TOURNAMENT_FORMAT_SIZES, isLeaguePhaseFormat } = require('../../app/constants');
 const { findTeamById } = require('../teams/team-service');
+const { sortPremiumEntries } = require('../premium/premium-store');
 const { findActiveBanForTeamOrManagers } = require('../checkins/checkin-ban-integration');
 const {
   BOMBER_X_LOCO_FORMAT_SIZES,
@@ -51,7 +52,8 @@ function isTeamEligibleForLock(team, now) {
 }
 
 function collectValidRealTeams(event, now = new Date()) {
-  const teamIds = uniqueEntryTeamIds(event.checkin?.entries || []);
+  const entries = event.format?.lockedAt ? (event.checkin?.entries || []) : sortPremiumEntries(event.checkin?.entries || [], findTeamById, now);
+  const teamIds = uniqueEntryTeamIds(entries);
   const teams = [];
   const skipped = [];
   for (const teamId of teamIds) {

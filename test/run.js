@@ -1,4 +1,5 @@
 'use strict';
+require('./premium.test');
 
 require('./live-schedule-cleanup.test');
 

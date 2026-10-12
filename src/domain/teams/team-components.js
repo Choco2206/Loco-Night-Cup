@@ -199,6 +199,7 @@ function buildTeamEmbed(team, logoAttachment, links = new Map()) {
     .setDescription([
       `Status: **${team.status}**`,
       `Registrierung: **${team.registrationStatus}**`,
+      `Premium: **${require('../premium/premium-store').statusText(team.id)}**`,
       '',
       `VM: ${links.get(String(team.manager?.userId)) || mention(team.manager?.userId)}`,
       '',

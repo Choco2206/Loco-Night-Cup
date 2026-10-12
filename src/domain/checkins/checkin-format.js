@@ -1,6 +1,7 @@
 'use strict';
 
 const { findTeamById } = require('../teams/team-service');
+const { sortPremiumEntries } = require('../premium/premium-store');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
 const { TOURNAMENT_FORMAT_SIZES } = require('../../app/constants');
 const {
@@ -39,7 +40,8 @@ function pruneInvalidCheckinEntries(event, now = new Date()) {
 }
 
 function getEntryTeamIds(event, now = new Date()) {
-  return uniqueStrings((event.checkin?.entries || [])
+  const entries = event.format?.lockedAt ? (event.checkin?.entries || []) : sortPremiumEntries(event.checkin?.entries || [], findTeamById, now);
+  return uniqueStrings(entries
     .map(entry => entry.teamId)
     .filter(teamId => isValidTournamentTeamId(teamId, now)));
 }
@@ -82,8 +84,8 @@ function minimumSlotsForEvent(event, settings) {
   return Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
 }
 
-function recalculateFormatBeforeLock(event, settings) {
-  const teamIds = getEntryTeamIds(event);
+function recalculateFormatBeforeLock(event, settings, now = new Date()) {
+  const teamIds = getEntryTeamIds(event, now);
   const byeCount = getManualByeCount(event);
   const minimumParticipantSlots = minimumSlotsForEvent(event, settings);
   const allowedSizes = getAllowedSizes(settings, event);
@@ -152,7 +154,7 @@ function recalculateCheckinFormat(event, settings, now = new Date()) {
 
   pruneInvalidCheckinEntries(event, now);
   if (event.format?.lockedAt) return preserveLockedFormat(event);
-  return recalculateFormatBeforeLock(event, settings);
+  return recalculateFormatBeforeLock(event, settings, now);
 }
 
 module.exports = {

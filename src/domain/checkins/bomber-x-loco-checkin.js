@@ -5,6 +5,7 @@ const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
+const { premiumLabel } = require('../premium/premium-store');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_EVENT_KEY,
@@ -32,7 +33,7 @@ function formatDateTime(value, type = 'time') {
 }
 
 function teamName(teamId) {
-  return findTeamById(teamId)?.clubName || `Unbekanntes Team (${teamId})`;
+  return (findTeamById(teamId)?.clubName || `Unbekanntes Team (${teamId})`) + premiumLabel(teamId);
 }
 
 function currentFormat(event) {

@@ -40,7 +40,8 @@ function ensureRoyaleCycle(now = new Date()) {
 }
 
 function recalculate(event) {
-  const result = calculateRoyaleCheckin(event.checkin?.entries || []);
+  const entries = event.format?.lockedAt ? (event.checkin?.entries || []) : require('../premium/premium-store').sortPremiumEntries(event.checkin?.entries || [], findTeamById);
+  const result = calculateRoyaleCheckin(entries);
   event.format.size = result.size;
   event.checkin.activeTeamIds = result.activeEntries.map(entry => String(entry.teamId));
   event.checkin.waitlistTeamIds = result.waitlistEntries.map(entry => String(entry.teamId));

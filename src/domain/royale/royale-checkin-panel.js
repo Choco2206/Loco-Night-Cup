@@ -8,7 +8,7 @@ const { getRoyaleState } = require('./royale-service');
 const { updateRoyale } = require('./royale-repository');
 
 function timestamp(value) { return value ? `<t:${Math.floor(new Date(value).getTime() / 1000)}:F>` : 'nicht gesetzt'; }
-function teamNames(ids) { return ids.length ? ids.map((id, index) => `${index + 1}. **${findTeamById(id)?.clubName || id}**`).join('\n') : 'Noch keine Teams.'; }
+function teamNames(ids) { return ids.length ? ids.map((id, index) => `${index + 1}. **${findTeamById(id)?.clubName || id}${require('../premium/premium-store').premiumLabel(id)}**`).join('\n') : 'Noch keine Teams.'; }
 
 function buildRoyaleCheckinPayload(event) {
   const active = event.checkin?.activeTeamIds || [];

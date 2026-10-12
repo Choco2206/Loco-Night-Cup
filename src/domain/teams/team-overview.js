@@ -98,6 +98,7 @@ function buildTeamBlocks(teams, links) {
     `🔴 **${formatTeamNumber(index)} | ${escapeLabel(team.clubName)}**`,
     `👑 **VM:** ${formatUser(team.manager?.userId, links)}`,
     `🤝 **Co-VM:** ${formatCoManagers(team, links)}`,
+    `💎 **Premium:** ${require('../premium/premium-store').hasPremium(team.id) ? 'Ja' : 'Nein'}`,
   ].join('\n'));
 }
 

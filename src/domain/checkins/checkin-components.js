@@ -6,6 +6,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const { EVENT_LABELS, TOURNAMENT_FORMAT_SIZES, isLeaguePhaseFormat } = require('../../app/constants');
 const { FILES, ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
+const { premiumLabel } = require('../premium/premium-store');
 const {
   chooseFormatSize,
   getAllowedSizes,
@@ -30,7 +31,7 @@ const MAX_DISPLAY_SLOTS = 32;
 
 function teamName(teamId) {
   const team = findTeamById(teamId);
-  return team?.clubName || `Unbekanntes Team (${teamId})`;
+  return (team?.clubName || `Unbekanntes Team (${teamId})`) + premiumLabel(teamId);
 }
 
 function isRoyaleEvent(event) {

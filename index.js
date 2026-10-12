@@ -21,6 +21,7 @@ const videoRequestSystem = require('./src/domain/video-requests');
 const facebookFeedSystem = require('./src/domain/social-media/facebook-feed');
 const ticketSystem = require('./src/domain/tickets');
 const feedbackSystem = require('./src/domain/feedback');
+const premiumSystem = require('./src/domain/premium');
 
 const EPHEMERAL = 64;
 const WELCOME_CHANNEL_ID = '1516390719839932576';
@@ -127,6 +128,9 @@ async function main() {
       console.log(`Bot online as ${readyClient.user.tag}`);
       await runStartupStep('Sperren', () => banSystem.initBanService(client));
       await runStartupStep('Teams', () => teamSystem.init(client));
+      await runStartupStep('Premium', () => premiumSystem.init(client).catch(error => {
+        console.error('[premium] Einrichtung fehlgeschlagen; übrige Systeme starten weiter:', error);
+      }));
       await runStartupStep('Check-ins', () => checkinSystem.init(client));
       await runStartupStep('Knockout Royale', () => royaleSystem.init(client));
       await runStartupStep('Turnierleitung', () => tournamentLeadershipSystem.init(client));
@@ -180,6 +184,7 @@ async function main() {
       }
 
       if (await feedbackSystem.handleInteraction(interaction, client)) return;
+      if (await premiumSystem.handleInteraction(interaction, client)) return;
       if (await ticketSystem.handleInteraction(interaction, client)) return;
       if (await videoRequestSystem.handleInteraction(interaction, client)) return;
       if (await tournamentLeadershipSystem.handleInteraction(interaction, client)) return;
