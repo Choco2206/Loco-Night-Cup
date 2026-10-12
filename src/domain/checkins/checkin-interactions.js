@@ -11,6 +11,8 @@ const {
 } = require('./checkin-panel');
 const { BOMBER_X_LOCO_CHECKIN_CHANNEL_ID, BOMBER_X_LOCO_EVENT_KEY, HALLOWEEN_EVENT_KEY, HALLOWEEN_CHECKIN_CHANNEL_ID, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 
+const { postCheckinActivityLog } = require('./checkin-activity-log');
+
 const EPHEMERAL = 64;
 
 function parseCheckinButton(customId) {
@@ -32,6 +34,7 @@ function parseCheckinButton(customId) {
 async function handleJoin(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
+  await postCheckinActivityLog(client, { action: 'join', eventKey, result, user: interaction.user });
   await refreshCheckinMessage(eventKey, client);
   if (result.alreadyCheckedIn) {
     await interaction.editReply('Dein Team ist für dieses Event bereits eingecheckt. Es wurde kein Duplikat erzeugt.');
@@ -50,6 +53,7 @@ async function handleJoin(interaction, client, eventKey) {
 async function handleLeave(interaction, client, eventKey) {
   await interaction.deferReply({ flags: EPHEMERAL });
   const result = withdrawTeam({ eventKey, userId: interaction.user.id });
+  await postCheckinActivityLog(client, { action: 'leave', eventKey, result, user: interaction.user });
   if (!result.wasCheckedIn) {
     await refreshCheckinMessage(eventKey, client);
     await interaction.editReply('Dein Team war für dieses Event nicht eingecheckt.');

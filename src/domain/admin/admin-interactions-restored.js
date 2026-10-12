@@ -15,6 +15,7 @@ const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { refreshCheckinMessage, refreshCheckinMessages } = require('../checkins/checkin-panel');
 const { recalculateCheckinFormat } = require('../checkins/checkin-format');
+const { postCheckinActivityLog } = require('../checkins/checkin-activity-log');
 const { adminCheckInTeam, adminWithdrawTeam, removeTeamFromAllEvents } = require('../checkins/checkin-service');
 const { readAllEvents, readEventData, updateEventData } = require('../checkins/checkin-repository');
 const { refreshRegisteredTeamsOverview } = require('../teams/team-overview');
@@ -1394,6 +1395,8 @@ async function handleAdminSelect(interaction, client, settings) {
     const result = normalizedAction === 'join'
       ? adminCheckInTeam({ eventKey, teamId, actorUserId: interaction.user.id })
       : adminWithdrawTeam({ eventKey, teamId, actorUserId: interaction.user.id });
+
+    await postCheckinActivityLog(client, { action: normalizedAction, eventKey, result, user: interaction.user, byAdmin: true });
 
     await refreshCheckinMessage(eventKey, client);
     await refreshRegisteredTeamsOverview(client).catch(() => null);

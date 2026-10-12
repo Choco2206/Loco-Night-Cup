@@ -105,7 +105,7 @@ function withdrawTeam({ eventKey, userId, now = new Date() }) {
       current.checkin.lateLeaveBans.push({ banId: ban.id, teamId: String(team.id), createdAt: nowIso(now), createdByUserId: String(userId) });
       return current;
     });
-    return { changed: true, wasCheckedIn: true, lateWithdrawal: true, ban, affectedEventKeys, team };
+    return { changed: true, wasCheckedIn: true, lateWithdrawal: true, ban, affectedEventKeys, team, event };
   }
 
   let updatedEvent;
