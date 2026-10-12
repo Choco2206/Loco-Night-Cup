@@ -117,11 +117,11 @@ function withinMatchWindow(match, confirmedAt) {
   return Boolean(confirmedAt && matchAt && Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS);
 }
 
-function selectEaMatch(matches, lncMatch, linkedTeams) {
+function selectEaMatch(matches, lncMatch, linkedTeams, excludedIds = new Set()) {
   const confirmedAt = confirmedTimestampMs(lncMatch);
   const teamByEaClubId = new Map(linkedTeams.map(team => [String(team.eaClub.clubId), String(team.id)]));
   const baseCandidates = (matches || []).filter(match => {
-    if (!eaMatchId(match) || !matchContainsClubs(match, teamByEaClubId)) return false;
+    if (!eaMatchId(match) || excludedIds.has(eaMatchId(match)) || !matchContainsClubs(match, teamByEaClubId)) return false;
     const matchAt = matchTimestampMs(match);
     if (linkedTeams.length === 1 && (!confirmedAt || !matchAt)) return false;
     return !confirmedAt || !matchAt || Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS;
@@ -315,11 +315,15 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
   updateEventData(eventKey, event => {
     event.ceremony = event.ceremony || {};
     const state = event.ceremony.teamOfTheTournament || { performances: [], capturedMatches: [], selection: null };
-    if (state.capturedMatches.some(entry => String(entry.eaMatchId) === eaMatchId(eaMatch))) return event;
+    if (state.capturedMatches.some(entry => String(entry.eaMatchId) === eaMatchId(eaMatch)
+      && String(entry.lncMatchId) !== String(lncMatch.id))) return event;
     const rows = playerRows(eaMatch, teamByEaClubId, lncMatch.id);
     if (!rows.length) return event;
-    state.performances.push(...rows);
-    state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), capturedAt: new Date().toISOString() });
+    const existing = new Set(state.performances.filter(row => String(row.lncMatchId) === String(lncMatch.id))
+      .map(row => `${row.teamId}:${row.playerId}`));
+    const newRows = rows.filter(row => !existing.has(`${row.teamId}:${row.playerId}`));
+    state.performances.push(...newRows);
+    if (!state.capturedMatches.some(entry => String(entry.lncMatchId) === String(lncMatch.id))) state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), capturedAt: new Date().toISOString() });
     state.selection = buildSelection(state.performances, tottOpportunityMatches(event)); state.updatedAt = new Date().toISOString();
     event.ceremony.teamOfTheTournament = state; storedRows = rows; stored = true; return event;
   });
@@ -347,15 +351,48 @@ async function captureOnce(eventKey, lncMatch) {
   const linked = teams.filter(team => team.eaClub?.clubId);
   if (!linked.length || !lncMatch?.result) return { captured: false, reason: 'no_linked_teams' };
   const teamByEaClubId = new Map(linked.map(team => [String(team.eaClub.clubId), String(team.id)]));
+  const state = readEventData(eventKey)?.ceremony?.teamOfTheTournament || {};
+  const excludedIds = new Set((state.capturedMatches || [])
+    .filter(entry => String(entry.lncMatchId) !== String(lncMatch.id)).map(entry => String(entry.eaMatchId)));
+  const ownCapture = (state.capturedMatches || []).find(entry => String(entry.lncMatchId) === String(lncMatch.id));
+  const matches = [];
+  const errors = [];
   for (const team of linked) {
-    const matches = await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform);
-    const selected = selectEaMatch(matches, lncMatch, linked);
-    if (selected.match) {
-      const result = persistMatch(eventKey, lncMatch, selected.match, teamByEaClubId);
-      if (result.stored) return { captured: true, candidate: selected.match, rows: result.rows, linked, fallback: selected.fallback };
+    try {
+      matches.push(...await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform, 50, { fresh: true }));
+    } catch (error) {
+      errors.push(`${team.clubName || team.id}: ${error.message}`);
     }
   }
-  return { captured: false, reason: 'match_not_found', linked };
+  const candidates = ownCapture
+    ? matches.filter(match => eaMatchId(match) === String(ownCapture.eaMatchId))
+    : matches;
+  const selected = selectEaMatch(candidates, lncMatch, linked, excludedIds);
+  // A previously captured match keeps its identity when filling missing player data.
+  if (ownCapture && !selected.match) {
+    selected.match = candidates[0] || null;
+  }
+  if (selected.match) {
+    // Merge complementary player payloads only for the same EA match ID.
+    const merged = { ...selected.match, players: {} };
+    for (const match of candidates.filter(entry => eaMatchId(entry) === eaMatchId(selected.match))) {
+      for (const [clubId, players] of Object.entries(match.players || {})) {
+        merged.players[clubId] = { ...(merged.players[clubId] || {}), ...players };
+      }
+    }
+    persistMatch(eventKey, lncMatch, merged, teamByEaClubId);
+    const rows = (readEventData(eventKey)?.ceremony?.teamOfTheTournament?.performances || [])
+      .filter(row => String(row.lncMatchId) === String(lncMatch.id));
+    const missingTeams = linked.filter(team => !rows.some(row => String(row.teamId) === String(team.id)));
+    if (!missingTeams.length && rows.length) {
+      return { captured: true, candidate: merged, rows, linked, fallback: selected.fallback };
+    }
+    return { captured: false, reason: rows.length ? 'partial_player_data' : 'no_player_data',
+      detail: `EA-Spiel ${eaMatchId(merged)} gefunden. Keine verwertbaren Spielerwerte für: ${missingTeams.map(team => team.clubName || team.id).join(', ')}. Vorhandene Werte bleiben gespeichert.`, linked };
+  }
+  return { captured: false, reason: errors.length ? 'ea_request_failed' : 'match_not_found',
+    detail: [`EA lieferte ${new Set(matches.map(eaMatchId)).size} verschiedene Spiele; keines konnte dieser Begegnung zugeordnet werden (Club-IDs, Ergebnis, Zeitfenster oder bereits verwendete Match-ID).`, ...errors].join(' '), linked };
+
 }
 
 function scheduleRatingCapture(eventKey, lncMatch) {
@@ -364,7 +401,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
   if (captureTimers.has(key)) return false;
   let attempt = 0; let firstWarningSent = false;
   const run = async () => {
-    let lastError = null;
+    let lastError = null; let lastDetail = null;
     try {
       const result = await captureOnce(eventKey, lncMatch);
       if (result.captured) {
@@ -380,6 +417,7 @@ function scheduleRatingCapture(eventKey, lncMatch) {
           linkedStatus(lncMatch), details, '**Gespeichert:** ✅', ...fallbackWarning].join('\n'));
         captureTimers.delete(key); return;
       }
+      lastDetail = result.detail;
       if (['no_linked_teams', 'bye_or_non_real_match', 'forfeit'].includes(result.reason)) { captureTimers.delete(key); return; }
     } catch (error) {
       lastError = error; console.warn(`[tott] EA-Daten konnten für ${key} nicht geladen werden: ${error.message}`);
@@ -388,14 +426,14 @@ function scheduleRatingCapture(eventKey, lncMatch) {
     if (!firstWarningSent) {
       firstWarningSent = true;
       await sendTracker(['⚠️ **TOTT MATCH NOCH NICHT ERFASST**', matchLabel(lncMatch), '', linkedStatus(lncMatch),
-        lastError ? `EA-Fehler: **${lastError.message}**` : 'EA erreichbar, aber das passende Match wurde noch nicht gefunden.',
+        lastError ? `EA-Fehler: **${lastError.message}**` : (lastDetail || 'EA erreichbar, aber das passende Match wurde noch nicht gefunden.'),
         '**Weitere Versuche laufen automatisch.**'].join('\n'));
     }
     if (attempt >= RETRY_DELAYS_MS.length) {
       console.warn(`[tott] ${key}: nach ${attempt} EA-Abfragen noch keine passenden Matchdaten gefunden.`);
       await sendTracker(['🔴 **TOTT MATCH NICHT ERFASST**', matchLabel(lncMatch), '', linkedStatus(lncMatch),
         `Nach **${attempt} Versuchen** konnten keine passenden EA-Matchdaten gespeichert werden.`,
-        lastError ? `Letzter EA-Fehler: **${lastError.message}**` : 'EA hat kein eindeutig passendes Match geliefert.'].join('\n'));
+        lastError ? `Letzter EA-Fehler: **${lastError.message}**` : (lastDetail || 'EA hat kein eindeutig passendes Match geliefert.')].join('\n'));
       captureTimers.delete(key); return;
     }
     const timer = setTimeout(run, RETRY_DELAYS_MS[attempt]);
@@ -428,6 +466,14 @@ function tottOpportunityMatches(event) {
   });
 }
 
+function hasCompleteCapture(event, match) {
+  const state = event?.ceremony?.teamOfTheTournament || {};
+  if (!(state.capturedMatches || []).some(entry => String(entry.lncMatchId) === String(match.id))) return false;
+  const linked = [match.home?.teamId, match.away?.teamId].map(findTeamById).filter(team => team?.eaClub?.clubId);
+  return linked.every(team => (state.performances || []).some(row =>
+    String(row.lncMatchId) === String(match.id) && String(row.teamId) === String(team.id)));
+}
+
 function refreshSelection(eventKey) {
   let selection = null;
   updateEventData(eventKey, event => {
@@ -443,11 +489,9 @@ function refreshSelection(eventKey) {
 }
 
 async function capturePendingMatchesNow(eventKey, event = readEventData(eventKey)) {
-  const state = event?.ceremony?.teamOfTheTournament || {};
-  const capturedIds = new Set((state.capturedMatches || []).map(entry => String(entry.lncMatchId)));
   const pending = confirmedEventMatches(event)
     .filter(requiresEaCapture)
-    .filter(match => !capturedIds.has(String(match.id)));
+    .filter(match => !hasCompleteCapture(event, match));
   let captured = 0; let missing = 0; let skipped = 0;
 
   for (const match of pending) {
@@ -475,7 +519,7 @@ async function capturePendingMatchesNow(eventKey, event = readEventData(eventKey
     '📊 **TOTT ABSCHLUSSPRÜFUNG**',
     `Fehlende EA-Spiele geprüft: **${pending.length}**`,
     `Davon nachträglich erfasst: **${captured}**`,
-    `Weiterhin nicht gefunden: **${missing}**`,
+    `Weiterhin fehlend oder unvollständig: **${missing}**`,
     `Ohne EA-Club-Verknüpfung: **${skipped}**`,
     `Kampflos gewertete Spiele: **${forfeits}**`,
     `Freilose: **${byes}**`,
@@ -487,10 +531,9 @@ async function capturePendingMatchesNow(eventKey, event = readEventData(eventKey
 }
 
 function resumeRatingCaptures(eventKey, event = readEventData(eventKey)) {
-  const captured = new Set((event?.ceremony?.teamOfTheTournament?.capturedMatches || []).map(entry => String(entry.lncMatchId)));
   let scheduled = 0;
   for (const match of confirmedEventMatches(event)) {
-    if (captured.has(String(match.id))) continue;
+    if (hasCompleteCapture(event, match)) continue;
     if (scheduleRatingCapture(eventKey, match)) scheduled += 1;
   }
   return scheduled;
@@ -500,5 +543,5 @@ module.exports = {
   FORMATION, MAX_MATCH_TIME_DISTANCE_MS, MINIMUM_MATCHES, MINIMUM_TEAM_MATCH_RATIO, TOTT_SCORING,
   buildRankings, buildSelection, calculateTottPoints, capturePendingMatchesNow, confirmedEventMatches, isRealEaMatch,
   normalizePosition, refreshSelection, requiresEaCapture, resumeRatingCaptures, scheduleRatingCapture,
-  selectEaMatch, tottOpportunityMatches,
+  selectEaMatch, tottOpportunityMatches, hasCompleteCapture,
 };

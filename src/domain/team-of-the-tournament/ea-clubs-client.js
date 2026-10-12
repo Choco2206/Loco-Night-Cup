@@ -141,10 +141,10 @@ async function resolveClub(clubName, platform = DEFAULT_PLATFORM) {
   throw new Error(`EA-Clubname **${cleanName}** ist nicht eindeutig. Bitte gib den Namen exakt wie in EA FC ein.`);
 }
 
-async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResultCount = 50) {
+async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResultCount = 50, options = {}) {
   const cacheKey = `${platform}:${clubId}:${maxResultCount}`;
   const cached = friendlyCache.get(cacheKey);
-  if (cached && Date.now() - cached.storedAt < FRIENDLY_CACHE_TTL_MS) {
+  if (!options.fresh && cached && Date.now() - cached.storedAt < FRIENDLY_CACHE_TTL_MS) {
     emitDiagnostic({
       type: 'cache_hit',
       operation: 'friendly_matches',
