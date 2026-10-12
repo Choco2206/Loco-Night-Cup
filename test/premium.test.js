@@ -92,6 +92,16 @@ test('Premium panels expose the requested actions and pagination never exceeds 2
   const list = Array.from({ length: 51 }, (_, i) => ({ id: String(i), label: `Team ${i}`, description: 'Kein Premium' }));
   assert.equal(p.picker('grant', list, 0).components[0].toJSON().components[0].options.length, 25);
   assert.equal(p.picker('grant', list, 2).components[0].toJSON().components[0].options.length, 1);
+  assert.equal(p.initialGroup('Älpha'), 'A');
+  assert.equal(p.initialGroup('💎 1860 Club'), 'numbers');
+  assert.equal(p.initialGroup('狼 Club'), 'other');
+  const alphabetTeams = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(letter => ({ clubName: letter + ' Club' }));
+  alphabetTeams.push({ clubName: '123 Club' }, { clubName: '狼 Club' });
+  const letters = p.letterPicker(alphabetTeams);
+  assert.equal(letters.components[0].toJSON().components[0].options.length, 25);
+  assert.deepEqual(p.letterPicker(alphabetTeams, 1).components[0].toJSON().components[0].options.map(o => o.value), ['Z', 'numbers', 'other']);
+  const filteredPage = p.picker('grant', list, 1, 'A');
+  assert.match(filteredPage.components[1].toJSON().components[1].custom_id, /page:grant:2:A$/);
 });
 
 test('Premium Discord flow checks membership and staff roles, and restores panels after restart', async () => {
@@ -124,6 +134,12 @@ test('Premium Discord flow checks membership and staff roles, and restores panel
     const interaction = (id, user = 'vm', values = [], staff = false) => ({ customId: 'premium:' + id, guildId: 'guild', channelId: staff ? ui.ADMIN_CHANNEL : ui.PUBLIC_CHANNEL, user: { id: user }, values, member: { roles: { cache: new Map(staff ? [['lead-role',true]] : []) } }, deferReply: async () => {}, editReply: async function(payload) { this.payload = payload; } });
     await ui.init(client);
     assert.equal(messagesSent, 2);
+    let grantSelection = interaction('grant', 'lead', [], true);
+    await ui.handleInteraction(grantSelection, client);
+    assert.deepEqual(grantSelection.payload.components[0].toJSON().components[0].options.map(o => o.value), ['L']);
+    grantSelection = interaction('select:grantletters', 'lead', ['L'], true);
+    await ui.handleInteraction(grantSelection, client);
+    assert.deepEqual(grantSelection.payload.components[0].toJSON().components[0].options.map(o => o.value), ['team']);
     let i = interaction('months:get:team', 'outsider', ['1']);
     await ui.handleInteraction(i, client);
     assert.match(i.payload.content, /VM oder Co-VM/);

@@ -27,15 +27,34 @@ function canAdmin(member) {
   const ids = [...(s.roles?.adminRoleIds || []), ...(s.roles?.cupLeadRoleIds || []), ...(s.permissions?.adminRoleIds || []), ...(s.permissions?.cupLeadRoleIds || [])];
   return ids.some(id => member?.roles?.cache?.has(id));
 }
-function teamPicker(action, userId, requestedPage = 0) {
-  const list = teams().filter(t => action === 'get' || action === 'mine' ? isTeamMember(t, userId) : action === 'remove' ? premium.hasPremium(t.id) : true);
-  return picker(action, list.map(t => ({ id: t.id, label: t.clubName, description: premium.hasPremium(t.id) ? 'Premium aktiv 💎' : 'Kein aktives Premium' })), requestedPage);
+function initialGroup(name) {
+  const first = String(name || '').normalize('NFKD').replace(/\p{M}/gu, '').toUpperCase().match(/[\p{L}\p{N}]/u)?.[0];
+  if (first && /[A-Z]/.test(first)) return first;
+  return first && /\p{N}/u.test(first) ? 'numbers' : 'other';
 }
-function picker(action, list, requestedPage) {
+function letterPicker(list, requestedPage = 0) {
+  const counts = new Map();
+  for (const team of list) { const key = initialGroup(team.clubName); counts.set(key, (counts.get(key) || 0) + 1); }
+  const keys = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'numbers', 'other'].filter(key => counts.has(key));
+  const payload = picker('grantletters', keys.map(key => ({ id: key, label: key === 'numbers' ? '0–9 · Zahlen' : key === 'other' ? 'Weitere Zeichen' : key, description: `${counts.get(key)} Team(s)` })), requestedPage);
+  payload.content = payload.content.replace('Teamauswahl', 'Anfangsbuchstabe wählen');
+  if (payload.components.length) payload.components[0].components[0].setPlaceholder('Anfangsbuchstaben oder Zahlen wählen');
+  return payload;
+}
+function teamPicker(action, userId, requestedPage = 0, group = null) {
+  let list = teams().filter(t => action === 'get' || action === 'mine' ? isTeamMember(t, userId) : action === 'remove' ? premium.hasPremium(t.id) : true);
+  if (action === 'grant' && !group) return letterPicker(list, requestedPage);
+  if (action === 'grant') list = list.filter(t => initialGroup(t.clubName) === group);
+  return picker(action, list.map(t => ({ id: t.id, label: t.clubName, description: premium.hasPremium(t.id) ? 'Premium aktiv 💎' : 'Kein aktives Premium' })), requestedPage, group);
+}
+function picker(action, list, requestedPage, group = null) {
   if (!list.length) return { content: action === 'cases' ? 'Es gibt keine offenen Zahlungsfälle.' : 'Keine passenden Teams gefunden.', components: [] };
   const pages = Math.ceil(list.length / 25), page = Math.max(0, Math.min(pages - 1, Number(requestedPage) || 0));
   const menu = new StringSelectMenuBuilder().setCustomId(PREFIX + `select:${action}`).setPlaceholder(action === 'cases' ? 'Offenen Fall auswählen' : 'Team auswählen').addOptions(list.slice(page * 25, page * 25 + 25).map(t => ({ label: t.label.slice(0, 100), value: t.id, description: t.description.slice(0, 100) })));
-  return { content: `**${action === 'cases' ? 'Offene Zahlungsfälle' : 'Teamauswahl'}** · Seite ${page + 1}/${pages}`, components: [row(menu), row(button(`page:${action}:${page - 1}`, 'Zurück', ButtonStyle.Secondary).setDisabled(page === 0), button(`page:${action}:${page + 1}`, 'Weiter', ButtonStyle.Secondary).setDisabled(page === pages - 1))] };
+  const suffix = group ? `:${group}` : '';
+  const navigation = row(button(`page:${action}:${page - 1}${suffix}`, 'Zurück', ButtonStyle.Secondary).setDisabled(page === 0), button(`page:${action}:${page + 1}${suffix}`, 'Weiter', ButtonStyle.Secondary).setDisabled(page === pages - 1));
+  if (group) navigation.addComponents(button('grant', 'Buchstaben wählen', ButtonStyle.Secondary));
+  return { content: `**${action === 'cases' ? 'Offene Zahlungsfälle' : 'Teamauswahl'}${group ? ` · ${group === 'numbers' ? '0–9' : group === 'other' ? 'Weitere Zeichen' : group}` : ''}** · Seite ${page + 1}/${pages}`, components: [row(menu), navigation] };
 }
 function cases(page = 0) {
   return picker('cases', premium.readStore().orders.filter(o => o.status === 'paid').sort((a, b) => (findTeamById(a.teamId)?.clubName || '').localeCompare(findTeamById(b.teamId)?.clubName || '', 'de')).map(o => ({ id: o.id, label: findTeamById(o.teamId)?.clubName || o.teamId, description: `${o.months} Monat(e) · ${o.amount} € · Zahlung gemeldet` })), page);
@@ -97,17 +116,18 @@ async function handleInteraction(interaction, client) {
   try {
     const s = settings();
     if (String(interaction.guildId) !== String(s.guild?.guildId)) throw new Error('Premium ist nur auf dem Loco Night Cup Server verfügbar.');
-    const [command, action, value] = interaction.customId.slice(PREFIX.length).split(':');
-    const adminAction = ['grant', 'remove', 'cases', 'approve', 'reject', 'removeconfirm'].includes(command) || ['page', 'select', 'months'].includes(command) && ['grant', 'remove', 'cases'].includes(action);
+    const [command, action, value, group] = interaction.customId.slice(PREFIX.length).split(':');
+    const adminAction = ['grant', 'remove', 'cases', 'approve', 'reject', 'removeconfirm'].includes(command) || ['page', 'select', 'months'].includes(command) && ['grant', 'grantletters', 'remove', 'cases'].includes(action);
     if (adminAction && (interaction.channelId !== ADMIN_CHANNEL || !canAdmin(interaction.member))) throw new Error('Diese Aktion ist nur für Admins und Turnierleitung verfügbar.');
     if (!adminAction && interaction.channelId !== PUBLIC_CHANNEL) throw new Error('Bitte nutze den Premium-Kanal.');
     let payload;
     if (['get', 'mine', 'grant', 'remove'].includes(command)) payload = teamPicker(command, interaction.user.id);
     else if (command === 'cases') payload = cases();
-    else if (command === 'page') payload = action === 'cases' ? cases(value) : teamPicker(action, interaction.user.id, value);
+    else if (command === 'page') payload = action === 'cases' ? cases(value) : teamPicker(action === 'grantletters' ? 'grant' : action, interaction.user.id, value, group);
     else if (command === 'select') {
       const id = interaction.values[0];
-      if (action === 'cases') {
+      if (action === 'grantletters') payload = teamPicker('grant', interaction.user.id, 0, id);
+      else if (action === 'cases') {
         const order = premium.readStore().orders.find(o => o.id === id && o.status === 'paid');
         if (!order) throw new Error('Dieser Fall ist nicht mehr offen.');
         payload = { content: `**${findTeamById(order.teamId)?.clubName || order.teamId}**\n${order.months} Monat(e) · **${order.amount} €**\nAnfrage von <@${order.userId}>\nZahlung gemeldet: <t:${Math.floor(Date.parse(order.paidAt) / 1000)}:f>\n\nIst die Zahlung angekommen?`, components: [row(button(`approve:${order.id}`, 'Ja, Zahlung angekommen', ButtonStyle.Success), button(`reject:${order.id}`, 'Nein, Zahlung fehlt', ButtonStyle.Danger))] };
@@ -181,4 +201,4 @@ async function init(client) {
     timer.unref?.();
   }
 }
-module.exports = { ADMIN_CHANNEL, PUBLIC_CHANNEL, PAYPAL, canAdmin, handleInteraction, init, picker, panels };
+module.exports = { ADMIN_CHANNEL, PUBLIC_CHANNEL, PAYPAL, canAdmin, handleInteraction, init, initialGroup, letterPicker, picker, panels };
