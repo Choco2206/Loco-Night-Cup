@@ -10,10 +10,11 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const { findTeamById, listVisibleTeams } = require('../teams/team-service');
 const {
   buildRankings, capturePendingMatchesNow, confirmedEventMatches, requiresEaCapture, resumeRatingCaptures,
-  tottOpportunityMatches,
+  tottOpportunityMatches, hasCompleteCapture,
 } = require('./team-of-the-tournament-service');
 
 const TOTT_GRACE_PERIOD_MS = 5 * 60 * 1000;
+const TOTT_EXTENDED_GRACE_PERIOD_MS = 10 * 60 * 1000;
 const POST_RETRY_DELAYS_MS = [120000, 120000, 300000, 600000, 900000, 900000, 1200000];
 const CONTINUOUS_RETRY_DELAY_MS = 15 * 60 * 1000;
 const TOTT_GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000;
@@ -153,24 +154,22 @@ function selectionCount(selection) {
 function workflowSnapshot(event) {
   const state = event.ceremony?.teamOfTheTournament || {};
   const confirmed = confirmedEventMatches(event);
-  const capturedIds = new Set((state.capturedMatches || []).map(entry => String(entry.lncMatchId)));
   const linked = confirmed.filter(requiresEaCapture).filter(match => [match.home?.teamId, match.away?.teamId]
     .map(findTeamById).some(team => team?.eaClub?.clubId));
   return {
     confirmedMatches: confirmed.length,
     linkedMatches: linked.length,
-    capturedMatches: linked.filter(match => capturedIds.has(String(match.id))).length,
+    capturedMatches: linked.filter(match => hasCompleteCapture(event, match)).length,
     performances: (state.performances || []).length,
     selectedPlayers: selectionCount(state.selection),
   };
 }
 
 function closingRatingsReady(event) {
-  const captured = new Set((event.ceremony?.teamOfTheTournament?.capturedMatches || []).map(entry => String(entry.lncMatchId)));
   return confirmedEventMatches(event).filter(requiresEaCapture).every(match => {
     const linkedCount = [match.home?.teamId, match.away?.teamId]
       .map(findTeamById).filter(team => team?.eaClub?.clubId).length;
-    return linkedCount === 0 || captured.has(String(match.id));
+    return linkedCount === 0 || hasCompleteCapture(event, match);
   });
 }
 
@@ -410,13 +409,14 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   let attempt = 0;
   const run = async () => {
     try {
-      if (attempt === 0) {
+      if (attempt <= 1) {
         console.info(`[tott] ${eventKey}: kontrollierte EA-Abschlussprüfung wird ausgeführt.`);
         await capturePendingMatchesNow(eventKey, readEventData(eventKey));
       }
       const current = readEventData(eventKey);
       const snapshot = workflowSnapshot(current);
-      const resumed = snapshot.selectedPlayers >= 11 ? 0 : resumeRatingCaptures(eventKey, current);
+      const resumed = snapshot.capturedMatches < snapshot.linkedMatches || snapshot.selectedPlayers < 11
+        ? resumeRatingCaptures(eventKey, current) : 0;
       const now = new Date().toISOString();
       updatePostState(eventKey, {
         postStatus: 'pending', postAttempt: attempt + 1,
@@ -427,6 +427,21 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
       console.info(`[tott] ${eventKey}: 5-Minuten-Prüfung/Postversuch ${attempt + 1}: `
         + `${snapshot.capturedMatches}/${snapshot.linkedMatches} EA-Spiele erfasst; `
         + `${snapshot.selectedPlayers}/11 Spieler gewählt; ${resumed} EA-Abfragen gestartet.`);
+
+      const elapsedBeforePost = Date.now() - new Date(postStartedAt).getTime();
+      if (snapshot.capturedMatches < snapshot.linkedMatches && elapsedBeforePost < TOTT_EXTENDED_GRACE_PERIOD_MS) {
+        const delay = TOTT_EXTENDED_GRACE_PERIOD_MS - elapsedBeforePost;
+        console.info(`[tott] ${eventKey}: EA-Daten fehlen oder sind unvollständig. Zweite Abschlussprüfung nach insgesamt zehn Minuten.`);
+        updatePostState(eventKey, {
+          postLastResult: 'waiting_for_missing_ea_data',
+          postNextAttemptAt: new Date(Date.now() + delay).toISOString(),
+        });
+        attempt += 1;
+        const timer = setTimeout(run, delay);
+        if (typeof timer.unref === 'function') timer.unref();
+        postTimers.set(eventKey, timer);
+        return;
+      }
 
       if (snapshot.selectedPlayers >= 11) {
         if (snapshot.capturedMatches < snapshot.linkedMatches) {
