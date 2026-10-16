@@ -53,6 +53,10 @@ function eaMatchId(match) {
 
 function clubMap(match) { return match?.clubs || match?.teams || {}; }
 
+function clubIdOf(key, club) {
+  return String(club?.details?.clubId ?? club?.clubId ?? club?.club_id ?? key);
+}
+
 function clubGoals(club) {
   const value = club?.goals ?? club?.score ?? club?.goalsFor;
   const number = Number(value);
@@ -85,11 +89,11 @@ function confirmedTimestampMs(lncMatch) {
 
 function eaClubEntry(match, eaClubId) {
   return Object.entries(clubMap(match)).find(([key, club]) =>
-    String(key) === String(eaClubId) || String(club?.clubId ?? club?.club_id ?? '') === String(eaClubId));
+    String(key) === String(eaClubId) || clubIdOf(key, club) === String(eaClubId));
 }
 
 function matchContainsClubs(match, teamByEaClubId) {
-  const ids = new Set(Object.entries(clubMap(match)).flatMap(([key, club]) => [String(key), String(club?.clubId ?? club?.club_id ?? '')]));
+  const ids = new Set(Object.entries(clubMap(match)).flatMap(([key, club]) => [String(key), clubIdOf(key, club)]));
   const linkedIds = [...teamByEaClubId.keys()];
   return linkedIds.length > 1 ? linkedIds.every(id => ids.has(id)) : linkedIds.some(id => ids.has(id));
 }
@@ -126,9 +130,8 @@ function selectEaMatch(matches, lncMatch, linkedTeams, excludedIds = new Set()) 
     if (linkedTeams.length === 1 && (!confirmedAt || !matchAt)) return false;
     return !confirmedAt || !matchAt || Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS;
   });
-  const exactCandidates = baseCandidates.filter(match => linkedTeams.length > 1
-    ? scoreMatches(match, lncMatch)
-    : linkedTeamScoreMatches(match, lncMatch, linkedTeams[0], linkedTeams[0].eaClub.clubId));
+  const exactCandidates = baseCandidates.filter(match => linkedTeams.every(team =>
+    linkedTeamScoreMatches(match, lncMatch, team, team.eaClub.clubId)));
   const sortByTime = (a, b) => {
     if (!confirmedAt) return 0;
     return Math.abs(confirmedAt - (matchTimestampMs(a) || confirmedAt))
@@ -136,7 +139,10 @@ function selectEaMatch(matches, lncMatch, linkedTeams, excludedIds = new Set()) 
   };
   if (exactCandidates.length) return { match: exactCandidates.sort(sortByTime)[0], fallback: false };
   if (linkedTeams.length > 1) {
-    const timedCandidates = baseCandidates.filter(match => withinMatchWindow(match, confirmedAt));
+    // Both club histories may contain the same match. Count identities, not responses.
+    const timedCandidates = [...new Map(baseCandidates
+      .filter(match => withinMatchWindow(match, confirmedAt))
+      .map(match => [eaMatchId(match), match])).values()];
     if (timedCandidates.length === 1) return { match: timedCandidates[0], fallback: true };
   }
   return { match: null, fallback: false };
@@ -147,12 +153,12 @@ function playerRows(match, teamByEaClubId, lncMatchId) {
   const playersByClub = match?.players || {};
   for (const [rawClubId, players] of Object.entries(playersByClub)) {
     const club = clubMap(match)?.[rawClubId] || {};
-    const clubId = String(club?.clubId ?? club?.club_id ?? rawClubId);
+    const clubId = clubIdOf(rawClubId, club);
     const teamId = teamByEaClubId.get(clubId);
     if (!teamId || !players || typeof players !== 'object') continue;
     const goalsConceded = Object.entries(clubMap(match))
       .filter(([key, opponent]) => String(key) !== String(rawClubId)
-        && String(opponent?.clubId ?? opponent?.club_id ?? key) !== clubId)
+        && clubIdOf(key, opponent) !== clubId)
       .map(([, opponent]) => clubGoals(opponent)).find(Number.isFinite);
     const ownGoals = clubGoals(club);
     const won = Number.isFinite(ownGoals) && Number.isFinite(goalsConceded) && ownGoals > goalsConceded ? 1 : 0;
@@ -380,10 +386,21 @@ async function captureOnce(eventKey, lncMatch) {
         merged.players[clubId] = { ...(merged.players[clubId] || {}), ...players };
       }
     }
+    // The selected fixture has exactly one unlinked opponent. Map it only for this
+    // fixture, without changing the team's permanent EA club connection.
+    const entries = Object.entries(clubMap(merged));
+    if (linked.length === 1 && teams.length === 2 && entries.length === 2) {
+      const ownEntry = eaClubEntry(merged, linked[0].eaClub.clubId);
+      const opponentEntry = ownEntry && entries.find(([key]) => key !== ownEntry[0]);
+      const opponentTeam = teams.find(team => String(team.id) !== String(linked[0].id));
+      if (opponentEntry && opponentTeam) {
+        teamByEaClubId.set(clubIdOf(...opponentEntry), String(opponentTeam.id));
+      }
+    }
     persistMatch(eventKey, lncMatch, merged, teamByEaClubId);
     const rows = (readEventData(eventKey)?.ceremony?.teamOfTheTournament?.performances || [])
       .filter(row => String(row.lncMatchId) === String(lncMatch.id));
-    const missingTeams = linked.filter(team => !rows.some(row => String(row.teamId) === String(team.id)));
+    const missingTeams = teams.filter(team => !rows.some(row => String(row.teamId) === String(team.id)));
     if (!missingTeams.length && rows.length) {
       return { captured: true, candidate: merged, rows, linked, fallback: selected.fallback };
     }
@@ -469,9 +486,9 @@ function tottOpportunityMatches(event) {
 function hasCompleteCapture(event, match) {
   const state = event?.ceremony?.teamOfTheTournament || {};
   if (!(state.capturedMatches || []).some(entry => String(entry.lncMatchId) === String(match.id))) return false;
-  const linked = [match.home?.teamId, match.away?.teamId].map(findTeamById).filter(team => team?.eaClub?.clubId);
-  return linked.every(team => (state.performances || []).some(row =>
-    String(row.lncMatchId) === String(match.id) && String(row.teamId) === String(team.id)));
+  return [match.home?.teamId, match.away?.teamId].every(teamId => teamId &&
+    (state.performances || []).some(row =>
+      String(row.lncMatchId) === String(match.id) && String(row.teamId) === String(teamId)));
 }
 
 function refreshSelection(eventKey) {
@@ -545,3 +562,4 @@ module.exports = {
   normalizePosition, refreshSelection, requiresEaCapture, resumeRatingCaptures, scheduleRatingCapture,
   selectEaMatch, tottOpportunityMatches, hasCompleteCapture,
 };
+
