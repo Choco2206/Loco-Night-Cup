@@ -10,6 +10,7 @@ const MAX_REQUEST_ATTEMPTS = 3;
 let queueTail = Promise.resolve();
 let nextRequestAt = 0;
 const friendlyCache = new Map();
+const friendlyInFlight = new Map();
 let diagnostics = null;
 
 function setEaDiagnostics(handler) {
@@ -32,7 +33,7 @@ async function runQueued(task) {
     try {
       return await task();
     } finally {
-      nextRequestAt = Date.now() + MIN_REQUEST_GAP_MS;
+      nextRequestAt = Math.max(nextRequestAt, Date.now() + MIN_REQUEST_GAP_MS);
     }
   };
   const current = queueTail.then(run, run);
@@ -70,6 +71,14 @@ async function fetchJson(url, context = {}) {
             signal: controller.signal,
           });
           if (!response.ok) {
+            if (response.status === 429) {
+              const retryAfter = response.headers?.get?.('retry-after');
+              const seconds = Number(retryAfter);
+              const until = retryAfter && !Number.isFinite(seconds) ? Date.parse(retryAfter) : 0;
+              const pause = retryAfter && Number.isFinite(seconds) ? seconds * 1000
+                : (until ? Math.max(0, until - Date.now()) : 30000);
+              nextRequestAt = Math.max(nextRequestAt, Date.now() + Math.max(1000, pause));
+            }
             const error = new Error(`EA Clubs antwortet mit HTTP ${response.status}.`);
             error.status = response.status;
             throw error;
@@ -143,6 +152,7 @@ async function resolveClub(clubName, platform = DEFAULT_PLATFORM) {
 
 async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResultCount = 50, options = {}) {
   const cacheKey = `${platform}:${clubId}:${maxResultCount}`;
+  if (friendlyInFlight.has(cacheKey)) return friendlyInFlight.get(cacheKey);
   const cached = friendlyCache.get(cacheKey);
   if (!options.fresh && cached && Date.now() - cached.storedAt < FRIENDLY_CACHE_TTL_MS) {
     emitDiagnostic({
@@ -156,6 +166,7 @@ async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResult
     return cached.matches;
   }
 
+  const work = (async () => {
   const payload = await requestJson('clubs/matches', {
     platform,
     clubIds: clubId,
@@ -166,7 +177,10 @@ async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResult
     clubId: String(clubId),
     platform,
   });
-  const matches = Array.isArray(payload) ? payload : (payload?.matches || []);
+  const matches = Array.isArray(payload) ? payload : payload?.matches;
+  if (!Array.isArray(matches)) {
+    throw new Error('EA lieferte keine gültige Spielliste (unerwartetes Antwortformat statt leerer Historie).');
+  }
   friendlyCache.set(cacheKey, { storedAt: Date.now(), matches });
   emitDiagnostic({
     type: 'cache_store',
@@ -176,6 +190,9 @@ async function getFriendlyMatches(clubId, platform = DEFAULT_PLATFORM, maxResult
     matchCount: matches.length,
   });
   return matches;
+  })();
+  friendlyInFlight.set(cacheKey, work);
+  try { return await work; } finally { friendlyInFlight.delete(cacheKey); }
 }
 
 function clearFriendlyMatchCache() {
@@ -192,3 +209,4 @@ module.exports = {
   searchClubs,
   setEaDiagnostics,
 };
+

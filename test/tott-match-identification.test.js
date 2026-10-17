@@ -99,3 +99,69 @@ test('the opponent response can recover after the first club request fails', asy
   assert.equal((await h.api.captureOnceForTest('test', h.lnc)).captured, true);
   assert.equal(h.calls.length, 2);
 });
+
+test('one linked club accepts the sole recent fixture even if EA reports a different score', async () => {
+  const h = setup('home'); h.respond({ 101: [match('score-lag', '0', '0')] });
+  const result = await h.api.captureOnceForTest('test', h.lnc);
+  assert.equal(result.captured, true);
+  assert.equal(result.fallback, true);
+  assert.equal(result.rows.length, 2);
+});
+
+test('twenty unrelated history entries do not make one recent fixture ambiguous', () => {
+  const h = setup('home');
+  const history = Array.from({ length: 20 }, (_, i) => ({
+    ...match('old-' + i), timestamp: '2026-10-15T19:00:00Z',
+  }));
+  history.push(match('actual', '0', '0'));
+  const result = h.api.selectEaMatch(history, h.lnc, h.teams.filter(t => t.eaClub));
+  assert.equal(result.match.matchId, 'actual');
+});
+
+test('time fallback never accepts an older score-mismatching fixture', () => {
+  const h = setup('home'); const m = match('old', '0', '0');
+  m.timestamp = '2026-10-15T21:45:00Z';
+  assert.equal(h.api.selectEaMatch([m], h.lnc, h.teams.filter(t => t.eaClub)).match, null);
+});
+
+test('start-time lookback accepts a unique exact-score fixture, not an arbitrary old game', () => {
+  const h = setup('home'); const m = match();
+  m.timestamp = '2026-10-15T21:42:00Z';
+  assert.equal(h.api.selectEaMatch([m], h.lnc, h.teams.filter(t => t.eaClub)).match.matchId, 'ea-1');
+  m.timestamp = '2026-10-15T21:20:00Z';
+  assert.equal(h.api.selectEaMatch([m], h.lnc, h.teams.filter(t => t.eaClub)).match, null);
+});
+
+test('one linked club does not guess between multiple recent score-mismatching games', () => {
+  const h = setup('home');
+  const result = h.api.selectEaMatch([match('one', '0', '0'), match('two', '0', '0')],
+    h.lnc, h.teams.filter(t => t.eaClub));
+  assert.equal(result.match, null);
+  assert.equal(result.reason, 'ambiguous_recent_matches');
+});
+
+test('a linked opponent must match its club ID, not only the score and time', () => {
+  const h = setup(); const m = match();
+  m.clubs[999] = m.clubs[102]; delete m.clubs[102];
+  assert.equal(h.api.selectEaMatch([m], h.lnc, h.teams).match, null);
+});
+
+test('admin results of any score are skipped but a normally reported 3:0 is eligible', async () => {
+  const h = setup();
+  h.lnc.result = { ...h.lnc.result, source: 'admin', matchPlayed: true };
+  assert.equal((await h.api.captureOnceForTest('test', h.lnc)).reason, 'forfeit');
+  assert.equal(h.calls.length, 0);
+  h.lnc.result = { ...h.lnc.result, source: 'teams', homeGoals: 3, awayGoals: 0 };
+  assert.equal(h.api.requiresEaCapture(h.lnc), true);
+  h.lnc.result.matchPlayed = false;
+  assert.equal(h.api.requiresEaCapture(h.lnc), false);
+});
+
+test('concurrent closing checks and regular capture share one fixture operation', async () => {
+  const h = setup(); h.respond({ 101: [match()], 102: [match()] });
+  const results = await Promise.all(Array.from({ length: 7 }, () => h.api.captureOnceForTest('test', h.lnc)));
+  assert.ok(results.every(result => result.captured));
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.event.ceremony.teamOfTheTournament.performances.length, 2);
+});
+
