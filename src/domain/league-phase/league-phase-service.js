@@ -141,7 +141,16 @@ function refreshLeaguePhasePosts(client, eventKey) {
   return enqueueCoalesced(`league-posts:${eventKey}`, () => performLeaguePhasePostsRefresh(client, eventKey));
 }
 async function drawLeaguePhaseForEvent({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
-  let result; updateEventData(eventKey, event => { if (!isLeaguePhaseFormat(event.format?.size) || !event.format?.lockedAt) throw new Error('Ligaphase ist ausschließlich für die final gelockten Formate 14, 18 und 20 erlaubt.'); if (event.leaguePhase?.status && event.leaguePhase.status !== 'not_created') { result = { event, leaguePhase: event.leaguePhase, restored: true }; return event; }
+  let result;
+  updateEventData(eventKey, event => {
+    // Resume an existing league (including legacy 20-team draws) unchanged.
+    if (event.leaguePhase?.status && event.leaguePhase.status !== 'not_created') {
+      result = { event, leaguePhase: event.leaguePhase, restored: true };
+      return event;
+    }
+    if (!isLeaguePhaseFormat(event.format?.size) || !event.format?.lockedAt) {
+      throw new Error('Ligaphase ist ausschließlich für die final gelockten Formate 14 und 18 erlaubt.');
+    }
     const phase = createLeaguePhaseDraw({ eventKey, participants: event.format.participants, createdAt: now.toISOString() }); validateLeaguePhaseDraw(phase); recalculateGroupStandings(phase); phase.drawnBy = actorUserId ? String(actorUserId) : null; event.status = 'league_phase'; event.phaseType = 'league'; event.leaguePhase = phase; event.groups = { ...(event.groups || {}), status: 'not_created', groups: {} }; result = { event, leaguePhase: phase, restored: false }; return event; });
   console.info(`[league-phase] ${eventKey}: ${result.leaguePhase.formatSize}er-Ligaphase erkannt; Auslosung mit ${LEAGUE_PHASE_FORMATS[result.leaguePhase.formatSize].totalMatches} Spielen erfolgreich validiert.`);
   if (!client) return result; const settings = readJson(FILES.settings, createSettingsDefault()); const targetGuild = guild || await getConfiguredGuild(client, settings); if (!targetGuild) return result;

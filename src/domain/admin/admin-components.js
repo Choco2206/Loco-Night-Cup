@@ -61,7 +61,7 @@ const ADMIN_CATEGORIES = {
       ['admin_testdata_remove', 'Testdaten entfernen', 'Alle Testteams entfernen'],
       ['admin_simulate_groups', 'Gruppenphase simulieren', 'Gruppenphase eines Events simulieren'],
       ['admin_schedule_visual_test', 'Spielplan-Grafik testen', 'Alle sechs Grafikzustände in einer Gruppe darstellen'],
-      ['admin_league_phase_test', 'Ligaphase testen', '14er-, 18er- oder 20er-Ligaphase testen'],
+      ['admin_league_phase_test', 'Ligaphase testen', '14er- oder 18er-Ligaphase testen'],
       ['admin_league_phase_test_stop', 'Ligaphasen-Test beenden', 'Testkanäle und Rollenmitgliedschaften bereinigen'],
       ['admin_ko_images_test', 'K.O.-Bilder testen', 'Eine K.O.-Bildvorlage im Testkanal prüfen'],
       ['admin_simulate_knockout', 'K.O.-Phase simulieren', 'K.O.-Phase eines Events simulieren'],

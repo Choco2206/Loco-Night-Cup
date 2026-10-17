@@ -28,12 +28,13 @@ const TOURNAMENT_FORMAT_SIZES = [8, 12, 14, 16, 18, 20, 24, 28, 32];
 const LEAGUE_PHASE_FORMATS = {
   14: { size: 14, matchdays: 4, matchesPerDay: 7, totalMatches: 28, qualifiedCount: 8 },
   18: { size: 18, matchdays: 4, matchesPerDay: 9, totalMatches: 36, qualifiedCount: 8 },
+  // Retained for already drawn 20-team leagues across a deployment.
   20: { size: 20, matchdays: 4, matchesPerDay: 10, totalMatches: 40, qualifiedCount: 8 },
 };
 const LEAGUE_PHASE_VIDEO_CHANNEL_NAME = 'größenvideo-ligaphase';
 
 function isLeaguePhaseFormat(format) {
-  return Boolean(LEAGUE_PHASE_FORMATS[Number(format)]);
+  return TOURNAMENT_FORMATS[Number(format)]?.phaseType === 'league';
 }
 
 const TOURNAMENT_FORMATS = {
@@ -42,7 +43,7 @@ const TOURNAMENT_FORMATS = {
   14: { groupCount: 0, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'league_top_8', phaseType: 'league' },
   16: { groupCount: 4, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'top2' },
   18: { groupCount: 0, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'league_top_8', phaseType: 'league' },
-  20: { groupCount: 0, qualifiedCount: 8, bestThirds: 0, firstRoundKey: 'quarter_final', rule: 'league_top_8', phaseType: 'league' },
+  20: { groupCount: 5, qualifiedCount: 16, bestThirds: 5, bestFourths: 1, firstRoundKey: 'round_of_16', rule: 'top2_plus_5_best_thirds_plus_1_best_fourth' },
   24: { groupCount: 6, qualifiedCount: 16, bestThirds: 4, firstRoundKey: 'round_of_16', rule: 'top2_plus_4_best_thirds' },
   28: { groupCount: 7, qualifiedCount: 16, bestThirds: 2, firstRoundKey: 'round_of_16', rule: 'top2_plus_2_best_thirds' },
   32: { groupCount: 8, qualifiedCount: 16, bestThirds: 0, firstRoundKey: 'round_of_16', rule: 'top2' },

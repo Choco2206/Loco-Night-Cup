@@ -5,7 +5,7 @@ const {
   EVENT_PROFILE_BY_KEY,
   EVENT_STATUSES,
   TOURNAMENT_FORMAT_SIZES,
-  isLeaguePhaseFormat,
+  LEAGUE_PHASE_FORMATS,
 } = require('../app/constants');
 const {
   hasNoDuplicates,
@@ -108,7 +108,8 @@ function validateEvent(data, expectedEventKey = null) {
     requireArray(errors, data.leaguePhase.matchdays, 'leaguePhase.matchdays');
     requireArray(errors, data.leaguePhase.standings, 'leaguePhase.standings');
     if (data.leaguePhase.phaseType === 'league') {
-      if (!isLeaguePhaseFormat(data.format.size)) errors.push('leaguePhase requires locked format.size 14, 18 or 20');
+      // Existing 20-team leagues remain valid; new 20-team draws use groups.
+      if (!LEAGUE_PHASE_FORMATS[data.format.size]) errors.push('leaguePhase requires stored format.size 14, 18 or 20');
       if (data.leaguePhase.participants.length !== data.format.size) errors.push('leaguePhase.participants must match format.size');
       if (data.leaguePhase.matchdays.length !== 4) errors.push('leaguePhase.matchdays must contain 4 matchdays');
     }

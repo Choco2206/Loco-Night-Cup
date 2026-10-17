@@ -1,6 +1,24 @@
 # Loco-Night-Cup
 <!-- Admin-Panel Redeploy -->
 
+## Gruppenphase und K.O.-Zuordnung
+
+Das normale 20er-Format spielt in fünf Vierergruppen. Platz 1 bis 3 jeder Gruppe
+und der beste Gruppenvierte erreichen das Achtelfinale. Der Gruppenvergleich
+nutzt Punkte, Tordifferenz, erzielte Tore, Gegentore und bei vollständigem
+Gleichstand den bestehenden deterministischen Losentscheid. Die Formate 14 und
+18 bleiben Ligaphasen mit vier Spieltagen und acht Viertelfinalisten.
+
+Neue K.O.-Bäume werden deterministisch nach Setzplätzen zugeordnet. Pro Paarung
+trifft ein Team aus der oberen auf eines aus der unteren Hälfte der Setzliste.
+Gruppengegner werden nach Möglichkeit auf unterschiedliche Zweige verteilt,
+sodass sie weder im ersten noch im zweiten K.O.-Spiel aufeinandertreffen können.
+Beim 20er-Format sind Wiederholungen damit frühestens im Halbfinale möglich.
+Ist der Schutz über zwei Runden rechnerisch unmöglich (z.B. 8er-/12er-Format),
+wird zumindest eine Wiederholung im ersten K.O.-Spiel vermieden, soweit möglich.
+Bestehende K.O.-Bäume und bereits ausgeloste 20er-Ligaphasen werden nicht neu
+gezogen; die Gruppenregel gilt für neue 20er-Auslosungen.
+
 ## Loco Power Ranking
 
 Das Power Ranking wertet jede Kalenderwoche von Montag 00:00 Uhr bis zum Abschluss des letzten Sonntags-Cups in der Zeitzone `Europe/Berlin`. Die aktuelle Rangliste wird nach jedem vollständig abgeschlossenen Cup aktualisiert. Historische Wochen und Turnierergebnisse liegen unabhängig von den täglich zurückgesetzten Eventdateien in `data/power-ranking.json`.

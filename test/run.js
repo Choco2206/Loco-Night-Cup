@@ -1,4 +1,5 @@
 'use strict';
+require('./group-knockout-format.test');
 require('./premium.test');
 
 require('./live-schedule-cleanup.test');

@@ -156,7 +156,7 @@ async function syncGroupDiscordResources({ eventKey, event, client, guild, setti
 
 async function drawGroupsForEvent({ eventKey, actorUserId = null, client = null, guild = null, now = new Date() }) {
   const lockedEvent = readEventData(eventKey);
-  if (isLeaguePhaseFormat(lockedEvent.format?.size) && !isBomberXLocoEvent(lockedEvent)) {
+  if ((isLeaguePhaseFormat(lockedEvent.format?.size) || lockedEvent.leaguePhase?.phaseType === 'league') && !isBomberXLocoEvent(lockedEvent)) {
     const { drawLeaguePhaseForEvent } = require('../league-phase');
     return drawLeaguePhaseForEvent({ eventKey, actorUserId, client, guild, now });
   }

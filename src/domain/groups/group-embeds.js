@@ -141,6 +141,9 @@ function formatByeEntry(place) {
 
 function getQualificationText(formatSize) {
   const config = TOURNAMENT_FORMATS[Number(formatSize)] || getLocoZwergenCupFormat(formatSize);
+  if (Number(formatSize) === 20) {
+    return '\u{1f3c6} Weiterkommen: Platz 1 bis 3 jeder Gruppe + der beste Viertplatzierte → Achtelfinale';
+  }
   if (config?.bestFourths) {
     const fourths = config.bestFourths === 1
       ? 'der beste Viertplatzierte'

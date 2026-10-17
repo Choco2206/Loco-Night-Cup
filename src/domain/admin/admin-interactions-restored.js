@@ -2107,7 +2107,6 @@ async function handleAdminInteraction(interaction, client) {
           new StringSelectMenuBuilder().setCustomId('admin_league_phase_test_select').setPlaceholder('Ligaphasentest auswählen').addOptions([
             { value: '14', label: '14er-Liga', description: '14 Teams, 7 Spiele je Spieltag, 28 insgesamt' },
             { value: '18', label: '18er-Liga', description: '18 Teams, 9 Spiele je Spieltag, 36 insgesamt' },
-            { value: '20', label: '20er-Liga', description: '20 Teams, 10 Spiele je Spieltag, 40 insgesamt' },
           ])
         )],
         flags: EPHEMERAL,

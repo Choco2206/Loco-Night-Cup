@@ -22,7 +22,7 @@ function createLeaguePhaseDraw({ eventKey, participants, createdAt = new Date().
   const size = participants?.length;
   const config = LEAGUE_PHASE_FORMATS[size];
   if (!Array.isArray(participants) || !isLeaguePhaseFormat(size)) {
-    throw new Error('Die Ligaphase benötigt exakt 14, 18 oder 20 persistierte Startplätze.');
+    throw new Error('Die Ligaphase benötigt exakt 14 oder 18 persistierte Startplätze.');
   }
   const normalized = shuffled(participants, random).map((participant, index) => ({
     ...participant,

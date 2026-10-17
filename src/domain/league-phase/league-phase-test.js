@@ -8,7 +8,7 @@ const { readAllEvents } = require('../checkins/checkin-repository');
 const { listVisibleTeams, findTeamById } = require('../teams/team-service');
 const { getTeamUserIds } = require('../groups/group-roles');
 const { recalculateGroupStandings } = require('../groups/group-results');
-const { LEAGUE_PHASE_FORMATS } = require('../../app/constants');
+const { LEAGUE_PHASE_FORMATS, isLeaguePhaseFormat } = require('../../app/constants');
 const { createLeaguePhaseDraw, validateLeaguePhaseDraw } = require('./league-phase-draw');
 const {
   LEAGUE_PHASE_CATEGORY_ID,
@@ -39,7 +39,7 @@ function participants(size) {
 }
 
 function testPhase(size) {
-  if (!LEAGUE_PHASE_FORMATS[size]) throw new Error('Ligaphasentest unterstützt nur 14, 18 oder 20 Teams.');
+  if (!isLeaguePhaseFormat(size)) throw new Error('Ligaphasentest unterstützt nur 14 oder 18 Teams.');
   const phase = createLeaguePhaseDraw({ eventKey: `league_test_${size}`, participants: participants(size), random: () => 0.42 });
   let index = 0;
   for (const match of phase.matchdays.flatMap(day => day.matches)) {
@@ -61,7 +61,7 @@ function assertNoLiveEvent() {
 async function startLeaguePhaseIntegrationTest({ guild, formatSize }) {
   const size = Number(formatSize);
   const config = LEAGUE_PHASE_FORMATS[size];
-  if (!config) throw new Error('Bitte 14, 18 oder 20 wählen.');
+  if (!isLeaguePhaseFormat(size)) throw new Error('Bitte 14 oder 18 wählen.');
   if (activeTests.has(guild.id)) throw new Error('In diesem Server läuft bereits ein Ligaphasen-Test.');
   assertNoLiveEvent();
   const staleChannels = guild.channels.cache.filter(channel => ['ligaphase', 'ligaphase-ergebnisse'].includes(channel.name));

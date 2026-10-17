@@ -55,11 +55,59 @@ function takeOpponentFor(seed, pool) {
   return pool.pop();
 }
 
+// Adjacent first-round matches feed the same second-round match. Put four
+// different groups in each such branch, retaining one top-half seed per match.
+// Smaller fields (e.g. 12 teams with three qualifiers from one group) cannot
+// always avoid a second-round rematch; then solve just the first-round pairing.
+function separateGroups(ordered, branchSize) {
+  const branchCount = ordered.length / branchSize;
+  const half = ordered.length / 2;
+  const bucketCapacity = branchSize / 2;
+  const groupKey = team => team.groupKey || `team:${team.teamId}`;
+  const groupCounts = new Map();
+  for (const team of ordered) groupCounts.set(groupKey(team), (groupCounts.get(groupKey(team)) || 0) + 1);
+  if ([...groupCounts.values()].some(count => count > branchCount)) return null;
+
+  const branches = Array.from({ length: branchCount }, () => ({ top: [], bottom: [], groups: new Set() }));
+  const entries = ordered.map((team, index) => ({ team, bucket: index < half ? 'top' : 'bottom' }));
+  const failed = new Set();
+  function place(index) {
+    if (index === entries.length) return true;
+    const state = `${index}:${branches.map(branch =>
+      `${branch.top.length}/${branch.bottom.length}/${[...branch.groups].sort().join(',')}`
+    ).sort().join('|')}`;
+    if (failed.has(state)) return false;
+    const { team, bucket } = entries[index];
+    const key = groupKey(team);
+    const tried = new Set();
+    for (const branch of branches) {
+      if (branch[bucket].length >= bucketCapacity || branch.groups.has(key)) continue;
+      const signature = `${branch.top.length}/${branch.bottom.length}/${[...branch.groups].sort().join(',')}`;
+      if (tried.has(signature)) continue;
+      tried.add(signature);
+      branch[bucket].push(team);
+      branch.groups.add(key);
+      if (place(index + 1)) return true;
+      branch[bucket].pop();
+      branch.groups.delete(key);
+    }
+    failed.add(state);
+    return false;
+  }
+  if (!place(0)) return null;
+  return branches.flatMap(branch => branch.top.map((team, index) =>
+    [team, branch.bottom[bucketCapacity - 1 - index]]
+  ));
+}
+
 function createFirstRoundPairs(qualifiedTeams) {
   const ordered = qualifiedTeams.slice().sort((a, b) => Number(a.seed) - Number(b.seed));
   if (ordered.length === 8 && ordered.every(team => team.groupKey === 'league')) {
     return [[ordered[0], ordered[7]], [ordered[3], ordered[4]], [ordered[1], ordered[6]], [ordered[2], ordered[5]]];
   }
+  const separated = separateGroups(ordered, 4) || separateGroups(ordered, 2);
+  if (separated) return separated;
+  // Single-group special events cannot avoid even a first-round rematch.
   const topHalf = ordered.slice(0, ordered.length / 2);
   const pool = ordered.slice(ordered.length / 2);
 
