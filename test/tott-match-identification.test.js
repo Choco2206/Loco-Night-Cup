@@ -165,3 +165,52 @@ test('concurrent closing checks and regular capture share one fixture operation'
   assert.equal(h.event.ceremony.teamOfTheTournament.performances.length, 2);
 });
 
+
+function decisionPair() {
+  const draw = match('main-draw', '2', '2');
+  draw.timestamp = '2026-10-15T21:42:00Z';
+  const decision = match('golden-goal', '0', '3');
+  decision.clubs[102].winnerByDnf = '1';
+  return { draw, decision };
+}
+test('knockout DNF decision uses the preceding draw instead of short-game ratings', () => {
+  const h = setup(); const { draw, decision } = decisionPair();
+  const result = h.api.selectEaMatch([decision, draw], h.lnc, h.teams, new Set(), { knockout: true });
+  assert.equal(result.match.matchId, 'main-draw');
+  assert.equal(result.decisionMatchId, 'golden-goal');
+});
+test('knockout DNF with missing, ambiguous or wrong-winner main game requires review', () => {
+  const h = setup(); const { draw, decision } = decisionPair();
+  for (const candidates of [[decision], [draw, { ...draw, matchId: 'other-draw' }, decision]]) {
+    const result = h.api.selectEaMatch(candidates, h.lnc, h.teams, new Set(), { knockout: true });
+    assert.equal(result.match, null);
+    assert.equal(result.reason, 'decision_needs_review');
+  }
+  decision.clubs[102].winnerByDnf = '0'; decision.clubs[101].winnerByDnf = '1';
+  assert.equal(h.api.selectEaMatch([draw, decision], h.lnc, h.teams, new Set(), { knockout: true }).match, null);
+});
+test('golden-goal recovery stores only full-game stats and reserves the decision ID', async () => {
+  const h = setup(); const { draw, decision } = decisionPair();
+  h.event.knockout = { rounds: { final: { matches: [h.lnc] } } };
+  h.respond({ 101: [decision, draw], 102: [decision, draw] });
+  const result = await h.api.captureOnceForTest('test', h.lnc);
+  assert.equal(result.captured, true);
+  assert.equal(result.decisionMatchId, 'golden-goal');
+  const state = h.event.ceremony.teamOfTheTournament;
+  assert.equal(state.capturedMatches[0].decisionMatchId, 'golden-goal');
+  assert.ok(state.performances.every(row => row.eaMatchId === 'main-draw'));
+  assert.ok(state.performances.every(row => row.won === 0));
+});
+test('failed identity diagnostics show actual EA names, dates, opponent IDs and reuse', async () => {
+  const h = setup(); const wrong = match('wrong');
+  wrong.clubs[101].details = { name: 'Different club' };
+  wrong.clubs[999] = wrong.clubs[102]; delete wrong.clubs[102];
+  h.teams[0].eaClub.name = 'Expected club';
+  h.respond({ 101: [wrong] });
+  const result = await h.api.captureOnceForTest('test', h.lnc);
+  assert.equal(result.captured, false);
+  assert.match(result.detail, /Different club/);
+  assert.match(result.detail, /Expected club/);
+  assert.match(result.detail, /999/);
+  assert.match(result.detail, /Club-IDs passen nicht/);
+});

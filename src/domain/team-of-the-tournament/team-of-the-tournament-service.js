@@ -127,7 +127,43 @@ function withinMatchWindow(match, confirmedAt) {
   return Boolean(confirmedAt && matchAt && Math.abs(confirmedAt - matchAt) <= MAX_MATCH_TIME_DISTANCE_MS);
 }
 
-function selectEaMatch(matches, lncMatch, linkedTeams, excludedIds = new Set()) {
+function hasDnf(match) {
+  return Object.values(clubMap(match)).some(club => Number(club?.winnerByDnf) === 1);
+}
+
+function historyDiagnostic(team, matches) {
+  const recent = [...matches].sort((a, b) => (matchTimestampMs(b) || 0) - (matchTimestampMs(a) || 0));
+  const latest = recent[0];
+  const own = latest && eaClubEntry(latest, team.eaClub.clubId)?.[1];
+  const actualName = own?.details?.name || own?.name;
+  const expectedName = team.eaClub.name;
+  const nameMismatch = actualName && expectedName
+    && actualName.localeCompare(expectedName, 'de', { sensitivity: 'base' }) !== 0;
+  const details = [`${team.clubName || team.id} [${team.eaClub.clubId}/${team.eaClub.platform || 'common-gen5'}]: ${matches.length} Spiele`];
+  if (actualName) details.push(`EA-Club: ${String(actualName).slice(0, 80)}${nameMismatch ? ' ⚠️ weicht vom verknüpften Namen ab: ' + String(expectedName).slice(0, 80) : ''}`);
+  if (latest) details.push(`neuestes Spiel: ${matchTimestampMs(latest) ? new Date(matchTimestampMs(latest)).toISOString() : 'Zeit fehlt'}`);
+  return details.join('; ');
+}
+
+function candidateDiagnostics(matches, lncMatch, linked, excludedIds) {
+  const at = confirmedTimestampMs(lncMatch);
+  const ids = new Map(linked.map(team => [String(team.eaClub.clubId), String(team.id)]));
+  const unique = [...new Map(matches.map(match => [eaMatchId(match), match])).values()];
+  return unique.sort((a, b) => Math.abs((matchTimestampMs(a) || 0) - at) - Math.abs((matchTimestampMs(b) || 0) - at))
+    .slice(0, 3).map(match => {
+      const clubs = Object.entries(clubMap(match)).map(([key, club]) =>
+        `${String(club?.details?.name || club?.name || '?').slice(0, 45)} [${clubIdOf(key, club)}] ${clubGoals(club) ?? '?'}`).join(' / ');
+      const reasons = [];
+      if (!matchContainsClubs(match, ids)) reasons.push('Club-IDs passen nicht');
+      const time = matchTimestampMs(match);
+      if (!time || !at || time < at - MATCH_START_LOOKBACK_MS || time > at + MAX_MATCH_TIME_DISTANCE_MS) reasons.push('außerhalb Zeitfenster');
+      if (excludedIds.has(eaMatchId(match))) reasons.push('bereits zugeordnet');
+      if (hasDnf(match)) reasons.push('Abbruch/DNF');
+      return `EA ${eaMatchId(match)}: ${clubs}; ${time ? new Date(time).toISOString() : 'Zeit fehlt'}; ${reasons.join(', ') || 'Identität/Zeit passen'}`;
+    }).join('\n');
+}
+
+function selectEaMatch(matches, lncMatch, linkedTeams, excludedIds = new Set(), options = {}) {
   const confirmedAt = confirmedTimestampMs(lncMatch);
   const teamByEaClubId = new Map(linkedTeams.map(team => [String(team.eaClub.clubId), String(team.id)]));
   if (!confirmedAt || !linkedTeams.length || teamByEaClubId.size !== linkedTeams.length) {
@@ -142,6 +178,31 @@ function selectEaMatch(matches, lncMatch, linkedTeams, excludedIds = new Set()) 
     return matchAt && matchAt >= confirmedAt - MATCH_START_LOOKBACK_MS
       && matchAt <= confirmedAt + MAX_MATCH_TIME_DISTANCE_MS;
   });
+  // A knockout may consist of a complete draw followed by a short golden-goal
+  // game which EA records as a DNF win. Never use that short game's ratings.
+  if (options.knockout) {
+    const draws = baseCandidates.filter(match => {
+      const goals = eaScore(match);
+      return goals.length === 2 && goals[0] === goals[1] && !hasDnf(match);
+    });
+    const decisions = baseCandidates.filter(match => hasDnf(match) && withinMatchWindow(match, confirmedAt)
+      && linkedTeams.every(team => {
+        const isHome = String(team.id) === String(lncMatch.home.teamId);
+        const expectedWin = isHome ? Number(lncMatch.result.homeGoals) > Number(lncMatch.result.awayGoals)
+          : Number(lncMatch.result.awayGoals) > Number(lncMatch.result.homeGoals);
+        return (Number(eaClubEntry(match, team.eaClub.clubId)?.[1]?.winnerByDnf) === 1) === expectedWin;
+      }));
+    const pairs = draws.flatMap(draw => decisions.filter(decision =>
+      matchTimestampMs(decision) > matchTimestampMs(draw)
+      && matchTimestampMs(decision) - matchTimestampMs(draw) <= MATCH_START_LOOKBACK_MS
+    ).map(decision => ({ draw, decision })));
+    if (linkedTeams.length === 2 && pairs.length === 1) {
+      return { match: pairs[0].draw, decisionMatchId: eaMatchId(pairs[0].decision), fallback: true };
+    }
+    if (baseCandidates.some(hasDnf)) {
+      return { match: null, fallback: false, reason: 'decision_needs_review' };
+    }
+  }
   const exact = match => linkedTeams.every(team =>
     linkedTeamScoreMatches(match, lncMatch, team, team.eaClub.clubId));
   const timed = baseCandidates.filter(match => withinMatchWindow(match, confirmedAt));
@@ -324,20 +385,21 @@ function buildSelection(performances, tournamentMatches = []) {
   ]));
 }
 
-function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId) {
+function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId, decisionMatchId = null) {
   let stored = false; let storedRows = [];
   updateEventData(eventKey, event => {
     event.ceremony = event.ceremony || {};
     const state = event.ceremony.teamOfTheTournament || { performances: [], capturedMatches: [], selection: null };
-    if (state.capturedMatches.some(entry => String(entry.eaMatchId) === eaMatchId(eaMatch)
-      && String(entry.lncMatchId) !== String(lncMatch.id))) return event;
+    if (state.capturedMatches.some(entry => String(entry.lncMatchId) !== String(lncMatch.id)
+      && [entry.eaMatchId, entry.decisionMatchId].filter(Boolean).map(String)
+        .some(id => [eaMatchId(eaMatch), decisionMatchId].includes(id)))) return event;
     const rows = playerRows(eaMatch, teamByEaClubId, lncMatch.id);
     if (!rows.length) return event;
     const existing = new Set(state.performances.filter(row => String(row.lncMatchId) === String(lncMatch.id))
       .map(row => `${row.teamId}:${row.playerId}`));
     const newRows = rows.filter(row => !existing.has(`${row.teamId}:${row.playerId}`));
     state.performances.push(...newRows);
-    if (!state.capturedMatches.some(entry => String(entry.lncMatchId) === String(lncMatch.id))) state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), capturedAt: new Date().toISOString() });
+    if (!state.capturedMatches.some(entry => String(entry.lncMatchId) === String(lncMatch.id))) state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), decisionMatchId, capturedAt: new Date().toISOString() });
     state.selection = buildSelection(state.performances, tottOpportunityMatches(event)); state.updatedAt = new Date().toISOString();
     event.ceremony.teamOfTheTournament = state; storedRows = rows; stored = true; return event;
   });
@@ -378,7 +440,7 @@ async function captureOnceInternal(eventKey, requestedMatch) {
   const teamByEaClubId = new Map(linked.map(team => [String(team.eaClub.clubId), String(team.id)]));
   const state = readEventData(eventKey)?.ceremony?.teamOfTheTournament || {};
   const excludedIds = new Set((state.capturedMatches || [])
-    .filter(entry => String(entry.lncMatchId) !== String(lncMatch.id)).map(entry => String(entry.eaMatchId)));
+    .filter(entry => String(entry.lncMatchId) !== String(lncMatch.id)).flatMap(entry => [entry.eaMatchId, entry.decisionMatchId].filter(Boolean).map(String)));
   const ownCapture = (state.capturedMatches || []).find(entry => String(entry.lncMatchId) === String(lncMatch.id));
   const matches = [];
   const errors = [];
@@ -387,7 +449,7 @@ async function captureOnceInternal(eventKey, requestedMatch) {
     try {
       const response = await getFriendlyMatches(team.eaClub.clubId, team.eaClub.platform, 50, { fresh: true });
       matches.push(...response);
-      queries.push(`${team.clubName || team.id} [${team.eaClub.clubId}/${team.eaClub.platform || 'common-gen5'}]: ${response.length}`);
+      queries.push(historyDiagnostic(team, response));
     } catch (error) {
       errors.push(`${team.clubName || team.id}: ${error.message}`);
     }
@@ -395,7 +457,9 @@ async function captureOnceInternal(eventKey, requestedMatch) {
   const candidates = ownCapture
     ? matches.filter(match => eaMatchId(match) === String(ownCapture.eaMatchId))
     : matches;
-  const selected = selectEaMatch(candidates, lncMatch, linked, excludedIds);
+  const knockout = Object.values(readEventData(eventKey)?.knockout?.rounds || {})
+    .some(round => (round.matches || []).some(match => String(match.id) === String(lncMatch.id)));
+  const selected = selectEaMatch(candidates, lncMatch, linked, excludedIds, { knockout });
   // A previously captured match keeps its identity when filling missing player data.
   if (ownCapture && !selected.match) {
     selected.match = candidates[0] || null;
@@ -427,12 +491,12 @@ async function captureOnceInternal(eventKey, requestedMatch) {
         teamByEaClubId.set(clubIdOf(...opponentEntry), String(opponentTeam.id));
       }
     }
-    persistMatch(eventKey, lncMatch, merged, teamByEaClubId);
+    persistMatch(eventKey, lncMatch, merged, teamByEaClubId, selected.decisionMatchId || ownCapture?.decisionMatchId);
     const rows = (readEventData(eventKey)?.ceremony?.teamOfTheTournament?.performances || [])
       .filter(row => String(row.lncMatchId) === String(lncMatch.id));
     const missingTeams = teams.filter(team => !rows.some(row => String(row.teamId) === String(team.id)));
     if (!missingTeams.length && rows.length) {
-      return { captured: true, candidate: merged, rows, linked, fallback: selected.fallback };
+      return { captured: true, candidate: merged, rows, linked, fallback: selected.fallback, decisionMatchId: selected.decisionMatchId || ownCapture?.decisionMatchId };
     }
     return { captured: false, reason: rows.length ? 'partial_player_data' : 'no_player_data',
       detail: `EA-Spiel ${eaMatchId(merged)} gefunden. Keine verwertbaren Spielerwerte für: ${missingTeams.map(team => team.clubName || team.id).join(', ')}. Vorhandene Werte bleiben gespeichert.`, linked };
@@ -443,8 +507,10 @@ async function captureOnceInternal(eventKey, requestedMatch) {
       `Unterschiedliche EA-Match-IDs insgesamt: ${new Set(matches.map(eaMatchId)).size} (nicht die Anzahl passender Begegnungen).`,
       `Mit passenden Club-IDs: ${new Set(matches.filter(match => matchContainsClubs(match, teamByEaClubId)).map(eaMatchId)).size}.`,
       `Meldezeit: ${confirmedTimestampMs(lncMatch) ? new Date(confirmedTimestampMs(lncMatch)).toISOString() : 'fehlt'}; Zeitfenster ±10 Minuten (bei passendem Ergebnis bis 30 Minuten davor).`,
-      selected.reason === 'ambiguous_recent_matches' ? 'Mehrere passende Begegnungen im Zeitfenster; keine unsichere Zuordnung.'
+      selected.reason === 'decision_needs_review' ? 'Abbruch/Entscheidungsspiel gefunden, aber kein eindeutiges vollständiges Hauptspiel. Manuelle Prüfung erforderlich.'
+        : selected.reason === 'ambiguous_recent_matches' ? 'Mehrere passende Begegnungen im Zeitfenster; keine unsichere Zuordnung.'
         : 'Kein unverbrauchtes Spiel mit passenden Club-IDs im Zeitfenster gefunden.',
+      candidateDiagnostics(matches, lncMatch, linked, excludedIds),
       ...errors,
     ].join('\n'), linked };
 
@@ -464,7 +530,8 @@ function scheduleRatingCapture(eventKey, lncMatch) {
         for (const row of result.rows || []) counts.set(row.teamId, (counts.get(row.teamId) || 0) + 1);
         const details = [lncMatch?.home?.teamId, lncMatch?.away?.teamId]
           .map(teamId => `${teamName(teamId)}: **${counts.get(String(teamId)) || 0} Spielerwerte**`).join('\n');
-        const fallbackWarning = result.fallback ? ['', '⚠️ **ERGEBNISABWEICHUNG – FALLBACK VERWENDET**',
+        const fallbackWarning = result.decisionMatchId ? ['', '**ENTSCHEIDUNGSSPIEL ERKANNT**',
+          `EA ${result.decisionMatchId}: Abbruch nach dem Unentschieden. Nur Spielerwerte aus dem Hauptspiel werden gewertet.`] : result.fallback ? ['', '⚠️ **ERGEBNISABWEICHUNG – FALLBACK VERWENDET**',
           `Night Cup eingetragen: **${lncMatch.result.homeGoals}:${lncMatch.result.awayGoals}**`,
           `EA Match-Ergebnis: **${eaScore(result.candidate).join(':')}**`,
           'Hinterlegte EA-Club-ID(s) + Zeitfenster passen; genau **eine** aktuelle Begegnung gefunden. EA-Spielerwerte werden unverändert übernommen.'] : [];

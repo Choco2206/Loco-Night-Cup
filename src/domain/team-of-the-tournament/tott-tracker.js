@@ -21,7 +21,23 @@ async function sendTracker(content) {
   if (!content) return false;
   const channel = await getTrackerChannel();
   if (!channel?.send) return false;
-  await channel.send({ content, allowedMentions: { parse: [] } }).catch(() => null);
+  // Diagnostics include candidate identities and can exceed Discord's limit.
+  const chunks = [];
+  let remaining = String(content);
+  while (remaining.length > 1900) {
+    const boundary = remaining.lastIndexOf('\n', 1900);
+    const end = boundary > 0 ? boundary : 1900;
+    chunks.push(remaining.slice(0, end));
+    remaining = remaining.slice(end).replace(/^\n/, '');
+  }
+  if (remaining) chunks.push(remaining);
+  for (const chunk of chunks) {
+    try { await channel.send({ content: chunk, allowedMentions: { parse: [] } }); }
+    catch (error) {
+      console.warn(`[tott-tracker] Nachricht konnte nicht gesendet werden: ${error.message}`);
+      return false;
+    }
+  }
   return true;
 }
 
