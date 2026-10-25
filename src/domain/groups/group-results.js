@@ -327,6 +327,9 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
     if (!match || !isAdminScorableMatch(match)) throw new Error('Spiel wurde nicht gefunden.');
 
     const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
+    const eaReferenceAt = match.result?.eaReferenceAt
+      || match.reports?.[0]?.submittedAt || match.confirmation?.startedAt
+      || match.result?.confirmedAt || nowIso();
     match.reports = [];
     match.confirmation = null;
     match.result = {
@@ -334,6 +337,7 @@ function setAdminResult({ eventKey, groupKey, matchId, adminUserId, homeGoals, a
       awayGoals: parsedAway,
       confirmedAt: nowIso(),
       source: 'admin',
+      eaReferenceAt,
       adminUserId: String(adminUserId),
       matchPlayed: Boolean(matchPlayed),
     };

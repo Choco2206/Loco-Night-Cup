@@ -165,3 +165,18 @@ test('rejects a drawn score for a forfeited group match', () => {
     homeGoals: '0', awayGoals: '0', matchPlayed: false,
   }), /braucht einen Sieger/);
 });
+
+test('admin correction preserves the original auto-zero time for EA lookup', () => {
+  const originalTime = '2026-10-25T20:00:00.000Z';
+  const match = { id: 'corrected', matchday: 1, status: 'confirmed',
+    home: participant('home'), away: participant('away'), reports: [],
+    result: { homeGoals: 0, awayGoals: 0, source: 'slot_timeout_0_0', confirmedAt: originalTime } };
+  const group = { groupKey: 'A', slots: [match.home, match.away], matchdays: [{ matches: [match] }], standings: [] };
+  storedEvent = { groups: { status: 'created', groups: { A: group } }, meta: {} };
+  for (const matchPlayed of [true, false, true]) {
+    const outcome = groupResults.setAdminResult({ eventKey: 'monday', groupKey: 'A', matchId: match.id,
+      adminUserId: 'admin', homeGoals: '3', awayGoals: '0', matchPlayed });
+    assert.equal(outcome.match.result.eaReferenceAt, originalTime);
+    assert.equal(outcome.match.result.matchPlayed, matchPlayed);
+  }
+});

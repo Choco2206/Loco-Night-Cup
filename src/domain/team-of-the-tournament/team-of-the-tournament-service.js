@@ -49,7 +49,8 @@ function isRealEaMatch(lncMatch) {
 
 function requiresEaCapture(lncMatch) {
   return isRealEaMatch(lncMatch) && lncMatch?.result?.matchPlayed !== false
-    && lncMatch?.result?.source !== 'admin';
+    && !['slot_timeout_0_0', 'matchday_timeout_0_0'].includes(lncMatch?.result?.source)
+    && (lncMatch?.result?.source !== 'admin' || lncMatch.result.matchPlayed === true);
 }
 
 function eaMatchId(match) {
@@ -85,6 +86,7 @@ function matchTimestampMs(match) {
 
 function confirmedTimestampMs(lncMatch) {
   const candidates = [
+    lncMatch?.result?.eaReferenceAt,
     ...(lncMatch?.reports || []).map(report => report?.submittedAt),
     lncMatch?.confirmation?.startedAt,
     lncMatch?.result?.confirmedAt,
@@ -399,7 +401,8 @@ function persistMatch(eventKey, lncMatch, eaMatch, teamByEaClubId, decisionMatch
       .map(row => `${row.teamId}:${row.playerId}`));
     const newRows = rows.filter(row => !existing.has(`${row.teamId}:${row.playerId}`));
     state.performances.push(...newRows);
-    if (!state.capturedMatches.some(entry => String(entry.lncMatchId) === String(lncMatch.id))) state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), decisionMatchId, capturedAt: new Date().toISOString() });
+    if (!state.capturedMatches.some(entry => String(entry.lncMatchId) === String(lncMatch.id)
+      && String(entry.eaMatchId) === eaMatchId(eaMatch))) state.capturedMatches.push({ lncMatchId: String(lncMatch.id), eaMatchId: eaMatchId(eaMatch), decisionMatchId, capturedAt: new Date().toISOString() });
     state.selection = buildSelection(state.performances, tottOpportunityMatches(event)); state.updatedAt = new Date().toISOString();
     event.ceremony.teamOfTheTournament = state; storedRows = rows; stored = true; return event;
   });
@@ -462,7 +465,44 @@ async function captureOnceInternal(eventKey, requestedMatch) {
   const selected = selectEaMatch(candidates, lncMatch, linked, excludedIds, { knockout });
   // A previously captured match keeps its identity when filling missing player data.
   if (ownCapture && !selected.match) {
-    selected.match = candidates[0] || null;
+    selected.match = candidates.find(match => matchContainsClubs(match, teamByEaClubId)) || null;
+  }
+  // Prefer the joint fixture. If an opponent's link is stale, identify each
+  // linked team's own game independently, requiring its oriented score as well
+  // as time. Never assign the unknown opponent to a team with a conflicting link.
+  if (!selected.match) {
+    let candidate = matches.find(match => (state.capturedMatches || []).some(entry =>
+      String(entry.lncMatchId) === String(lncMatch.id) && String(entry.eaMatchId) === eaMatchId(match))) || null;
+    for (const team of linked) {
+      const existingRows = (readEventData(eventKey)?.ceremony?.teamOfTheTournament?.performances || [])
+        .filter(row => String(row.lncMatchId) === String(lncMatch.id) && String(row.teamId) === String(team.id));
+      if (existingRows.length) continue;
+      const ownCandidates = matches.filter(match => (!knockout || !hasDnf(match))
+        && linkedTeamScoreMatches(match, lncMatch, team, team.eaClub.clubId));
+      const ownSelected = selectEaMatch(ownCandidates, lncMatch, [team], excludedIds);
+      if (!ownSelected.match) continue;
+      const latest = allEventMatches(readEventData(eventKey)).find(match => String(match.id) === String(lncMatch.id));
+      if (latest && (latest.status !== 'confirmed' || !requiresEaCapture(latest)
+        || JSON.stringify(latest.result) !== JSON.stringify(lncMatch.result))) {
+        return { captured: false, reason: 'result_changed' };
+      }
+      const merged = { ...ownSelected.match, players: {} };
+      for (const match of matches.filter(entry => eaMatchId(entry) === eaMatchId(merged))) {
+        for (const [clubId, players] of Object.entries(match.players || {})) {
+          merged.players[clubId] = { ...(merged.players[clubId] || {}), ...players };
+        }
+      }
+      persistMatch(eventKey, lncMatch, merged, new Map([[String(team.eaClub.clubId), String(team.id)]]));
+      candidate = merged;
+    }
+    const rows = (readEventData(eventKey)?.ceremony?.teamOfTheTournament?.performances || [])
+      .filter(row => String(row.lncMatchId) === String(lncMatch.id));
+    if (rows.length) {
+      const missing = linked.filter(team => !rows.some(row => String(row.teamId) === String(team.id)));
+      return { captured: !missing.length, reason: 'partial_player_data', candidate, rows, linked,
+        detail: [`Spielerwerte einzeln gespeichert. Noch fehlend: ${missing.map(team => team.clubName || team.id).join(', ') || 'keine'}.`,
+          ...queries, candidateDiagnostics(matches, lncMatch, linked, excludedIds), ...errors].join('\n') };
+    }
   }
   if (selected.match) {
     const latest = allEventMatches(readEventData(eventKey))

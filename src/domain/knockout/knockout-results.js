@@ -317,6 +317,9 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
     if (!match || !isRealMatch(match)) throw new Error('K.O.-Spiel wurde nicht gefunden.');
 
     const confirmationNotice = match.confirmation ? { ...match.confirmation } : null;
+    const eaReferenceAt = match.result?.eaReferenceAt
+      || match.reports?.[0]?.submittedAt || match.confirmation?.startedAt
+      || match.result?.confirmedAt || nowIso();
     match.reports = [];
     match.confirmation = null;
     match.adminDecision = {
@@ -330,6 +333,7 @@ function setAdminResult({ eventKey, roundKey, matchId, adminUserId, homeGoals, a
       actorUserId: adminUserId,
       matchPlayed,
     });
+    match.result.eaReferenceAt = eaReferenceAt;
     event.meta = { ...(event.meta || {}), updatedAt: nowIso() };
     outcome = { event, round, match, status: match.status, completed: event.knockout.status === 'completed', confirmationNotice };
     return event;

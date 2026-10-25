@@ -146,11 +146,11 @@ test('a linked opponent must match its club ID, not only the score and time', ()
   assert.equal(h.api.selectEaMatch([m], h.lnc, h.teams).match, null);
 });
 
-test('admin results of any score are skipped but a normally reported 3:0 is eligible', async () => {
+test('played admin results are eligible, forfeits are skipped regardless of score', async () => {
   const h = setup();
   h.lnc.result = { ...h.lnc.result, source: 'admin', matchPlayed: true };
-  assert.equal((await h.api.captureOnceForTest('test', h.lnc)).reason, 'forfeit');
-  assert.equal(h.calls.length, 0);
+  h.respond({ 101: [match()], 102: [match()] });
+  assert.equal((await h.api.captureOnceForTest('test', h.lnc)).captured, true);
   h.lnc.result = { ...h.lnc.result, source: 'teams', homeGoals: 3, awayGoals: 0 };
   assert.equal(h.api.requiresEaCapture(h.lnc), true);
   h.lnc.result.matchPlayed = false;
@@ -213,4 +213,51 @@ test('failed identity diagnostics show actual EA names, dates, opponent IDs and 
   assert.match(result.detail, /Expected club/);
   assert.match(result.detail, /999/);
   assert.match(result.detail, /Club-IDs passen nicht/);
+});
+
+test('automatic zero draws never request EA, but a played admin correction uses the original time', async () => {
+  for (const source of ['slot_timeout_0_0', 'matchday_timeout_0_0']) {
+    const h = setup();
+    h.lnc.result = { ...h.lnc.result, source, homeGoals: 0, awayGoals: 0 };
+    assert.equal((await h.api.captureOnceForTest('test', h.lnc)).reason, 'forfeit');
+    assert.equal(h.calls.length, 0);
+    h.lnc.result = { ...h.lnc.result, source: 'admin', matchPlayed: true,
+      homeGoals: 1, awayGoals: 5, eaReferenceAt: h.lnc.result.confirmedAt,
+      confirmedAt: '2026-10-16T01:00:00Z' };
+    h.respond({ 101: [match()], 102: [match()] });
+    assert.equal((await h.api.captureOnceForTest('test', h.lnc)).captured, true);
+  }
+});
+test('a non-played admin 3:0 makes no requests', async () => {
+  const h = setup();
+  h.lnc.result = { ...h.lnc.result, source: 'admin', matchPlayed: false, homeGoals: 3, awayGoals: 0 };
+  assert.equal((await h.api.captureOnceForTest('test', h.lnc)).reason, 'forfeit');
+  assert.equal(h.calls.length, 0);
+});
+test('a stale opponent link does not block own stats, and missing team recovers independently', async () => {
+  const h = setup(); const first = match('first');
+  first.clubs[999] = first.clubs[102]; delete first.clubs[102];
+  first.players[999] = first.players[102]; delete first.players[102];
+  h.respond({ 101: [first] });
+  assert.equal((await h.api.captureOnceForTest('test', h.lnc)).reason, 'partial_player_data');
+  assert.equal(h.event.ceremony.teamOfTheTournament.performances.length, 1);
+  assert.equal(h.event.ceremony.teamOfTheTournament.performances[0].teamId, 'a');
+  const second = match('second');
+  second.clubs[888] = second.clubs[101]; delete second.clubs[101];
+  second.players[888] = second.players[101]; delete second.players[101];
+  h.respond({ 101: [first], 102: [second] });
+  assert.equal((await h.api.captureOnceForTest('test', h.lnc)).captured, true);
+  assert.equal(h.event.ceremony.teamOfTheTournament.performances.length, 2);
+  assert.equal(h.event.ceremony.teamOfTheTournament.capturedMatches.length, 2);
+  await h.api.captureOnceForTest('test', h.lnc);
+  assert.equal(h.event.ceremony.teamOfTheTournament.performances.length, 2);
+});
+test('independent lookup rejects wrong scores and ambiguous games', async () => {
+  for (const ambiguous of [false, true]) {
+    const h = setup(); const first = match('first', ambiguous ? '1' : '3', '5');
+    first.clubs[999] = first.clubs[102]; delete first.clubs[102];
+    h.respond({ 101: ambiguous ? [first, { ...first, matchId: 'second' }] : [first] });
+    assert.equal((await h.api.captureOnceForTest('test', h.lnc)).captured, false);
+    assert.equal(h.event.ceremony, undefined);
+  }
 });
