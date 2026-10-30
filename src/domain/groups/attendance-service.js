@@ -34,7 +34,7 @@ function bomberAttendanceCloseAt(event) {
   const eventDate = event.cycle?.eventDate;
   if (!eventDate) return null;
   const halloween = event.eventKey === HALLOWEEN_EVENT_KEY;
-  const date = new Date(`${eventDate}T${halloween ? '20:15' : BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00${halloween ? '+01:00' : '+02:00'}`);
+  const date = new Date(`${eventDate}T${BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME}:00${halloween ? '+01:00' : '+02:00'}`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -91,7 +91,7 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
       `**${present.size}/${teamIds.length} Teams anwesend**`,
       'Bitte drückt auf **Anwesend**, um euer Team einzuchecken.',
       isBomber ? '' : null,
-      isBomber ? `**Die Anwesenheitsabfrage endet um ${halloween ? '20:15' : '20:55'} Uhr.**` : null,
+      isBomber ? `**Die Anwesenheitsabfrage endet um 20:55 Uhr.**` : null,
     ].filter(line => line !== null).join('\n'))
     .setFooter({ text: isBomber ? 'BOMBER X LOCO \u2022 READY FOR KICK-OFF' : 'VM AURA \u2022 LOCO DNA \u2022 READY FOR KICK-OFF' });
   const row = new ActionRowBuilder().addComponents(
