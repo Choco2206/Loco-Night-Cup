@@ -96,7 +96,7 @@ function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
   if (isBomberXLoco(event)) {
     const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
     const drawTime = getDrawAt(eventKey, event, settings, now)?.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
-    const attendanceTime = event.eventKey === HALLOWEEN_EVENT_KEY ? '20:15' : '20:55';
+    const attendanceTime = '20:55';
     return [
       `✅ **${title} findet statt**`, '',
       'Der offizielle Anmeldeschluss ist erreicht. Die Anmeldung ist geschlossen.', '',
@@ -430,6 +430,15 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
   const settings = readSettings();
   const repaired = repairEventCycle(eventKey, settings, now);
   const event = repaired.event;
+  if (eventKey === HALLOWEEN_EVENT_KEY && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE
+      && (repaired.changed || !event.meta?.halloweenTiming2055UpdatedAt)) {
+    await refreshCheckinMessage(eventKey, client);
+    if (event.checkin?.finalStatusMessagePostedAt) await upsertStatusMessage(client, eventKey, buildFinalReadyMessage(eventKey, event, settings, now));
+    updateEventData(eventKey, current => {
+      current.meta = { ...current.meta, halloweenTiming2055UpdatedAt: nowIso(now) };
+      return current;
+    });
+  }
   if (eventKey === 'friday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
     const today = toDateOnly(now) === HALLOWEEN_EVENT_DATE;
     if (repaired.changed || (today && !event.meta?.halloweenTodayNoticeAt)) {
