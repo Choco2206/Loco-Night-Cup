@@ -357,11 +357,13 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     : reserveSerial(eventKey, event?.cycle?.cycleKey || event?.cycle?.eventDate || null);
   const rendered = await renderTeamOfTheTournament({
     selection: state.selection,
+    eventKey,
     serialNumber,
     variant,
   });
   const awardsRendered = await renderSpecialAwards({
     awards: selectSpecialAwards(state.performances),
+    eventKey,
     serialNumber,
     variant,
   });

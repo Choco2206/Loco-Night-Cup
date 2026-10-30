@@ -5,6 +5,7 @@ const path = require('path');
 const DEFAULT_LAYOUT = require('../config/team-of-the-tournament-layout');
 const FC27_LAYOUT = require('../config/team-of-the-tournament-fc27-layout');
 const BOMBER_X_LOCO_LAYOUT = require('../config/bomber-x-loco-tott-layout');
+const HALLOWEEN_LAYOUT = require('../config/bomber-x-loco-halloween-tott-layout');
 const LOCO_ZWERGEN_CUP_LAYOUT = require('../config/loco-zwergen-cup-tott-layout');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
@@ -77,8 +78,10 @@ function orderedPlayers(selection) {
   };
 }
 
-async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'default' }) {
+async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'default', eventKey = null }) {
+  if (eventKey === 'bomber_halloween') variant = 'bomber_halloween';
   const layouts = {
+    bomber_halloween: HALLOWEEN_LAYOUT,
     default: DEFAULT_LAYOUT,
     fc27: FC27_LAYOUT,
     bomber_x_loco: BOMBER_X_LOCO_LAYOUT,
@@ -113,6 +116,7 @@ async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'd
     }, layout.serial.maxFontSize, 32);
   }
   const prefixes = {
+    bomber_halloween: 'bomber-x-loco-halloween-team-of-the-tournament',
     default: 'team-of-the-tournament',
     fc27: 'team-of-the-tournament-fc27',
     bomber_x_loco: 'bomber-x-loco-team-of-the-tournament',
