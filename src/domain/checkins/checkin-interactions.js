@@ -70,6 +70,7 @@ async function handleLeave(interaction, client, eventKey) {
 }
 
 async function handleInteraction(interaction, client) {
+  if (await require('./halloween-replacement-interactions').handleInteraction(interaction, client)) return true;
   if (await handleBomberManualDrawInteraction(interaction, client)) return true;
   if (!interaction.isButton()) return false;
 
