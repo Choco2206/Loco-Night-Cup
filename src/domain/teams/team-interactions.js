@@ -379,6 +379,9 @@ async function handleModal(interaction, client) {
     const [, teamId] = interaction.customId.split(':');
     const newClubName = interaction.fields.getTextInputValue('new_club_name');
     const team = updateTeamName({ teamId, newClubName, actorUserId: interaction.user.id, settings });
+    await refreshCheckinMessages(['bomber_halloween'], client).catch(error => {
+      console.warn('[team-rename] Halloween-Check-in konnte nicht aktualisiert werden:', error.message);
+    });
     await syncTeamNicknames(interaction.guild, team);
     await refreshRegisteredTeamsOverview(client);
     await refreshTeamStreamList(client);
