@@ -9,7 +9,7 @@ const WIDTH = 1536;
 const HEIGHT = 864;
 const BACKGROUNDS = Object.freeze({
   regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png'),
-  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'live-table.png'),
+  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'live-table-v2.jpeg'),
 });
 
 // Individually measured against the current 1536x864 Bomber X Loco live-table template.
@@ -30,6 +30,17 @@ const LAYOUT = Object.freeze({
   lossesX: 1054,
   diffX: 1194,
   pointsX: 1325,
+});
+
+// Independently measured on the 1672 x 941 Halloween table.
+const HALLOWEEN_LAYOUT = Object.freeze({
+  groupLabel: { x: 1200, y: 378, maxWidth: 430 },
+  qualification: { x: 525, y: 378, maxWidth: 690 },
+  rowsY: [487, 543, 598, 653, 709, 764],
+  placeX: 215, logoX: 302, logoSize: 38,
+  teamX: 332, teamMaxWidth: 318,
+  playedX: 728, winsX: 844, drawsX: 988,
+  lossesX: 1148, diffX: 1300, pointsX: 1445,
 });
 
 let canvasApi = null;
@@ -104,7 +115,7 @@ function cleanQualificationText(value) {
   return stripped ? `K.O.-Phase erreicht: ${stripped}` : '';
 }
 
-function drawTopLabels(ctx, groupKey, qualificationText) {
+function drawTopLabels(ctx, groupKey, qualificationText, layout) {
   const groupText = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -114,17 +125,17 @@ function drawTopLabels(ctx, groupKey, qualificationText) {
   ctx.shadowColor = 'rgba(255,140,30,0.55)';
   ctx.shadowBlur = 6;
 
-  fitOxanium(ctx, groupText, LAYOUT.groupLabel.maxWidth, 25, 16, '700');
+  fitOxanium(ctx, groupText, layout.groupLabel.maxWidth, 25, 16, '700');
   ctx.lineWidth = 2;
-  ctx.strokeText(groupText, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
-  ctx.fillText(groupText, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
+  ctx.strokeText(groupText, layout.groupLabel.x, layout.groupLabel.y);
+  ctx.fillText(groupText, layout.groupLabel.x, layout.groupLabel.y);
 
   const qualification = cleanQualificationText(qualificationText);
   if (qualification) {
-    fitOxanium(ctx, qualification, LAYOUT.qualification.maxWidth, 20, 12, '600');
+    fitOxanium(ctx, qualification, layout.qualification.maxWidth, 20, 12, '600');
     ctx.lineWidth = 2;
-    ctx.strokeText(qualification, LAYOUT.qualification.x, LAYOUT.qualification.y);
-    ctx.fillText(qualification, LAYOUT.qualification.x, LAYOUT.qualification.y);
+    ctx.strokeText(qualification, layout.qualification.x, layout.qualification.y);
+    ctx.fillText(qualification, layout.qualification.x, layout.qualification.y);
   }
   ctx.shadowBlur = 0;
 }
@@ -142,11 +153,11 @@ function formatDiff(value) {
   return number > 0 ? `+${number}` : String(number);
 }
 
-async function drawRows(ctx, rows) {
+async function drawRows(ctx, rows, layout) {
   const visible = (rows || []).slice(0, 6);
   for (let index = 0; index < visible.length; index += 1) {
     const row = visible[index];
-    const y = LAYOUT.rowsY[index];
+    const y = layout.rowsY[index];
     const teamName = String(row.name || 'Team').trim();
     const logo = row.isBye ? null : await loadTeamLogo(row);
 
@@ -157,23 +168,23 @@ async function drawRows(ctx, rows) {
 
     setFont(ctx, 29, 'Oxanium', '700');
     ctx.textAlign = 'center';
-    ctx.fillText(String(index + 1), LAYOUT.placeX, y);
+    ctx.fillText(String(index + 1), layout.placeX, y);
 
-    drawLogo(ctx, logo, LAYOUT.logoX, y, LAYOUT.logoSize);
+    drawLogo(ctx, logo, layout.logoX, y, layout.logoSize);
 
-    fitFont(ctx, teamName, LAYOUT.teamMaxWidth, 29, 15);
+    fitFont(ctx, teamName, layout.teamMaxWidth, 29, 15);
     ctx.textAlign = 'left';
-    ctx.fillText(teamName, LAYOUT.teamX, y);
+    ctx.fillText(teamName, layout.teamX, y);
 
     setFont(ctx, 31, 'Odibee Sans', '400');
     ctx.textAlign = 'center';
     const values = [
-      [LAYOUT.playedX, Number(row.played || 0)],
-      [LAYOUT.winsX, Number(row.wins || 0)],
-      [LAYOUT.drawsX, Number(row.draws || 0)],
-      [LAYOUT.lossesX, Number(row.losses || 0)],
-      [LAYOUT.diffX, formatDiff(row.goalDifference)],
-      [LAYOUT.pointsX, Number(row.points || 0)],
+      [layout.playedX, Number(row.played || 0)],
+      [layout.winsX, Number(row.wins || 0)],
+      [layout.drawsX, Number(row.draws || 0)],
+      [layout.lossesX, Number(row.losses || 0)],
+      [layout.diffX, formatDiff(row.goalDifference)],
+      [layout.pointsX, Number(row.points || 0)],
     ];
     for (const [x, value] of values) ctx.fillText(String(value), x, y);
   }
@@ -184,12 +195,16 @@ async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualification
   ensureFonts();
   const { createCanvas } = getCanvasApi();
   const background = await loadBackground(eventKey);
-  const canvas = createCanvas(WIDTH, HEIGHT);
+  const halloween = eventKey === 'bomber_halloween';
+  const layout = halloween ? HALLOWEEN_LAYOUT : LAYOUT;
+  const width = halloween ? 1672 : WIDTH;
+  const height = halloween ? 941 : HEIGHT;
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
-  drawTopLabels(ctx, groupKey, qualificationText);
-  await drawRows(ctx, rows);
+  ctx.drawImage(background, 0, 0, width, height);
+  drawTopLabels(ctx, groupKey, qualificationText, layout);
+  await drawRows(ctx, rows, layout);
   return canvas.toBuffer('image/png');
 }
 
-module.exports = { BOMBER_X_LOCO_TABLE_LAYOUT: LAYOUT, generateBomberXLocoLiveTableImage };
+module.exports = { BOMBER_X_LOCO_TABLE_LAYOUT: LAYOUT, BOMBER_X_LOCO_HALLOWEEN_TABLE_LAYOUT: HALLOWEEN_LAYOUT, generateBomberXLocoLiveTableImage };

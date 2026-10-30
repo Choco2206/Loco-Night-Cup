@@ -17,6 +17,7 @@ const {
 } = require('../teams/team-achievements');
 const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
+const halloweenLayout = require('../../../config/bomber-x-loco-halloween-ceremony-layout');
 const ceremonyLayout = require('../../../config/bomber-x-loco-ceremony-layout');
 
 const TEMPLATE_PATH = path.join(ROOT_DIR, 'assets', 'bomber-x-loco', 'ceremony.png');
@@ -68,20 +69,24 @@ async function logoOverlay(team, slot, scaleX, scaleY) {
   };
 }
 
-async function renderBomberXLocoCeremonyImage({ teams }) {
-  if (!fs.existsSync(TEMPLATE_PATH)) throw new Error('Bomber X Loco Siegerehrungsbild wurde nicht gefunden.');
-  const meta = await sharp(TEMPLATE_PATH).metadata();
-  const width = Number(meta.width || REFERENCE.width);
-  const height = Number(meta.height || REFERENCE.height);
-  const scaleX = width / REFERENCE.width;
-  const scaleY = height / REFERENCE.height;
+async function renderBomberXLocoCeremonyImage({ teams, eventKey = null }) {
+  const layout = eventKey === 'bomber_halloween' ? halloweenLayout : ceremonyLayout;
+  const templatePath = eventKey === 'bomber_halloween' ? path.resolve(ROOT_DIR, layout.template) : TEMPLATE_PATH;
+  const reference = layout.reference;
+  const slots = layout.placements;
+  if (!fs.existsSync(templatePath)) throw new Error('Bomber X Loco Siegerehrungsbild wurde nicht gefunden.');
+  const meta = await sharp(templatePath).metadata();
+  const width = Number(meta.width || reference.width);
+  const height = Number(meta.height || reference.height);
+  const scaleX = width / reference.width;
+  const scaleY = height / reference.height;
   const overlays = (await Promise.all([
-    logoOverlay(teams.first, LOGO_SLOTS.first, scaleX, scaleY),
-    logoOverlay(teams.second, LOGO_SLOTS.second, scaleX, scaleY),
-    logoOverlay(teams.third, LOGO_SLOTS.third, scaleX, scaleY),
+    logoOverlay(teams.first, slots.first, scaleX, scaleY),
+    logoOverlay(teams.second, slots.second, scaleX, scaleY),
+    logoOverlay(teams.third, slots.third, scaleX, scaleY),
   ])).filter(Boolean);
-  const buffer = await sharp(TEMPLATE_PATH).composite(overlays).png().toBuffer();
-  return { buffer, width, height, slots: LOGO_SLOTS };
+  const buffer = await sharp(templatePath).composite(overlays).png().toBuffer();
+  return { buffer, width, height, slots };
 }
 
 function teamPings(team) {
@@ -209,7 +214,7 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   const achievements = applyTeamAchievementsForEvent(eventKey);
   const eventWithAchievements = readEventData(eventKey);
   const promotion = getPromotion(eventWithAchievements, teams);
-  const image = await renderBomberXLocoCeremonyImage({ teams });
+  const image = await renderBomberXLocoCeremonyImage({ teams, eventKey });
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
 

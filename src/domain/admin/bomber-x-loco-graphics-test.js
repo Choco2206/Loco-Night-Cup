@@ -242,8 +242,8 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
 
   const podium = cycleTeams(teams, 3);
   const ceremonyTeams = { first: podium[0], second: podium[1], third: podium[2] };
-  const ceremonyImage = await renderPreview('ceremony', { teams: ceremonyTeams });
-  messageIds.push(await sendImage(channel, halloween ? 'Siegerehrung • bestehende Bomber-X-Loco-Vorlage' : 'Siegerehrung • Bild', ceremonyImage, 'bomber-x-loco-test-ceremony.png'));
+  const ceremonyImage = await renderPreview('ceremony', { teams: ceremonyTeams, eventKey });
+  messageIds.push(await sendImage(channel, halloween ? 'Halloween-Siegerehrung • Bild' : 'Siegerehrung • Bild', ceremonyImage, 'bomber-x-loco-test-ceremony.png'));
 
   const ceremonyText = buildBomberXLocoCeremonyText({
     teams: ceremonyTeams,
