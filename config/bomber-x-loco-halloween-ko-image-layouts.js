@@ -40,6 +40,9 @@ function measuredRound(template, centers, { homeLogoX, homeNameX, homeNameWidth,
 }
 
 module.exports = Object.freeze({
+  third_place: measuredRound('third-place.jpeg',
+    [1268],
+    { homeLogoX: 108, homeNameX: 278, homeNameWidth: 260, awayLogoX: 932, awayNameX: 756, awayNameWidth: 272, logoSize: 64, fontSize: 28 }),
   round_of_16: measuredRound('round-of-16.jpeg',
     [600, 708, 816, 924, 1036, 1148, 1262, 1372],
     { homeLogoX: 112, homeNameX: 282, homeNameWidth: 264, awayLogoX: 944, awayNameX: 764, awayNameWidth: 284, logoSize: 44, fontSize: 24 }),
