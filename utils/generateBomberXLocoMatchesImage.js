@@ -11,7 +11,7 @@ const WIDTH = 1024;
 const HEIGHT = 1535;
 const BACKGROUNDS = Object.freeze({
   regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png'),
-  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches-v3.png'),
+  halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches-v4.jpeg'),
 });
 
 // Five matchdays, three matches per matchday. Every coordinate below belongs
@@ -41,26 +41,26 @@ const LAYOUT = Object.freeze({
   logoSize: 30,
 });
 
-// Measured against the Halloween artwork (1024 x 1535). The group cartouche
-// and all 15 pennants are separate from the regular cup's geometry.
+// Measured independently on the replacement 1024 x 1536 Halloween template.
+// Five sections, exactly three rows each; the group label sits beside Spieltag 1.
 const HALLOWEEN_LAYOUT = Object.freeze({
-  title: { x: 512, y: 563, maxWidth: 180 },
+  title: { x: 810, y: 472, maxWidth: 180 },
   matchRowsY: Object.freeze([
-    Object.freeze([668, 705, 742]),
-    Object.freeze([842, 879, 916]),
-    Object.freeze([1016, 1053, 1090]),
-    Object.freeze([1190, 1227, 1264]),
-    Object.freeze([1364, 1401, 1438]),
+    Object.freeze([518, 566, 612]),
+    Object.freeze([718, 764, 810]),
+    Object.freeze([918, 966, 1012]),
+    Object.freeze([1128, 1176, 1224]),
+    Object.freeze([1334, 1380, 1428]),
   ]),
-  homeLogoX: 122,
-  homeNameX: 275,
-  homeNameMaxWidth: 260,
+  homeLogoX: 134,
+  homeNameX: 306,
+  homeNameMaxWidth: 282,
   scoreX: 512,
-  scoreMaxWidth: 86,
-  awayNameX: 749,
-  awayNameMaxWidth: 260,
-  awayLogoX: 902,
-  logoSize: 26,
+  scoreMaxWidth: 44,
+  awayNameX: 716,
+  awayNameMaxWidth: 280,
+  awayLogoX: 890,
+  logoSize: 28,
 });
 
 let canvasApi = null;
@@ -203,9 +203,10 @@ async function drawMatch(ctx, match, y, layout) {
 async function generateBomberXLocoMatchesImage({ group }) {
   const background = await loadBackground(group.eventKey);
   const { createCanvas } = getCanvasApi();
-  const canvas = createCanvas(WIDTH, HEIGHT);
+  const height = group.eventKey === 'bomber_halloween' ? 1536 : HEIGHT;
+  const canvas = createCanvas(WIDTH, height);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
+  ctx.drawImage(background, 0, 0, WIDTH, height);
   const layout = group.eventKey === 'bomber_halloween' ? HALLOWEEN_LAYOUT : LAYOUT;
   drawTitle(ctx, group.groupKey, layout);
 
@@ -223,7 +224,7 @@ async function generateBomberXLocoMatchesImage({ group }) {
     buffer: canvas.toBuffer('image/png'),
     fileName: `bomber-x-loco-matches-${String(group.groupKey || 'group').toLowerCase()}.png`,
     width: WIDTH,
-    height: HEIGHT,
+    height,
   };
 }
 
