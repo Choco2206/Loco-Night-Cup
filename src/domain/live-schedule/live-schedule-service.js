@@ -92,7 +92,7 @@ function headerPayload(event, phase) {
     `📊 ${label} • Live-Spielplan`,
     `🏆 Turnierformat: ${size}`,
     '',
-    qualification ? (qualification.includes('jeder Gruppe') ? qualification : qualification.replace(/Platz 1(?: & 2| bis \d+)?/, 'qualification ? qualification.replace(/(Platz 1(?: & 2| bis \d+)?)(?!\d)(?! jeder Gruppe)/, '$1 jeder Gruppe') : null, jeder Gruppe')) : null,
+    qualification ? (qualification.includes('jeder Gruppe') ? qualification : qualification.replace(/Platz 1(?: & 2| bis \d+)?/, place => `${place} jeder Gruppe`)) : null,
     /beste[nr]? /i.test(qualification) ? 'Die besten weiteren Platzierten werden über alle Gruppen verglichen.' : null,
   ].filter(line => line !== null).join('\n'), allowedMentions: { parse: [] } };
 }
