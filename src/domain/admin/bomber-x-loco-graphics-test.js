@@ -1,7 +1,8 @@
 'use strict';
 
 const path = require('path');
-const { ROOT_DIR } = require('../../storage');
+const { ROOT_DIR, FILES, readJson, updateJson } = require('../../storage');
+const { createMessagesDefault } = require('../../storage/defaults');
 const { renderGraphicsTestImage } = require('./graphics-test-render');
 const { AttachmentBuilder } = require('discord.js');
 const { listVisibleTeams } = require('../teams/team-service');
@@ -144,10 +145,39 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
   const eventKey = halloween ? 'bomber_halloween' : 'bomber_x_loco_graphics_test';
   const eventId = halloween ? 'bomber_halloween_2026-10-30' : BOMBER_X_LOCO_TEST_EVENT_ID;
   if (!guild) throw new Error('Bomber-X-Loco-Grafiktest ist nur auf dem Server nutzbar.');
-  const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
+  let channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
   if (!channel?.isTextBased?.() || !channel?.send) {
     throw new Error(`Admin-Testkanal nicht gefunden: ${HALL_OF_FAME_TEST_CHANNEL_ID}`);
   }
+
+  // Keep one preview set per test type; retries update the same messages.
+  const targetChannel = channel;
+  const previewKey = halloween ? 'halloween' : 'bomber_x_loco';
+  let previewIndex = 0;
+  channel = {
+    id: targetChannel.id,
+    async send(payload) {
+      const index = previewIndex++;
+      const state = readJson(FILES.messages, createMessagesDefault()).graphicsTests?.[previewKey];
+      const previousId = state?.channelId === targetChannel.id ? state.messageIds?.[index] : null;
+      const previous = previousId
+        ? await targetChannel.messages.fetch(previousId).catch(() => null) : null;
+      const message = previous
+        ? await previous.edit({ ...payload, attachments: [] })
+        : await targetChannel.send(payload);
+      updateJson(FILES.messages, createMessagesDefault(), messages => {
+        messages.graphicsTests = messages.graphicsTests || {};
+        const entry = messages.graphicsTests[previewKey] || {};
+        if (entry.channelId !== targetChannel.id) entry.messageIds = [];
+        entry.channelId = targetChannel.id;
+        entry.messageIds = entry.messageIds || [];
+        entry.messageIds[index] = message.id;
+        messages.graphicsTests[previewKey] = entry;
+        return messages;
+      });
+      return message;
+    },
+  };
 
   const teams = availableTeams();
   const messageIds = [];
