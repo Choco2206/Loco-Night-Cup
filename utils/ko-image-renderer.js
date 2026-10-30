@@ -64,8 +64,8 @@ function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
 function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
-  if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
-  else if (options.eventId === 'bomber_halloween_2026-10-30' && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
+  if (options.eventId === 'bomber_halloween_2026-10-30' && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
+  else if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
   else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
   else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;
   const layout = layouts[key];
