@@ -39,8 +39,8 @@ function isBomberXLocoEvent(event) {
 function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE, eventKey = BOMBER_X_LOCO_EVENT_KEY) {
   const halloween = eventKey === HALLOWEEN_EVENT_KEY;
   const offset = halloween ? '+01:00' : '+02:00';
-  const drawTime = halloween ? '19:00' : BOMBER_X_LOCO_DRAW_TIME;
-  const attendanceTime = halloween ? '20:15' : BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME;
+  const drawTime = BOMBER_X_LOCO_DRAW_TIME;
+  const attendanceTime = BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME;
   const resetDate = new Date(`${eventDate}T07:00:00${offset}`);
   resetDate.setUTCDate(resetDate.getUTCDate() + 1);
   return {
