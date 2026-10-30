@@ -28,7 +28,7 @@ test('Halloween runs alongside normal Fridays with its own six-team format and B
   assert.deepEqual(halloween.format.allowedSizes, [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]);
   assert.deepEqual(validateEvent(halloween, 'bomber_halloween'), []);
   assert.equal(halloween.schedule.deadlineAt, '2026-10-30T17:30:00.000Z');
-  assert.equal(halloween.schedule.drawAt, '2026-10-30T18:00:00.000Z');
+  assert.equal(halloween.schedule.drawAt, '2026-10-30T19:00:00.000Z');
   assert.equal(halloween.schedule.tournamentStartAt, '2026-10-30T20:00:00.000Z');
   assert.equal(halloween.schedule.resetAt, '2026-10-31T06:00:00.000Z');
   assert.equal(getCheckinWindowState('bomber_halloween', halloween, settings, now).canJoin, true);
