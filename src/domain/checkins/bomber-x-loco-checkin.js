@@ -5,7 +5,7 @@ const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { ROOT_DIR } = require('../../storage');
 const { findTeamById } = require('../teams/team-service');
-const { premiumLabel } = require('../premium/premium-store');
+const { premiumLabel, sortPremiumEntries } = require('../premium/premium-store');
 const {
   BOMBER_X_LOCO_CHECKIN_CHANNEL_ID,
   BOMBER_X_LOCO_EVENT_KEY,
@@ -50,6 +50,13 @@ function formatSeparator(size) {
   return `══════⬆️ ${size}er Turnier ⬆️══════`;
 }
 
+// Sort only display copies, after determining membership from the locked event.
+function sortDisplayIds(event, ids) {
+  const entries = new Map((event.checkin?.entries || []).map(entry => [String(entry.teamId), entry]));
+  return sortPremiumEntries(ids.map(teamId => entries.get(String(teamId)) || { teamId }), findTeamById)
+    .map(entry => String(entry.teamId));
+}
+
 function formatTeams(event) {
   const ids = getEntryTeamIds(event);
   const waitlistIds = getWaitlistIds(event);
@@ -60,9 +67,9 @@ function formatTeams(event) {
     Math.max(0, MAX_PARTICIPANTS - activeIds.length),
   );
   const labels = [
-    ...activeIds.map(teamName),
-    ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos ${index + 1}` : 'Freilos'),
+    ...sortDisplayIds(event, activeIds).map(teamName),
     ...waitlistIds.map(teamId => `${teamName(teamId)} (WL)`),
+    ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos ${index + 1}` : 'Freilos'),
   ];
   const lines = [];
   for (let index = 0; index < MAX_PARTICIPANTS; index += 1) {
