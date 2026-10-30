@@ -1,6 +1,7 @@
 'use strict';
 require('./group-knockout-format.test');
 require('./premium.test');
+require('./bomber-premium-display.test');
 
 require('./live-schedule-cleanup.test');
 
