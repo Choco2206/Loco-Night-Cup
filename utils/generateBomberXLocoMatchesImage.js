@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const sharp = require('sharp');
 const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
@@ -79,7 +80,17 @@ function setFont(ctx, size, family, weight = '400') {
 function loadBackground(eventKey) {
   const variant = eventKey === 'bomber_halloween' ? 'halloween' : 'regular';
   if (!backgroundPromises.has(variant)) {
-    const promise = getCanvasApi().loadImage(BACKGROUNDS[variant]).catch(error => {
+    const promise = (async () => {
+      const source = BACKGROUNDS[variant];
+      try {
+        // Decode fully before handing PNG data to Cairo, whose error can
+        // misleadingly report corrupt IDAT chunks as an allocation failure.
+        const normalized = await sharp(source, { failOn: 'warning' }).png().toBuffer();
+        return await getCanvasApi().loadImage(normalized);
+      } catch (error) {
+        throw new Error(`Spielplan-Vorlage ${path.basename(source)} kann nicht gelesen werden: ${error.message}`);
+      }
+    })().catch(error => {
       backgroundPromises.delete(variant);
       throw error;
     });

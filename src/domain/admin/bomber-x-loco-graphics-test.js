@@ -119,6 +119,13 @@ function buildKoMatches(teams, matchCount) {
 }
 
 async function sendImage(channel, title, image, fileName) {
+  if (image.renderError) {
+    const message = await channel.send({
+      content: `❌ **${title}** konnte nicht gerendert werden.\n${String(image.renderError).slice(0, 1200)}`,
+      allowedMentions: { parse: [] },
+    });
+    return message.id;
+  }
   const buffer = image.filePath || (Buffer.isBuffer(image) ? image : image.buffer);
   const name = fileName || image.fileName || `bxl-test-${Date.now()}.png`;
   try {
@@ -144,6 +151,15 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
 
   const teams = availableTeams();
   const messageIds = [];
+  const failedImages = [];
+  async function renderPreview(kind, input) {
+    try { return await renderGraphicsTestImage(kind, input); }
+    catch (error) {
+      failedImages.push(kind);
+      console.error(`[graphics-test] ${kind}:`, error);
+      return { renderError: error.message };
+    }
+  }
   const intro = await channel.send({
     content: [
       halloween ? '🎃🧪 **BOMBER X LOCO HALLOWEEN CUP • GRAFIKTEST**' : '🧪 **BOMBER X LOCO • KOMPLETTER GRAFIKTEST**',
@@ -163,7 +179,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
     messageIds.push(checkin.id);
   }
 
-  const liveTable = await renderGraphicsTestImage('table', {
+  const liveTable = await renderPreview('table', {
     eventKey,
     groupKey: 'A',
     rows: buildLiveRows(teams),
@@ -172,7 +188,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
   messageIds.push(await sendImage(channel, 'Live-Tabelle • Gruppe A', liveTable, 'bomber-x-loco-test-live-table.png'));
 
   const group = { ...buildGroup(teams), eventKey };
-  const matches = await renderGraphicsTestImage('matches', { group });
+  const matches = await renderPreview('matches', { group });
   messageIds.push(await sendImage(channel, 'Matches • 5 Spieltage × 3 Begegnungen', matches));
 
   const koRounds = [
@@ -185,7 +201,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
   ];
 
   for (const [phase, count, label] of koRounds) {
-    const image = await renderGraphicsTestImage('ko', {
+    const image = await renderPreview('ko', {
       phase,
       matches: buildKoMatches(teams, count),
       eventId,
@@ -196,7 +212,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
 
   const podium = cycleTeams(teams, 3);
   const ceremonyTeams = { first: podium[0], second: podium[1], third: podium[2] };
-  const ceremonyImage = await renderGraphicsTestImage('ceremony', { teams: ceremonyTeams });
+  const ceremonyImage = await renderPreview('ceremony', { teams: ceremonyTeams });
   messageIds.push(await sendImage(channel, halloween ? 'Siegerehrung • bestehende Bomber-X-Loco-Vorlage' : 'Siegerehrung • Bild', ceremonyImage, 'bomber-x-loco-test-ceremony.png'));
 
   const ceremonyText = buildBomberXLocoCeremonyText({
@@ -216,7 +232,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
   messageIds.push(textMessage.id);
 
   const tottSelection = buildTottSelection(teams);
-  const tottImage = await renderGraphicsTestImage('tott', {
+  const tottImage = await renderPreview('tott', {
     selection: tottSelection,
     eventKey,
     variant: 'bomber_x_loco',
@@ -237,7 +253,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
   }
 
   const awardPlayers = selectSpecialAwards(buildTestPerformances(tottSelection));
-  const awardsImage = await renderGraphicsTestImage('awards', {
+  const awardsImage = await renderPreview('awards', {
     awards: awardPlayers,
     eventKey,
     variant: 'bomber_x_loco',
@@ -249,7 +265,7 @@ async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
     'bomber-x-loco-test-special-awards.png',
   ));
 
-  return { channelId: channel.id, messageIds, teamCount: teams.length };
+  return { channelId: channel.id, messageIds, teamCount: teams.length, failedImages };
 }
 
 let activeGraphicsTest = false;

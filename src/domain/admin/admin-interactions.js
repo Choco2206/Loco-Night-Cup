@@ -349,7 +349,9 @@ async function handleBomberXLocoGraphicsTest(interaction) {
     const result = await postBomberXLocoGraphicsTest({ guild: interaction.guild, halloween });
     await interaction.editReply({
       content: [
-        `✅ ${halloween ? 'Halloween' : 'Bomber-X-Loco'}-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
+        result.failedImages?.length
+          ? `⚠️ Grafiktest in <#${result.channelId}> beendet. Fehlgeschlagene Grafiken: ${result.failedImages.join(', ')}. Die übrigen Vorschauen wurden weiter geprüft.`
+          : `✅ ${halloween ? 'Halloween' : 'Bomber-X-Loco'}-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
         `Verwendete aktive Teams: ${result.teamCount}`,
         `Testposts: ${result.messageIds.length}`,
         'Es wurden keine Turnierdaten, Siege, Statistiken oder Rollen verändert.',
