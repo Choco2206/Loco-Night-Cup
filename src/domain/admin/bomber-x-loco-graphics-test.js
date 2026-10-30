@@ -2,20 +2,15 @@
 
 const path = require('path');
 const { ROOT_DIR } = require('../../storage');
+const { renderGraphicsTestImage } = require('./graphics-test-render');
 const { AttachmentBuilder } = require('discord.js');
 const { listVisibleTeams } = require('../teams/team-service');
 const { createGroupMatchdays } = require('../groups/group-matches');
 const { HALL_OF_FAME_TEST_CHANNEL_ID } = require('../ceremony/ceremony-test-service');
 const {
   buildBomberXLocoCeremonyText,
-  renderBomberXLocoCeremonyImage,
 } = require('../ceremony/bomber-x-loco-ceremony');
-const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
 const { getBomberXLocoQualificationText } = require('../groups/group-embeds');
-const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
-const { renderKoImage } = require('../../../utils/ko-image-renderer');
-const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
-const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
 const {
   buildIntroText,
   buildTestPerformances,
@@ -124,17 +119,21 @@ function buildKoMatches(teams, matchCount) {
 }
 
 async function sendImage(channel, title, image, fileName) {
-  const buffer = Buffer.isBuffer(image) ? image : image.buffer;
+  const buffer = image.filePath || (Buffer.isBuffer(image) ? image : image.buffer);
   const name = fileName || image.fileName || `bxl-test-${Date.now()}.png`;
+  try {
   const message = await channel.send({
     content: `🧪 **${title}**`,
     files: [new AttachmentBuilder(buffer, { name })],
     allowedMentions: { parse: [] },
   });
   return message.id;
+  } finally {
+    if (image.cleanup) await image.cleanup();
+  }
 }
 
-async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
+async function runBomberXLocoGraphicsTest({ guild, halloween = false }) {
   const eventKey = halloween ? 'bomber_halloween' : 'bomber_x_loco_graphics_test';
   const eventId = halloween ? 'bomber_halloween_2026-10-30' : BOMBER_X_LOCO_TEST_EVENT_ID;
   if (!guild) throw new Error('Bomber-X-Loco-Grafiktest ist nur auf dem Server nutzbar.');
@@ -164,7 +163,7 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
     messageIds.push(checkin.id);
   }
 
-  const liveTable = await generateBomberXLocoLiveTableImage({
+  const liveTable = await renderGraphicsTestImage('table', {
     eventKey,
     groupKey: 'A',
     rows: buildLiveRows(teams),
@@ -173,7 +172,7 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
   messageIds.push(await sendImage(channel, 'Live-Tabelle • Gruppe A', liveTable, 'bomber-x-loco-test-live-table.png'));
 
   const group = { ...buildGroup(teams), eventKey };
-  const matches = await generateBomberXLocoMatchesImage({ group });
+  const matches = await renderGraphicsTestImage('matches', { group });
   messageIds.push(await sendImage(channel, 'Matches • 5 Spieltage × 3 Begegnungen', matches));
 
   const koRounds = [
@@ -186,7 +185,7 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
   ];
 
   for (const [phase, count, label] of koRounds) {
-    const image = await renderKoImage({
+    const image = await renderGraphicsTestImage('ko', {
       phase,
       matches: buildKoMatches(teams, count),
       eventId,
@@ -197,7 +196,7 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
 
   const podium = cycleTeams(teams, 3);
   const ceremonyTeams = { first: podium[0], second: podium[1], third: podium[2] };
-  const ceremonyImage = await renderBomberXLocoCeremonyImage({ teams: ceremonyTeams });
+  const ceremonyImage = await renderGraphicsTestImage('ceremony', { teams: ceremonyTeams });
   messageIds.push(await sendImage(channel, halloween ? 'Siegerehrung • bestehende Bomber-X-Loco-Vorlage' : 'Siegerehrung • Bild', ceremonyImage, 'bomber-x-loco-test-ceremony.png'));
 
   const ceremonyText = buildBomberXLocoCeremonyText({
@@ -217,7 +216,7 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
   messageIds.push(textMessage.id);
 
   const tottSelection = buildTottSelection(teams);
-  const tottImage = await renderTeamOfTheTournament({
+  const tottImage = await renderGraphicsTestImage('tott', {
     selection: tottSelection,
     eventKey,
     variant: 'bomber_x_loco',
@@ -238,7 +237,7 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
   }
 
   const awardPlayers = selectSpecialAwards(buildTestPerformances(tottSelection));
-  const awardsImage = await renderSpecialAwards({
+  const awardsImage = await renderGraphicsTestImage('awards', {
     awards: awardPlayers,
     eventKey,
     variant: 'bomber_x_loco',
@@ -251,6 +250,18 @@ async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
   ));
 
   return { channelId: channel.id, messageIds, teamCount: teams.length };
+}
+
+let activeGraphicsTest = false;
+
+async function postBomberXLocoGraphicsTest(input) {
+  if (activeGraphicsTest) throw new Error('Ein Bomber-X-Loco-/Halloween-Grafiktest läuft bereits. Bitte warte, bis er fertig ist.');
+  activeGraphicsTest = true;
+  try {
+    return await runBomberXLocoGraphicsTest(input);
+  } finally {
+    activeGraphicsTest = false;
+  }
 }
 
 module.exports = { buildTottSelection, postBomberXLocoGraphicsTest };
