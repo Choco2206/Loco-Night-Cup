@@ -268,7 +268,9 @@ async function handleTeamResultSelect(interaction, eventKey, roundKey) {
   if (!entry) throw new Error('Dieses K.O.-Spiel ist für dich nicht meldbar.');
 
   await interaction.showModal(createScoreModal({
-    customId: `ko_result_modal:${eventKey}:${roundKey}:${matchId}:${encodeURIComponent(selectedParticipantKey)}`,
+    // Discord limits modal custom IDs to 100 characters. The team key
+    // repeats a long team ID; encode its side and revalidate on submission.
+    customId: `ko_result_modal:${eventKey}:${roundKey}:${matchId}:${entry.match.home.participantKey === selectedParticipantKey || `team:${entry.match.home.teamId}` === selectedParticipantKey ? 'home' : 'away'}`,
     title: 'K.O.-Ergebnis eintragen',
     match: entry.match,
   }));
@@ -387,11 +389,19 @@ async function finalizeConfirmedKnockoutResult(client, eventKey, outcome, guild 
 
 async function handleTeamResultModal(interaction, eventKey, roundKey, matchId, selectedParticipantKey, client) {
   await interaction.deferReply({ flags: EPHEMERAL });
+  const { round } = getRoundFromEvent(eventKey, roundKey);
+  const match = round.matches.find(item => String(item.id) === String(matchId));
+  const side = ['home', 'away'].includes(selectedParticipantKey) ? selectedParticipantKey : null;
+  const participant = side ? match?.[side] : null;
+  if (side && participant?.type !== 'team') throw new Error('K.O.-Team wurde nicht gefunden.');
+  const submittedParticipantKey = side
+    ? participant.participantKey || `team:${participant.teamId}`
+    : decodeURIComponent(selectedParticipantKey);
   const outcome = submitTeamResult({
     eventKey,
     roundKey,
     matchId,
-    participantKeyValue: decodeURIComponent(selectedParticipantKey),
+    participantKeyValue: submittedParticipantKey,
     userId: interaction.user.id,
     homeGoals: interaction.fields.getTextInputValue('home_goals'),
     awayGoals: interaction.fields.getTextInputValue('away_goals'),
