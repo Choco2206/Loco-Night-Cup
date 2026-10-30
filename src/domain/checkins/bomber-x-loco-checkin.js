@@ -132,7 +132,7 @@ function buildBomberXLocoPayload(event, settings) {
     `⏰ Offizieller Anmeldeschluss: ${formatDateTime(event.schedule?.deadlineAt)}`,
     `🎲 Gruppenauslosung live bei **Paddy HSV**: ${formatDateTime(event.schedule?.drawAt)}`,
     `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
-    `✅ Anwesenheits-Check: bis ${halloween ? '20:15' : '20:55'} Uhr`,
+    `✅ Anwesenheits-Check: bis 20:55 Uhr`,
     `🚀 Turnierstart: ${formatDateTime(event.schedule?.tournamentStartAt)}`,
     '',
     `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
@@ -160,6 +160,7 @@ function buildBomberXLocoPayload(event, settings) {
       new ButtonBuilder().setCustomId(`checkin_join:${eventKey}`).setLabel('⬆️ Anmelden').setStyle(ButtonStyle.Success).setDisabled(!state.canJoin),
       new ButtonBuilder().setCustomId(`checkin_leave:${eventKey}`).setLabel('⬇️ Abmelden').setStyle(ButtonStyle.Danger).setDisabled(!state.canLeave),
       new ButtonBuilder().setCustomId('bxl_manual_group_assignment').setLabel('🎲 Gruppenzuteilung').setStyle(ButtonStyle.Primary),
+      ...(halloween ? [new ButtonBuilder().setCustomId('halloween_replace:open').setLabel('🔄 Teilnehmer ersetzen').setStyle(ButtonStyle.Secondary)] : []),
     )],
     files: banner.files,
   };
@@ -177,7 +178,7 @@ function buildBomberXLocoBlockerPayload({ halloween = false, today = false, chan
         `${today ? 'Heute spielen wir' : 'Stattdessen spielen wir'} den **${title}**.`,
         channelId ? `Die Anmeldung läuft im <#${channelId}>.` : 'Die Anmeldung folgt im Eventkanal.',
         '**Anmeldeschluss: 18:30 Uhr.**',
-        `**Gruppenauslosung: ${halloween ? '19:00' : '20:00'} Uhr live bei Paddy HSV.**`,
+        `**Gruppenauslosung: 20:00 Uhr live bei Paddy HSV.**`,
         `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
       ].join('\n'))],
     components: [new ActionRowBuilder().addComponents(
