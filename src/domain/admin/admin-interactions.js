@@ -340,14 +340,16 @@ async function handleTeamsWithoutEa(interaction, client) {
 }
 
 async function handleBomberXLocoGraphicsTest(interaction) {
-  if (selectedAction(interaction) !== 'admin_bxl_graphics_test') return false;
+  const action = selectedAction(interaction);
+  if (!['admin_bxl_graphics_test', 'admin_halloween_graphics_test'].includes(action)) return false;
+  const halloween = action === 'admin_halloween_graphics_test';
   try {
     await requireAdmin(interaction);
     await interaction.deferReply({ flags: EPHEMERAL });
-    const result = await postBomberXLocoGraphicsTest({ guild: interaction.guild });
+    const result = await postBomberXLocoGraphicsTest({ guild: interaction.guild, halloween });
     await interaction.editReply({
       content: [
-        `✅ Bomber-X-Loco-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
+        `✅ ${halloween ? 'Halloween' : 'Bomber-X-Loco'}-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
         `Verwendete aktive Teams: ${result.teamCount}`,
         `Testposts: ${result.messageIds.length}`,
         'Es wurden keine Turnierdaten, Siege, Statistiken oder Rollen verändert.',

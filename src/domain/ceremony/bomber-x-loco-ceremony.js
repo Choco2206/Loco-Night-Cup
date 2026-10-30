@@ -103,15 +103,19 @@ function promotionLines(promotion) {
 function buildBomberXLocoCeremonyText({ teams, promotion = null, halloween = false }) {
   if (halloween) return [
     '🎃🏆 **BOMBER X LOCO HALLOWEEN CUP • 30.10.2026**', '',
-    'Der Halloween Cup ist gespielt. Das ist eure Top 3:', '',
+    'Die letzte Begegnung ist gespielt, die Geister können schlafen gehen. Unsere Podiumsplätze stehen fest! 👻', '',
     `🥇 **1. Platz • ${teams.first.clubName}**`,
     `👑 VM / Co-VM: ${teamPings(teams.first)}`,
     ...promotionLines(promotion), '',
+    'Eiskalt durch die Halloween-Nacht und am Ende den Pokal geholt. Glückwunsch an unsere Champions! 🏆🔥', '',
     `🥈 **2. Platz • ${teams.second.clubName}**`,
     `👑 VM / Co-VM: ${teamPings(teams.second)}`, '',
+    'Bis ins Finale gekämpft und euren Gegnern das Fürchten gelehrt. Starker zweiter Platz! 🦇', '',
     `🥉 **3. Platz • ${teams.third.clubName}**`,
     `👑 VM / Co-VM: ${teamPings(teams.third)}`, '',
-    'Danke an alle Teams, die diesen Abend mit uns gespielt haben. 💣🐺🎃',
+    'Im Spiel um Platz 3 noch einmal alles rausgeholt und das Podium gesichert. Glückwunsch! 🎃', '',
+    'Ein großes Danke an alle Teams, Manager und Helfer von **Bomber Cup** und **Loco Night Cup**. Ihr habt diese Halloween-Nacht besonders gemacht. 💣🐺', '',
+    '**Wenn andere schlafen, spielen wir um Titel. Auch wenn es spukt. 👻🏆**',
   ].join('\n');
   return [
     '🏆 **BOMBER X LOCO CUP • FC 27 OPENING CUP**',

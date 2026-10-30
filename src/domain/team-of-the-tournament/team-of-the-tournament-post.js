@@ -109,7 +109,13 @@ function buildIntroText({ test = false, variant = 'default', eventKey = null } =
       test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
       '@everyone',
       '🎃🏆 **BOMBER X LOCO HALLOWEEN CUP – TEAM OF THE TOURNAMENT**',
-      'Elf Spieler haben sich an diesem Halloween-Abend ihren Platz in der besten Elf verdient. Glückwunsch an euch! 💣🐺🎃',
+      'Wenn andere vor Geistern flüchten, jagt ihr den nächsten Titel. 👻',
+      '',
+      'Elf Spieler haben beim **Bomber X Loco Halloween Cup** für Gänsehaut gesorgt: eiskalt vor dem Tor, unheimlich stark im Mittelfeld und hinten eine echte Albtraum-Abwehr.',
+      '',
+      'Hier ist die **beste Elf unserer Halloween-Nacht**. Herzlichen Glückwunsch an alle, die sich ihren Platz mit starken Leistungen verdient haben! 🎃🔥',
+      '',
+      'Danke an alle Teams von **Bomber Cup** und **Loco Night Cup** für diesen besonderen Abend. 💣🐺',
     ].filter(entry => entry !== null).join('\n');
     return [
       test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,

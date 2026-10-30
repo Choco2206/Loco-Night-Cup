@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require('path');
+const { ROOT_DIR } = require('../../storage');
 const { AttachmentBuilder } = require('discord.js');
 const { listVisibleTeams } = require('../teams/team-service');
 const { createGroupMatchdays } = require('../groups/group-matches');
@@ -15,6 +17,7 @@ const { renderKoImage } = require('../../../utils/ko-image-renderer');
 const { renderTeamOfTheTournament } = require('../../../utils/team-of-the-tournament-renderer');
 const { renderSpecialAwards } = require('../../../utils/special-awards-renderer');
 const {
+  buildIntroText,
   buildTestPerformances,
   selectSpecialAwards,
 } = require('../team-of-the-tournament/team-of-the-tournament-post');
@@ -131,7 +134,9 @@ async function sendImage(channel, title, image, fileName) {
   return message.id;
 }
 
-async function postBomberXLocoGraphicsTest({ guild }) {
+async function postBomberXLocoGraphicsTest({ guild, halloween = false }) {
+  const eventKey = halloween ? 'bomber_halloween' : 'bomber_x_loco_graphics_test';
+  const eventId = halloween ? 'bomber_halloween_2026-10-30' : BOMBER_X_LOCO_TEST_EVENT_ID;
   if (!guild) throw new Error('Bomber-X-Loco-Grafiktest ist nur auf dem Server nutzbar.');
   const channel = await guild.channels.fetch(HALL_OF_FAME_TEST_CHANNEL_ID).catch(() => null);
   if (!channel?.isTextBased?.() || !channel?.send) {
@@ -142,7 +147,7 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   const messageIds = [];
   const intro = await channel.send({
     content: [
-      '🧪 **BOMBER X LOCO • KOMPLETTER GRAFIKTEST**',
+      halloween ? '🎃🧪 **BOMBER X LOCO HALLOWEEN CUP • GRAFIKTEST**' : '🧪 **BOMBER X LOCO • KOMPLETTER GRAFIKTEST**',
       '',
       'Nur Vorschau – es werden keine Ergebnisse, Siege, Statistiken oder Rollen gespeichert.',
     ].join('\n'),
@@ -150,14 +155,24 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   });
   messageIds.push(intro.id);
 
+  if (halloween) {
+    const checkin = await channel.send({
+      content: '🧪 **Halloween-Check-in • Banner**',
+      files: [new AttachmentBuilder(path.resolve(ROOT_DIR, 'assets/bomber-x-loco-halloween/check-in.png'), { name: 'halloween-test-check-in.png' })],
+      allowedMentions: { parse: [] },
+    });
+    messageIds.push(checkin.id);
+  }
+
   const liveTable = await generateBomberXLocoLiveTableImage({
+    eventKey,
     groupKey: 'A',
     rows: buildLiveRows(teams),
     qualificationText: getBomberXLocoQualificationText(30),
   });
   messageIds.push(await sendImage(channel, 'Live-Tabelle • Gruppe A', liveTable, 'bomber-x-loco-test-live-table.png'));
 
-  const group = buildGroup(teams);
+  const group = { ...buildGroup(teams), eventKey };
   const matches = await generateBomberXLocoMatchesImage({ group });
   messageIds.push(await sendImage(channel, 'Matches • 5 Spieltage × 3 Begegnungen', matches));
 
@@ -174,7 +189,7 @@ async function postBomberXLocoGraphicsTest({ guild }) {
     const image = await renderKoImage({
       phase,
       matches: buildKoMatches(teams, count),
-      eventId: BOMBER_X_LOCO_TEST_EVENT_ID,
+      eventId,
       version: `admin-test-${Date.now()}`,
     });
     messageIds.push(await sendImage(channel, label, image));
@@ -183,10 +198,11 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   const podium = cycleTeams(teams, 3);
   const ceremonyTeams = { first: podium[0], second: podium[1], third: podium[2] };
   const ceremonyImage = await renderBomberXLocoCeremonyImage({ teams: ceremonyTeams });
-  messageIds.push(await sendImage(channel, 'Siegerehrung • Bild', ceremonyImage, 'bomber-x-loco-test-ceremony.png'));
+  messageIds.push(await sendImage(channel, halloween ? 'Siegerehrung • bestehende Bomber-X-Loco-Vorlage' : 'Siegerehrung • Bild', ceremonyImage, 'bomber-x-loco-test-ceremony.png'));
 
   const ceremonyText = buildBomberXLocoCeremonyText({
     teams: ceremonyTeams,
+    halloween,
     promotion: {
       name: '🥇 Loco Night Champion',
       previousGold: 0,
@@ -203,6 +219,7 @@ async function postBomberXLocoGraphicsTest({ guild }) {
   const tottSelection = buildTottSelection(teams);
   const tottImage = await renderTeamOfTheTournament({
     selection: tottSelection,
+    eventKey,
     variant: 'bomber_x_loco',
   });
   messageIds.push(await sendImage(
@@ -212,9 +229,18 @@ async function postBomberXLocoGraphicsTest({ guild }) {
     'bomber-x-loco-test-team-of-the-tournament.png',
   ));
 
+  if (halloween) {
+    const text = await channel.send({
+      content: buildIntroText({ test: true, variant: 'bomber_x_loco', eventKey }),
+      allowedMentions: { parse: [] },
+    });
+    messageIds.push(text.id);
+  }
+
   const awardPlayers = selectSpecialAwards(buildTestPerformances(tottSelection));
   const awardsImage = await renderSpecialAwards({
     awards: awardPlayers,
+    eventKey,
     variant: 'bomber_x_loco',
   });
   messageIds.push(await sendImage(
