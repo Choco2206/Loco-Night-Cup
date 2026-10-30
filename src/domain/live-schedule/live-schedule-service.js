@@ -8,6 +8,8 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { readEventData } = require('../events/event-repository');
 const { recalculateGroupStandings } = require('../groups/group-results');
 const { findTeamById } = require('../teams/team-service');
+const { getQualificationText, getBomberXLocoQualificationText } = require('../groups/group-embeds');
+const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const { renderLeagueSchedule, renderLeagueTable } = require('../../../utils/league-phase-renderer');
 const { parseDateTime } = require('../checkins/checkin-schedule');
 
@@ -83,7 +85,16 @@ function headerPayload(event, phase) {
   const label = eventDisplayLabel(event);
   if (phase === 'knockout') return { content: `🏆 ${label} • K.O.-Phase`, allowedMentions: { parse: [] } };
   if (phase === 'league') return { content: `📊 Loco Night Cup ${event.label || event.eventKey} • ${event.format?.size}er-Ligaphase\n🏆 Die besten 8 qualifizieren sich für das Viertelfinale.`, allowedMentions: { parse: [] } };
-  return { content: [`📊 ${label} • Live-Spielplan`, `🏆 Turnierformat: ${size}`].join('\n'), allowedMentions: { parse: [] } };
+  const qualification = isBomberXLocoEvent(event)
+    ? getBomberXLocoQualificationText(event.format?.size)
+    : getQualificationText(event.format?.size);
+  return { content: [
+    `📊 ${label} • Live-Spielplan`,
+    `🏆 Turnierformat: ${size}`,
+    '',
+    qualification ? (qualification.includes('jeder Gruppe') ? qualification : qualification.replace(/Platz 1(?: & 2| bis \d+)?/, 'qualification ? qualification.replace(/(Platz 1(?: & 2| bis \d+)?)(?!\d)(?! jeder Gruppe)/, '$1 jeder Gruppe') : null, jeder Gruppe')) : null,
+    /beste[nr]? /i.test(qualification) ? 'Die besten weiteren Platzierten werden über alle Gruppen verglichen.' : null,
+  ].filter(line => line !== null).join('\n'), allowedMentions: { parse: [] } };
 }
 async function fetchMessage(channel, messageId) { if (!messageId) return null; return channel.messages.fetch(messageId).catch(() => null); }
 async function upsertMessage(channel, messageId, payload) {
