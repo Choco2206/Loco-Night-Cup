@@ -19,7 +19,7 @@ const EVENT_LABELS = {
   friday: 'Freitag',
   saturday: 'Samstag',
   sunday: 'Sonntag',
-  bomber_halloween: 'Bomber X Loco Halloween Cup',
+  bomber_halloween: 'Bomber X Loco Christmas Cup',
 };
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];

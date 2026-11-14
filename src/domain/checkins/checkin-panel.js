@@ -200,8 +200,8 @@ async function refreshCheckinMessage(eventKey, client) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) return false;
 
-  const payload = eventKey === 'friday' && event.cycle?.eventDate === '2026-10-30'
-    ? buildBomberXLocoBlockerPayload({ halloween: true, today: toDateOnly(new Date()) === '2026-10-30', channelId: HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY] })
+  const payload = eventKey === 'saturday' && event.cycle?.eventDate === '2026-12-19'
+    ? buildBomberXLocoBlockerPayload({ halloween: true, today: toDateOnly(new Date()) === '2026-12-19', channelId: HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY] })
     : buildCheckinMessagePayload(eventKey, event, settings);
   await deleteSummaryMessageIfOpen({ channel, state, eventKey, event, settings });
   const hasStaleChannelRef = state.channelId && String(state.channelId) !== String(channel.id);

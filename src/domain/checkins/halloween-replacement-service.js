@@ -7,7 +7,7 @@ const { recalculateGroupStandings } = require('../groups/group-results');
 const { HALLOWEEN_EVENT_KEY, HALLOWEEN_EVENT_DATE, buildBomberXLocoSchedule } = require('../events/bomber-x-loco-config');
 
 function assertEditable(event, now = new Date()) {
-  if (event.eventKey !== HALLOWEEN_EVENT_KEY || event.cycle?.eventDate !== HALLOWEEN_EVENT_DATE) throw new Error('Diese Aktion gilt nur für den Bomber X Loco Halloween Cup.');
+  if (event.eventKey !== HALLOWEEN_EVENT_KEY || event.cycle?.eventDate !== HALLOWEEN_EVENT_DATE) throw new Error('Diese Aktion gilt nur für den Bomber X Loco Christmas Cup.');
   if (!event.format?.lockedAt || !event.format?.size) throw new Error('Das Teilnehmerfeld ist noch nicht gelockt.');
   if (!['checkin', 'checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) throw new Error('Das Teilnehmerfeld kann in dieser Turnierphase nicht ersetzt werden.');
   if (now >= buildBomberXLocoSchedule(HALLOWEEN_EVENT_DATE, HALLOWEEN_EVENT_KEY).tournamentStartAt) throw new Error('Das Turnier hat bereits begonnen. Bitte den bestehenden Nachrücker-Dialog in der Gruppe verwenden.');

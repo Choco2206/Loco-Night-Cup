@@ -35,7 +35,7 @@ const EVENT_KEY = BOMBER_X_LOCO_EVENT_KEY;
 const PREPARE_AT = new Date(`${BOMBER_X_LOCO_EVENT_DATE}T18:45:00+02:00`);
 const EVENT_END = new Date('2026-09-26T07:00:00+02:00');
 const HALLOWEEN_PREPARE_AT = new Date(`${HALLOWEEN_EVENT_DATE}T18:45:00+01:00`);
-const HALLOWEEN_END = new Date('2026-10-31T07:00:00+01:00');
+const HALLOWEEN_END = new Date('2026-12-20T07:00:00+01:00');
 const EPHEMERAL = 64;
 let prepareTimer = null;
 

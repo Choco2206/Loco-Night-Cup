@@ -83,7 +83,7 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
     .setTitle(title)
     .setDescription([
       isBomber
-        ? `Zeigt kurz, dass ihr bereit für den Bomber X Loco ${halloween ? 'Halloween ' : ''}Cup seid.`
+        ? `Zeigt kurz, dass ihr bereit für den Bomber X Loco ${halloween ? 'Christmas ' : ''}Cup seid.`
         : 'Zeigt kurz, dass ihr bereit für den Loco Night Cup seid.',
       '',
       ...lines,

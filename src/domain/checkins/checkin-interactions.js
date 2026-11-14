@@ -90,7 +90,7 @@ async function handleInteraction(interaction, client) {
   if (interaction.customId === `bomber_x_loco_redirect:${HALLOWEEN_EVENT_KEY}`) {
     const settings = readJson(FILES.settings, createSettingsDefault());
     const channelId = HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY];
-    await interaction.reply({ content: `💣🐺🎃 Am **30.10.2026** läuft der **Bomber X Loco Halloween Cup**. Anmeldung im <#${channelId}>.`, flags: EPHEMERAL });
+    await interaction.reply({ content: `💣🐺🎅 Am **19.12.2026** läuft der **Bomber X Loco Christmas Cup**. Anmeldung im <#${channelId}>.`, flags: EPHEMERAL });
     return true;
   }
 

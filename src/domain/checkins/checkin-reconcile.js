@@ -73,7 +73,7 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
   const minimum = minimumTeams(settings, event);
   const validTeamCount = getValidRealTeamCount(event, now);
   if (isBomberXLoco(event)) {
-    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
+    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Christmas Cup' : 'Bomber X Loco Cup';
     return [
       `❌ **${title} abgesagt**`, '',
       'Zum offiziellen Anmeldeschluss sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.', '',
@@ -94,7 +94,7 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
 function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
   const waitlistCount = getWaitlistOverflowCount(event);
   if (isBomberXLoco(event)) {
-    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup';
+    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Christmas Cup' : 'Bomber X Loco Cup';
     const drawTime = getDrawAt(eventKey, event, settings, now)?.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
     const attendanceTime = '20:55';
     return [
@@ -431,20 +431,20 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
   const repaired = repairEventCycle(eventKey, settings, now);
   const event = repaired.event;
   if (eventKey === HALLOWEEN_EVENT_KEY && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE
-      && (repaired.changed || !event.meta?.halloweenTiming2055UpdatedAt)) {
+      && (repaired.changed || !event.meta?.christmasPanelRefreshedAt)) {
     await refreshCheckinMessage(eventKey, client);
     if (event.checkin?.finalStatusMessagePostedAt) await upsertStatusMessage(client, eventKey, buildFinalReadyMessage(eventKey, event, settings, now));
     updateEventData(eventKey, current => {
-      current.meta = { ...current.meta, halloweenTiming2055UpdatedAt: nowIso(now) };
+      current.meta = { ...current.meta, christmasPanelRefreshedAt: nowIso(now) };
       return current;
     });
   }
-  if (eventKey === 'friday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
+  if (eventKey === 'saturday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
     const today = toDateOnly(now) === HALLOWEEN_EVENT_DATE;
-    if (repaired.changed || (today && !event.meta?.halloweenTodayNoticeAt)) {
+    if (repaired.changed || (today && !event.meta?.christmasTodayNoticeAt)) {
       const posted = await refreshCheckinMessage(eventKey, client);
       if (today && posted) updateEventData(eventKey, current => {
-        current.meta = { ...(current.meta || {}), halloweenTodayNoticeAt: nowIso(now) };
+        current.meta = { ...(current.meta || {}), christmasTodayNoticeAt: nowIso(now) };
         return current;
       });
     }

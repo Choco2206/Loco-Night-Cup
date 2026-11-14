@@ -162,7 +162,7 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
 function resetToOpenCheckinCycle(event) {
   event.status = 'checkin_open';
   event.format = { ...(event.format || {}), size: null, realTeamCount: 0, byeCount: 0, activeByeCount: 0, waitlistByeCount: 0, waitlistCount: 0, lockedAt: null, lockedByUserId: null, participants: [] };
-  event.checkin = { ...(event.checkin || {}), isOpen: true, closedAt: null, entries: [], activeTeamIds: [], waitlistTeamIds: [], lateLeaveBans: [] };
+  event.checkin = { ...(event.checkin || {}), isOpen: true, closedAt: null, entries: [], activeTeamIds: [], waitlistTeamIds: [], lateLeaveBans: [], finalStatusMessagePostedAt: null, finalStatusMessageState: null };
   event.byes = [];
   event.groups = { status: 'not_created', drawnAt: null, drawnBy: null, groups: {} };
   event.leaguePhase = {
@@ -232,8 +232,8 @@ function isAfterDeadline(eventKey, event, settings, now = new Date()) { const d 
 function canUseCheckinStatus(status) { return CHECKIN_EVENT_STATUSES.includes(status); }
 
 function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
-  if (eventKey === 'friday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
-    return { label: 'Halloween Cup', phase: 'special_event', canJoin: false, canLeave: false };
+  if (eventKey === 'saturday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
+    return { label: 'Christmas Cup', phase: 'special_event', canJoin: false, canLeave: false };
   }
   if (['checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) return { label: 'Geschlossen', phase: event.status, canJoin: false, canLeave: false };
   if (event.status === 'cancelled') return { label: 'Abgesagt', phase: 'cancelled', canJoin: false, canLeave: false };

@@ -7,13 +7,13 @@ const { createEventDefault, createSettingsDefault } = require('../src/storage/de
 const { ensureEventCycle } = require('../src/domain/checkins/checkin-schedule');
 const { attendanceCloseAt } = require('../src/domain/groups/attendance-service');
 const { buildBomberXLocoPayload, buildBomberXLocoBlockerPayload } = require('../src/domain/checkins/bomber-x-loco-checkin');
-const now = new Date('2026-10-30T18:00:00Z');
+const now = new Date('2026-12-19T18:00:00Z');
 function eventFixture() {
   const event = createEventDefault('bomber_halloween');
   ensureEventCycle('bomber_halloween', event, createSettingsDefault(), now);
   event.status = 'draw_ready';
-  event.format = { ...event.format, size: 6, lockedAt: '2026-10-30T17:30:00Z', participants: ['old', 'stay'].map(teamId => ({ type: 'team', teamId, displayName: teamId })), activeByeCount: 0 };
-  event.checkin = { ...event.checkin, isOpen: false, entries: ['old', 'stay', 'next', 'last'].map(teamId => ({ teamId, checkedInAt: '2026-10-29T12:00:00Z' })), activeTeamIds: ['old', 'stay'], waitlistTeamIds: ['next', 'last'] };
+  event.format = { ...event.format, size: 6, lockedAt: '2026-12-19T17:30:00Z', participants: ['old', 'stay'].map(teamId => ({ type: 'team', teamId, displayName: teamId })), activeByeCount: 0 };
+  event.checkin = { ...event.checkin, isOpen: false, entries: ['old', 'stay', 'next', 'last'].map(teamId => ({ teamId, checkedInAt: '2026-12-18T12:00:00Z' })), activeTeamIds: ['old', 'stay'], waitlistTeamIds: ['next', 'last'] };
   return event;
 }
 const args = { oldTeamId: 'old', newTeam: { id: 'next', clubName: 'Nachrücker' }, actorUserId: 'admin', now };
@@ -59,7 +59,7 @@ test('external registered replacement works; stale or wrong-event exchanges fail
     const event = eventFixture(); change(event); const before = structuredClone(event);
     assert.throws(() => applyReplacement(event, args)); assert.deepEqual(event, before);
   }
-  assert.throws(() => applyReplacement(eventFixture(), { ...args, now: new Date('2026-10-30T20:00:00Z') }), /begonnen/);
+  assert.throws(() => applyReplacement(eventFixture(), { ...args, now: new Date('2026-12-19T20:00:00Z') }), /begonnen/);
   const played = eventFixture();
   played.groups.groups = { A: { matchdays: [{ matches: [{ reports: [{}] }] }] } };
   assert.throws(() => applyReplacement(played, args), /Spielergebnisse/);
@@ -67,9 +67,9 @@ test('external registered replacement works; stale or wrong-event exchanges fail
 
 test('Halloween schedule and cards use 20:00 draw, 20:55 attendance, 21:00 start, replacement button only on Halloween', () => {
   const event = eventFixture();
-  assert.equal(event.schedule.drawAt, '2026-10-30T19:00:00.000Z');
-  assert.equal(event.schedule.tournamentStartAt, '2026-10-30T20:00:00.000Z');
-  assert.equal(attendanceCloseAt(event).toISOString(), '2026-10-30T19:55:00.000Z');
+  assert.equal(event.schedule.drawAt, '2026-12-19T19:00:00.000Z');
+  assert.equal(event.schedule.tournamentStartAt, '2026-12-19T20:00:00.000Z');
+  assert.equal(attendanceCloseAt(event).toISOString(), '2026-12-19T19:55:00.000Z');
   const payload = buildBomberXLocoPayload(event, {});
   const text = payload.embeds.map(e => e.toJSON().description).join('\n');
   assert.match(text, /Paddy HSV\*\*: 20:00/); assert.match(text, /bis 20:55 Uhr/); assert.match(text, /Turnierstart: 21:00/);
