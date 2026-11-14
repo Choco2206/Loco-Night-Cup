@@ -31,6 +31,11 @@ module.exports = {
     { logoX: 151, nameX: 177, nameWidth: 217, scoreX: 440 },
     { logoX: 659, nameX: 685, nameWidth: 218, scoreX: 949 },
   ], 38),
+  quarter_final: cardRound('quarter-final', [
+    [486, 550], [687, 753], [889, 955], [1091, 1157],
+  ], [
+    { logoX: 185, nameX: 220, nameWidth: 630, scoreX: 922 },
+  ], 46),
   fonts: {
     team: { family: 'Open Sans', weight: '600', minSize: 13 },
     score: { family: 'Oxanium', weight: '700', minSize: 14, maxSize: 25 },
