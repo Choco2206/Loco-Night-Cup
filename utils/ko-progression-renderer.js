@@ -373,6 +373,10 @@ async function renderChristmasProgression({ firstRoundKey, rounds, version = Dat
     }
     centers = nextCenters;
   }
+  await drawMatchCard(ctx, {
+    match: roundMatches(rounds, 'third_place')[0],
+    x: columns.at(-1), y: 950, width: cardWidth, label: 'SPIEL UM PLATZ 3', color: '#cd8757',
+  });
   return { buffer: canvas.toBuffer('image/png'), fileName: `christmas-road-to-glory-${firstCenters.length * 2}-${version}.png`, width, height };
 }
 
