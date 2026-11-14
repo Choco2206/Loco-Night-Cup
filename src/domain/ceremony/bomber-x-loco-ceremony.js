@@ -10,7 +10,8 @@ const { createMessagesDefault, createSettingsDefault } = require('../../storage/
 const { readEventData, updateEventData } = require('../events/event-repository');
 const { getAutoCleanupScheduledAt, scheduleAutoCleanupForEvent } = require('../events/event-cleanup-service');
 const { findTeamById } = require('../teams/team-service');
-const { isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
+const { renderChristmasProgression } = require('../../../utils/ko-progression-renderer');
+const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP, isBomberXLocoEvent } = require('../events/bomber-x-loco-config');
 const {
   applyTeamAchievementsForEvent,
   refreshTeamAchievementsRankingMessage,
@@ -27,6 +28,16 @@ const LOGO_SLOTS = Object.freeze({
   second: Object.freeze({ ...ceremonyLayout.placements.second }),
   third: Object.freeze({ ...ceremonyLayout.placements.third }),
 });
+
+const christmasLayout = {
+  template: 'assets/bomber-x-loco-christmas/podium.jpeg',
+  reference: { width: 1536, height: 1024 },
+  placements: {
+    first: { centerX: 765, centerY: 789, width: 270, height: 270 },
+    second: { centerX: 370, centerY: 789, width: 270, height: 270 },
+    third: { centerX: 1162, centerY: 789, width: 270, height: 270 },
+  },
+};
 
 function findPlacementTeam(teamId, placement) {
   const team = teamId ? findTeamById(teamId) : null;
@@ -69,9 +80,9 @@ async function logoOverlay(team, slot, scaleX, scaleY) {
   };
 }
 
-async function renderBomberXLocoCeremonyImage({ teams, eventKey = null }) {
-  const layout = eventKey === 'bomber_halloween' ? halloweenLayout : ceremonyLayout;
-  const templatePath = eventKey === 'bomber_halloween' ? path.resolve(ROOT_DIR, layout.template) : TEMPLATE_PATH;
+async function renderBomberXLocoCeremonyImage({ teams, eventKey = null, christmas = false }) {
+  const layout = christmas ? christmasLayout : eventKey === 'bomber_halloween' ? halloweenLayout : ceremonyLayout;
+  const templatePath = layout.template ? path.resolve(ROOT_DIR, layout.template) : TEMPLATE_PATH;
   const reference = layout.reference;
   const slots = layout.placements;
   if (!fs.existsSync(templatePath)) throw new Error('Bomber X Loco Siegerehrungsbild wurde nicht gefunden.');
@@ -105,7 +116,8 @@ function promotionLines(promotion) {
   ];
 }
 
-function buildBomberXLocoCeremonyText({ teams, promotion = null, halloween = false }) {
+function buildBomberXLocoCeremonyText({ teams, promotion = null, halloween = false, christmas = false }) {
+  if (christmas) return baseCeremony.buildCeremonyText({ dayKey: 'saturday', teams, promotion, christmas });
   if (halloween) return [
     '🎃🏆 **BOMBER X LOCO HALLOWEEN CUP • 30.10.2026**', '',
     'Die letzte Begegnung ist gespielt, die Geister können schlafen gehen. Unsere Podiumsplätze stehen fest! 👻', '',
@@ -189,10 +201,10 @@ function getPromotion(event, teams) {
   return { ...promotion, teamName: teams.first.clubName };
 }
 
-function updateMessageRefs(eventKey, event, channelId, imageMessageId, textMessageId, timestamp) {
+function updateMessageRefs(eventKey, event, channelId, imageMessageId, textMessageId, timestamp, progressionMessageId = null) {
   updateJson(FILES.messages, createMessagesDefault(), messages => {
     messages.ceremony = messages.ceremony || {};
-    messages.ceremony[eventKey] = { ...(messages.ceremony[eventKey] || {}), cycleKey: event.cycle?.cycleKey || null, channelId, imageMessageId, textMessageId, postedAt: timestamp, updatedAt: timestamp };
+    messages.ceremony[eventKey] = { ...(messages.ceremony[eventKey] || {}), cycleKey: event.cycle?.cycleKey || null, channelId, imageMessageId, textMessageId, progressionMessageId, postedAt: timestamp, updatedAt: timestamp };
     messages.liveSchedule = messages.liveSchedule || {};
     messages.liveSchedule.phase = 'ceremony';
     messages.liveSchedule.currentEventKey = eventKey;
@@ -214,13 +226,23 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   const achievements = applyTeamAchievementsForEvent(eventKey);
   const eventWithAchievements = readEventData(eventKey);
   const promotion = getPromotion(eventWithAchievements, teams);
-  const image = await renderBomberXLocoCeremonyImage({ teams, eventKey });
+  const christmas = eventKey === HALLOWEEN_EVENT_KEY && SEASONAL_CUP.theme === 'christmas'
+    && event.cycle?.eventDate === SEASONAL_CUP.date;
+  const image = await renderBomberXLocoCeremonyImage({ teams, eventKey, christmas });
+  const progression = christmas ? await renderChristmasProgression({
+    firstRoundKey: event.knockout?.firstRoundKey, rounds: event.knockout?.rounds,
+  }) : null;
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
 
   const imageMessage = await channel.send({ content: '@everyone', files: [new AttachmentBuilder(image.buffer, { name: `bomber-x-loco-ceremony-${Date.now()}.png` })], allowedMentions: { parse: ['everyone'] } });
   const halloween = eventKey === 'bomber_halloween';
-  const textMessage = await channel.send({ content: buildBomberXLocoCeremonyText({ teams, promotion, halloween }), allowedMentions: { parse: ['users'] } });
+  const textMessage = await channel.send({ content: buildBomberXLocoCeremonyText({ teams, promotion, halloween, christmas }), allowedMentions: { parse: ['users'] } });
+
+  const progressionMessage = progression ? await channel.send({
+    files: [new AttachmentBuilder(progression.buffer, { name: progression.fileName })],
+    allowedMentions: { parse: [] },
+  }) : null;
 
   let updatedEvent;
   updateEventData(eventKey, storedEvent => {
@@ -230,7 +252,8 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
     storedEvent.ceremony.channelId = channel.id;
     storedEvent.ceremony.imageMessageId = imageMessage.id;
     storedEvent.ceremony.textMessageId = textMessage.id;
-    storedEvent.ceremony.postedMessageIds = [imageMessage.id, textMessage.id];
+    storedEvent.ceremony.progressionMessageId = progressionMessage?.id || null;
+    storedEvent.ceremony.postedMessageIds = [imageMessage.id, textMessage.id, progressionMessage?.id].filter(Boolean);
     storedEvent.ceremony.cleanupStatus = 'scheduled';
     storedEvent.ceremony.cleanupScheduledAt = getAutoCleanupScheduledAt(timestamp);
     storedEvent.ceremony.cleanupCompletedAt = null;
@@ -239,7 +262,7 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
     return storedEvent;
   });
 
-  updateMessageRefs(eventKey, updatedEvent, channel.id, imageMessage.id, textMessage.id, timestamp);
+  updateMessageRefs(eventKey, updatedEvent, channel.id, imageMessage.id, textMessage.id, timestamp, progressionMessage?.id || null);
 
   if (achievements.applied) {
     await refreshTeamAchievementsRankingMessage({ client: guild.client, guild, force: true }).catch(error => console.warn(`[team-achievements] Ranking konnte nicht aktualisiert werden: ${error.message}`));
@@ -247,7 +270,7 @@ async function postBomberXLocoCeremony({ guild, eventKey }) {
   }
 
   scheduleAutoCleanupForEvent({ eventKey, guild, scheduledAt: updatedEvent.ceremony.cleanupScheduledAt, client: guild.client });
-  return { channelId: channel.id, imageMessageId: imageMessage.id, textMessageId: textMessage.id, teams, dayKey: eventKey, dayLabel: halloween ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup' };
+  return { channelId: channel.id, imageMessageId: imageMessage.id, textMessageId: textMessage.id, teams, dayKey: eventKey, dayLabel: christmas ? 'Bomber X Loco Christmas Cup' : halloween ? 'Bomber X Loco Halloween Cup' : 'Bomber X Loco Cup' };
 }
 
 async function maybePostBomberXLocoCeremony({ guild, eventKey }) {

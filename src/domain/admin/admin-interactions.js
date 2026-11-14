@@ -341,17 +341,18 @@ async function handleTeamsWithoutEa(interaction, client) {
 
 async function handleBomberXLocoGraphicsTest(interaction) {
   const action = selectedAction(interaction);
-  if (!['admin_bxl_graphics_test', 'admin_halloween_graphics_test'].includes(action)) return false;
+  if (!['admin_bxl_graphics_test', 'admin_halloween_graphics_test', 'admin_christmas_graphics_test'].includes(action)) return false;
   const halloween = action === 'admin_halloween_graphics_test';
+  const christmas = action === 'admin_christmas_graphics_test';
   try {
     await requireAdmin(interaction);
     await interaction.deferReply({ flags: EPHEMERAL });
-    const result = await postBomberXLocoGraphicsTest({ guild: interaction.guild, halloween });
+    const result = await postBomberXLocoGraphicsTest({ guild: interaction.guild, halloween, christmas });
     await interaction.editReply({
       content: [
         result.failedImages?.length
           ? `⚠️ Grafiktest in <#${result.channelId}> beendet. Fehlgeschlagene Grafiken: ${result.failedImages.join(', ')}. Die übrigen Vorschauen wurden weiter geprüft.`
-          : `✅ ${halloween ? 'Halloween' : 'Bomber-X-Loco'}-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
+          : `✅ ${christmas ? 'Christmas Cup' : halloween ? 'Halloween' : 'Bomber-X-Loco'}-Grafiktest wurde vollständig in <#${result.channelId}> gepostet.`,
         `Verwendete aktive Teams: ${result.teamCount}`,
         `Testposts: ${result.messageIds.length}`,
         'Es wurden keine Turnierdaten, Siege, Statistiken oder Rollen verändert.',

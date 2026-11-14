@@ -10,6 +10,7 @@ async function main() {
     case 'table': image = await require('../../../utils/generateBomberXLocoLiveTableImage').generateBomberXLocoLiveTableImage(input); break;
     case 'matches': image = await require('../../../utils/generateBomberXLocoMatchesImage').generateBomberXLocoMatchesImage(input); break;
     case 'ko': image = await require('../../../utils/ko-image-renderer').renderKoImage(input); break;
+    case 'progression': image = await require('../../../utils/ko-progression-renderer').renderChristmasProgression(input); break;
     case 'ceremony': image = await require('../ceremony/bomber-x-loco-ceremony').renderBomberXLocoCeremonyImage(input); break;
     case 'tott': image = await require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input); break;
     case 'awards': image = await require('../../../utils/special-awards-renderer').renderSpecialAwards(input); break;
