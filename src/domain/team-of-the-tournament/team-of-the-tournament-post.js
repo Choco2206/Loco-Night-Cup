@@ -371,6 +371,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   const awardsRendered = await renderSpecialAwards({
     awards: selectSpecialAwards(state.performances),
     eventKey,
+    eventDate: event.cycle?.eventDate,
     serialNumber,
     variant,
   });
