@@ -2,11 +2,11 @@
 
 const reference = { width: 1024, height: 1536 };
 
-function cardRound(template, rows, columns, logoSize) {
+function cardRound(template, rows, columns, logoSize, nameFontSize = logoSize - 4) {
   const matches = columns.flatMap(({ logoX, nameX, nameWidth, scoreX }) => rows.map(([homeY, awayY]) => {
     const team = y => ({
       logo: { centerX: logoX, centerY: y, width: logoSize, height: logoSize },
-      teamName: { x: nameX, y, width: nameWidth, height: logoSize, fontSize: logoSize - 4 },
+      teamName: { x: nameX, y, width: nameWidth, height: logoSize, fontSize: nameFontSize },
     });
     return {
       home: team(homeY),
@@ -36,6 +36,11 @@ module.exports = {
   ], [
     { logoX: 185, nameX: 220, nameWidth: 630, scoreX: 922 },
   ], 46),
+  semi_final: cardRound('semi-final', [
+    [546, 669], [922, 1043],
+  ], [
+    { logoX: 226, nameX: 278, nameWidth: 564, scoreX: 917 },
+  ], 72, 46),
   fonts: {
     team: { family: 'Open Sans', weight: '600', minSize: 13 },
     score: { family: 'Oxanium', weight: '700', minSize: 14, maxSize: 25 },
