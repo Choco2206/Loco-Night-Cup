@@ -94,6 +94,7 @@ async function buildLiveTableImagePayload(group) {
   if (isBomberXLocoEvent(event)) {
     image = await generateBomberXLocoLiveTableImage({
       eventKey: group.eventKey,
+      eventDate: event.cycle?.eventDate,
       groupKey: group.groupKey,
       rows,
       qualificationText: getBomberXLocoQualificationText(group.formatSize),

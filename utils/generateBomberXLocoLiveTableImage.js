@@ -5,10 +5,13 @@ const { ensureCanvasFontsRegistered, setCanvasFont } = require('./canvas-fonts')
 const { listVisibleTeams } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 
+const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../src/domain/events/bomber-x-loco-config');
+
 const WIDTH = 1536;
 const HEIGHT = 864;
 const BACKGROUNDS = Object.freeze({
   regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'live-table.png'),
+  christmas: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-christmas', 'live-table.jpeg'),
   halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'live-table-v2.jpeg'),
 });
 
@@ -43,6 +46,17 @@ const HALLOWEEN_LAYOUT = Object.freeze({
   lossesX: 1148, diffX: 1300, pointsX: 1445,
 });
 
+// Cell centers measured on the native 1672 × 941 artwork, between the printed rules.
+const CHRISTMAS_LAYOUT = Object.freeze({
+  groupLabel: { x: 998, y: 244, maxWidth: 62 },
+  qualification: { x: 836, y: 902, maxWidth: 940 },
+  rowsY: [442, 513, 584, 655, 727, 799],
+  placeX: 280, logoX: 371, logoSize: 50,
+  teamX: 411, teamMaxWidth: 350,
+  playedX: 839, winsX: 944, drawsX: 1043,
+  lossesX: 1139, diffX: 1254, pointsX: 1383,
+});
+
 let canvasApi = null;
 const backgroundPromises = new Map();
 const logoCache = new Map();
@@ -55,8 +69,7 @@ function getCanvasApi() {
 function ensureFonts() { ensureCanvasFontsRegistered(getCanvasApi()); }
 function setFont(ctx, size, family, weight = '400') { setCanvasFont(ctx, size, family, weight); }
 
-async function loadBackground(eventKey) {
-  const variant = eventKey === 'bomber_halloween' ? 'halloween' : 'regular';
+async function loadBackground(variant) {
   if (!backgroundPromises.has(variant)) {
     const promise = getCanvasApi().loadImage(BACKGROUNDS[variant]).catch(error => {
       backgroundPromises.delete(variant);
@@ -116,7 +129,9 @@ function cleanQualificationText(value) {
 }
 
 function drawTopLabels(ctx, groupKey, qualificationText, layout) {
-  const groupText = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
+  const group = String(groupKey || '').toUpperCase();
+  const christmas = layout === CHRISTMAS_LAYOUT;
+  const groupText = christmas ? group : `GRUPPE ${group}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
@@ -125,7 +140,7 @@ function drawTopLabels(ctx, groupKey, qualificationText, layout) {
   ctx.shadowColor = 'rgba(255,140,30,0.55)';
   ctx.shadowBlur = 6;
 
-  fitOxanium(ctx, groupText, layout.groupLabel.maxWidth, 25, 16, '700');
+  fitOxanium(ctx, groupText, layout.groupLabel.maxWidth, christmas ? 42 : 25, 16, '700');
   ctx.lineWidth = 2;
   ctx.strokeText(groupText, layout.groupLabel.x, layout.groupLabel.y);
   ctx.fillText(groupText, layout.groupLabel.x, layout.groupLabel.y);
@@ -133,6 +148,14 @@ function drawTopLabels(ctx, groupKey, qualificationText, layout) {
   const qualification = cleanQualificationText(qualificationText);
   if (qualification) {
     fitOxanium(ctx, qualification, layout.qualification.maxWidth, 20, 12, '600');
+    if (christmas) {
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(3, 12, 26, 0.9)';
+      const width = Math.min(ctx.measureText(qualification).width + 32, 972);
+      ctx.fillRect(layout.qualification.x - width / 2, layout.qualification.y - 15, width, 30);
+      ctx.restore();
+    }
     ctx.lineWidth = 2;
     ctx.strokeText(qualification, layout.qualification.x, layout.qualification.y);
     ctx.fillText(qualification, layout.qualification.x, layout.qualification.y);
@@ -174,7 +197,7 @@ async function drawRows(ctx, rows, layout) {
 
     fitFont(ctx, teamName, layout.teamMaxWidth, 29, 15);
     ctx.textAlign = 'left';
-    ctx.fillText(teamName, layout.teamX, y);
+    ctx.fillText(teamName, layout.teamX, y, layout.teamMaxWidth);
 
     setFont(ctx, 31, 'Odibee Sans', '400');
     ctx.textAlign = 'center';
@@ -191,14 +214,15 @@ async function drawRows(ctx, rows, layout) {
   ctx.shadowBlur = 0;
 }
 
-async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualificationText = '', eventKey = '' }) {
+async function generateBomberXLocoLiveTableImage({ groupKey, rows, qualificationText = '', eventKey = '', eventDate }) {
   ensureFonts();
   const { createCanvas } = getCanvasApi();
-  const background = await loadBackground(eventKey);
-  const halloween = eventKey === 'bomber_halloween';
-  const layout = halloween ? HALLOWEEN_LAYOUT : LAYOUT;
-  const width = halloween ? 1672 : WIDTH;
-  const height = halloween ? 941 : HEIGHT;
+  const variant = eventKey !== HALLOWEEN_EVENT_KEY ? 'regular'
+    : eventDate === SEASONAL_CUP.date ? SEASONAL_CUP.theme : 'halloween';
+  const background = await loadBackground(variant);
+  const layout = variant === 'christmas' ? CHRISTMAS_LAYOUT : variant === 'halloween' ? HALLOWEEN_LAYOUT : LAYOUT;
+  const width = variant === 'regular' ? WIDTH : 1672;
+  const height = variant === 'regular' ? HEIGHT : 941;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(background, 0, 0, width, height);
