@@ -1,5 +1,6 @@
 'use strict';
 
+const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../events/bomber-x-loco-config');
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
@@ -103,7 +104,20 @@ function selectSpecialAwards(performances) {
   };
 }
 
-function buildIntroText({ test = false, variant = 'default', eventKey = null } = {}) {
+function buildIntroText({ test = false, variant = 'default', eventKey = null, eventDate } = {}) {
+  if (eventKey === HALLOWEEN_EVENT_KEY && SEASONAL_CUP.theme === 'christmas' && eventDate === SEASONAL_CUP.date) {
+    return [
+      test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
+      '@everyone',
+      '🎄🏆 **BOMBER X LOCO CHRISTMAS CUP • TEAM OF THE TOURNAMENT**',
+      '',
+      'Eiskalt vor dem Tor, stark im Mittelfeld und hinten dicht. Glückwunsch an unsere beste Elf des Christmas Cups! ❄️',
+      '',
+      'Danke an alle Teams für den gemeinsamen Abend. Frohe Weihnachten an alle, die es feiern! 🎄',
+      'Baba und bis zum nächsten Cup! 💣🐺',
+      '**Eure Teams von Bomber Cup und Loco Night Cup**',
+    ].filter(entry => entry !== null).join('\n');
+  }
   if (variant === 'bomber_x_loco') {
     if (eventKey === 'bomber_halloween') return [
       test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,
@@ -375,7 +389,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     serialNumber,
     variant,
   });
-  const intro = buildIntroText({ variant, eventKey });
+  const intro = buildIntroText({ variant, eventKey, eventDate: event.cycle?.eventDate });
   const imageMessage = await channel.send({
     content: intro,
     files: [{ attachment: rendered.buffer, name: rendered.fileName }],

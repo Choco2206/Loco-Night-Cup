@@ -320,12 +320,12 @@ function buildPromotionBlock(promotion) {
   ];
 }
 
-function buildCeremonyText({ dayKey, teams, promotion = null }) {
+function buildCeremonyText({ dayKey, teams, promotion = null, christmas = false }) {
   const dayLabel = (CEREMONY_DAY_LABELS[dayKey] || dayKey).toUpperCase();
   return [
-    `🏆 SIEGEREHRUNG • ${dayLabel}`,
+    christmas ? '🎄🏆 **SIEGEREHRUNG • BOMBER X LOCO CHRISTMAS CUP**' : `🏆 SIEGEREHRUNG • ${dayLabel}`,
     '',
-    'Der Loco Night Cup ist beendet. Hier ist die offizielle Top 3:',
+    christmas ? 'Der Christmas Cup ist gespielt. Glückwunsch an unsere Top 3!' : 'Der Loco Night Cup ist beendet. Hier ist die offizielle Top 3:',
     '',
     `🥇 1. Platz: ${teams.first.clubName}`,
     '👑 Manager / Co-Manager:',
@@ -358,7 +358,11 @@ function buildCeremonyText({ dayKey, teams, promotion = null }) {
     '',
     'Wir hoffen, ihr hattet Spass und seid auch beim nächsten Loco Night Cup wieder dabei.',
     '',
-    'Bis zum nächsten Mal! 🏆🐺',
+    ...(christmas ? [
+      '🎄 Frohe Weihnachten an alle, die es feiern!',
+      'Baba und bis zum nächsten Cup! 💣🐺',
+      '**Eure Teams von Bomber Cup und Loco Night Cup**',
+    ] : ['Bis zum nächsten Mal! 🏆🐺']),
   ].join('\n');
 }
 
@@ -515,7 +519,7 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
   const textMessage = await channel.send({
     content: locoZwergenCup
       ? buildLocoZwergenCupCeremonyText({ teams, promotion })
-      : buildCeremonyText({ dayKey, teams, promotion }),
+      : buildCeremonyText({ dayKey, teams, promotion, christmas }),
     allowedMentions: { parse: ['users'] },
   });
   const progressionMessage = progressionRender
