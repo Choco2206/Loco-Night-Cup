@@ -111,10 +111,10 @@ function buildIntroText({ test = false, variant = 'default', eventKey = null, ev
       '@everyone',
       '🎄🏆 **BOMBER X LOCO CHRISTMAS CUP • TEAM OF THE TOURNAMENT**',
       '',
-      'Eiskalt vor dem Tor, stark im Mittelfeld und hinten dicht. Glückwunsch an unsere beste Elf des Christmas Cups! ❄️',
+      'Eiskalt vor dem Tor, stark im Mittelfeld und hinten dicht. Hier ist unsere beste Elf des Christmas Cups. Glückwunsch an alle elf Spieler! ❄️',
       '',
       'Danke an alle Teams für den gemeinsamen Abend. Frohe Weihnachten an alle, die es feiern! 🎄',
-      'Baba und bis zum nächsten Cup! 💣🐺',
+      'Genießt die Feiertage und nehmt euch Zeit für eure Familien und Freunde. ❤️',
       '**Eure Teams von Bomber Cup und Loco Night Cup**',
     ].filter(entry => entry !== null).join('\n');
   }

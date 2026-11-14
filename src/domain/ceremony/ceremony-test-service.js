@@ -325,7 +325,7 @@ function buildCeremonyText({ dayKey, teams, promotion = null, christmas = false 
   return [
     christmas ? '🎄🏆 **SIEGEREHRUNG • BOMBER X LOCO CHRISTMAS CUP**' : `🏆 SIEGEREHRUNG • ${dayLabel}`,
     '',
-    christmas ? 'Der Christmas Cup ist gespielt. Glückwunsch an unsere Top 3!' : 'Der Loco Night Cup ist beendet. Hier ist die offizielle Top 3:',
+    christmas ? 'Danke für einen starken Weihnachtscup! Hier sind unsere drei Teams auf dem Treppchen.' : 'Der Loco Night Cup ist beendet. Hier ist die offizielle Top 3:',
     '',
     `🥇 1. Platz: ${teams.first.clubName}`,
     '👑 Manager / Co-Manager:',
@@ -352,15 +352,17 @@ function buildCeremonyText({ dayKey, teams, promotion = null, christmas = false 
     '',
     '━━━━━━━━━━━━━━━━━━━━',
     '',
-    '❤️ Danke an alle Teilnehmer',
-    '',
-    'Vielen Dank an alle Teams für die Teilnahme am heutigen Cup.',
-    '',
-    'Wir hoffen, ihr hattet Spass und seid auch beim nächsten Loco Night Cup wieder dabei.',
-    '',
+    ...(!christmas ? [
+      '❤️ Danke an alle Teilnehmer',
+      '',
+      'Vielen Dank an alle Teams für die Teilnahme am heutigen Cup.',
+      '',
+      'Wir hoffen, ihr hattet Spass und seid auch beim nächsten Loco Night Cup wieder dabei.',
+      '',
+    ] : []),
     ...(christmas ? [
       '🎄 Frohe Weihnachten an alle, die es feiern!',
-      'Baba und bis zum nächsten Cup! 💣🐺',
+      'Genießt die Feiertage und nehmt euch Zeit für eure Familien und Freunde. ❤️',
       '**Eure Teams von Bomber Cup und Loco Night Cup**',
     ] : ['Bis zum nächsten Mal! 🏆🐺']),
   ].join('\n');
