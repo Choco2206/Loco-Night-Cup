@@ -312,11 +312,76 @@ async function renderKoProgression4({ rounds, serialNumber = null, eventId = 'ev
   };
 }
 
+const CHRISTMAS_PROGRESSION_LAYOUTS = {
+  quarter_final: { columns: [96, 930, 1764], cardWidth: 444, firstCenters: [365, 605, 845, 1085] },
+  round_of_16: { columns: [70, 665, 1260, 1855], cardWidth: 379, firstCenters: [344, 458, 572, 686, 800, 914, 1028, 1142] },
+  round_of_32: { columns: [56, 506, 956, 1406, 1856], cardWidth: 392, firstCenters: [
+    330, 392, 454, 516, 578, 640, 702, 764, 826, 888, 950, 1012, 1074, 1136, 1198, 1260,
+  ] },
+};
+const CHRISTMAS_ROUNDS = [
+  ['round_of_32', 'SECHZEHNTELFINALE'], ['round_of_16', 'ACHTELFINALE'],
+  ['quarter_final', 'VIERTELFINALE'], ['semi_final', 'HALBFINALE'], ['final', 'FINALE'],
+];
+const CHRISTMAS_TEMPLATE = 'assets/bomber-x-loco-christmas/road-to-glory.jpeg';
+
+async function renderChristmasProgression({ firstRoundKey, rounds, version = Date.now() }) {
+  const layout = CHRISTMAS_PROGRESSION_LAYOUTS[firstRoundKey];
+  if (!layout) return null;
+  const { columns, cardWidth, firstCenters } = layout;
+  const width = 2304;
+  const height = 1536;
+  const canvas = getCanvasApi().createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(await loadTemplate(CHRISTMAS_TEMPLATE), 0, 0, width, height);
+  const stages = CHRISTMAS_ROUNDS.slice(-columns.length);
+  const cardHeight = 57;
+  let centers = firstCenters;
+  for (const [index, [key, label]] of stages.entries()) {
+    const x = columns[index];
+    const color = key === 'final' ? GOLD : index % 2 ? BLUE : RED;
+    fillRounded(ctx, x, 260, cardWidth, 34, 8, '#091321', color, 2);
+    drawLabel(ctx, label, x + cardWidth / 2, 278, cardWidth - 16);
+    const matches = roundMatches(rounds, key);
+    const nextCenters = [];
+    for (const [slot, y] of centers.entries()) {
+      if (index + 1 < stages.length) {
+        const target = (centers[slot - slot % 2] + centers[slot - slot % 2 + 1]) / 2;
+        const nextX = columns[index + 1];
+        const elbow = (x + cardWidth + nextX) / 2;
+        drawConnector(ctx, [[x + cardWidth, y], [elbow, y], [elbow, target], [nextX, target]], color);
+        if (slot % 2 === 0) nextCenters.push(target);
+      }
+      const match = matches[slot];
+      const score = match?.status === 'confirmed' ? resultFor(match) : null;
+      const winner = score ? winnerSide(match) : null;
+      fillRounded(ctx, x, y - cardHeight / 2, cardWidth, cardHeight, 8, '#071223', color, 2);
+      drawLabel(ctx, String(slot + 1).padStart(2, '0'), x + 19, y, 30);
+      for (const [sideIndex, side] of ['home', 'away'].entries()) {
+        const rowY = y + (sideIndex ? 15 : -15);
+        const participant = match?.[side];
+        const logoBox = { centerX: x + 53, centerY: rowY, width: 23, height: 23 };
+        if (participant?.type === 'team') await drawTeamLogoOrFallback({ ctx, participant, logoBox, scaleY: 1 });
+        drawFittedText({
+          ctx, text: participantName(participant), x: x + 72, y: rowY, maxWidth: cardWidth - 132,
+          maxFontSize: 20, minFontSize: 12, align: 'left',
+          font: { family: 'Oxanium', weight: '700' }, color: winner === side ? '#ffe58a' : '#eef3fb',
+        });
+        fillRounded(ctx, x + cardWidth - 52, rowY - 12, 42, 24, 4, '#142137');
+        if (score) drawLabel(ctx, String(score[side]), x + cardWidth - 31, rowY, 34);
+      }
+    }
+    centers = nextCenters;
+  }
+  return { buffer: canvas.toBuffer('image/png'), fileName: `christmas-road-to-glory-${firstCenters.length * 2}-${version}.png`, width, height };
+}
+
 module.exports = {
   TEMPLATE,
   TEMPLATE_4,
   TEMPLATE_8,
   resultFor,
+  renderChristmasProgression,
   renderKoProgression4,
   renderKoProgression8,
   renderKoProgression16,

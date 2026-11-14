@@ -19,10 +19,12 @@ const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const { renderLocoZwergenCupCeremonyImage } = require('../../../utils/loco-zwergen-cup-ceremony-renderer');
 const { renderFc27CeremonyImage } = require('../../../utils/fc27-ceremony-renderer');
 const {
+  renderChristmasProgression,
   renderKoProgression4,
   renderKoProgression8,
   renderKoProgression16,
 } = require('../../../utils/ko-progression-renderer');
+const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../events/bomber-x-loco-config');
 const { getGraphicsVariant } = require('../graphics/graphics-profile');
 const { reserveSerial } = require('../team-of-the-tournament/team-of-the-tournament-post');
 
@@ -482,15 +484,22 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     : graphicsVariant === 'fc27'
     ? await renderFc27CeremonyImage({ dayKey, teams })
     : await renderHallOfFameCeremonyImage({ dayKey, teams });
-  const progressionRenderer = graphicsVariant === 'fc27' && !locoZwergenCup
+  const christmas = eventKey === HALLOWEEN_EVENT_KEY
+    && SEASONAL_CUP.theme === 'christmas' && event.cycle?.eventDate === SEASONAL_CUP.date;
+  const progressionRenderer = !christmas && graphicsVariant === 'fc27' && !locoZwergenCup
     ? getKoProgressionRenderer(event?.knockout?.firstRoundKey)
     : null;
   const progressionSerialNumber = progressionRenderer
     ? reserveSerial(eventKey, event?.cycle?.cycleKey || event?.cycle?.eventDate || null)
     : null;
-  const progressionRender = progressionSerialNumber === null
-    ? null
-    : await renderFc27KoProgression({ event, eventKey, serialNumber: progressionSerialNumber });
+  const progressionRender = christmas
+    ? await renderChristmasProgression({
+      firstRoundKey: event.knockout?.firstRoundKey,
+      rounds: event.knockout?.rounds,
+    })
+    : progressionSerialNumber === null
+      ? null
+      : await renderFc27KoProgression({ event, eventKey, serialNumber: progressionSerialNumber });
   const { buffer } = ceremonyRender;
   const channel = await ensureHallOfFameChannel(guild);
   const timestamp = new Date().toISOString();
