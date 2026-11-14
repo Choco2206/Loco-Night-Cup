@@ -93,7 +93,7 @@ test('Halloween round of 32 renders all sixteen matches on its own measured artw
   assert.equal(halloween.layout.matches[15].score.y, 1396);
   assert.equal(halloween.layout.template, 'assets/bomber-x-loco-halloween/round-of-32-v3.png');
   assert.notEqual(halloween.layout.template, regular.layout.template);
-  assert.equal(getKoLayout({ phase: 'round_of_32', eventId: 'bomber_halloween_2026-12-19' }).layout.template, regular.layout.template);
+  assert.equal(getKoLayout({ phase: 'round_of_32', eventId: 'bomber_halloween_2026-12-19' }).layout.template, 'assets/bomber-x-loco-christmas/round-of-32.jpeg');
 
   const matches = Array.from({ length: 16 }, (_, index) => ({
     home: { type: 'placeholder', displayName: `Heimteam ${index + 1}` },

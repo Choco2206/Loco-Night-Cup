@@ -2,6 +2,7 @@
 
 const path = require('path');
 const LAYOUTS = require('../config/ko-image-layouts');
+const CHRISTMAS_LAYOUTS = require('../config/bomber-x-loco-christmas-ko-image-layouts');
 const FC27_LAYOUTS = require('../config/ko-image-layouts-fc27');
 const BOMBER_X_LOCO_LAYOUTS = require('../config/bomber-x-loco-ko-image-layouts');
 const BOMBER_X_LOCO_HALLOWEEN_LAYOUTS = require('../config/bomber-x-loco-halloween-ko-image-layouts');
@@ -12,7 +13,7 @@ const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupSched
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 const { loadCanvasImage } = require('./canvas-image-loader');
 
-const { isHalloweenCycle, isBomberXLocoDate } = require('../src/domain/events/bomber-x-loco-config');
+const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP, isHalloweenCycle, isBomberXLocoDate } = require('../src/domain/events/bomber-x-loco-config');
 const LOCO_ZWERGEN_CUP_CYCLE_KEY = 'saturday_2026-09-12';
 let canvasApi = null;
 let renderSequence = 0;
@@ -57,6 +58,9 @@ function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
   if (isHalloweenCycle(options.eventId) && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
+  else if (SEASONAL_CUP.theme === 'christmas'
+    && options.eventId === `${HALLOWEEN_EVENT_KEY}_${SEASONAL_CUP.date}`
+    && CHRISTMAS_LAYOUTS[key]) layouts = CHRISTMAS_LAYOUTS;
   else if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
   else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
   else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;
@@ -158,7 +162,12 @@ async function renderKoImage({ phase, qualifiedTeams = [], matches = [], eventId
       await drawParticipant(ctx, match.home, slot.home, scaleX, scaleY, layouts);
       await drawParticipant(ctx, match.away, slot.away, scaleX, scaleY, layouts);
       const score = officialScore(match);
-      if (score) drawScore(ctx, `${score.home}:${score.away}`, slot.score, scaleX, scaleY, layouts);
+      if (score && layout.splitScore) {
+        drawScore(ctx, score.home, slot.score.home, scaleX, scaleY, layouts);
+        drawScore(ctx, score.away, slot.score.away, scaleX, scaleY, layouts);
+      } else if (score) {
+        drawScore(ctx, `${score.home}:${score.away}`, slot.score, scaleX, scaleY, layouts);
+      }
     }
   }
 
