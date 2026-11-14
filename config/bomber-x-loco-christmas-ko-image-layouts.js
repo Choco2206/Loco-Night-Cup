@@ -41,6 +41,11 @@ module.exports = {
   ], [
     { logoX: 226, nameX: 278, nameWidth: 564, scoreX: 917 },
   ], 72, 46),
+  third_place: cardRound('third-place', [
+    [1155, 1297],
+  ], [
+    { logoX: 101, nameX: 156, nameWidth: 688, scoreX: 922 },
+  ], 76, 48),
   fonts: {
     team: { family: 'Open Sans', weight: '600', minSize: 13 },
     score: { family: 'Oxanium', weight: '700', minSize: 14, maxSize: 25 },
