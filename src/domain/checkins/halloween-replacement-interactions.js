@@ -1,5 +1,7 @@
 'use strict';
 
+const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
+
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
@@ -14,7 +16,7 @@ const name = id => findTeamById(id)?.clubName || String(id);
 
 async function assertStaff(interaction) {
   const settings = readJson(FILES.settings, createSettingsDefault());
-  if (String(interaction.channelId) !== HALLOWEEN_CHECKIN_CHANNEL_ID) throw new Error('Bitte nutze diesen Button im Christmas-Check-in-Kanal.');
+  if (String(interaction.channelId) !== HALLOWEEN_CHECKIN_CHANNEL_ID) throw new Error(`Bitte nutze diesen Button im Check-in-Kanal für den ${SEASONAL_CUP_NAME}.`);
   if (settings.guild?.guildId && String(interaction.guildId) !== String(settings.guild.guildId)) throw new Error('Falscher Server.');
   const member = await interaction.guild?.members.fetch(interaction.user.id);
   const roles = [...(settings.roles?.adminRoleIds || []), ...(settings.roles?.cupLeadRoleIds || []), ...(settings.permissions?.adminRoleIds || []), ...(settings.permissions?.cupLeadRoleIds || [])].map(String);

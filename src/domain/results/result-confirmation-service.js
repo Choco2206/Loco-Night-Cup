@@ -5,8 +5,6 @@ const { readEventData, updateEventData } = require('../events/event-repository')
 const { findTeamById } = require('../teams/team-service');
 const { autoConfirmFirstReport: autoConfirmGroupResult } = require('../groups/group-results');
 const { autoConfirmFirstReport: autoConfirmKnockoutResult } = require('../knockout/knockout-results');
-const { autoConfirmRoyaleFirstReport } = require('../royale/royale-bracket');
-const { readRoyale, updateRoyale } = require('../royale/royale-repository');
 
 const pendingTimers = new Map();
 
@@ -33,10 +31,6 @@ function teamContactIds(participant) {
 }
 
 function getMatch(event, descriptor) {
-  if (descriptor.phase === 'royale') {
-    return event.bracket?.rounds?.[descriptor.phaseKey]?.matches
-      ?.find(match => String(match.id) === String(descriptor.matchId)) || null;
-  }
   if (descriptor.phase === 'knockout') {
     return event.knockout?.rounds?.[descriptor.phaseKey]?.matches
       ?.find(match => String(match.id) === String(descriptor.matchId)) || null;
@@ -49,14 +43,6 @@ function getMatch(event, descriptor) {
 }
 
 function persistNotice(descriptor, values) {
-  if (descriptor.phase === 'royale') {
-    updateRoyale(event => {
-      const match = getMatch(event, descriptor);
-      if (match?.confirmation) match.confirmation = { ...match.confirmation, ...values };
-      return event;
-    });
-    return;
-  }
   updateEventData(descriptor.eventKey, event => {
     const match = getMatch(event, descriptor);
     if (!match?.confirmation) return event;
@@ -117,21 +103,12 @@ async function sendOpponentReminder({ client, descriptor, match, channelId }) {
 }
 
 async function finalizeAutomaticResult(client, descriptor, channelId) {
-  const sourceEvent = descriptor.phase === 'royale' ? readRoyale() : readEventData(descriptor.eventKey);
+  const sourceEvent = readEventData(descriptor.eventKey);
   const pendingMatch = getMatch(sourceEvent, descriptor);
   const notice = pendingMatch?.confirmation || null;
-  let outcome;
-  if (descriptor.phase === 'royale') {
-    updateRoyale(event => {
-      outcome = autoConfirmRoyaleFirstReport(event.bracket, { roundKey: descriptor.phaseKey, matchId: descriptor.matchId });
-      if (outcome) event.status = event.bracket.status === 'completed' ? 'completed' : 'running';
-      return event;
-    });
-  } else {
-    outcome = descriptor.phase === 'knockout'
-      ? autoConfirmKnockoutResult({ eventKey: descriptor.eventKey, roundKey: descriptor.phaseKey, matchId: descriptor.matchId })
-      : autoConfirmGroupResult({ eventKey: descriptor.eventKey, groupKey: descriptor.phaseKey, matchId: descriptor.matchId });
-  }
+  const outcome = descriptor.phase === 'knockout'
+    ? autoConfirmKnockoutResult({ eventKey: descriptor.eventKey, roundKey: descriptor.phaseKey, matchId: descriptor.matchId })
+    : autoConfirmGroupResult({ eventKey: descriptor.eventKey, groupKey: descriptor.phaseKey, matchId: descriptor.matchId });
   if (!outcome) return false;
 
   await deleteOpponentReminder(client, notice, channelId);
@@ -142,10 +119,7 @@ async function finalizeAutomaticResult(client, descriptor, channelId) {
     allowedMentions: { parse: [] },
   }).catch(() => null);
 
-  if (descriptor.phase === 'royale') {
-    const { finalizeConfirmedRoyaleResult } = require('../royale/royale-interactions');
-    await finalizeConfirmedRoyaleResult(client, outcome);
-  } else if (descriptor.phase === 'knockout') {
+  if (descriptor.phase === 'knockout') {
     const { finalizeConfirmedKnockoutResult } = require('../knockout/knockout-interactions');
     await finalizeConfirmedKnockoutResult(client, descriptor.eventKey, outcome);
   } else {
@@ -180,7 +154,7 @@ async function handleResultOutcome({ client, eventKey, phase, phaseKey, outcome,
   }
   const targetChannelId = channelId || outcome.match.confirmation?.channelId;
   await sendOpponentReminder({ client, descriptor, match: outcome.match, channelId: targetChannelId });
-  const currentEvent = phase === 'royale' ? readRoyale() : readEventData(eventKey);
+  const currentEvent = readEventData(eventKey);
   const currentMatch = getMatch(currentEvent, descriptor) || outcome.match;
   scheduleTimer(client, descriptor, currentMatch, targetChannelId);
   return true;
@@ -206,21 +180,6 @@ function pendingDescriptors(eventKey, event) {
   return entries;
 }
 
-function royalePendingDescriptors(event = readRoyale()) {
-  const entries = [];
-  for (const [roundKey, round] of Object.entries(event.bracket?.rounds || {})) {
-    for (const match of round.matches || []) {
-      if (match.status !== 'pending_confirmation' || match.reports?.length !== 1 || !match.confirmation?.expiresAt) continue;
-      entries.push({
-        descriptor: { eventKey: 'knockout_royale', phase: 'royale', phaseKey: roundKey, matchId: match.id },
-        match,
-        channelId: match.confirmation.channelId || round.resultsChannelId || round.channelId,
-      });
-    }
-  }
-  return entries;
-}
-
 function initPendingResultConfirmations(client) {
   let scheduled = 0;
   for (const eventKey of EVENT_KEYS) {
@@ -228,10 +187,6 @@ function initPendingResultConfirmations(client) {
       scheduleTimer(client, entry.descriptor, entry.match, entry.channelId);
       scheduled += 1;
     }
-  }
-  for (const entry of royalePendingDescriptors()) {
-    scheduleTimer(client, entry.descriptor, entry.match, entry.channelId);
-    scheduled += 1;
   }
   console.log(`[results] ${scheduled} offene Zwei-Minuten-Bestätigungen wiederhergestellt.`);
   return scheduled;
@@ -242,5 +197,4 @@ module.exports = {
   handleResultOutcome,
   initPendingResultConfirmations,
   pendingDescriptors,
-  royalePendingDescriptors,
 };

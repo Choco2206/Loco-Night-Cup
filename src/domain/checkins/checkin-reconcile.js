@@ -1,12 +1,13 @@
 'use strict';
 
+const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
+
 const { EVENT_KEYS, isLeaguePhaseFormat } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
 const { collectValidRealTeams } = require('../events/event-format');
 const { drawGroupsForEvent, lockEventFormat } = require('../events/event-lock-service');
 const { maybeReleaseNextSlot, scheduleEvent } = require('../groups/group-releases');
-const { createRoyaleFromSaturdayCheckin } = require('../royale/royale-service');
 const { recalculateCheckinFormat } = require('./checkin-format');
 const { readEventData, updateEventData } = require('./checkin-repository');
 const { HALLOWEEN_EVENT_KEY, HALLOWEEN_EVENT_DATE, HALLOWEEN_CHECKIN_CHANNEL_ID } = require('../events/bomber-x-loco-config');
@@ -73,7 +74,7 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
   const minimum = minimumTeams(settings, event);
   const validTeamCount = getValidRealTeamCount(event, now);
   if (isBomberXLoco(event)) {
-    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Christmas Cup' : 'Bomber X Loco Cup';
+    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? SEASONAL_CUP_NAME : 'Bomber X Loco Cup';
     return [
       `❌ **${title} abgesagt**`, '',
       'Zum offiziellen Anmeldeschluss sind leider nicht genug Teams für ein gültiges Turnierformat zusammengekommen.', '',
@@ -94,7 +95,7 @@ function buildFinalCancelledMessage(event, settings, now = new Date()) {
 function buildFinalReadyMessage(eventKey, event, settings, now = new Date()) {
   const waitlistCount = getWaitlistOverflowCount(event);
   if (isBomberXLoco(event)) {
-    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? 'Bomber X Loco Christmas Cup' : 'Bomber X Loco Cup';
+    const title = event.eventKey === HALLOWEEN_EVENT_KEY ? SEASONAL_CUP_NAME : 'Bomber X Loco Cup';
     const drawTime = getDrawAt(eventKey, event, settings, now)?.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
     const attendanceTime = '20:55';
     return [
@@ -384,23 +385,6 @@ async function maybeDrawGroups({ client, eventKey, event, drawAt, now }) {
   if (!isReached(drawAt, now)) return { changed: false, event };
   if (event.status !== 'draw_ready') return { changed: false, event };
   if (!event.format?.lockedAt || event.groups?.status !== 'not_created') return { changed: false, event };
-  if (eventKey === 'saturday' && event.meta?.eventMode === 'knockout_royale') {
-    try {
-      createRoyaleFromSaturdayCheckin({ saturdayEvent: event, actorUserId: 'auto-checkin-reconcile', now });
-      let eventAfter = null;
-      updateEventData(eventKey, current => {
-        current.status = 'knockout';
-        current.meta = { ...(current.meta || {}), royaleBracketCreatedAt: nowIso(now), updatedAt: nowIso(now) };
-        eventAfter = current;
-        return current;
-      });
-      logStatus(eventKey, 'knockout_royale_bracket_created');
-      return { changed: true, event: eventAfter };
-    } catch (error) {
-      console.warn(`[checkin-reconcile] ${eventKey}: Royale-Turnierbaum fehlgeschlagen: ${error.message}`);
-      return { changed: false, event };
-    }
-  }
   try {
     const result = await drawGroupsForEvent({ eventKey, actorUserId: 'auto-checkin-reconcile', client, now });
     const running = markGroupsRunning(eventKey, now);

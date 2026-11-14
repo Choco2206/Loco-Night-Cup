@@ -1,5 +1,7 @@
 'use strict';
 
+const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
+
 const { EmbedBuilder } = require('discord.js');
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
@@ -46,7 +48,7 @@ function sortedStandings(group) {
 }
 function eventDisplayLabel(event) {
   return event?.meta?.eventMode === 'bomber_x_loco'
-    ? (event.eventKey === 'bomber_halloween' ? 'Bomber X Loco Christmas Cup' : 'Bomber X Loco Cup')
+    ? (event.eventKey === 'bomber_halloween' ? SEASONAL_CUP_NAME : 'Bomber X Loco Cup')
     : `Loco Night Cup ${event?.label || event?.eventKey}`;
 }
 function buildGroupEmbed(event, group) {

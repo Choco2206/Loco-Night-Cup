@@ -1,5 +1,7 @@
 'use strict';
 
+const { SEASONAL_CUP_NAME, SEASONAL_CUP_ICON, SEASONAL_CUP_DISPLAY_DATE } = require('../events/bomber-x-loco-config');
+
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
@@ -90,7 +92,7 @@ async function handleInteraction(interaction, client) {
   if (interaction.customId === `bomber_x_loco_redirect:${HALLOWEEN_EVENT_KEY}`) {
     const settings = readJson(FILES.settings, createSettingsDefault());
     const channelId = HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY];
-    await interaction.reply({ content: `💣🐺🎅 Am **19.12.2026** läuft der **Bomber X Loco Christmas Cup**. Anmeldung im <#${channelId}>.`, flags: EPHEMERAL });
+    await interaction.reply({ content: `💣🐺${SEASONAL_CUP_ICON} Am **${SEASONAL_CUP_DISPLAY_DATE}** läuft der **${SEASONAL_CUP_NAME}**. Anmeldung im <#${channelId}>.`, flags: EPHEMERAL });
     return true;
   }
 

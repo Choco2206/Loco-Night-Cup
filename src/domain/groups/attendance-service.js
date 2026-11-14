@@ -1,5 +1,7 @@
 'use strict';
 
+const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
+
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
@@ -83,7 +85,7 @@ function buildAttendancePayload(eventKey, groupKey, scope) {
     .setTitle(title)
     .setDescription([
       isBomber
-        ? `Zeigt kurz, dass ihr bereit für den Bomber X Loco ${halloween ? 'Christmas ' : ''}Cup seid.`
+        ? `Zeigt kurz, dass ihr bereit für den ${halloween ? SEASONAL_CUP_NAME : 'Bomber X Loco Cup'} seid.`
         : 'Zeigt kurz, dass ihr bereit für den Loco Night Cup seid.',
       '',
       ...lines,

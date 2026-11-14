@@ -11,7 +11,21 @@ const BOMBER_X_LOCO_DRAW_TIME = '20:00';
 const BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME = '20:55';
 const BOMBER_X_LOCO_TOURNAMENT_START_TIME = '21:00';
 const HALLOWEEN_EVENT_KEY = 'bomber_halloween';
-const HALLOWEEN_EVENT_DATE = '2026-12-19';
+// Update the date and theme together for the next seasonal cup.
+const SEASONAL_CUP = Object.freeze({
+  date: '2026-12-19',
+  theme: 'christmas',
+});
+const HALLOWEEN_EVENT_DATE = SEASONAL_CUP.date;
+const SEASONAL_CUP_NAME = `Bomber X Loco ${SEASONAL_CUP.theme === 'halloween' ? 'Halloween' : 'Christmas'} Cup`;
+const SEASONAL_CUP_ICON = SEASONAL_CUP.theme === 'halloween' ? '🎃' : '🎅';
+const SEASONAL_CUP_DISPLAY_DATE = SEASONAL_CUP.date.split('-').reverse().join('.');
+
+function isHalloweenCycle(eventId) {
+  const cycleKey = String(eventId || '');
+  return cycleKey === 'bomber_halloween_2026-10-30'
+    || (SEASONAL_CUP.theme === 'halloween' && cycleKey === `${HALLOWEEN_EVENT_KEY}_${SEASONAL_CUP.date}`);
+}
 const HALLOWEEN_CHECKIN_CHANNEL_ID = '1542823464434671676';
 
 const BOMBER_X_LOCO_FORMATS = {
@@ -37,8 +51,8 @@ function isBomberXLocoEvent(event) {
 }
 
 function buildBomberXLocoSchedule(eventDate = BOMBER_X_LOCO_EVENT_DATE, eventKey = BOMBER_X_LOCO_EVENT_KEY) {
-  const halloween = eventKey === HALLOWEEN_EVENT_KEY;
-  const offset = halloween ? '+01:00' : '+02:00';
+  const offset = new Intl.DateTimeFormat('en', { timeZone: 'Europe/Berlin', timeZoneName: 'longOffset' })
+    .formatToParts(new Date(`${eventDate}T12:00:00Z`)).find(part => part.type === 'timeZoneName').value.slice(3);
   const drawTime = BOMBER_X_LOCO_DRAW_TIME;
   const attendanceTime = BOMBER_X_LOCO_ATTENDANCE_DEADLINE_TIME;
   const resetDate = new Date(`${eventDate}T07:00:00${offset}`);
@@ -77,6 +91,11 @@ module.exports = {
   HALLOWEEN_CHECKIN_CHANNEL_ID,
   HALLOWEEN_EVENT_DATE,
   HALLOWEEN_EVENT_KEY,
+  SEASONAL_CUP,
+  SEASONAL_CUP_NAME,
+  SEASONAL_CUP_ICON,
+  SEASONAL_CUP_DISPLAY_DATE,
+  isHalloweenCycle,
   buildBomberXLocoSchedule,
   getBomberXLocoFormat,
   isBomberXLocoDate,

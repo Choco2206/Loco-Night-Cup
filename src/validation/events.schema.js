@@ -51,15 +51,12 @@ function validateEvent(data, expectedEventKey = null) {
   }
 
   if (requireObject(errors, data.format, 'format')) {
-    const isRoyale = data.eventKey === 'saturday' && data.meta?.eventMode === 'knockout_royale';
     const isZwergenCup = isLocoZwergenCupEvent(data);
     const isBomberCup = isBomberXLocoEvent(data);
-    const allowedFormatSizes = isRoyale
-      ? [8, 16, 32]
-      : isZwergenCup
-        ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
-        : isBomberCup
-          ? BOMBER_X_LOCO_FORMAT_SIZES
+    const allowedFormatSizes = isZwergenCup
+      ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
+      : isBomberCup
+        ? BOMBER_X_LOCO_FORMAT_SIZES
         : TOURNAMENT_FORMAT_SIZES;
     const acceptedStoredAllowedSizes = isZwergenCup || isBomberCup
       ? [allowedFormatSizes, TOURNAMENT_FORMAT_SIZES]

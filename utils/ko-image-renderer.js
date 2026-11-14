@@ -12,7 +12,7 @@ const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupSched
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
 const { loadCanvasImage } = require('./canvas-image-loader');
 
-const BOMBER_X_LOCO_CYCLE_KEY = 'friday_2026-09-25';
+const { isHalloweenCycle, isBomberXLocoDate } = require('../src/domain/events/bomber-x-loco-config');
 const LOCO_ZWERGEN_CUP_CYCLE_KEY = 'saturday_2026-09-12';
 let canvasApi = null;
 let renderSequence = 0;
@@ -25,7 +25,8 @@ function getCanvasApi() {
 }
 
 function isBomberXLocoRender(eventId) {
-  return [BOMBER_X_LOCO_CYCLE_KEY, 'bomber_halloween_2026-10-30'].includes(String(eventId || ''));
+  const [, eventKey, eventDate] = /^(.*)_(\d{4}-\d{2}-\d{2})$/.exec(String(eventId || '')) || [];
+  return isHalloweenCycle(eventId) || isBomberXLocoDate(eventKey, eventDate);
 }
 
 function isLocoZwergenCupRender(eventId) {
@@ -46,15 +47,6 @@ function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
 
   if (![
     'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final',
-    'royal_8_kings_round_1', 'royal_8_kings_round_2', 'royal_8_kings_final',
-    'royal_8_shadows_round_1', 'royal_8_shadows_round_2', 'royal_8_shadows_round_3', 'royal_8_shadows_final',
-    'royal_16_kings_round_1', 'royal_16_kings_round_2', 'royal_16_kings_round_3', 'royal_16_kings_final',
-    'royal_16_shadows_round_1', 'royal_16_shadows_round_2', 'royal_16_shadows_round_3',
-    'royal_16_shadows_round_4', 'royal_16_shadows_round_5', 'royal_16_shadows_final',
-    'royal_32_kings_round_1', 'royal_32_kings_round_2', 'royal_32_kings_round_3', 'royal_32_kings_round_4', 'royal_32_kings_final',
-    'royal_32_shadows_round_1', 'royal_32_shadows_round_2', 'royal_32_shadows_round_3', 'royal_32_shadows_round_4',
-    'royal_32_shadows_round_5', 'royal_32_shadows_round_6', 'royal_32_shadows_round_7', 'royal_32_shadows_final',
-    'royal_grand_final', 'royal_grand_final_reset',
   ].includes(phase)) {
     throw new Error(`Unbekannte K.O.-Bildphase: ${phase}`);
   }
@@ -64,7 +56,7 @@ function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
 function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
-  if (options.eventId === 'bomber_halloween_2026-10-30' && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
+  if (isHalloweenCycle(options.eventId) && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
   else if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
   else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
   else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;

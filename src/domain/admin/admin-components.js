@@ -27,8 +27,6 @@ const ADMIN_CATEGORIES = {
       ['admin_groups_draw', 'Gruppen ziehen', 'Gruppen für das Event auslosen'],
       ['admin_group_release_current', 'Aktuellen Spieltag freigeben', 'Nächsten Gruppenspieltag freigeben'],
       ['admin_knockout_create', 'K.O. erstellen', 'K.O.-Phase für das Event erstellen'],
-      ['admin_royale_status', 'Royal Status', 'Monatsdatum, Check-in und Turnierstatus anzeigen'],
-      ['admin_royale_lock', 'Royal starten', 'Royal-Format locken und Turnierbaum erstellen'],
     ],
   },
   teams: {
@@ -65,7 +63,6 @@ const ADMIN_CATEGORIES = {
       ['admin_league_phase_test_stop', 'Ligaphasen-Test beenden', 'Testkanäle und Rollenmitgliedschaften bereinigen'],
       ['admin_ko_images_test', 'K.O.-Bilder testen', 'Eine K.O.-Bildvorlage im Testkanal prüfen'],
       ['admin_simulate_knockout', 'K.O.-Phase simulieren', 'K.O.-Phase eines Events simulieren'],
-      ['admin_royale_sync', 'Royal synchronisieren', 'Check-in, Kanäle und aktuelle Runde aktualisieren'],
       ['admin_halloween_graphics_test', 'Halloween-Grafiken testen', 'Alle hinterlegten Halloween-Vorlagen mit Testdaten prüfen'],
       ['admin_hof_test', 'Hall of Fame testen', 'Siegerehrung im Testkanal prüfen'],
       ['admin_fc27_ceremony_test', 'FC-27-Grafiken testen', 'Alle neuen FC-27-Vorlagen gemeinsam prüfen'],

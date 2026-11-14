@@ -22,15 +22,6 @@ const TEST_VARIANTS = Object.freeze({
   fc27_semi_final: { phase: 'semi_final', matches: 2, variant: 'fc27', label: 'FC 27: Halbfinale' },
   fc27_third_place: { phase: 'third_place', matches: 1, variant: 'fc27', label: 'FC 27: Spiel um Platz 3' },
   fc27_final: { phase: 'final', matches: 1, variant: 'fc27', label: 'FC 27: Finale' },
-  royal_8_kings_round_1: { phase: 'royal_8_kings_round_1', matches: 4, label: 'Royal 8er: König Runde 1' },
-  royal_8_kings_round_2: { phase: 'royal_8_kings_round_2', matches: 2, label: 'Royal 8er: König Runde 2' },
-  royal_8_kings_final: { phase: 'royal_8_kings_final', matches: 1, label: 'Royal 8er: König Finale' },
-  royal_8_shadows_round_1: { phase: 'royal_8_shadows_round_1', matches: 2, label: 'Royal 8er: Schatten R1' },
-  royal_8_shadows_round_2: { phase: 'royal_8_shadows_round_2', matches: 2, label: 'Royal 8er: Schatten R2' },
-  royal_8_shadows_round_3: { phase: 'royal_8_shadows_round_3', matches: 1, label: 'Royal 8er: Schatten R3' },
-  royal_8_shadows_final: { phase: 'royal_8_shadows_final', matches: 1, label: 'Royal 8er: Schatten-Finale' },
-  royal_grand_final: { phase: 'royal_grand_final', matches: 1, label: 'Royal: Grand Finale' },
-  royal_grand_final_reset: { phase: 'royal_grand_final_reset', matches: 1, label: 'Royal: Grand-Finale-Reset' },
 });
 
 function shuffled(values) {

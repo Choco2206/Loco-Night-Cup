@@ -59,11 +59,9 @@ function getAllowedSizes(settings, event) {
   if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
   if (isLocoZwergenCupEvent(event)) return [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
 
-  const allowedSizes = event.meta?.eventMode === 'knockout_royale' && Array.isArray(event.format?.allowedSizes)
-    ? event.format.allowedSizes
-    : Array.isArray(settings.tournament?.allowedSizes)
-      ? settings.tournament.allowedSizes
-      : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
+  const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
+    ? settings.tournament.allowedSizes
+    : event.format?.allowedSizes || TOURNAMENT_FORMAT_SIZES;
   return [...allowedSizes]
     .filter(size => TOURNAMENT_FORMAT_SIZES.includes(Number(size)))
     .map(Number)

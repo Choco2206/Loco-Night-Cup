@@ -16,7 +16,6 @@ const { initPendingResultConfirmations } = require('./src/domain/results/result-
 const { initPowerRanking } = require('./src/domain/power-ranking');
 const { initLegacyRanking } = require('./src/domain/legacy-ranking');
 const tournamentLeadershipSystem = require('./src/domain/tournament-leadership');
-const royaleSystem = require('./src/domain/royale');
 const videoRequestSystem = require('./src/domain/video-requests');
 const facebookFeedSystem = require('./src/domain/social-media/facebook-feed');
 const ticketSystem = require('./src/domain/tickets');
@@ -132,7 +131,6 @@ async function main() {
         console.error('[premium] Einrichtung fehlgeschlagen; übrige Systeme starten weiter:', error);
       }));
       await runStartupStep('Check-ins', () => checkinSystem.init(client));
-      await runStartupStep('Knockout Royale', () => royaleSystem.init(client));
       await runStartupStep('Turnierleitung', () => tournamentLeadershipSystem.init(client));
       await runStartupStep('Admin', () => adminSystem.init(client));
       await runStartupStep('Rollen', () => roleSystem.init(client));
@@ -194,7 +192,6 @@ async function main() {
       if (await roleSystem.handleInteraction(interaction, client)) return;
       if (await teamSystem.handleInteraction(interaction, client)) return;
       if (await checkinSystem.handleInteraction(interaction, client)) return;
-      if (await royaleSystem.handleRoyaleInteraction(interaction, client)) return;
     } catch (error) {
       await handleInteractionError(interaction, error);
     }

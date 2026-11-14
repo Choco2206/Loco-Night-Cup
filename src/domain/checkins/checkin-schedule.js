@@ -1,5 +1,7 @@
 'use strict';
 
+const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
+
 const CHECKIN_EVENT_STATUSES = [
   'idle', 'checkin', 'checkin_open', 'deadline_reached', 'checkin_closed', 'draw_ready', 'cancelled', 'reset',
 ];
@@ -9,7 +11,6 @@ const EVENT_WEEKDAY_INDEX = {
 };
 
 const DEFAULT_TIMEZONE = 'Europe/Berlin';
-const { buildRoyaleSchedule, isRoyaleEventDate } = require('../royale/royale-schedule');
 const {
   BOMBER_X_LOCO_FORMAT_SIZES,
   HALLOWEEN_EVENT_DATE,
@@ -135,16 +136,6 @@ function getPlannedSchedule(eventKey, event, settings, now = new Date()) {
     return buildBomberXLocoSchedule(eventDate, eventKey);
   }
 
-  if (eventKey === 'saturday' && isRoyaleEventDate(eventDate)) {
-    const royale = buildRoyaleSchedule(eventDate);
-    return {
-      cycleKey: buildCycleKey(eventKey, eventDate), eventDate, timeZone,
-      deadlineAt: new Date(royale.deadlineAt), lateWindowUntil: new Date(royale.lateWindowUntil),
-      drawAt: new Date(royale.bracketAt), tournamentStartAt: new Date(royale.tournamentStartAt),
-      resetAt: new Date(royale.resetAt), eventMode: 'knockout_royale',
-    };
-  }
-
   const normalSchedule = {
     cycleKey: buildCycleKey(eventKey, eventDate),
     eventDate,
@@ -196,13 +187,11 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
   };
 
   if (event.meta.eventMode !== planned.eventMode) { event.meta.eventMode = planned.eventMode; changed = true; }
-  const allowedSizes = planned.eventMode === 'knockout_royale'
-    ? [8, 16, 32]
-    : planned.eventMode === 'bomber_x_loco'
-      ? BOMBER_X_LOCO_FORMAT_SIZES
-      : planned.eventMode === 'loco_zwergen_cup'
-        ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
-        : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
+  const allowedSizes = planned.eventMode === 'bomber_x_loco'
+    ? BOMBER_X_LOCO_FORMAT_SIZES
+    : planned.eventMode === 'loco_zwergen_cup'
+      ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
+      : (settings.tournament?.allowedSizes || [8, 16, 24, 32]);
   if (JSON.stringify(event.format.allowedSizes) !== JSON.stringify(allowedSizes)) { event.format.allowedSizes = [...allowedSizes]; changed = true; }
   if (planned.eventMode === 'bomber_x_loco' && Number(event.format.minimumRealTeams) !== 6) { event.format.minimumRealTeams = 6; changed = true; }
 
@@ -233,7 +222,7 @@ function canUseCheckinStatus(status) { return CHECKIN_EVENT_STATUSES.includes(st
 
 function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
   if (eventKey === 'saturday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
-    return { label: 'Christmas Cup', phase: 'special_event', canJoin: false, canLeave: false };
+    return { label: SEASONAL_CUP_NAME, phase: 'special_event', canJoin: false, canLeave: false };
   }
   if (['checkin_closed', 'draw_ready', 'groups', 'groups_running'].includes(event.status)) return { label: 'Geschlossen', phase: event.status, canJoin: false, canLeave: false };
   if (event.status === 'cancelled') return { label: 'Abgesagt', phase: 'cancelled', canJoin: false, canLeave: false };

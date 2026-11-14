@@ -34,10 +34,6 @@ function teamName(teamId) {
   return (team?.clubName || `Unbekanntes Team (${teamId})`) + premiumLabel(teamId);
 }
 
-function isRoyaleEvent(event) {
-  return event.meta?.eventMode === 'knockout_royale';
-}
-
 function uniqueStrings(values) {
   const seen = new Set();
   const result = [];
@@ -187,7 +183,7 @@ function formatMilestoneLine(size) {
 function formatSlotLines(slotState) {
   const lines = [];
   const playableSlotCount = slotState.playableSlotCount;
-  const milestones = slotState.isRoyale ? [8, 16, 32] : slotState.milestones || TOURNAMENT_MILESTONES;
+  const milestones = slotState.milestones || TOURNAMENT_MILESTONES;
 
   for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
     const label = slotState.participantLabels[slot - 1];
@@ -216,8 +212,6 @@ function getBannerAttachment(settings, event) {
   const graphicsProfile = getGraphicsProfile(settings);
   const configuredPath = isLocoZwergenCupEvent(event)
     ? 'assets/loco-zwerge-cup/check-in.jpeg'
-    : isRoyaleEvent(event)
-    ? 'assets/knockout-royale/royale-check-in.png'
     : graphicsProfile.checkinBannerPath || settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
   const absolutePath = path.isAbsolute(configuredPath)
     ? configuredPath
@@ -251,16 +245,13 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const drawAt = getDrawAt(eventKey, event, settings, now);
   const tournamentStartAt = getTournamentStartAt(eventKey, event, settings, now);
   const slotState = buildSlotState(event, settings);
-  slotState.isRoyale = isRoyaleEvent(event);
   slotState.milestones = getAllowedSizes(settings, event);
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
   const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
   const waitlistSection = formatWaitlistSection(slotState);
   const title = isLocoZwergenCupEvent(event)
     ? '🍄 Loco Zwergen Cup'
-    : isRoyaleEvent(event)
-      ? '🐺 Loco Knockout Royale'
-      : `🌕 Loco NightCup ${label}`;
+    : `🌕 Loco NightCup ${label}`;
 
   const description = [
     formatStatus(eventKey, event, settings, now),
@@ -268,7 +259,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
     '',
     `⏰ Offizieller Anmeldeschluss: ${formatTime(deadlineAt)}`,
     `🕒 Late-Check-in bis: ${formatTime(lateWindowUntil)}`,
-    `${isRoyaleEvent(event) ? '🌳 Turnierbaum-Erstellung' : '🎲 Gruppenauslosung'}: ${formatTime(drawAt)}`,
+    `🎲 Gruppenauslosung: ${formatTime(drawAt)}`,
     '',
     `🚀 Turnierstart: ${formatTime(tournamentStartAt)}`,
     nightHint,

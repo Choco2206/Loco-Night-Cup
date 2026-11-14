@@ -59,8 +59,6 @@ const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-t
 const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = require('../league-phase/league-phase-test');
 const { postTeamOfTheTournamentTest } = require('../team-of-the-tournament');
 const { postPowerRankingChampionTest, postPowerRankingTest } = require('../power-ranking');
-const { createRoyaleFromSaturdayCheckin, getRoyaleState } = require('../royale/royale-service');
-const { syncRoyaleRoundResources } = require('../royale/royale-rounds');
 
 const EPHEMERAL = 64;
 const ADMIN_ACTIONS = new Set([
@@ -99,9 +97,6 @@ const ADMIN_ACTIONS = new Set([
   'admin_ko_images_test',
   'admin_simulate_knockout',
   'admin_server_setup',
-  'admin_royale_status',
-  'admin_royale_lock',
-  'admin_royale_sync',
 ]);
 const ADMIN_SELECT_IDS = new Set([
   'admin_bye_add_select',
@@ -2049,39 +2044,6 @@ async function handleAdminInteraction(interaction, client) {
     if (actionCustomId.startsWith('admin_hof_first_page:')) {
       const [, page] = actionCustomId.split(':');
       await interaction.update(buildHallOfFameTeamSelectPayload({ placement: 'first', page }));
-      return true;
-    }
-
-    if (actionCustomId === 'admin_royale_status') {
-      const event = getRoyaleState();
-      await interaction.reply({
-        content: [
-          `**Loco Knockout Royale ${event.cycle?.eventDate || '-'}**`,
-          `Status: **${event.status}**`,
-          `Check-in: **${event.checkin?.entries?.length || 0} Teams**`,
-          `Aktives Format: **${event.format?.size || 'noch keines'}**`,
-          `Warteliste: **${event.checkin?.waitlistTeamIds?.length || 0}**`,
-          `Turnierstart: ${event.schedule?.tournamentStartAt ? `<t:${Math.floor(new Date(event.schedule.tournamentStartAt).getTime() / 1000)}:F>` : '-'}`,
-        ].join('\n'),
-        flags: EPHEMERAL,
-      });
-      return true;
-    }
-
-    if (actionCustomId === 'admin_royale_lock') {
-      await interaction.deferReply({ flags: EPHEMERAL });
-      const result = createRoyaleFromSaturdayCheckin({ saturdayEvent: readEventData('saturday'), actorUserId: interaction.user.id });
-      await refreshCheckinMessage('saturday', interaction.client);
-      await syncRoyaleRoundResources(interaction.client);
-      await interaction.editReply(`Knockout Royale als **${result.bracket.formatSize}er-Format** gelockt. Runde 1 – Pfad des Königs wurde vorbereitet.`);
-      return true;
-    }
-
-    if (actionCustomId === 'admin_royale_sync') {
-      await interaction.deferReply({ flags: EPHEMERAL });
-      await refreshCheckinMessage('saturday', interaction.client);
-      const resource = await syncRoyaleRoundResources(interaction.client);
-      await interaction.editReply(resource ? `Royal synchronisiert: **${resource.roundKey}**.` : 'Royal-Check-in synchronisiert; aktuell ist keine Runde offen.');
       return true;
     }
 
