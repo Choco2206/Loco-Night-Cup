@@ -17,7 +17,25 @@ function cardRound(template, rows, columns, logoSize, nameFontSize = logoSize - 
   return { template: `assets/bomber-x-loco-christmas/${template}.jpeg`, reference, kind: 'round', matches, splitScore: true };
 }
 
+function qualification(count, width, height, rows, columns, logoSize, fontSize) {
+  return {
+    template: `assets/bomber-x-loco-christmas/qualified-${count}.jpeg`,
+    reference: { width, height },
+    kind: 'qualification',
+    slots: rows.flatMap(y => columns.map(([logoX, left, right]) => ({
+      logo: { centerX: logoX, centerY: y, width: logoSize, height: logoSize },
+      teamName: { x: (left + right) / 2, y, width: right - left, height: logoSize, align: 'center', fontSize },
+    }))),
+  };
+}
+
 module.exports = {
+  qualification_8: qualification(8, 1536, 1024, [292, 454, 614, 773],
+    [[174, 273, 712], [882, 979, 1422]], 78, 34),
+  qualification_16: qualification(16, 1672, 941, [291, 421, 550, 676],
+    [[90, 142, 389], [495, 548, 796], [902, 951, 1200], [1309, 1360, 1611]], 56, 25),
+  qualification_32: qualification(32, 1536, 1024, [248, 328, 407, 486, 565, 645, 724, 803],
+    [[98, 138, 375], [457, 498, 738], [820, 860, 1098], [1181, 1221, 1459]], 38, 23),
   round_of_32: cardRound('round-of-32', [
     [346, 388], [472, 514], [596, 638], [720, 761],
     [841, 880], [958, 997], [1075, 1114], [1190, 1230],
@@ -52,7 +70,7 @@ module.exports = {
     { logoX: 101, nameX: 156, nameWidth: 688, scoreX: 922 },
   ], 76, 48),
   fonts: {
-    team: { family: 'Open Sans', weight: '600', minSize: 13 },
+    team: { family: 'Open Sans', weight: '600', maxSize: 30, minSize: 13 },
     score: { family: 'Oxanium', weight: '700', minSize: 14, maxSize: 25 },
   },
   colors: { text: '#ffffff' },

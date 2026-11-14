@@ -131,7 +131,8 @@ function qualifyBomberXLocoTeams(event, config, groupKeys) {
   return {
     rule: config.rule,
     qualifiedCount: config.qualifiedCount,
-    qualifiedTeams: qualifiedTeams.map((team, index) => ({ ...team, seed: index + 1 })),
+    qualifiedTeams: qualifiedTeams.sort((a, b) => a.groupRank - b.groupRank)
+      .map((team, index) => ({ ...team, seed: index + 1 })),
   };
 }
 

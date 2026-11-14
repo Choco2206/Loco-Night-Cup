@@ -34,11 +34,17 @@ function isLocoZwergenCupRender(eventId) {
   return String(eventId || '') === LOCO_ZWERGEN_CUP_CYCLE_KEY;
 }
 
+function isChristmasCycle(eventId) {
+  return SEASONAL_CUP.theme === 'christmas'
+    && eventId === `${HALLOWEEN_EVENT_KEY}_${SEASONAL_CUP.date}`;
+}
+
 function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
   const bomberXLoco = isBomberXLocoRender(eventId);
   const locoZwergenCup = isLocoZwergenCupRender(eventId);
   if (phase === 'qualification_overview') {
-    if (![4, 8, 16].includes(Number(qualifiedTeamCount))) throw new Error(`Keine K.O.-Uebersicht fuer ${qualifiedTeamCount} Teams.`);
+    if (![4, 8, 16].includes(Number(qualifiedTeamCount))
+      && !(isChristmasCycle(eventId) && Number(qualifiedTeamCount) === 32)) throw new Error(`Keine K.O.-Uebersicht fuer ${qualifiedTeamCount} Teams.`);
     return `qualification_${Number(qualifiedTeamCount)}`;
   }
 
@@ -58,9 +64,7 @@ function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
   if (isHalloweenCycle(options.eventId) && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
-  else if (SEASONAL_CUP.theme === 'christmas'
-    && options.eventId === `${HALLOWEEN_EVENT_KEY}_${SEASONAL_CUP.date}`
-    && CHRISTMAS_LAYOUTS[key]) layouts = CHRISTMAS_LAYOUTS;
+  else if (isChristmasCycle(options.eventId) && CHRISTMAS_LAYOUTS[key]) layouts = CHRISTMAS_LAYOUTS;
   else if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
   else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
   else if (isLocoZwergenCupRender(options.eventId) && LOCO_ZWERGEN_CUP_LAYOUTS[key]) layouts = LOCO_ZWERGEN_CUP_LAYOUTS;
