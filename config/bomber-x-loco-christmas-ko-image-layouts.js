@@ -46,6 +46,11 @@ module.exports = {
   ], [
     { logoX: 101, nameX: 156, nameWidth: 688, scoreX: 922 },
   ], 76, 48),
+  final: cardRound('final', [
+    [1187, 1328],
+  ], [
+    { logoX: 101, nameX: 156, nameWidth: 688, scoreX: 922 },
+  ], 76, 48),
   fonts: {
     team: { family: 'Open Sans', weight: '600', minSize: 13 },
     score: { family: 'Oxanium', weight: '700', minSize: 14, maxSize: 25 },
