@@ -135,7 +135,7 @@ async function buildScheduleImagePayload(group, { includeResultButtons = true } 
   const event = group.eventKey ? readEventData(group.eventKey) : null;
   const settings = readJson(FILES.settings, createSettingsDefault());
   let image;
-  if (isBomberXLocoEvent(event)) image = await generateBomberXLocoMatchesImage({ group });
+  if (isBomberXLocoEvent(event)) image = await generateBomberXLocoMatchesImage({ group, eventDate: event.cycle?.eventDate });
   else if (isLocoZwergenCupEvent(event)) image = await generateLocoZwergenCupMatchesImage({ group });
   else if (getGraphicsVariant(settings) === 'fc27') image = await generateFc27GroupScheduleImage({ group });
   else {

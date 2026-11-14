@@ -7,10 +7,13 @@ const { findTeamById } = require('../src/domain/teams/team-service');
 const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 
 // Current Bomber X Loco matches artwork was measured directly at 1024 x 1535.
+const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../src/domain/events/bomber-x-loco-config');
+
 const WIDTH = 1024;
 const HEIGHT = 1535;
 const BACKGROUNDS = Object.freeze({
   regular: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco', 'matches.png'),
+  christmas: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-christmas', 'matches.jpeg'),
   halloween: path.resolve(__dirname, '..', 'assets', 'bomber-x-loco-halloween', 'matches-v4.jpeg'),
 });
 
@@ -63,6 +66,20 @@ const HALLOWEEN_LAYOUT = Object.freeze({
   logoSize: 28,
 });
 
+// Measured on the 1672 × 941 Christmas artwork. Each pair is the
+// center of the home and away lines in one match card.
+const CHRISTMAS_LAYOUT = {
+  title: { x: 932, y: 242, maxWidth: 52 },
+  matchRowsY: [[430, 486], [558, 614], [688, 745]],
+  columns: [
+    { logoX: 65, nameX: 89, dividerX: 275, scoreX: 303 },
+    { logoX: 396, nameX: 420, dividerX: 601, scoreX: 629 },
+    { logoX: 720, nameX: 744, dividerX: 923, scoreX: 950 },
+    { logoX: 1040, nameX: 1064, dividerX: 1245, scoreX: 1273 },
+    { logoX: 1364, nameX: 1388, dividerX: 1573, scoreX: 1601 },
+  ],
+};
+
 let canvasApi = null;
 const backgroundPromises = new Map();
 const logoCache = new Map();
@@ -77,8 +94,7 @@ function setFont(ctx, size, family, weight = '400') {
   setCanvasFont(ctx, size, family, weight);
 }
 
-function loadBackground(eventKey) {
-  const variant = eventKey === 'bomber_halloween' ? 'halloween' : 'regular';
+function loadBackground(variant) {
   if (!backgroundPromises.has(variant)) {
     const promise = (async () => {
       const source = BACKGROUNDS[variant];
@@ -151,11 +167,12 @@ function normalizedScore(result) {
   const home = result.homeGoals ?? result.homeScore ?? result.score?.home ?? result.goals?.home;
   const away = result.awayGoals ?? result.awayScore ?? result.score?.away ?? result.goals?.away;
   if (!Number.isFinite(Number(home)) || !Number.isFinite(Number(away))) return null;
-  return `${Number(home)} : ${Number(away)}`;
+  return [Number(home), Number(away)];
 }
 
 function drawTitle(ctx, groupKey, layout) {
-  const text = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
+  const group = String(groupKey || '').toUpperCase();
+  const text = layout === CHRISTMAS_LAYOUT ? group : `GRUPPE ${group}`;
   fitFont(ctx, text, layout.title.maxWidth, 30, 20, 'Oxanium', '700');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -191,7 +208,7 @@ async function drawMatch(ctx, match, y, layout) {
   ctx.textAlign = 'center';
   ctx.fillText(awayName, layout.awayNameX, y);
 
-  const score = normalizedScore(match?.result);
+  const score = normalizedScore(match?.result)?.join(' : ');
   if (score && match?.status === 'confirmed') {
     fitFont(ctx, score, layout.scoreMaxWidth, 22, 14, 'Oxanium', '700');
     ctx.textAlign = 'center';
@@ -200,14 +217,41 @@ async function drawMatch(ctx, match, y, layout) {
   ctx.shadowBlur = 0;
 }
 
-async function generateBomberXLocoMatchesImage({ group }) {
-  const background = await loadBackground(group.eventKey);
+async function drawChristmasMatch(ctx, match, row, column) {
+  const scores = match.status === 'confirmed' ? normalizedScore(match.result) : null;
+  const participants = [match.home, match.away];
+  const logos = await Promise.all(participants.map(loadLogo));
+  const nameWidth = column.dividerX - column.nameX - 10;
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  for (const [index, participant] of participants.entries()) {
+    const y = row[index];
+    const name = participantName(participant);
+    drawLogo(ctx, logos[index], column.logoX, y, 32);
+    fitFont(ctx, name, nameWidth, 25, 15);
+    ctx.textAlign = 'left';
+    ctx.fillText(name, column.nameX, y, nameWidth);
+    if (scores) {
+      const score = String(scores[index]);
+      fitFont(ctx, score, 40, 25, 14, 'Oxanium', '700');
+      ctx.textAlign = 'center';
+      ctx.fillText(score, column.scoreX, y, 40);
+    }
+  }
+}
+
+async function generateBomberXLocoMatchesImage({ group, eventDate }) {
+  const variant = group.eventKey !== HALLOWEEN_EVENT_KEY ? 'regular'
+    : eventDate === SEASONAL_CUP.date ? SEASONAL_CUP.theme : 'halloween';
+  const background = await loadBackground(variant);
   const { createCanvas } = getCanvasApi();
-  const height = group.eventKey === 'bomber_halloween' ? 1536 : HEIGHT;
-  const canvas = createCanvas(WIDTH, height);
+  const christmas = variant === 'christmas';
+  const width = christmas ? 1672 : WIDTH;
+  const height = christmas ? 941 : variant === 'halloween' ? 1536 : HEIGHT;
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(background, 0, 0, WIDTH, height);
-  const layout = group.eventKey === 'bomber_halloween' ? HALLOWEEN_LAYOUT : LAYOUT;
+  ctx.drawImage(background, 0, 0, width, height);
+  const layout = christmas ? CHRISTMAS_LAYOUT : variant === 'halloween' ? HALLOWEEN_LAYOUT : LAYOUT;
   drawTitle(ctx, group.groupKey, layout);
 
   const matchdays = (group.matchdays || []).slice(0, 5);
@@ -216,14 +260,18 @@ async function generateBomberXLocoMatchesImage({ group }) {
     for (let matchIndex = 0; matchIndex < 3; matchIndex += 1) {
       const match = matches[matchIndex];
       if (!match) continue;
-      await drawMatch(ctx, match, layout.matchRowsY[dayIndex][matchIndex], layout);
+      if (christmas) {
+        await drawChristmasMatch(ctx, match, layout.matchRowsY[matchIndex], layout.columns[dayIndex]);
+      } else {
+        await drawMatch(ctx, match, layout.matchRowsY[dayIndex][matchIndex], layout);
+      }
     }
   }
 
   return {
     buffer: canvas.toBuffer('image/png'),
     fileName: `bomber-x-loco-matches-${String(group.groupKey || 'group').toLowerCase()}.png`,
-    width: WIDTH,
+    width,
     height,
   };
 }
