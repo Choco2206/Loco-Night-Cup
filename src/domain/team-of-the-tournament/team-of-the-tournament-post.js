@@ -364,6 +364,7 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
   const rendered = await renderTeamOfTheTournament({
     selection: state.selection,
     eventKey,
+    eventDate: event.cycle?.eventDate,
     serialNumber,
     variant,
   });
