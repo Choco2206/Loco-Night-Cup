@@ -57,7 +57,7 @@ const { buildAdminPanelPayload } = require('./admin-components');
 const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-test');
 const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = require('../league-phase/league-phase-test');
-const { postTeamOfTheTournamentTest } = require('../team-of-the-tournament');
+const { postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost, workflowSnapshot } = require('../team-of-the-tournament');
 const { postPowerRankingChampionTest, postPowerRankingTest } = require('../power-ranking');
 
 const EPHEMERAL = 64;
@@ -113,6 +113,7 @@ const ADMIN_SELECT_IDS = new Set([
   'admin_league_phase_test_select',
   'admin_simulate_knockout_select',
   'admin_ceremony_post_select',
+  'admin_tott_retry_select',
   'admin_team_ban_team_select',
   'admin_team_unban_select',
   'admin_checkin_manual_action_select',
@@ -1600,6 +1601,28 @@ async function handleAdminSelect(interaction, client, settings) {
     return true;
   }
 
+  if (interaction.customId === 'admin_tott_retry_select') {
+    const event = readEventData(eventKey);
+    if (event.knockout?.status !== 'completed') {
+      throw new Error('Die K.O.-Phase dieses Events ist noch nicht als abgeschlossen gespeichert.');
+    }
+    if (event.ceremony?.teamOfTheTournament?.postedAt) {
+      throw new Error('Das Team of the Tournament wurde für dieses Event bereits gepostet.');
+    }
+
+    const snapshot = workflowSnapshot(event);
+    const scheduled = scheduleTeamOfTheTournamentPost({ client, eventKey });
+    await interaction.editReply({
+      content: [
+        scheduled ? 'TOTT-Nachlauf gestartet.' : 'TOTT-Nachlauf läuft bereits.',
+        `${snapshot.capturedMatches}/${snapshot.linkedMatches} verknüpfte EA-Spiele erfasst, ${snapshot.selectedPlayers}/11 Spieler ausgewählt.`,
+        'Der Bot prüft die gespeicherten EA-Daten und veröffentlicht TOTT und Special Awards, sobald die Elf vollständig ist.',
+      ].join('\n'),
+      components: [],
+    });
+    return true;
+  }
+
   if (interaction.customId === 'admin_ceremony_post_select') {
     const result = await postHallOfFameCeremony({
       guild: interaction.guild,
@@ -2130,8 +2153,11 @@ async function handleAdminInteraction(interaction, client) {
 
     if (actionCustomId === 'admin_ceremony_post') {
       await interaction.reply({
-        content: 'Für welches Event soll die Siegerehrung gepostet werden?',
-        components: [buildEventSelect('admin_ceremony_post_select', 'Event auswählen')],
+        content: 'Wähle das Event für die Siegerehrung oder den TOTT-Nachlauf.',
+        components: [
+          buildEventSelect('admin_ceremony_post_select', 'Event für Siegerehrung auswählen'),
+          buildEventSelect('admin_tott_retry_select', 'Event für TOTT-Nachlauf auswählen'),
+        ],
         flags: EPHEMERAL,
       });
       return true;
