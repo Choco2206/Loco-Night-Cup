@@ -23,6 +23,7 @@ const LIVE_CHANNEL_ID = '1533394601220505641';
 const TEST_CHANNEL_ID = '1525035287971889173';
 const AUDIT_CHANNEL_ID = '1545836933102444635';
 const postTimers = new Map();
+const activePosts = new Map();
 
 function renderTeamOfTheTournament(input) {
   return require('../../../utils/team-of-the-tournament-renderer').renderTeamOfTheTournament(input);
@@ -350,7 +351,17 @@ async function postTottAuditReport({ client, eventKey, event, state }) {
   return true;
 }
 
-async function postTeamOfTheTournament({ client, eventKey, force = false }) {
+function postTeamOfTheTournament(options) {
+  const { eventKey } = options;
+  const active = activePosts.get(eventKey);
+  if (active) return active;
+
+  const publication = publishTeamOfTheTournament(options).finally(() => activePosts.delete(eventKey));
+  activePosts.set(eventKey, publication);
+  return publication;
+}
+
+async function publishTeamOfTheTournament({ client, eventKey, force = false }) {
   const event = readEventData(eventKey);
   const state = event.ceremony?.teamOfTheTournament;
   if (state?.postedAt) return { posted: false, reason: 'already_posted' };
@@ -390,11 +401,14 @@ async function postTeamOfTheTournament({ client, eventKey, force = false }) {
     variant,
   });
   const intro = buildIntroText({ variant, eventKey, eventDate: event.cycle?.eventDate });
-  const imageMessage = await channel.send({
-    content: intro,
-    files: [{ attachment: rendered.buffer, name: rendered.fileName }],
-    allowedMentions: { parse: ['everyone'] },
-  });
+  const imageMessage = state.imageMessageId && state.channelId === channel.id
+    ? { id: state.imageMessageId }
+    : await channel.send({
+      content: intro,
+      files: [{ attachment: rendered.buffer, name: rendered.fileName }],
+      allowedMentions: { parse: ['everyone'] },
+    });
+  updatePostState(eventKey, { channelId: channel.id, imageMessageId: imageMessage.id });
   const awardsMessage = await channel.send({
     files: [{ attachment: awardsRendered.buffer, name: awardsRendered.fileName }], allowedMentions: { parse: [] },
   });
@@ -433,11 +447,19 @@ function scheduleTeamOfTheTournamentPost({ client, eventKey }) {
   let attempt = 0;
   const run = async () => {
     try {
+      if (readEventData(eventKey).ceremony?.teamOfTheTournament?.postedAt) {
+        postTimers.delete(eventKey);
+        return;
+      }
       if (attempt <= 1) {
         console.info(`[tott] ${eventKey}: kontrollierte EA-Abschlussprüfung wird ausgeführt.`);
         await capturePendingMatchesNow(eventKey, readEventData(eventKey));
       }
       const current = readEventData(eventKey);
+      if (current.ceremony?.teamOfTheTournament?.postedAt) {
+        postTimers.delete(eventKey);
+        return;
+      }
       const snapshot = workflowSnapshot(current);
       const resumed = snapshot.capturedMatches < snapshot.linkedMatches || snapshot.selectedPlayers < 11
         ? resumeRatingCaptures(eventKey, current) : 0;

@@ -57,7 +57,7 @@ const { buildAdminPanelPayload } = require('./admin-components');
 const { refreshGroupPostsForTeam } = require('../groups/group-posts');
 const { TEST_VARIANTS, postKoImageTest } = require('../knockout/knockout-image-test');
 const { startLeaguePhaseIntegrationTest, stopLeaguePhaseIntegrationTest } = require('../league-phase/league-phase-test');
-const { postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost, workflowSnapshot } = require('../team-of-the-tournament');
+const { postTeamOfTheTournament, postTeamOfTheTournamentTest, scheduleTeamOfTheTournamentPost, workflowSnapshot } = require('../team-of-the-tournament');
 const { postPowerRankingChampionTest, postPowerRankingTest } = require('../power-ranking');
 
 const EPHEMERAL = 64;
@@ -1611,6 +1611,19 @@ async function handleAdminSelect(interaction, client, settings) {
     }
 
     const snapshot = workflowSnapshot(event);
+    if (snapshot.selectedPlayers >= 11) {
+      const result = await postTeamOfTheTournament({ client, eventKey, force: true });
+      if (result.posted || result.reason === 'already_posted') {
+        await interaction.editReply({
+          content: result.posted
+            ? `TOTT und Special Awards wurden in <#${result.channelId}> gepostet.`
+            : 'Das Team of the Tournament wurde bereits gepostet.',
+          components: [],
+        });
+        return true;
+      }
+    }
+
     const scheduled = scheduleTeamOfTheTournamentPost({ client, eventKey });
     await interaction.editReply({
       content: [
