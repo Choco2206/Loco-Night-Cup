@@ -1,5 +1,7 @@
 'use strict';
 
+const { RULES_FORUM_CHANNEL_ID } = require('../../app/constants');
+
 const fs = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
@@ -287,6 +289,7 @@ function buildPayload(state, { liveEvent = false } = {}) {
       `📺 Twitch: ${PADDY_HSV_TWITCH_URL}`,
       '✅ Anwesenheits-Check: bis 20:55 Uhr',
       '🚀 Turnierstart: 21:00 Uhr',
+      `📜 Regeln: <#${RULES_FORUM_CHANNEL_ID}>`,
       '',
       `🏆 Aktuelles Format: ${format ? `${format}er Turnier` : 'noch kein gültiges Format'}`,
       `👥 Teilnehmerfeld: ${participantCount}/${participantCapacity} Plätze${byeCount ? ` (${cleanEntries.length} Teams + ${byeCount} Freilos${byeCount === 1 ? '' : 'e'})` : ''}`,

@@ -2,6 +2,7 @@
 
 const {
   DATA_VERSION,
+  RULES_FORUM_CHANNEL_ID,
   EVENT_KEYS,
   EVENT_LABELS,
   EVENT_PROFILE_BY_KEY,
@@ -382,7 +383,7 @@ function createSettingsDefault() {
       roleSelectChannelId: null,
       teamRegistrationChannelId: null,
       registeredTeamsChannelId: null,
-      rulesChannelId: null,
+      rulesChannelId: RULES_FORUM_CHANNEL_ID,
       banlistChannelId: null,
       adminPanelChannelId: null,
       announcementChannelId: null,

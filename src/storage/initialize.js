@@ -5,6 +5,7 @@ const { GTA_CUP_KEY, GTA_CUP_CHANNEL } = require('../domain/events/loco-gta-cup-
 const fs = require('fs');
 const {
   EVENT_KEYS,
+  RULES_FORUM_CHANNEL_ID,
   EVENT_PROFILE_BY_KEY,
   KNOCKOUT_ROUNDS,
   TOURNAMENT_FORMAT_SIZES,
@@ -327,6 +328,10 @@ function removeLegacyResetTimeFromSettingsFile() {
   let changed = false;
   // New one-off events need a nullable channel entry in existing installations.
   settings.channels = settings.channels || {};
+  if (settings.channels.rulesChannelId !== RULES_FORUM_CHANNEL_ID) {
+    settings.channels.rulesChannelId = RULES_FORUM_CHANNEL_ID;
+    changed = true;
+  }
   settings.channels.checkinChannelIds = settings.channels.checkinChannelIds || {};
   if (settings.channels.checkinChannelIds.bomber_halloween === undefined) {
     settings.channels.checkinChannelIds.bomber_halloween = null;

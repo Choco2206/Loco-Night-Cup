@@ -354,6 +354,14 @@ async function ensureServerStructure({ guild, actorUserId }) {
 
   const coreChannels = {};
   for (const definition of CHANNEL_DEFINITIONS) {
+    if (definition.key === 'rulesChannelId') {
+      const forum = await fetchChannel(guild, settings.channels.rulesChannelId);
+      if (forum?.type === ChannelType.GuildForum) {
+        coreChannels[definition.key] = forum;
+        result.channels.reused.push({ name: forum.name, id: forum.id });
+        continue;
+      }
+    }
     coreChannels[definition.key] = await ensureTextChannel({
       guild,
       configuredId: settings.channels[definition.key],

@@ -31,9 +31,9 @@ const { getGraphicsProfile } = require('../graphics/graphics-profile');
 const TOURNAMENT_MILESTONES = TOURNAMENT_FORMAT_SIZES;
 const MAX_DISPLAY_SLOTS = 32;
 
-function teamName(teamId) {
+function teamName(teamId, showPremium) {
   const team = findTeamById(teamId);
-  return (team?.clubName || `Unbekanntes Team (${teamId})`) + premiumLabel(teamId);
+  return (team?.clubName || `Unbekanntes Team (${teamId})`) + (showPremium ? premiumLabel(teamId) : '');
 }
 
 function uniqueStrings(values) {
@@ -160,11 +160,11 @@ function buildSlotState(event, settings) {
   const waitlistByeCount = Math.max(0, byeCount - activeByeCount);
 
   const activeLabels = [
-    ...activeTeamIds.map(teamName),
+    ...activeTeamIds.map(teamId => teamName(teamId, !isGtaCup(event))),
     ...Array.from({ length: activeByeCount }, (_, index) => activeByeCount > 1 ? `Freilos-Team ${index + 1}` : 'Freilos'),
   ];
   const waitlistLabels = [
-    ...waitlistTeamIds.map(teamName),
+    ...waitlistTeamIds.map(teamId => teamName(teamId, !isGtaCup(event))),
     ...Array.from({ length: waitlistByeCount }, (_, index) => waitlistByeCount > 1 ? `Freilos-Team ${activeByeCount + index + 1}` : 'Freilos'),
   ];
 
@@ -270,6 +270,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
     nightHint,
     '',
     rulesLine,
+    isGtaCup(event) ? '⭐ **Keine Bevorzugung von Premium-Teams.**' : null,
     isGtaCup(event) ? '💶 **5 € Teilnahmegebühr pro Team**. Anmeldung zuerst auf der Freigabeliste. Wenn ihr auf der Nachrückerliste bleibt und keinen Startplatz bekommt, erstatten wir die 5 €.' : null,
     formatCheckinSummary(event, settings, slotState),
     '─────────────',

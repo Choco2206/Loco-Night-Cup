@@ -4,6 +4,8 @@ const { SEASONAL_CUP_NAME } = require('../domain/events/bomber-x-loco-config');
 
 const { GTA_CUP_KEY } = require('../domain/events/loco-gta-cup-config');
 
+const RULES_FORUM_CHANNEL_ID = '1571156165596028948';
+
 const EVENT_KEYS = [
   'monday',
   'tuesday',
@@ -107,6 +109,7 @@ const EVENT_PROFILE_BY_KEY = {
 const DATA_VERSION = 1;
 
 module.exports = {
+  RULES_FORUM_CHANNEL_ID,
   BAN_REASONS,
   BAN_STATUSES,
   DATA_VERSION,
