@@ -168,6 +168,7 @@ function adminWithdrawTeam({ eventKey, teamId, actorUserId, now = new Date() }) 
   updateEventData(eventKey, event => {
     ensureCheckinShape(event);
     assertManualCheckinEventEditable(event);
+    if (isGtaCup(event) && event.format?.lockedAt) throw new Error('Das Turnierformat ist bereits festgelegt.');
     if (!hasTeamEntry(event, teamId)) {
       recalculateCheckinFormat(event, settings, now);
       result = { changed: false, wasCheckedIn: false, team, event };
@@ -211,14 +212,15 @@ function getPublicCheckinState(eventKey) {
   return { event, settings };
 }
 
-function reviewGtaCupPayment({ eventKey, reference, approved, actorUserId, now = new Date() }) {
+function reviewGtaCupPayment({ eventKey, teamId, reference, approved, actorUserId, now = new Date() }) {
   const settings = readSettings();
   let result;
   updateEventData(eventKey, event => {
     if (!isGtaCup(event)) throw new Error('Ungültiges Event.');
     const pending = event.checkin?.pendingPaymentEntries || [];
-    const matches = pending.filter(entry => entry.teamId === reference
-      || findTeamById(entry.teamId)?.clubName?.toLowerCase() === reference.toLowerCase());
+    const matches = pending.filter(entry => teamId
+      ? String(entry.teamId) === teamId
+      : entry.teamId === reference || findTeamById(entry.teamId)?.clubName?.toLowerCase() === reference?.toLowerCase());
     if (matches.length !== 1) throw new Error('Kein eindeutiges Team auf der Freigabeliste gefunden. Gib die Team-ID an.');
     const [entry] = matches;
     const team = approved ? getManualCheckinTeam(entry.teamId, now) : findTeamById(entry.teamId);

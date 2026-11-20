@@ -7,7 +7,7 @@ const { createEventDefault, createSettingsDefault } = require('../src/storage/de
 const { ensureEventCycle } = require('../src/domain/checkins/checkin-schedule');
 const { chooseFormatSize, getAllowedSizes } = require('../src/domain/checkins/checkin-format');
 const { buildCheckinMessagePayload } = require('../src/domain/checkins/checkin-components');
-const { buildGtaPaymentPayload } = require('../src/domain/checkins/gta-cup-payment-panel');
+const { buildGtaPaymentPayload, buildTeamSelection } = require('../src/domain/checkins/gta-cup-payment-panel');
 const { createGroups } = require('../src/domain/groups/group-draw');
 const { qualifyTeams } = require('../src/domain/knockout/knockout-qualification');
 const { buildKnockoutRounds } = require('../src/domain/knockout/knockout-bracket');
@@ -28,7 +28,7 @@ test('GTA Cup check-in has its own date, payment information and four-team incre
   assert.match(payload.embeds.at(-1).toJSON().description, /5 € Teilnahmegebühr.*erstatt/);
   const paymentPanel = buildGtaPaymentPayload(event, settings);
   assert.equal(paymentPanel.embeds[0].toJSON().title, 'Freigabeliste (0)');
-  assert.equal(paymentPanel.components[0].toJSON().components.length, 2);
+  assert.equal(paymentPanel.components[0].toJSON().components.length, 3);
 });
 
 test('all GTA Cup formats create complete four-team groups and the promised knockout fields', () => {
@@ -91,5 +91,24 @@ test('pending registrations are excluded from check-in and rejection clears the 
     repository.updateEventData = originalUpdate;
     validation.getEligibleTeamForUser = originalLookup;
     delete require.cache[base];
+  }
+});
+
+test('payment review and withdrawal menus preserve registration order across pages', () => {
+  const entries = Array.from({ length: 55 }, (_, i) => ({
+    teamId: `gta-page-${i + 1}`,
+    checkedInAt: new Date(Date.UTC(2026, 10, 20, 12, i)).toISOString(),
+  })).reverse();
+  const event = { checkin: { entries, pendingPaymentEntries: entries } };
+  for (const action of ['approve', 'reject', 'withdraw']) {
+    for (const [page, count] of [[0, 25], [1, 25], [2, 5]]) {
+      const payload = buildTeamSelection(event, action, page);
+      const [menu, navigation] = payload.components.map(row => row.toJSON().components);
+      assert.equal(menu[0].options.length, count);
+      assert.equal(menu[0].options[0].value, `gta-page-${page * 25 + 1}`);
+      assert.equal(Boolean(navigation[0].disabled), page === 0);
+      assert.equal(Boolean(navigation[1].disabled), page === 2);
+    }
+    assert.match(buildTeamSelection({ checkin: {} }, action, 99).content, /leer|kein Team/);
   }
 });

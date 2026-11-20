@@ -100,7 +100,7 @@ async function handleInteractionError(interaction, error) {
 
 function isDirectCheckinButton(interaction) {
   const customId = String(interaction.customId || '');
-  if (customId.startsWith('gta_payment_')) return interaction.isButton() || interaction.isModalSubmit();
+  if (customId.startsWith('gta_payment_')) return interaction.isButton() || interaction.isStringSelectMenu();
   if (!interaction.isButton()) return false;
   return customId.startsWith('checkin_join:')
     || customId.startsWith('checkin_leave:')
