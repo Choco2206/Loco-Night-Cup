@@ -1,6 +1,7 @@
 'use strict';
 
 const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../events/bomber-x-loco-config');
+const { GTA_CUP_KEY } = require('../events/loco-gta-cup-config');
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createSettingsDefault, createTottHistoryDefault } = require('../../storage/defaults');
@@ -106,6 +107,22 @@ function selectSpecialAwards(performances) {
 }
 
 function buildIntroText({ test = false, variant = 'default', eventKey = null, eventDate } = {}) {
+  if (eventKey === GTA_CUP_KEY) {
+    return [
+      '🌴 **LOCO GTA VI CUP | TEAM OF THE TOURNAMENT**',
+      '',
+      'Vice City hat elf neue Legenden. 🌃🐺',
+      '',
+      'Die Mission war klar: abliefern, wenn’s drauf ankommt. Vorne eiskalt, im Mittelfeld den Überblick behalten und hinten die Tür zugemacht. Diese Elf hat dem Cup ihren Stempel aufgedrückt.',
+      '',
+      '🎮 **Mission abgeschlossen: Platz in der besten Elf gesichert.**',
+      '',
+      'Glückwunsch an alle, die sich ihren Spot im **Team of the Tournament** erspielt haben. Ihr habt die Nacht übernommen. 🔥',
+      '',
+      '**Vice City schläft nie. Loco auch nicht.**',
+    ].join('\n');
+  }
+
   if (eventKey === HALLOWEEN_EVENT_KEY && SEASONAL_CUP.theme === 'christmas' && eventDate === SEASONAL_CUP.date) {
     return [
       test ? '🧪 **TESTAUSGABE – KEINE ECHTE AUSZEICHNUNG**' : null,

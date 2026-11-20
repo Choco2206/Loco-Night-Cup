@@ -131,7 +131,9 @@ function buildAdminPanelPayload(selectedCategory = null) {
       new ButtonBuilder().setCustomId('admin_christmas_graphics_test')
         .setLabel('Christmas Cup testen').setEmoji('🎄').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('admin_halloween_graphics_test')
-        .setLabel('Halloween-Grafiken testen').setEmoji('🎃').setStyle(ButtonStyle.Primary)
+        .setLabel('Halloween-Grafiken testen').setEmoji('🎃').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin_gta_graphics_test')
+        .setLabel('GTA VI Cup testen').setEmoji('🌴').setStyle(ButtonStyle.Success)
     ));
   }
   return { embeds: [embed], components };
