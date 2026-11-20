@@ -281,7 +281,9 @@ function buildCheckinEmbed(eventKey, event, settings) {
     waitlistSection,
     '',
     '⚠️ Wichtiger Hinweis zur Abmeldung',
-    `Nach dem offiziellen Anmeldeschluss um ${formatTime(deadlineAt)} Uhr führt eine Abmeldung automatisch zu einer 7-Tage-Sperre.`,
+    isGtaCup(event)
+      ? `Wenn ihr ausfallt, meldet euch bitte über **Abmelden** ab. Das geht bis zum Ende des Late-Check-ins um ${formatTime(lateWindowUntil)} Uhr, auch nach dem offiziellen Anmeldeschluss ohne Sperre.`
+      : `Nach dem offiziellen Anmeldeschluss um ${formatTime(deadlineAt)} Uhr führt eine Abmeldung automatisch zu einer 7-Tage-Sperre.`,
   ].filter(line => line !== null && line !== undefined).join('\n');
 
   return new EmbedBuilder()
@@ -318,6 +320,17 @@ function buildCheckinMessagePayload(eventKey, event, settings) {
   const bannerAttachment = getBannerAttachment(settings, event);
   const bannerEmbed = buildBannerEmbed(bannerAttachment);
   const embeds = [bannerEmbed, buildCheckinEmbed(eventKey, event, settings)].filter(Boolean);
+
+  if (isGtaCup(event)) {
+    const { participantLabels, displaySlotCount, playableSlotCount } = buildSlotState(event, settings);
+    const overflow = participantLabels.slice(displaySlotCount);
+    if (overflow.length) {
+      const lines = overflow.slice(0, 24).map((name, index) =>
+        `${displaySlotCount - playableSlotCount + index + 1}. ${name.slice(0, 48)}`);
+      if (overflow.length > lines.length) lines.push(`… und ${overflow.length - lines.length} weitere Teams`);
+      embeds.push(new EmbedBuilder().setTitle('Warteliste · weitere Teams').setDescription(lines.join('\n')));
+    }
+  }
 
   return {
     embeds,

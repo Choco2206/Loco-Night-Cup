@@ -115,7 +115,7 @@ function withdrawTeam({ eventKey, userId, now = new Date() }) {
   }
   if (!hasTeamEntry(event, team.id)) return { changed: false, wasCheckedIn: false, lateWithdrawal: false, team, event };
 
-  if (isAfterDeadline(eventKey, event, settings, now)) {
+  if (!isGtaCup(event) && isAfterDeadline(eventKey, event, settings, now)) {
     const ban = createLateWithdrawalBan({ team, eventKey, actorUserId: userId, settings, now });
     const affectedEventKeys = removeTeamFromAllEvents({ teamId: team.id, settings, now });
     updateEventData(eventKey, current => {
