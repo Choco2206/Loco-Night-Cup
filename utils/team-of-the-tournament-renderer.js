@@ -8,6 +8,8 @@ const BOMBER_X_LOCO_LAYOUT = require('../config/bomber-x-loco-tott-layout');
 const CHRISTMAS_LAYOUT = require('../config/bomber-x-loco-christmas-tott-layout');
 const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../src/domain/events/bomber-x-loco-config');
 const HALLOWEEN_LAYOUT = require('../config/bomber-x-loco-halloween-tott-layout');
+const { GTA_CUP_KEY } = require('../src/domain/events/loco-gta-cup-config');
+const LOCO_GTA_CUP_LAYOUT = require('../config/loco-gta-cup-tott-layout');
 const LOCO_ZWERGEN_CUP_LAYOUT = require('../config/loco-zwergen-cup-tott-layout');
 const { ROOT_DIR, TEAM_LOGOS_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
@@ -81,6 +83,7 @@ function orderedPlayers(selection) {
 }
 
 async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'default', eventKey = null, eventDate }) {
+  if (eventKey === GTA_CUP_KEY) variant = GTA_CUP_KEY;
   if (eventKey === HALLOWEEN_EVENT_KEY) {
     variant = SEASONAL_CUP.theme === 'christmas' && eventDate === SEASONAL_CUP.date
       ? 'bomber_christmas' : 'bomber_halloween';
@@ -92,6 +95,7 @@ async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'd
     fc27: FC27_LAYOUT,
     bomber_x_loco: BOMBER_X_LOCO_LAYOUT,
     loco_zwergen_cup: LOCO_ZWERGEN_CUP_LAYOUT,
+    [GTA_CUP_KEY]: LOCO_GTA_CUP_LAYOUT,
   };
   const layout = layouts[variant] || DEFAULT_LAYOUT;
   const template = await loadTemplate(layout);
@@ -128,6 +132,7 @@ async function renderTeamOfTheTournament({ selection, serialNumber, variant = 'd
     fc27: 'team-of-the-tournament-fc27',
     bomber_x_loco: 'bomber-x-loco-team-of-the-tournament',
     loco_zwergen_cup: 'loco-zwergen-cup-team-of-the-tournament',
+    [GTA_CUP_KEY]: 'loco-gta-vi-cup-team-of-the-tournament',
   };
   const prefix = prefixes[variant] || prefixes.default;
   return { buffer: canvas.toBuffer('image/png'), fileName: `${prefix}${layout.serial ? `-${serialNumber}` : ''}.png` };
