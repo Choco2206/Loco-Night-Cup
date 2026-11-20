@@ -485,6 +485,7 @@ async function handleInteraction(interaction, client) {
 
 module.exports = {
   ...restored,
+  requireAdmin,
   handleAdminButton: handleAdminInteraction,
   handleAdminInteraction,
   handleInteraction,

@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_KEY, GTA_CUP_CHANNEL } = require('../domain/events/loco-gta-cup-config');
+
 const fs = require('fs');
 const {
   EVENT_KEYS,
@@ -118,7 +120,7 @@ function isConfiguredCheckinMap(map) {
 }
 
 function repairCheckinChannelIdsFromSeed(settings, seed) {
-  const seedMap = seed?.channels?.checkinChannelIds;
+  const seedMap = { ...seed?.channels?.checkinChannelIds, [GTA_CUP_KEY]: GTA_CUP_CHANNEL };
   if (!isConfiguredCheckinMap(seedMap)) return false;
 
   settings.channels = settings.channels || {};
@@ -328,6 +330,10 @@ function removeLegacyResetTimeFromSettingsFile() {
   settings.channels.checkinChannelIds = settings.channels.checkinChannelIds || {};
   if (settings.channels.checkinChannelIds.bomber_halloween === undefined) {
     settings.channels.checkinChannelIds.bomber_halloween = null;
+    changed = true;
+  }
+  if (settings.channels.checkinChannelIds[GTA_CUP_KEY] !== GTA_CUP_CHANNEL) {
+    settings.channels.checkinChannelIds[GTA_CUP_KEY] = GTA_CUP_CHANNEL;
     changed = true;
   }
   changed = removeLegacyResetTimeFromSettings(settings) || changed;

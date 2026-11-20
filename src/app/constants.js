@@ -2,6 +2,8 @@
 
 const { SEASONAL_CUP_NAME } = require('../domain/events/bomber-x-loco-config');
 
+const { GTA_CUP_KEY } = require('../domain/events/loco-gta-cup-config');
+
 const EVENT_KEYS = [
   'monday',
   'tuesday',
@@ -11,6 +13,7 @@ const EVENT_KEYS = [
   'saturday',
   'sunday',
   'bomber_halloween',
+  GTA_CUP_KEY,
 ];
 
 const EVENT_LABELS = {
@@ -22,6 +25,7 @@ const EVENT_LABELS = {
   saturday: 'Samstag',
   sunday: 'Sonntag',
   bomber_halloween: SEASONAL_CUP_NAME,
+  [GTA_CUP_KEY]: 'Loco GTA VI Cup',
 };
 
 const GROUP_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -97,6 +101,7 @@ const EVENT_PROFILE_BY_KEY = {
   saturday: 'weekend_late_night',
   sunday: 'weekend_night',
   bomber_halloween: 'weekend_late_night',
+  [GTA_CUP_KEY]: 'weekend_late_night',
 };
 
 const DATA_VERSION = 1;

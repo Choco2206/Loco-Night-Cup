@@ -1,5 +1,7 @@
 'use strict';
 
+const { isGtaCup } = require('../events/loco-gta-cup-config');
+
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
@@ -74,6 +76,15 @@ function checkInTeam({ eventKey, userId, now = new Date() }) {
       return event;
     }
     const timestamp = nowIso(now);
+    if (isGtaCup(event)) {
+      if (event.format?.lockedAt) throw new Error('Das Turnierformat ist bereits festgelegt.');
+      event.checkin.pendingPaymentEntries ||= [];
+      const pending = event.checkin.pendingPaymentEntries;
+      const changed = !pending.some(entry => entry.teamId === String(team.id));
+      if (changed) pending.push({ teamId: String(team.id), checkedInByUserId: String(userId), checkedInAt: timestamp });
+      result = { changed, pendingPayment: true, team, event };
+      return event;
+    }
     event.checkin.entries.push({ teamId: String(team.id), checkedInByUserId: String(userId), checkedInAt: timestamp });
     event.meta = { ...event.meta, updatedAt: timestamp };
     recalculateCheckinFormat(event, settings);
@@ -95,6 +106,13 @@ function withdrawTeam({ eventKey, userId, now = new Date() }) {
   // Teilnehmerliste steht. Dadurch kann ein alter/mehrdeutiger Team-Membership-Eintrag
   // nicht dazu führen, dass der Bot das falsche Team prüft und "nicht eingecheckt" meldet.
   const team = getCheckedInTeamForUser(event, userId) || getEligibleTeamForUser(userId);
+  if (isGtaCup(event) && (event.checkin.pendingPaymentEntries || []).some(entry => entry.teamId === String(team.id))) {
+    const updatedEvent = updateEventData(eventKey, current => {
+      current.checkin.pendingPaymentEntries = current.checkin.pendingPaymentEntries.filter(entry => entry.teamId !== String(team.id));
+      return current;
+    });
+    return { changed: true, wasCheckedIn: true, lateWithdrawal: false, team, event: updatedEvent };
+  }
   if (!hasTeamEntry(event, team.id)) return { changed: false, wasCheckedIn: false, lateWithdrawal: false, team, event };
 
   if (isAfterDeadline(eventKey, event, settings, now)) {
@@ -126,6 +144,7 @@ function adminCheckInTeam({ eventKey, teamId, actorUserId, now = new Date() }) {
   updateEventData(eventKey, event => {
     ensureCheckinShape(event);
     assertManualCheckinEventEditable(event);
+    if (isGtaCup(event)) throw new Error('Nutze die Zahlungsfreigabe unter dem Check-in.');
     if (hasTeamEntry(event, team.id)) {
       recalculateCheckinFormat(event, settings, now);
       result = { changed: false, alreadyCheckedIn: true, team, event };
@@ -192,4 +211,33 @@ function getPublicCheckinState(eventKey) {
   return { event, settings };
 }
 
-module.exports = { adminCheckInTeam, adminWithdrawTeam, checkInTeam, getPublicCheckinState, hasTeamEntry, refreshEventFormat, removeTeamFromAllEvents, withdrawTeam };
+function reviewGtaCupPayment({ eventKey, reference, approved, actorUserId, now = new Date() }) {
+  const settings = readSettings();
+  let result;
+  updateEventData(eventKey, event => {
+    if (!isGtaCup(event)) throw new Error('Ungültiges Event.');
+    const pending = event.checkin?.pendingPaymentEntries || [];
+    const matches = pending.filter(entry => entry.teamId === reference
+      || findTeamById(entry.teamId)?.clubName?.toLowerCase() === reference.toLowerCase());
+    if (matches.length !== 1) throw new Error('Kein eindeutiges Team auf der Freigabeliste gefunden. Gib die Team-ID an.');
+    const [entry] = matches;
+    const team = approved ? getManualCheckinTeam(entry.teamId, now) : findTeamById(entry.teamId);
+    if (approved) {
+      assertCheckinActionAllowed({ eventKey, event, settings, now });
+      if (event.format?.lockedAt) throw new Error('Das Turnierformat ist bereits festgelegt.');
+      if (hasTeamEntry(event, entry.teamId)) throw new Error('Dieses Team ist bereits bestätigt.');
+      event.checkin.entries.push({
+        ...entry,
+        paymentConfirmedAt: nowIso(now),
+        paymentConfirmedByUserId: String(actorUserId),
+      });
+      recalculateCheckinFormat(event, settings, now);
+    }
+    event.checkin.pendingPaymentEntries = pending.filter(item => item !== entry);
+    result = { event, team, entry, changed: true };
+    return event;
+  });
+  return result;
+}
+
+module.exports = { reviewGtaCupPayment, adminCheckInTeam, adminWithdrawTeam, checkInTeam, getPublicCheckinState, hasTeamEntry, refreshEventFormat, removeTeamFromAllEvents, withdrawTeam };

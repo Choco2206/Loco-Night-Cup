@@ -103,19 +103,19 @@ async function buildLiveTableImagePayload(group) {
     image = await generateLocoZwergenCupLiveTableImage({
       groupKey: group.groupKey,
       rows,
-      qualificationText: getQualificationText(group.formatSize),
+      qualificationText: getQualificationText(group.formatSize, group.eventKey),
     });
   } else if (getGraphicsVariant(settings) === 'fc27') {
     image = await generateFc27LiveTableImage({
       groupKey: group.groupKey,
       rows,
-      qualificationText: getQualificationText(group.formatSize),
+      qualificationText: getQualificationText(group.formatSize, group.eventKey),
     });
   } else {
     image = await generateLiveTableImage({
         groupKey: group.groupKey,
         rows,
-        qualificationText: getQualificationText(group.formatSize),
+        qualificationText: getQualificationText(group.formatSize, group.eventKey),
       });
   }
 
@@ -188,7 +188,7 @@ async function upsertGroupPosts(channel, group, refs = {}, resultsChannel = null
 
     if (!existingTableMessageId) {
       table = await upsertMessage(channel, null, {
-        embeds: [buildLiveTableEmbed(group)],
+        embeds: [buildLiveTableEmbed(groupWithEvent)],
         allowedMentions: { parse: [] },
       }, `${group.groupKey} Live-Tabelle Fallback`).catch(fallbackError => {
         console.error(`[live-table] Auch das Text-Fallback für Gruppe ${group.groupKey} ist fehlgeschlagen.`, fallbackError);

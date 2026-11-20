@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_SIZES, isGtaCup } = require('./loco-gta-cup-config');
+
 const { FILES, readJson } = require('../../storage');
 const { createSettingsDefault } = require('../../storage/defaults');
 const { TOURNAMENT_FORMAT_SIZES, isLeaguePhaseFormat } = require('../../app/constants');
@@ -26,10 +28,12 @@ function uniqueEntryTeamIds(entries) {
 }
 
 function getActiveManualByes(event) {
+  if (isGtaCup(event)) return [];
   return (event.byes || []).filter(bye => bye?.type === 'bye' && bye.status === 'active');
 }
 
 function getAllowedSizes(settings, event) {
+  if (isGtaCup(event)) return [...GTA_CUP_SIZES];
   if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
   if (isLocoZwergenCupEvent(event)) return [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
   const allowedSizes = Array.isArray(settings.tournament?.allowedSizes)
@@ -52,7 +56,7 @@ function isTeamEligibleForLock(team, now) {
 }
 
 function collectValidRealTeams(event, now = new Date()) {
-  const entries = event.format?.lockedAt ? (event.checkin?.entries || []) : sortPremiumEntries(event.checkin?.entries || [], findTeamById, now);
+  const entries = event.format?.lockedAt || isGtaCup(event) ? (event.checkin?.entries || []) : sortPremiumEntries(event.checkin?.entries || [], findTeamById, now);
   const teamIds = uniqueEntryTeamIds(entries);
   const teams = [];
   const skipped = [];
@@ -66,6 +70,7 @@ function collectValidRealTeams(event, now = new Date()) {
 }
 
 function minimumParticipantSlots(settings, event) {
+  if (isGtaCup(event)) return 8;
   return isBomberXLocoEvent(event)
     ? 6
     : Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);

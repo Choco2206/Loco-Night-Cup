@@ -1,5 +1,7 @@
 'use strict';
 
+const { isGtaCup } = require('../events/loco-gta-cup-config');
+
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -497,6 +499,9 @@ function roundStatusContent(round) {
 
 async function buildOverviewImagePayload(eventKey, event) {
   const qualifiedTeams = event.knockout?.qualifiedTeams || [];
+  if (isGtaCup(event) && qualifiedTeams.length === 32) {
+    return { content: null, embeds: [buildOverviewEmbed(eventKey, event)], attachments: [], allowedMentions: { parse: [] } };
+  }
   const settings = readJson(FILES.settings, createSettingsDefault());
   const image = await renderKoImage({
     phase: 'qualification_overview',

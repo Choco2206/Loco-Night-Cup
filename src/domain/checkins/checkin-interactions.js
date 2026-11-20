@@ -38,6 +38,10 @@ async function handleJoin(interaction, client, eventKey) {
   const result = checkInTeam({ eventKey, userId: interaction.user.id });
   await postCheckinActivityLog(client, { action: 'join', eventKey, result, user: interaction.user });
   await refreshCheckinMessage(eventKey, client);
+  if (result.pendingPayment) {
+    await interaction.editReply('Dein Team steht auf der Freigabeliste. Nach Prüfung der 5 € Teilnahmegebühr wird es im Check-in angezeigt.');
+    return true;
+  }
   if (result.alreadyCheckedIn) {
     await interaction.editReply('Dein Team ist für dieses Event bereits eingecheckt. Es wurde kein Duplikat erzeugt.');
     return true;
@@ -72,6 +76,7 @@ async function handleLeave(interaction, client, eventKey) {
 }
 
 async function handleInteraction(interaction, client) {
+  if (await require('./gta-cup-payment-panel').handleGtaPaymentInteraction(interaction, client)) return true;
   if (await require('./halloween-replacement-interactions').handleInteraction(interaction, client)) return true;
   if (await handleBomberManualDrawInteraction(interaction, client)) return true;
   if (!interaction.isButton()) return false;

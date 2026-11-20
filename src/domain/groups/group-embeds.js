@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_KEY, GTA_CUP_FORMATS } = require('../events/loco-gta-cup-config');
+
 const { EmbedBuilder } = require('discord.js');
 const { findTeamById } = require('../teams/team-service');
 const { TOURNAMENT_FORMATS } = require('../../app/constants');
@@ -73,7 +75,7 @@ function buildLiveTableEmbed(group) {
       : formatStandingEntry(index + 1, row))
     .join('\n\n');
 
-  const qualification = getQualificationText(group.formatSize);
+  const qualification = getQualificationText(group.formatSize, group.eventKey);
 
   return new EmbedBuilder()
     .setTitle(`${group.name || `Gruppe ${group.groupKey}`} - Live-Tabelle`)
@@ -139,7 +141,12 @@ function formatByeEntry(place) {
   return `**${place}. Freilos**\n\`Keine Tabellenwirkung\``;
 }
 
-function getQualificationText(formatSize) {
+function getQualificationText(formatSize, eventKey) {
+  if (eventKey === GTA_CUP_KEY) {
+    const gtaFormat = GTA_CUP_FORMATS[formatSize];
+    if (gtaFormat?.bestRunnersUp) return `🏆 Weiterkommen: Gruppensieger + ${gtaFormat.bestRunnersUp} beste Gruppenzweite`;
+    if (gtaFormat?.bestThirds) return `🏆 Weiterkommen: Platz 1 und 2 + ${gtaFormat.bestThirds} beste Gruppendritte`;
+  }
   const config = TOURNAMENT_FORMATS[Number(formatSize)] || getLocoZwergenCupFormat(formatSize);
   if (Number(formatSize) === 20) {
     return '\u{1f3c6} Weiterkommen: Platz 1 bis 3 jeder Gruppe + der beste Viertplatzierte → Achtelfinale';

@@ -1,5 +1,7 @@
 'use strict';
 
+const { isGtaCup, GTA_CUP_FORMATS } = require('../events/loco-gta-cup-config');
+
 const { findTeamById } = require('../teams/team-service');
 const { TOURNAMENT_FORMATS } = require('../../app/constants');
 const { compareThirdPlaceRows, rankGroupRows } = require('../groups/group-ranking');
@@ -11,6 +13,7 @@ const QUALIFICATION_RULES = TOURNAMENT_FORMATS;
 
 function configForEvent(event) {
   const formatSize = Number(event.format?.size || 0);
+  if (isGtaCup(event)) return GTA_CUP_FORMATS[formatSize] || QUALIFICATION_RULES[formatSize];
   if (isBomberXLocoEvent(event)) return getBomberXLocoFormat(formatSize);
   if (isLocoZwergenCupEvent(event)) return getLocoZwergenCupFormat(formatSize) || QUALIFICATION_RULES[formatSize];
   return QUALIFICATION_RULES[formatSize];
@@ -152,9 +155,13 @@ function qualifyNormalTeams(event, config, groupKeys) {
     if (rows[3]) fourths.push(createQualifiedTeam(rows[3], groupKey, 4, 'fourth', fourths.length + 1));
   }
 
-  let qualifiedTeams = [...winners, ...runnersUp];
+  const rankCandidates = (teams, count, label) => qualificationAudit(label, teams, count).slice(0, count);
+  const qualifiedRunnersUp = config.bestRunnersUp
+    ? rankCandidates(runnersUp, config.bestRunnersUp, 'Beste Gruppenzweite')
+    : runnersUp;
+  let qualifiedTeams = [...winners, ...qualifiedRunnersUp];
   if (config.bestThirds > 0) {
-    qualifiedTeams = [...qualifiedTeams, ...qualificationAudit('Beste Drittplatzierte', thirds, config.bestThirds).slice(0, config.bestThirds)];
+    qualifiedTeams = [...qualifiedTeams, ...rankCandidates(thirds, config.bestThirds, 'Beste Drittplatzierte')];
   }
   if (config.bestFourths > 0) {
     qualifiedTeams = [...qualifiedTeams, ...qualificationAudit('Beste Viertplatzierte', fourths, config.bestFourths).slice(0, config.bestFourths)];

@@ -99,8 +99,9 @@ async function handleInteractionError(interaction, error) {
 }
 
 function isDirectCheckinButton(interaction) {
-  if (!interaction.isButton()) return false;
   const customId = String(interaction.customId || '');
+  if (customId.startsWith('gta_payment_')) return interaction.isButton() || interaction.isModalSubmit();
+  if (!interaction.isButton()) return false;
   return customId.startsWith('checkin_join:')
     || customId.startsWith('checkin_leave:')
     || customId === 'bomber_x_loco_prejoin'

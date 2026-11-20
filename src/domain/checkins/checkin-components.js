@@ -1,5 +1,7 @@
 'use strict';
 
+const { isGtaCup } = require('../events/loco-gta-cup-config');
+
 const fs = require('fs');
 const path = require('path');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
@@ -188,7 +190,7 @@ function formatSlotLines(slotState) {
   for (let slot = 1; slot <= slotState.displaySlotCount; slot += 1) {
     const label = slotState.participantLabels[slot - 1];
     const isWaitlistSlot = Boolean(playableSlotCount && slot > playableSlotCount && label);
-    lines.push(`${slot}. ${label ? `${label}${isWaitlistSlot ? ' (WL)' : ''}` : '—'}`);
+    lines.push(`${slot}. ${label ? `${slotState.limitLabel ? label.slice(0, 48) : label}${isWaitlistSlot ? ' (WL)' : ''}` : '—'}`);
 
     if (milestones.includes(slot)) {
       lines.push(formatMilestoneLine(slot));
@@ -210,7 +212,9 @@ function formatWaitlistSection(slotState) {
 
 function getBannerAttachment(settings, event) {
   const graphicsProfile = getGraphicsProfile(settings);
-  const configuredPath = isLocoZwergenCupEvent(event)
+  const configuredPath = isGtaCup(event)
+    ? 'assets/loco-gta-vi-cup/check-in.jpeg'
+    : isLocoZwergenCupEvent(event)
     ? 'assets/loco-zwerge-cup/check-in.jpeg'
     : graphicsProfile.checkinBannerPath || settings.assets?.checkinBannerPath || 'data/assets/check-in.png';
   const absolutePath = path.isAbsolute(configuredPath)
@@ -245,13 +249,14 @@ function buildCheckinEmbed(eventKey, event, settings) {
   const drawAt = getDrawAt(eventKey, event, settings, now);
   const tournamentStartAt = getTournamentStartAt(eventKey, event, settings, now);
   const slotState = buildSlotState(event, settings);
+  slotState.limitLabel = isGtaCup(event);
   slotState.milestones = getAllowedSizes(settings, event);
   const rulesLine = settings.channels?.rulesChannelId ? `📜 Regeln: <#${settings.channels.rulesChannelId}>` : null;
-  const nightHint = profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
-  const waitlistSection = formatWaitlistSection(slotState);
+  const nightHint = isGtaCup(event) && profile.startIsNextDay ? '🌙 Nacht von Samstag auf Sonntag' : profile.startIsNextDay ? `🌙 Nacht von ${label} auf ${nextDayLabel(eventKey)}` : null;
+  const waitlistSection = isGtaCup(event) ? null : formatWaitlistSection(slotState);
   const title = isLocoZwergenCupEvent(event)
     ? '🍄 Loco Zwergen Cup'
-    : `🌕 Loco NightCup ${label}`;
+    : isGtaCup(event) ? `🌴 ${label}` : `🌕 Loco NightCup ${label}`;
 
   const description = [
     formatStatus(eventKey, event, settings, now),
@@ -265,11 +270,12 @@ function buildCheckinEmbed(eventKey, event, settings) {
     nightHint,
     '',
     rulesLine,
+    isGtaCup(event) ? '💶 **5 € Teilnahmegebühr pro Team**. Anmeldung zuerst auf der Freigabeliste. Wenn ihr auf der Nachrückerliste bleibt und keinen Startplatz bekommt, erstatten wir die 5 €.' : null,
     formatCheckinSummary(event, settings, slotState),
     '─────────────',
     `🏆 Turnierformat: ${formatFormat(event, settings)}`,
     '─────────────',
-    `👥 Teilnehmende Teams/Plätze (${slotState.participantSlotCount})`,
+    isGtaCup(event) ? `👥 Bestätigte Teams (${slotState.participantSlotCount}) · Maximal 48 Startplätze` : `👥 Teilnehmende Teams/Plätze (${slotState.participantSlotCount})`,
     formatSlotLines(slotState),
     waitlistSection,
     '',

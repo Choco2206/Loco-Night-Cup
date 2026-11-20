@@ -1,5 +1,8 @@
 'use strict';
 
+const { GTA_CUP_CHANNEL, GTA_CUP_KEY, isGtaCup, replacesSaturdayCup } = require('../events/loco-gta-cup-config');
+const { buildGtaPaymentPayload } = require('./gta-cup-payment-panel');
+
 const { EVENT_KEYS } = require('../../app/constants');
 const { FILES, readJson, updateJson } = require('../../storage');
 const { createMessagesDefault, createSettingsDefault } = require('../../storage/defaults');
@@ -39,7 +42,7 @@ function getMessageState(messages, eventKey) {
 }
 
 function createEditPayload(payload) {
-  return { ...payload, attachments: [] };
+  return { content: null, ...payload, attachments: [] };
 }
 
 async function deleteSummaryMessageIfOpen({ channel, state, eventKey, event, settings }) {
@@ -169,7 +172,16 @@ async function adoptBomberXLocoPanelMessage(message, client) {
   return true;
 }
 
-async function refreshCheckinMessage(eventKey, client) {
+let gtaPanelRefresh = Promise.resolve();
+
+function refreshCheckinMessage(eventKey, client) {
+  if (eventKey !== GTA_CUP_KEY) return refreshCheckinMessageNow(eventKey, client);
+  const refresh = gtaPanelRefresh.then(() => refreshCheckinMessageNow(eventKey, client));
+  gtaPanelRefresh = refresh.catch(() => {});
+  return refresh;
+}
+
+async function refreshCheckinMessageNow(eventKey, client) {
   const settings = readJson(FILES.settings, createSettingsDefault());
   const { event } = getPublicCheckinState(eventKey);
   const messages = readJson(FILES.messages, createMessagesDefault());
@@ -192,7 +204,7 @@ async function refreshCheckinMessage(eventKey, client) {
     return true;
   }
 
-  const channelId = settings.channels?.checkinChannelIds?.[eventKey];
+  const channelId = isGtaCup(event) ? GTA_CUP_CHANNEL : settings.channels?.checkinChannelIds?.[eventKey];
   if (!channelId) {
     console.warn(`[checkin-panel] ${eventKey}: no check-in channel configured`);
     return false;
@@ -200,7 +212,14 @@ async function refreshCheckinMessage(eventKey, client) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) return false;
 
-  const payload = eventKey === 'saturday' && event.cycle?.eventDate === '2026-12-19'
+  const payload = replacesSaturdayCup(eventKey, event.cycle?.eventDate)
+    ? {
+      content: `🌴 Am **28.11.2026** läuft der **Loco GTA VI Cup**. Anmeldung in <#${GTA_CUP_CHANNEL}>.`,
+      embeds: [],
+      components: [],
+      allowedMentions: { parse: [] },
+    }
+    : eventKey === 'saturday' && event.cycle?.eventDate === '2026-12-19'
     ? buildBomberXLocoBlockerPayload({ halloween: true, today: toDateOnly(new Date()) === '2026-12-19', channelId: HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[HALLOWEEN_EVENT_KEY] })
     : buildCheckinMessagePayload(eventKey, event, settings);
   await deleteSummaryMessageIfOpen({ channel, state, eventKey, event, settings });
@@ -217,6 +236,13 @@ async function refreshCheckinMessage(eventKey, client) {
     return current;
   });
 
+  if (isGtaCup(event)) {
+    const paymentMessage = await upsertMessage(channel, state.paymentMessageId, buildGtaPaymentPayload(event, settings));
+    updateJson(FILES.messages, createMessagesDefault(), current => {
+      getMessageState(current, eventKey).paymentMessageId = paymentMessage.id;
+      return current;
+    });
+  }
   return true;
 }
 

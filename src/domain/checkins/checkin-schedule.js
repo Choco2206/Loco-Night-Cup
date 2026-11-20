@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_KEY, GTA_CUP_DATE, GTA_CUP_SIZES, replacesSaturdayCup } = require('../events/loco-gta-cup-config');
+
 const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
 
 const CHECKIN_EVENT_STATUSES = [
@@ -104,6 +106,7 @@ function getCurrentCycleDateValue(eventKey, event = {}, now = new Date(), settin
 }
 
 function getEventDateValue(eventKey, event = {}, now = new Date(), settings = {}) {
+  if (eventKey === GTA_CUP_KEY) return GTA_CUP_DATE;
   if (eventKey === HALLOWEEN_EVENT_KEY) return HALLOWEEN_EVENT_DATE;
   const timeZone = getTimeZone(settings, event);
   if (event.cycle?.eventDate) {
@@ -187,7 +190,7 @@ function ensureEventCycle(eventKey, event, settings, now = new Date()) {
   };
 
   if (event.meta.eventMode !== planned.eventMode) { event.meta.eventMode = planned.eventMode; changed = true; }
-  const allowedSizes = planned.eventMode === 'bomber_x_loco'
+  const allowedSizes = eventKey === GTA_CUP_KEY ? GTA_CUP_SIZES : planned.eventMode === 'bomber_x_loco'
     ? BOMBER_X_LOCO_FORMAT_SIZES
     : planned.eventMode === 'loco_zwergen_cup'
       ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
@@ -221,6 +224,9 @@ function isAfterDeadline(eventKey, event, settings, now = new Date()) { const d 
 function canUseCheckinStatus(status) { return CHECKIN_EVENT_STATUSES.includes(status); }
 
 function getCheckinWindowState(eventKey, event, settings, now = new Date()) {
+  if (replacesSaturdayCup(eventKey, event.cycle?.eventDate)) {
+    return { label: 'Loco GTA VI Cup', phase: 'special_event', canJoin: false, canLeave: false };
+  }
   if (eventKey === 'saturday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
     return { label: SEASONAL_CUP_NAME, phase: 'special_event', canJoin: false, canLeave: false };
   }

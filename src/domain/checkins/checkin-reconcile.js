@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_KEY, GTA_CUP_CHANNEL, replacesSaturdayCup } = require('../events/loco-gta-cup-config');
+
 const { SEASONAL_CUP_NAME } = require('../events/bomber-x-loco-config');
 
 const { EVENT_KEYS, isLeaguePhaseFormat } = require('../../app/constants');
@@ -203,7 +205,7 @@ function markCheckinOpen(eventKey, now) {
 }
 
 async function getCheckinChannel(client, eventKey, settings) {
-  const channelId = eventKey === HALLOWEEN_EVENT_KEY
+  const channelId = eventKey === GTA_CUP_KEY ? GTA_CUP_CHANNEL : eventKey === HALLOWEEN_EVENT_KEY
     ? HALLOWEEN_CHECKIN_CHANNEL_ID || settings.channels?.checkinChannelIds?.[eventKey]
     : settings.channels?.checkinChannelIds?.[eventKey];
   if (!client || !channelId) return null;
@@ -422,6 +424,10 @@ async function reconcileCheckinEvent(eventKey, client = activeClient, now = new 
       current.meta = { ...current.meta, christmasPanelRefreshedAt: nowIso(now) };
       return current;
     });
+  }
+  if (replacesSaturdayCup(eventKey, event.cycle?.eventDate)) {
+    if (repaired.changed) await refreshCheckinMessage(eventKey, client);
+    return { changed: repaired.changed, event };
   }
   if (eventKey === 'saturday' && event.cycle?.eventDate === HALLOWEEN_EVENT_DATE) {
     const today = toDateOnly(now) === HALLOWEEN_EVENT_DATE;

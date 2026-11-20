@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_SIZES, isGtaCup } = require('../events/loco-gta-cup-config');
+
 const { findTeamById } = require('../teams/team-service');
 const { sortPremiumEntries } = require('../premium/premium-store');
 const { findActiveBanForTeamOrManagers } = require('./checkin-ban-integration');
@@ -40,13 +42,14 @@ function pruneInvalidCheckinEntries(event, now = new Date()) {
 }
 
 function getEntryTeamIds(event, now = new Date()) {
-  const entries = event.format?.lockedAt ? (event.checkin?.entries || []) : sortPremiumEntries(event.checkin?.entries || [], findTeamById, now);
+  const entries = event.format?.lockedAt || isGtaCup(event) ? (event.checkin?.entries || []) : sortPremiumEntries(event.checkin?.entries || [], findTeamById, now);
   return uniqueStrings(entries
     .map(entry => entry.teamId)
     .filter(teamId => isValidTournamentTeamId(teamId, now)));
 }
 
 function getManualByes(event) {
+  if (isGtaCup(event)) return [];
   if (!Array.isArray(event.byes)) return [];
   return event.byes.filter(bye => bye?.type === 'bye' && bye?.status === 'active');
 }
@@ -56,6 +59,7 @@ function getManualByeCount(event) {
 }
 
 function getAllowedSizes(settings, event) {
+  if (isGtaCup(event)) return [...GTA_CUP_SIZES];
   if (isBomberXLocoEvent(event)) return [...BOMBER_X_LOCO_FORMAT_SIZES];
   if (isLocoZwergenCupEvent(event)) return [...LOCO_ZWERGEN_CUP_FORMAT_SIZES];
 
@@ -78,6 +82,7 @@ function chooseFormatSize({ participantSlotCount, minimumParticipantSlots, allow
 }
 
 function minimumSlotsForEvent(event, settings) {
+  if (isGtaCup(event)) return 8;
   if (isBomberXLocoEvent(event)) return 6;
   return Number(settings.tournament?.minimumRealTeams || event.format?.minimumRealTeams || 8);
 }

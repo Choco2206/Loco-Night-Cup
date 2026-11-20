@@ -1,5 +1,7 @@
 'use strict';
 
+const { GTA_CUP_SIZES, isGtaCup } = require('../domain/events/loco-gta-cup-config');
+
 const {
   EVENT_KEYS,
   EVENT_PROFILE_BY_KEY,
@@ -53,12 +55,12 @@ function validateEvent(data, expectedEventKey = null) {
   if (requireObject(errors, data.format, 'format')) {
     const isZwergenCup = isLocoZwergenCupEvent(data);
     const isBomberCup = isBomberXLocoEvent(data);
-    const allowedFormatSizes = isZwergenCup
+    const allowedFormatSizes = isGtaCup(data) ? GTA_CUP_SIZES : isZwergenCup
       ? LOCO_ZWERGEN_CUP_FORMAT_SIZES
       : isBomberCup
         ? BOMBER_X_LOCO_FORMAT_SIZES
         : TOURNAMENT_FORMAT_SIZES;
-    const acceptedStoredAllowedSizes = isZwergenCup || isBomberCup
+    const acceptedStoredAllowedSizes = isZwergenCup || isBomberCup || isGtaCup(data)
       ? [allowedFormatSizes, TOURNAMENT_FORMAT_SIZES]
       : [allowedFormatSizes];
     const expectedMinimumRealTeams = isBomberCup ? 6 : 8;
