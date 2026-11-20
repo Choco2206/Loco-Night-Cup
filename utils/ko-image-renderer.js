@@ -7,6 +7,8 @@ const FC27_LAYOUTS = require('../config/ko-image-layouts-fc27');
 const BOMBER_X_LOCO_LAYOUTS = require('../config/bomber-x-loco-ko-image-layouts');
 const BOMBER_X_LOCO_HALLOWEEN_LAYOUTS = require('../config/bomber-x-loco-halloween-ko-image-layouts');
 const LOCO_ZWERGEN_CUP_LAYOUTS = require('../config/loco-zwergen-cup-ko-image-layouts');
+const GTA_LAYOUTS = require('../config/loco-gta-cup-ko-image-layouts');
+const { GTA_CUP_KEY, GTA_CUP_DATE } = require('../src/domain/events/loco-gta-cup-config');
 const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupScheduleImage');
@@ -39,7 +41,12 @@ function isChristmasCycle(eventId) {
     && eventId === `${HALLOWEEN_EVENT_KEY}_${SEASONAL_CUP.date}`;
 }
 
+function isGtaRoundLayout(eventId, phase) {
+  return (eventId === GTA_CUP_KEY || eventId === `${GTA_CUP_KEY}_${GTA_CUP_DATE}`) && Boolean(GTA_LAYOUTS[phase]);
+}
+
 function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
+  if (isGtaRoundLayout(eventId, phase)) return phase;
   const bomberXLoco = isBomberXLocoRender(eventId);
   const locoZwergenCup = isLocoZwergenCupRender(eventId);
   if (phase === 'qualification_overview') {
@@ -63,7 +70,8 @@ function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
 function getKoLayout(options) {
   const key = getKoTemplate(options);
   let layouts = LAYOUTS;
-  if (isHalloweenCycle(options.eventId) && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
+  if (isGtaRoundLayout(options.eventId, key)) layouts = GTA_LAYOUTS;
+  else if (isHalloweenCycle(options.eventId) && BOMBER_X_LOCO_HALLOWEEN_LAYOUTS[key]) layouts = BOMBER_X_LOCO_HALLOWEEN_LAYOUTS;
   else if (isChristmasCycle(options.eventId) && CHRISTMAS_LAYOUTS[key]) layouts = CHRISTMAS_LAYOUTS;
   else if (options.variant === 'fc27' && FC27_LAYOUTS[key]) layouts = FC27_LAYOUTS;
   else if (isBomberXLocoRender(options.eventId) && BOMBER_X_LOCO_LAYOUTS[key]) layouts = BOMBER_X_LOCO_LAYOUTS;
