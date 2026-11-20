@@ -2,10 +2,10 @@
 
 const base = require('./ko-image-layouts');
 
-function teamSlot(logoX, nameX, y, align) {
+function teamSlot(logoX, nameX, y, align, width = 178, logoSize = 40, fontSize) {
   return {
-    logo: { centerX: logoX, centerY: y, width: 40, height: 40 },
-    teamName: { x: nameX, y, width: 178, align },
+    logo: { centerX: logoX, centerY: y, width: logoSize, height: logoSize },
+    teamName: { x: nameX, y, width, align, fontSize },
   };
 }
 
@@ -23,5 +23,14 @@ module.exports = {
       away: teamSlot(518 + offset, 492 + offset, y, 'right'),
       score: { x: 285 + offset, y, width: 44 },
     }))),
+  },
+  round_of_16: {
+    template: 'assets/loco-gta-vi-cup/round-of-16.jpeg',
+    reference: { width: 1122, height: 1402 },
+    matches: [677, 773, 869, 962, 1054, 1147, 1239, 1331].map(y => ({
+      home: teamSlot(80, 122, y, 'left', 354, 56, 30),
+      away: teamSlot(1042, 1000, y, 'right', 354, 56, 30),
+      score: { x: 561, y, width: 108, fontSize: 32 },
+    })),
   },
 };

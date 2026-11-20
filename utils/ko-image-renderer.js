@@ -143,7 +143,7 @@ function drawScore(ctx, value, box, scaleX, scaleY, layouts) {
   drawFittedText({
     ctx, text: String(value), x: box.x * scaleX, y: box.y * scaleY,
     maxWidth: box.width * scaleX,
-    maxFontSize: layouts.fonts.score.maxSize * scaleY,
+    maxFontSize: (box.fontSize || layouts.fonts.score.maxSize) * scaleY,
     minFontSize: layouts.fonts.score.minSize * scaleY,
     align: 'center', font: layouts.fonts.score, color: layouts.colors.text,
   });
