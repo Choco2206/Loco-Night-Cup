@@ -42,4 +42,13 @@ module.exports = {
       score: { x: 561, y, width: 116, fontSize: 38 },
     })),
   },
+  semi_final: {
+    template: 'assets/loco-gta-vi-cup/semi-final.jpeg',
+    reference: { width: 1122, height: 1402 },
+    matches: [1058, 1235].map(y => ({
+      home: teamSlot(81, 134, y, 'left', 334, 76, 36),
+      away: teamSlot(1041, 988, y, 'right', 334, 76, 36),
+      score: { x: 560, y, width: 126, fontSize: 44 },
+    })),
+  },
 };
