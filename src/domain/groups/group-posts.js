@@ -17,7 +17,8 @@ const { generateLiveTableImage } = require('../../../utils/generateLiveTableImag
 const { generateBomberXLocoLiveTableImage } = require('../../../utils/generateBomberXLocoLiveTableImage');
 const { generateGroupScheduleImage } = require('../../../utils/generateGroupScheduleImage');
 const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
-const { generateLocoZwergenCupLiveTableImage } = require('../../../utils/generateLocoZwergenCupLiveTableImage');
+const { isGtaCup } = require('../events/loco-gta-cup-config');
+const { generateLocoGtaCupLiveTableImage, generateLocoZwergenCupLiveTableImage } = require('../../../utils/generateLocoZwergenCupLiveTableImage');
 const { generateLocoZwergenCupMatchesImage } = require('../../../utils/generateLocoZwergenCupMatchesImage');
 const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
 const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
@@ -99,8 +100,9 @@ async function buildLiveTableImagePayload(group) {
       rows,
       qualificationText: getBomberXLocoQualificationText(group.formatSize),
     });
-  } else if (isLocoZwergenCupEvent(event)) {
-    image = await generateLocoZwergenCupLiveTableImage({
+  } else if (isGtaCup(event) || isLocoZwergenCupEvent(event)) {
+    const renderTable = isGtaCup(event) ? generateLocoGtaCupLiveTableImage : generateLocoZwergenCupLiveTableImage;
+    image = await renderTable({
       groupKey: group.groupKey,
       rows,
       qualificationText: getQualificationText(group.formatSize, group.eventKey),

@@ -25,8 +25,26 @@ const LAYOUT = Object.freeze({
   pointsX: 1453,
 });
 
+const GTA_TABLE_LAYOUT = Object.freeze({
+  groupLabel: { x: 1006, y: 280, maxWidth: 78 },
+  qualification: { x: 975, y: 848, maxWidth: 1110 },
+  rowsY: [484, 563, 645, 731],
+  placeX: 161,
+  logoX: 276,
+  logoSize: 54,
+  teamX: 316,
+  teamMaxWidth: 446,
+  playedX: 853,
+  winsX: 978,
+  drawsX: 1099,
+  lossesX: 1219,
+  diffX: 1355,
+  pointsX: 1512,
+});
+const GTA_BACKGROUND = path.resolve(__dirname, '..', 'assets', 'loco-gta-vi-cup', 'live-table.jpeg');
+
 let canvasApi;
-let backgroundPromise;
+const backgrounds = new Map();
 const logoCache = new Map();
 
 function getCanvasApi() {
@@ -48,12 +66,14 @@ function fitFont(ctx, text, maxWidth, maxSize, minSize, family = 'Oxanium', weig
   return minSize;
 }
 
-function loadBackground() {
-  if (!backgroundPromise) backgroundPromise = getCanvasApi().loadImage(BACKGROUND).catch(error => {
-    backgroundPromise = null;
-    throw error;
-  });
-  return backgroundPromise;
+function loadBackground(file) {
+  if (!backgrounds.has(file)) {
+    backgrounds.set(file, getCanvasApi().loadImage(file).catch(error => {
+      backgrounds.delete(file);
+      throw error;
+    }));
+  }
+  return backgrounds.get(file);
 }
 
 function findTeam(row) {
@@ -87,10 +107,10 @@ function drawLogo(ctx, image, centerX, centerY, size) {
 }
 
 function qualificationText(value) {
-  return String(value || '').replace(/🏆/gu, '').replace(/^Weiterkommen:\s*/i, '').trim();
+  return String(value || '').replace(/🏆/gu, '').trimStart().replace(/^Weiterkommen:\s*/i, '').trim();
 }
 
-function drawHeader(ctx, groupKey, qualification) {
+function drawHeader(ctx, groupKey, qualification, layout, gta) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
@@ -98,17 +118,18 @@ function drawHeader(ctx, groupKey, qualification) {
   ctx.lineJoin = 'round';
   ctx.shadowColor = 'rgba(255,35,70,0.8)';
   ctx.shadowBlur = 8;
-  const group = `GRUPPE ${String(groupKey || '').toUpperCase()}`;
-  fitFont(ctx, group, LAYOUT.groupLabel.maxWidth, 44, 24);
+  const letter = String(groupKey || '').toUpperCase();
+  const group = gta ? letter : `GRUPPE ${letter}`;
+  fitFont(ctx, group, layout.groupLabel.maxWidth, gta ? 64 : 44, 24);
   ctx.lineWidth = 3;
-  ctx.strokeText(group, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
-  ctx.fillText(group, LAYOUT.groupLabel.x, LAYOUT.groupLabel.y);
+  ctx.strokeText(group, layout.groupLabel.x, layout.groupLabel.y);
+  ctx.fillText(group, layout.groupLabel.x, layout.groupLabel.y);
   const detail = qualificationText(qualification);
   if (detail) {
-    fitFont(ctx, detail, LAYOUT.qualification.maxWidth, 20, 12, 'Open Sans', '600');
+    fitFont(ctx, detail, layout.qualification.maxWidth, gta ? 31 : 20, 12, 'Open Sans', '600');
     ctx.lineWidth = 2;
-    ctx.strokeText(detail, LAYOUT.qualification.x, LAYOUT.qualification.y);
-    ctx.fillText(detail, LAYOUT.qualification.x, LAYOUT.qualification.y);
+    ctx.strokeText(detail, layout.qualification.x, layout.qualification.y);
+    ctx.fillText(detail, layout.qualification.x, layout.qualification.y);
   }
   ctx.shadowBlur = 0;
 }
@@ -118,42 +139,52 @@ function goalDifference(value) {
   return number > 0 ? `+${number}` : String(number);
 }
 
-async function drawRows(ctx, rows) {
+async function drawRows(ctx, rows, layout, gta) {
   for (let index = 0; index < Math.min(4, rows?.length || 0); index += 1) {
     const row = rows[index];
-    const y = LAYOUT.rowsY[index];
+    const y = layout.rowsY[index];
     const name = String(row.name || 'Team').trim();
     const logo = row.isBye ? null : await loadLogo(row);
     ctx.fillStyle = '#ffffff';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.9)';
     ctx.shadowBlur = 3;
-    setFont(ctx, 25);
+    setFont(ctx, gta ? 34 : 25);
     ctx.textAlign = 'center';
-    ctx.fillText(String(index + 1), LAYOUT.placeX, y);
-    drawLogo(ctx, logo, LAYOUT.logoX, y, LAYOUT.logoSize);
-    fitFont(ctx, name, LAYOUT.teamMaxWidth, 25, 13, 'Open Sans', '700');
+    ctx.fillText(String(index + 1), layout.placeX, y);
+    drawLogo(ctx, logo, layout.logoX, y, layout.logoSize);
+    fitFont(ctx, name, layout.teamMaxWidth, gta ? 34 : 25, 13, 'Open Sans', '700');
     ctx.textAlign = 'left';
-    ctx.fillText(name, LAYOUT.teamX, y);
-    setFont(ctx, 27, 'Odibee Sans', '400');
+    if (gta) ctx.fillText(name, layout.teamX, y, layout.teamMaxWidth);
+    else ctx.fillText(name, layout.teamX, y);
+    setFont(ctx, gta ? 38 : 27, 'Odibee Sans', '400');
     ctx.textAlign = 'center';
     for (const [x, value] of [
-      [LAYOUT.playedX, row.played || 0], [LAYOUT.winsX, row.wins || 0],
-      [LAYOUT.drawsX, row.draws || 0], [LAYOUT.lossesX, row.losses || 0],
-      [LAYOUT.diffX, goalDifference(row.goalDifference)], [LAYOUT.pointsX, row.points || 0],
+      [layout.playedX, row.played || 0], [layout.winsX, row.wins || 0],
+      [layout.drawsX, row.draws || 0], [layout.lossesX, row.losses || 0],
+      [layout.diffX, goalDifference(row.goalDifference)], [layout.pointsX, row.points || 0],
     ]) ctx.fillText(String(value), x, y);
   }
   ctx.shadowBlur = 0;
 }
 
-async function generateLocoZwergenCupLiveTableImage({ groupKey, rows, qualificationText: qualification = '' }) {
-  const background = await loadBackground();
-  const canvas = getCanvasApi().createCanvas(WIDTH, HEIGHT);
+async function renderLiveTable({ groupKey, rows, qualificationText: qualification = '' }, gta) {
+  const layout = gta ? GTA_TABLE_LAYOUT : LAYOUT;
+  const background = await loadBackground(gta ? GTA_BACKGROUND : BACKGROUND);
+  const canvas = getCanvasApi().createCanvas(gta ? background.width : WIDTH, gta ? background.height : HEIGHT);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(background, 0, 0, WIDTH, HEIGHT);
-  drawHeader(ctx, groupKey, qualification);
-  await drawRows(ctx, rows);
+  ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+  drawHeader(ctx, groupKey, qualification, layout, gta);
+  await drawRows(ctx, rows, layout, gta);
   return canvas.toBuffer('image/png');
 }
 
-module.exports = { LOCO_ZWERGEN_CUP_TABLE_LAYOUT: LAYOUT, generateLocoZwergenCupLiveTableImage };
+function generateLocoZwergenCupLiveTableImage(data) {
+  return renderLiveTable(data, false);
+}
+
+function generateLocoGtaCupLiveTableImage(data) {
+  return renderLiveTable(data, true);
+}
+
+module.exports = { LOCO_ZWERGEN_CUP_TABLE_LAYOUT: LAYOUT, generateLocoZwergenCupLiveTableImage, generateLocoGtaCupLiveTableImage };
