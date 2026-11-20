@@ -1,5 +1,7 @@
 'use strict';
 
+const { escapeMarkdown } = require('discord.js');
+
 const { SEASONAL_CUP_NAME, SEASONAL_CUP_ICON, SEASONAL_CUP_DISPLAY_DATE } = require('../events/bomber-x-loco-config');
 
 const { EVENT_KEYS } = require('../../app/constants');
@@ -39,7 +41,21 @@ async function handleJoin(interaction, client, eventKey) {
   await postCheckinActivityLog(client, { action: 'join', eventKey, result, user: interaction.user });
   await refreshCheckinMessage(eventKey, client);
   if (result.pendingPayment) {
-    await interaction.editReply('Dein Team steht auf der Freigabeliste. Nach Prüfung der 5 € Teilnahmegebühr wird es im Check-in angezeigt.');
+    const teamName = escapeMarkdown(result.team.clubName);
+    await interaction.editReply({
+      content: [
+        '🌴 Danke, dass du dich für den **Loco GTA VI Cup** angemeldet hast!',
+        '',
+        '**Teilnahmegebühr:** 5 € pro Team',
+        '**Zahlung:** ausschließlich per PayPal über „Freunde und Familie“',
+        '**PayPal-Adresse: loco.nightcup@gmx.de**',
+        '',
+        `**Verwendungszweck:** Teilnahmegebühr Loco GTA 6 Cup - ${teamName}`,
+        '',
+        'Bitte gib den Verwendungszweck inklusive Teamnamen vollständig an. Dein Team steht auf der Freigabeliste. Die Teilnahme setzt voraus, dass die Zahlung eingegangen ist und eindeutig eurem Team zugeordnet werden kann.',
+      ].join('\n'),
+      allowedMentions: { parse: [] },
+    });
     return true;
   }
   if (result.alreadyCheckedIn) {
