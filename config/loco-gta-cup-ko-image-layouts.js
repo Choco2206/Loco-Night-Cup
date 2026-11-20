@@ -51,4 +51,13 @@ module.exports = {
       score: { x: 560, y, width: 126, fontSize: 44 },
     })),
   },
+  third_place: {
+    template: 'assets/loco-gta-vi-cup/third-place.jpeg',
+    reference: { width: 1122, height: 1402 },
+    matches: [{
+      home: teamSlot(80, 136, 1129, 'left', 330, 76, 36),
+      away: teamSlot(1042, 986, 1129, 'right', 330, 76, 36),
+      score: { x: 561, y: 1129, width: 126, fontSize: 44 },
+    }],
+  },
 };
