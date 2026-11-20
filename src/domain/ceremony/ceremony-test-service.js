@@ -37,6 +37,7 @@ const CEREMONY_LOGO_Y_OFFSET = -50;
 const CEREMONY_BANNER_DIR = path.join(ROOT_DIR, 'assets', 'ceremony');
 
 const CEREMONY_DAY_LABELS = {
+  loco_gta_vi: 'Loco GTA VI Cup',
   monday: 'Montag',
   tuesday: 'Dienstag',
   wednesday: 'Mittwoch',
@@ -265,6 +266,7 @@ async function getHallOfFameTestChannel(guild) {
 }
 
 function getEventDayKey(eventKey, event) {
+  if (isGtaCup(event)) return event.eventKey;
   const key = String(event?.eventKey || eventKey || '').toLowerCase();
   assertDay(key);
   return key;
