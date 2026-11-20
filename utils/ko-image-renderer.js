@@ -46,7 +46,8 @@ function isGtaRoundLayout(eventId, phase) {
 }
 
 function getKoTemplate({ phase, qualifiedTeamCount, eventId = null }) {
-  if (isGtaRoundLayout(eventId, phase)) return phase;
+  const gtaKey = phase === 'qualification_overview' ? `qualification_${Number(qualifiedTeamCount)}` : phase;
+  if (isGtaRoundLayout(eventId, gtaKey)) return gtaKey;
   const bomberXLoco = isBomberXLocoRender(eventId);
   const locoZwergenCup = isLocoZwergenCupRender(eventId);
   if (phase === 'qualification_overview') {

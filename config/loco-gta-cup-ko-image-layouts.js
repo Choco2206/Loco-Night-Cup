@@ -9,7 +9,37 @@ function teamSlot(logoX, nameX, y, align, width = 178, logoSize = 40, fontSize) 
   };
 }
 
+function qualificationLayout(count, columns, rows) {
+  const width = 1672;
+  const height = 941;
+  const left = 55;
+  const top = 443;
+  const gap = columns === 4 ? 15 : 24;
+  const rowGap = rows === 8 ? 7 : 14;
+  const cardWidth = (width - 2 * left - (columns - 1) * gap) / columns;
+  const cardHeight = (height - 45 - top - (rows - 1) * rowGap) / rows;
+  const logoField = Math.min(cardHeight - 12, columns === 4 ? 62 : 135);
+  const slots = Array.from({ length: count }, (_, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = left + column * (cardWidth + gap);
+    const y = top + row * (cardHeight + rowGap) + cardHeight / 2;
+    return teamSlot(x + 10 + logoField / 2, x + 24 + logoField, y, 'left',
+      cardWidth - logoField - 40, logoField - 8, columns === 4 ? 26 : 36);
+  });
+  return {
+    kind: 'qualification',
+    template: `assets/loco-gta-vi-cup/qualified-${count}.jpeg`,
+    reference: { width, height },
+    slots,
+  };
+}
+
 module.exports = {
+  qualification_4: qualificationLayout(4, 2, 2),
+  qualification_8: qualificationLayout(8, 2, 4),
+  qualification_16: qualificationLayout(16, 4, 4),
+  qualification_32: qualificationLayout(32, 4, 8),
   colors: base.colors,
   fonts: {
     team: { ...base.fonts.team, maxSize: 20, minSize: 11 },
