@@ -15,6 +15,8 @@ const {
 } = require('../teams/team-achievements');
 const { applyTeamStatsForEvent } = require('../teams/team-statistics');
 const { syncChampionRolesForTeam } = require('../teams/team-champion-roles');
+const { isGtaCup } = require('../events/loco-gta-cup-config');
+const { renderLocoGtaCupCeremonyImage } = require('../../../utils/loco-gta-cup-ceremony-renderer');
 const { isLocoZwergenCupEvent } = require('../events/loco-zwergen-cup-config');
 const { renderLocoZwergenCupCeremonyImage } = require('../../../utils/loco-zwergen-cup-ceremony-renderer');
 const { renderFc27CeremonyImage } = require('../../../utils/fc27-ceremony-renderer');
@@ -407,6 +409,29 @@ function buildLocoZwergenCupCeremonyText({ teams, promotion = null }) {
   ].join('\n');
 }
 
+function buildLocoGtaCupCeremonyText({ teams, promotion = null }) {
+  return [
+    '🏆 **SIEGEREHRUNG • LOCO GTA VI CUP**',
+    '',
+    'Die Motoren sind aus, das Ergebnis steht. Glückwunsch an unsere Top 3! 🌴',
+    '',
+    `🥇 **1. Platz • ${teams.first.clubName}**`,
+    'Glückwunsch zum Cupsieg und zur **GTA VI Ultimate Edition**! 👑',
+    getTeamPings(teams.first),
+    ...buildPromotionBlock(promotion),
+    '',
+    `🥈 **2. Platz • ${teams.second.clubName}**`,
+    'Glückwunsch zur **GTA VI Standardversion** und zu einem starken Turnier!',
+    getTeamPings(teams.second),
+    '',
+    `🥉 **3. Platz • ${teams.third.clubName}**`,
+    'Glückwunsch zu **40 € PSN- oder Xbox-Guthaben**!',
+    getTeamPings(teams.third),
+    '',
+    'Danke an alle Teams fürs Mitspielen. Gemeinsam immer loco. 🐺',
+  ].join('\n');
+}
+
 function getStoredChampionPromotion(event, teams) {
   const promotion = event?.ceremony?.teamAchievements?.championPromotion || null;
   if (!promotion?.name) return null;
@@ -485,7 +510,10 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
   const promotion = getStoredChampionPromotion(eventWithAchievements, teams);
   const graphicsVariant = getGraphicsVariant(readSettings());
   const locoZwergenCup = isLocoZwergenCupEvent(event);
-  const ceremonyRender = locoZwergenCup
+  const gtaCup = isGtaCup(event);
+  const ceremonyRender = gtaCup
+    ? await renderLocoGtaCupCeremonyImage({ teams })
+    : locoZwergenCup
     ? await renderLocoZwergenCupCeremonyImage({ teams })
     : graphicsVariant === 'fc27'
     ? await renderFc27CeremonyImage({ dayKey, teams })
@@ -519,7 +547,9 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     allowedMentions: { parse: ['everyone'] },
   });
   const textMessage = await channel.send({
-    content: locoZwergenCup
+    content: gtaCup
+      ? buildLocoGtaCupCeremonyText({ teams, promotion })
+      : locoZwergenCup
       ? buildLocoZwergenCupCeremonyText({ teams, promotion })
       : buildCeremonyText({ dayKey, teams, promotion, christmas }),
     allowedMentions: { parse: ['users'] },
@@ -622,6 +652,7 @@ async function postHallOfFameTest({ guild, dayKey, firstTeamId, secondTeamId, th
 
 module.exports = {
   buildLocoZwergenCupCeremonyText,
+  buildLocoGtaCupCeremonyText,
   CEREMONY_BANNERS,
   CEREMONY_DAY_LABELS,
   CEREMONY_LOGO_POSITIONS,
