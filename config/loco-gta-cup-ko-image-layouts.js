@@ -60,4 +60,13 @@ module.exports = {
       score: { x: 561, y: 1129, width: 126, fontSize: 44 },
     }],
   },
+  final: {
+    template: 'assets/loco-gta-vi-cup/final.jpeg',
+    reference: { width: 1122, height: 1402 },
+    matches: [{
+      home: teamSlot(84, 139, 1281, 'left', 330, 72, 36),
+      away: teamSlot(1038, 983, 1281, 'right', 330, 72, 36),
+      score: { x: 561, y: 1281, width: 125, fontSize: 44 },
+    }],
+  },
 };
