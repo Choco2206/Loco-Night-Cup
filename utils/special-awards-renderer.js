@@ -8,6 +8,8 @@ const BOMBER_X_LOCO_LAYOUT = require('../config/bomber-x-loco-special-awards-lay
 const CHRISTMAS_LAYOUT = require('../config/bomber-x-loco-christmas-special-awards-layout');
 const { HALLOWEEN_EVENT_KEY, SEASONAL_CUP } = require('../src/domain/events/bomber-x-loco-config');
 const HALLOWEEN_LAYOUT = require('../config/bomber-x-loco-halloween-special-awards-layout');
+const { GTA_CUP_KEY } = require('../src/domain/events/loco-gta-cup-config');
+const LOCO_GTA_CUP_LAYOUT = require('../config/loco-gta-cup-special-awards-layout');
 const LOCO_ZWERGEN_CUP_LAYOUT = require('../config/loco-zwergen-cup-special-awards-layout');
 const { ROOT_DIR } = require('../src/storage');
 const { findTeamById } = require('../src/domain/teams/team-service');
@@ -103,6 +105,7 @@ async function loadTemplate(layout) {
 }
 
 async function renderSpecialAwards({ awards, serialNumber, variant = 'default', eventKey = null, eventDate }) {
+  if (eventKey === GTA_CUP_KEY) variant = GTA_CUP_KEY;
   if (eventKey === HALLOWEEN_EVENT_KEY) {
     variant = SEASONAL_CUP.theme === 'christmas' && eventDate === SEASONAL_CUP.date
       ? 'bomber_christmas' : 'bomber_halloween';
@@ -114,6 +117,7 @@ async function renderSpecialAwards({ awards, serialNumber, variant = 'default', 
     fc27: FC27_LAYOUT,
     bomber_x_loco: BOMBER_X_LOCO_LAYOUT,
     loco_zwergen_cup: LOCO_ZWERGEN_CUP_LAYOUT,
+    [GTA_CUP_KEY]: LOCO_GTA_CUP_LAYOUT,
   };
   const layout = layouts[variant] || DEFAULT_LAYOUT;
   const template = await loadTemplate(layout);
@@ -138,6 +142,7 @@ async function renderSpecialAwards({ awards, serialNumber, variant = 'default', 
     fc27: 'special-awards-fc27',
     bomber_x_loco: 'bomber-x-loco-special-awards',
     loco_zwergen_cup: 'loco-zwergen-cup-special-awards',
+    [GTA_CUP_KEY]: 'loco-gta-vi-cup-special-awards',
   };
   const prefix = prefixes[variant] || prefixes.default;
   return { buffer: canvas.toBuffer('image/png'), fileName: `${prefix}${layout.serial ? `-${serialNumber}` : ''}.png` };
