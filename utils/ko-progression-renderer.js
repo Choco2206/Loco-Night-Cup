@@ -2,6 +2,7 @@
 
 const path = require('path');
 const { ROOT_DIR } = require('../src/storage');
+const { resolveTeamLogoPath } = require('../src/domain/teams/team-logos');
 const { findTeamById } = require('../src/domain/teams/team-service');
 const { drawFittedText, drawTeamLogoOrFallback } = require('./generateGroupScheduleImage');
 const { ensureCanvasFontsRegistered } = require('./canvas-fonts');
@@ -325,23 +326,64 @@ const CHRISTMAS_ROUNDS = [
 ];
 const CHRISTMAS_TEMPLATE = 'assets/bomber-x-loco-christmas/road-to-glory.jpeg';
 
-async function renderChristmasProgression({ firstRoundKey, rounds, version = Date.now() }) {
-  const layout = CHRISTMAS_PROGRESSION_LAYOUTS[firstRoundKey];
+const GTA_PROGRESSION_STARTS = {
+  semi_final: 2,
+  quarter_final: 4,
+  round_of_16: 8,
+  round_of_32: 16,
+};
+
+function gtaProgressionLayout(firstRoundKey) {
+  const count = GTA_PROGRESSION_STARTS[firstRoundKey];
+  if (!count) return null;
+  const stages = Math.log2(count) + 1;
+  const cardWidth = count === 16 ? 302 : 365;
+  return {
+    columns: Array.from({ length: stages }, (_, index) => Math.round(54 + index * (1740 - cardWidth) / (stages - 1))),
+    cardWidth,
+    firstCenters: Array.from({ length: count }, (_, index) => Math.round(366 + index * 1080 / (count - 1))),
+  };
+}
+
+async function drawGtaCrest(ctx, participant, box) {
+  const source = resolveTeamLogoPath(findTeamById(participant.teamId), { optional: true });
+  if (!source) return;
+  const image = await loadTemplate(source).catch(() => null);
+  if (!image) return;
+  const scale = Math.min(box.width / image.width, box.height / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  ctx.drawImage(image, box.centerX - width / 2, box.centerY - height / 2, width, height);
+}
+
+async function drawGtaResultRow(ctx, participant, score, x, y, width, color) {
+  fillRounded(ctx, x, y - 21, width, 42, 8, '#071223', color, 1);
+  if (participant?.type !== 'team') return;
+  await drawGtaCrest(ctx, participant, { centerX: x + 24, centerY: y, width: 28, height: 28 });
+  drawFittedText({
+    ctx, text: participantName(participant), x: x + 48, y, maxWidth: width - 105,
+    maxFontSize: 21, minFontSize: 12, align: 'left', font: { family: 'Oxanium', weight: '700' }, color: '#eef3fb',
+  });
+  if (score !== undefined) drawLabel(ctx, String(score), x + width - 28, y, 44);
+}
+
+async function renderThemedProgression({ firstRoundKey, rounds, version = Date.now() }, gta) {
+  const layout = gta ? gtaProgressionLayout(firstRoundKey) : CHRISTMAS_PROGRESSION_LAYOUTS[firstRoundKey];
   if (!layout) return null;
   const { columns, cardWidth, firstCenters } = layout;
   const width = 2304;
   const height = 1536;
   const canvas = getCanvasApi().createCanvas(width, height);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(await loadTemplate(CHRISTMAS_TEMPLATE), 0, 0, width, height);
+  ctx.drawImage(await loadTemplate(gta ? 'assets/loco-gta-vi-cup/road-to-glory.jpeg' : CHRISTMAS_TEMPLATE), 0, 0, width, height);
   const stages = CHRISTMAS_ROUNDS.slice(-columns.length);
   const cardHeight = 57;
   let centers = firstCenters;
   for (const [index, [key, label]] of stages.entries()) {
     const x = columns[index];
-    const color = key === 'final' ? GOLD : index % 2 ? BLUE : RED;
-    fillRounded(ctx, x, 260, cardWidth, 34, 8, '#091321', color, 2);
-    drawLabel(ctx, label, x + cardWidth / 2, 278, cardWidth - 16);
+    const color = key === 'final' ? GOLD : index % 2 ? BLUE : gta ? '#f53ba2' : RED;
+    fillRounded(ctx, x, gta ? 282 : 260, cardWidth, 34, 8, '#091321', color, 2);
+    drawLabel(ctx, label, x + cardWidth / 2, gta ? 300 : 278, cardWidth - 16);
     const matches = roundMatches(rounds, key);
     const nextCenters = [];
     for (const [slot, y] of centers.entries()) {
@@ -356,14 +398,18 @@ async function renderChristmasProgression({ firstRoundKey, rounds, version = Dat
       const score = match?.status === 'confirmed' ? resultFor(match) : null;
       const winner = score ? winnerSide(match) : null;
       fillRounded(ctx, x, y - cardHeight / 2, cardWidth, cardHeight, 8, '#071223', color, 2);
-      drawLabel(ctx, String(slot + 1).padStart(2, '0'), x + 19, y, 30);
+      if (!gta) drawLabel(ctx, String(slot + 1).padStart(2, '0'), x + 19, y, 30);
       for (const [sideIndex, side] of ['home', 'away'].entries()) {
         const rowY = y + (sideIndex ? 15 : -15);
-        const participant = match?.[side];
-        const logoBox = { centerX: x + 53, centerY: rowY, width: 23, height: 23 };
-        if (participant?.type === 'team') await drawTeamLogoOrFallback({ ctx, participant, logoBox, scaleY: 1 });
+        const candidate = match?.[side];
+        const participant = gta && candidate?.type !== 'team' ? null : candidate;
+        const logoBox = { centerX: x + (gta ? 20 : 53), centerY: rowY, width: 23, height: 23 };
+        if (participant?.type === 'team') {
+          if (gta) await drawGtaCrest(ctx, participant, logoBox);
+          else await drawTeamLogoOrFallback({ ctx, participant, logoBox, scaleY: 1 });
+        }
         drawFittedText({
-          ctx, text: participantName(participant), x: x + 72, y: rowY, maxWidth: cardWidth - 132,
+          ctx, text: participantName(participant), x: x + (gta ? 38 : 72), y: rowY, maxWidth: cardWidth - (gta ? 98 : 132),
           maxFontSize: 20, minFontSize: 12, align: 'left',
           font: { family: 'Oxanium', weight: '700' }, color: winner === side ? '#ffe58a' : '#eef3fb',
         });
@@ -373,11 +419,34 @@ async function renderChristmasProgression({ firstRoundKey, rounds, version = Dat
     }
     centers = nextCenters;
   }
-  await drawMatchCard(ctx, {
+  if (gta) {
+    const final = roundMatches(rounds, 'final')[0];
+    const winner = final?.status === 'confirmed' ? winnerParticipant(final) : null;
+    drawConnector(ctx, [[1794, 906], [1850, 906]], GOLD);
+    fillRounded(ctx, 1850, 852, 400, 108, 12, '#071223', GOLD, 2);
+    drawLabel(ctx, 'CUP-SIEGER', 2050, 871, 360);
+    await drawGtaResultRow(ctx, winner, undefined, 1858, 920, 384, GOLD);
+    const third = roundMatches(rounds, 'third_place')[0];
+    const score = third?.status === 'confirmed' ? resultFor(third) : null;
+    const bronze = '#cd8757';
+    fillRounded(ctx, 1850, 1095, 400, 34, 8, '#071223', bronze, 2);
+    drawLabel(ctx, 'SPIEL UM PLATZ 3', 2050, 1112, 370);
+    await drawGtaResultRow(ctx, third?.home, score?.home, 1850, 1157, 400, bronze);
+    await drawGtaResultRow(ctx, third?.away, score?.away, 1850, 1205, 400, bronze);
+  } else await drawMatchCard(ctx, {
     match: roundMatches(rounds, 'third_place')[0],
-    x: columns.at(-1), y: 950, width: cardWidth, label: 'SPIEL UM PLATZ 3', color: '#cd8757',
+    x: columns.at(-1), y: 950,
+    width: cardWidth, label: 'SPIEL UM PLATZ 3', color: '#cd8757',
   });
-  return { buffer: canvas.toBuffer('image/png'), fileName: `christmas-road-to-glory-${firstCenters.length * 2}-${version}.png`, width, height };
+  return { buffer: canvas.toBuffer('image/png'), fileName: `${gta ? 'gta-vi' : 'christmas'}-road-to-glory-${firstCenters.length * 2}-${version}.png`, width, height };
+}
+
+function renderChristmasProgression(options) {
+  return renderThemedProgression(options, false);
+}
+
+function renderLocoGtaProgression(options) {
+  return renderThemedProgression(options, true);
 }
 
 module.exports = {
@@ -386,6 +455,7 @@ module.exports = {
   TEMPLATE_8,
   resultFor,
   renderChristmasProgression,
+  renderLocoGtaProgression,
   renderKoProgression4,
   renderKoProgression8,
   renderKoProgression16,

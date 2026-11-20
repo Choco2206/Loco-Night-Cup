@@ -22,6 +22,7 @@ const { renderLocoZwergenCupCeremonyImage } = require('../../../utils/loco-zwerg
 const { renderFc27CeremonyImage } = require('../../../utils/fc27-ceremony-renderer');
 const {
   renderChristmasProgression,
+  renderLocoGtaProgression,
   renderKoProgression4,
   renderKoProgression8,
   renderKoProgression16,
@@ -522,13 +523,18 @@ async function postHallOfFameCeremony({ guild, eventKey }) {
     : await renderHallOfFameCeremonyImage({ dayKey, teams });
   const christmas = eventKey === HALLOWEEN_EVENT_KEY
     && SEASONAL_CUP.theme === 'christmas' && event.cycle?.eventDate === SEASONAL_CUP.date;
-  const progressionRenderer = !christmas && graphicsVariant === 'fc27' && !locoZwergenCup
+  const progressionRenderer = !gtaCup && !christmas && graphicsVariant === 'fc27' && !locoZwergenCup
     ? getKoProgressionRenderer(event?.knockout?.firstRoundKey)
     : null;
   const progressionSerialNumber = progressionRenderer
     ? reserveSerial(eventKey, event?.cycle?.cycleKey || event?.cycle?.eventDate || null)
     : null;
-  const progressionRender = christmas
+  const progressionRender = gtaCup
+    ? await renderLocoGtaProgression({
+      firstRoundKey: event.knockout?.firstRoundKey,
+      rounds: event.knockout?.rounds,
+    })
+    : christmas
     ? await renderChristmasProgression({
       firstRoundKey: event.knockout?.firstRoundKey,
       rounds: event.knockout?.rounds,
