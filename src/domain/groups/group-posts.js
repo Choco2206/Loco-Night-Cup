@@ -19,7 +19,7 @@ const { generateGroupScheduleImage } = require('../../../utils/generateGroupSche
 const { generateBomberXLocoMatchesImage } = require('../../../utils/generateBomberXLocoMatchesImage');
 const { isGtaCup } = require('../events/loco-gta-cup-config');
 const { generateLocoGtaCupLiveTableImage, generateLocoZwergenCupLiveTableImage } = require('../../../utils/generateLocoZwergenCupLiveTableImage');
-const { generateLocoZwergenCupMatchesImage } = require('../../../utils/generateLocoZwergenCupMatchesImage');
+const { generateLocoZwergenCupMatchesImage, generateLocoGtaCupMatchesImage } = require('../../../utils/generateLocoZwergenCupMatchesImage');
 const { generateFc27LiveTableImage } = require('../../../utils/generateFc27LiveTableImage');
 const { generateFc27GroupScheduleImage } = require('../../../utils/generateFc27GroupScheduleImage');
 const { EVENT_KEYS } = require('../../app/constants');
@@ -138,6 +138,7 @@ async function buildScheduleImagePayload(group, { includeResultButtons = true } 
   const settings = readJson(FILES.settings, createSettingsDefault());
   let image;
   if (isBomberXLocoEvent(event)) image = await generateBomberXLocoMatchesImage({ group, eventDate: event.cycle?.eventDate });
+  else if (isGtaCup(event)) image = await generateLocoGtaCupMatchesImage({ group });
   else if (isLocoZwergenCupEvent(event)) image = await generateLocoZwergenCupMatchesImage({ group });
   else if (getGraphicsVariant(settings) === 'fc27') image = await generateFc27GroupScheduleImage({ group });
   else {
