@@ -42,7 +42,7 @@ async function handleJoin(interaction, client, eventKey) {
   await refreshCheckinMessage(eventKey, client);
   if (result.pendingPayment) {
     const teamName = escapeMarkdown(result.team.clubName);
-    await interaction.editReply({
+    const paymentDetails = {
       content: [
         '🌴 Danke, dass du dich für den **Loco GTA VI Cup** angemeldet hast!',
         '',
@@ -52,10 +52,23 @@ async function handleJoin(interaction, client, eventKey) {
         '',
         `**Verwendungszweck:** Teilnahmegebühr Loco GTA 6 Cup - ${teamName}`,
         '',
-        'Bitte gib den Verwendungszweck inklusive Teamnamen vollständig an. Dein Team steht auf der Freigabeliste. Die Teilnahme setzt voraus, dass die Zahlung eingegangen ist und eindeutig eurem Team zugeordnet werden kann.',
+        'Bitte gib den Verwendungszweck inklusive Teamnamen vollständig an. Dein Team steht auf der Freigabeliste. Die Zahlung muss eindeutig eurem Team zugeordnet werden können.',
+        '',
+        '❗ **Euer Startplatz ist erst sicher, wenn die Turnierleitung eure Zahlung bestätigt hat und ihr in der Teilnehmerliste auf einem Startplatz steht.** Die Plätze werden nach Zahlungseingang vergeben. Teams, deren Zahlung früher eingeht, haben Vorrang. Die Anmeldung allein reserviert keinen Platz.',
       ].join('\n'),
       allowedMentions: { parse: [] },
-    });
+    };
+    const reply = interaction.editReply(paymentDetails);
+    if (result.changed) {
+      await Promise.all([
+        reply,
+        interaction.user.send(paymentDetails).catch(error => {
+          if (error.code !== 50007) console.error('[gta-cup] Zahlungsinfos per DM fehlgeschlagen:', error);
+        }),
+      ]);
+    } else {
+      await reply;
+    }
     return true;
   }
   if (result.alreadyCheckedIn) {
