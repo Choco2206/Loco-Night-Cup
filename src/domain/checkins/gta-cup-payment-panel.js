@@ -26,6 +26,8 @@ function buildGtaPaymentPayload(event, settings) {
     return `• ${name.slice(0, 65)}`;
   });
   const remaining = pending.length - names.length;
+  if (remaining) names.push(`… und ${remaining} weitere`);
+  const list = names.join('\n');
   const open = canAcceptCheckinActions(GTA_CUP_KEY, event, settings) && !event.format?.lockedAt;
   const buttons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('gta_payment_approve').setLabel('Teilnahme bestätigen').setStyle(ButtonStyle.Success).setDisabled(!open || !pending.length),
@@ -35,8 +37,7 @@ function buildGtaPaymentPayload(event, settings) {
   );
   return {
     embeds: [new EmbedBuilder().setTitle(`Freigabeliste (${pending.length})`).setDescription(
-      [...names, remaining ? `… und ${remaining} weitere` : null].filter(Boolean).join('\n')
-      || 'Aktuell wartet kein Team auf eine Zahlungsfreigabe.',
+      `Ein Eintrag auf der Freigabeliste reserviert keinen Startplatz.\n\n${list || 'Aktuell wartet kein Team auf eine Zahlungsfreigabe.'}`,
     )],
     components: [buttons],
     allowedMentions: { parse: [] },

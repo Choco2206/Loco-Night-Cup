@@ -271,7 +271,7 @@ function buildCheckinEmbed(eventKey, event, settings) {
     '',
     rulesLine,
     isGtaCup(event) ? '⭐ **Keine Bevorzugung von Premium-Teams.**' : null,
-    isGtaCup(event) ? '💶 **5 € Teilnahmegebühr pro Team**. Anmeldung zuerst auf der Freigabeliste. Wenn ihr auf der Nachrückerliste bleibt und keinen Startplatz bekommt, erstatten wir die 5 €.' : null,
+    isGtaCup(event) ? '💶 **5 € Teilnahmegebühr pro Team**. Für die Startplätze zählt die Reihenfolge, in der die Turnierleitung den Zahlungseingang bestätigt. Ein Eintrag auf der Freigabeliste reserviert keinen Startplatz. Bekommt ihr keinen Startplatz, erstatten wir euch die 5 €.' : null,
     formatCheckinSummary(event, settings, slotState),
     '─────────────',
     `🏆 Turnierformat: ${formatFormat(event, settings)}`,

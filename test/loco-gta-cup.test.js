@@ -112,3 +112,40 @@ test('payment review and withdrawal menus preserve registration order across pag
     assert.match(buildTeamSelection({ checkin: {} }, action, 99).content, /leer|kein Team/);
   }
 });
+
+test('the first registered team goes to the waitlist when approved 49th', t => {
+  const now = new Date('2026-11-20T13:00:00Z');
+  const event = createEventDefault(GTA_CUP_KEY);
+  ensureEventCycle(GTA_CUP_KEY, event, createSettingsDefault(), now);
+
+  const registrationOrder = Array.from({ length: 49 }, (_, index) => ({
+    teamId: `gta-priority-${index + 1}`,
+    checkedInAt: new Date(Date.UTC(2026, 10, 20, 12, index)).toISOString(),
+  }));
+  event.checkin.pendingPaymentEntries = registrationOrder;
+
+  const repository = require('../src/domain/checkins/checkin-repository');
+  const teams = require('../src/domain/teams/team-service');
+  const servicePath = require.resolve('../src/domain/checkins/checkin-service');
+  const formatPath = require.resolve('../src/domain/checkins/checkin-format');
+  const savedModules = [servicePath, formatPath].map(path => require.cache[path]);
+  t.after(() => {
+    [servicePath, formatPath].forEach((path, index) => { require.cache[path] = savedModules[index]; });
+  });
+  t.mock.method(repository, 'updateEventData', (key, update) => {
+    assert.equal(key, GTA_CUP_KEY);
+    return update(event);
+  });
+  t.mock.method(teams, 'findTeamById', id => ({ id, status: 'active', registrationStatus: 'complete' }));
+  delete require.cache[servicePath];
+  delete require.cache[formatPath];
+
+  const { reviewGtaCupPayment } = require(servicePath);
+  const [firstRegistration, ...firstApprovals] = registrationOrder;
+  for (const entry of [...firstApprovals, firstRegistration]) {
+    reviewGtaCupPayment({ eventKey: GTA_CUP_KEY, reference: entry.teamId, approved: true, actorUserId: 'admin', now });
+  }
+
+  assert.deepEqual(event.checkin.activeTeamIds, firstApprovals.map(entry => entry.teamId));
+  assert.deepEqual(event.checkin.waitlistTeamIds, [firstRegistration.teamId]);
+});
