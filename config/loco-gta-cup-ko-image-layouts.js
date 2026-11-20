@@ -33,4 +33,13 @@ module.exports = {
       score: { x: 561, y, width: 108, fontSize: 32 },
     })),
   },
+  quarter_final: {
+    template: 'assets/loco-gta-vi-cup/quarter-final.jpeg',
+    reference: { width: 1122, height: 1402 },
+    matches: [814, 963, 1113, 1262].map(y => ({
+      home: teamSlot(78, 126, y, 'left', 350, 68, 34),
+      away: teamSlot(1044, 996, y, 'right', 350, 68, 34),
+      score: { x: 561, y, width: 116, fontSize: 38 },
+    })),
+  },
 };
